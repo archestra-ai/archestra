@@ -6,7 +6,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { UserCog } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -43,6 +43,11 @@ import {
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import { MembershipTruncationNotice } from "./connector-membership-truncation-notice";
+import {
+  capitalizeNoun,
+  GROUP_ROSTER_NOUN,
+  type RosterNoun,
+} from "./roster-noun";
 
 /** One distinct upstream human account, with every group it appears in. */
 interface ConnectorMember extends ConnectorUserGroupMember {
@@ -64,17 +69,16 @@ type MemberFilter = "all" | "automatic" | "manual" | "unassigned";
  */
 export function ConnectorMembersTable({
   connectorId,
+  noun = GROUP_ROSTER_NOUN,
 }: {
   connectorId: string;
+  noun?: RosterNoun;
 }) {
   const appName = useAppName();
   const { data: userGroups, isPending } = useConnectorUserGroups({
     connectorId,
     enabled: true,
   });
-  // The snapshot's resolved user carries only {id, name}; the org member
-  // list supplies the email shown under the resolved name.
-  const { data: orgMembers } = useOrganizationMembers();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
@@ -98,17 +102,27 @@ export function ConnectorMembersTable({
     close: closeAssignDialog,
   } = useDialogUrlParam({ paramName: "member", entityFromUrl: memberFromUrl });
 
-  const orgEmailById = useMemo(
-    () => new Map((orgMembers ?? []).map((user) => [user.id, user.email])),
-    [orgMembers],
-  );
-
   const groupIds = useMemo(
     () =>
       [
         ...new Set((userGroups?.groups ?? []).map((group) => group.groupId)),
       ].sort(),
     [userGroups?.groups],
+  );
+
+  // Upstream groups carry a numeric id for authorization but a human name for
+  // display. Show the name and fall back to the id only when the source never
+  // exposed one.
+  const groupNameById = useMemo(
+    () =>
+      new Map(
+        (userGroups?.groups ?? []).map((group) => [group.groupId, group.name]),
+      ),
+    [userGroups?.groups],
+  );
+  const groupLabel = useCallback(
+    (groupId: string) => groupNameById.get(groupId) || groupId,
+    [groupNameById],
   );
 
   const visibleMembers = useMemo(() => {
@@ -186,18 +200,17 @@ export function ConnectorMembersTable({
             // "no user" signal; the fix lives in the Actions column.
             return <span className="text-sm text-muted-foreground">-</span>;
           }
-          const email = orgEmailById.get(user.id);
           return (
             <div className="min-w-0">
               <div className="truncate text-sm font-medium" title={user.name}>
                 {user.name}
               </div>
-              {email && (
+              {user.email && (
                 <div
                   className="truncate text-xs text-muted-foreground"
-                  title={email}
+                  title={user.email}
                 >
-                  {email}
+                  {user.email}
                 </div>
               )}
             </div>
@@ -244,11 +257,16 @@ export function ConnectorMembersTable({
       },
       {
         id: "groups",
-        header: "Groups",
+        header: capitalizeNoun(noun.plural),
         // Wider than the even share the unsized columns get: two group
         // badges plus the "+N more" badge fit on two lines.
         size: 280,
-        cell: ({ row }) => <MemberGroupBadges groups={row.original.groups} />,
+        cell: ({ row }) => (
+          <MemberGroupBadges
+            groups={row.original.groups}
+            resolveLabel={groupLabel}
+          />
+        ),
       },
       {
         id: "actions",
@@ -280,7 +298,7 @@ export function ConnectorMembersTable({
         },
       },
     ],
-    [appName, orgEmailById, openAssignDialog],
+    [appName, openAssignDialog, groupLabel, noun],
   );
 
   return (
@@ -290,7 +308,7 @@ export function ConnectorMembersTable({
           <SearchInput
             value={search}
             syncQueryParams={false}
-            placeholder="Search by ID, email, name, or group"
+            placeholder={`Search by ID, email, name, or ${noun.singular}`}
             onSearchChange={setSearch}
           />
           <Select
@@ -313,15 +331,15 @@ export function ConnectorMembersTable({
           <Select value={groupFilter} onValueChange={setGroupFilter}>
             <SelectTrigger
               className="h-9 w-full text-sm sm:w-[200px]"
-              aria-label="Filter by group"
+              aria-label={`Filter by ${noun.singular}`}
             >
-              <SelectValue placeholder="All groups" />
+              <SelectValue placeholder={`All ${noun.plural}`} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All groups</SelectItem>
+              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
               {groupIds.map((groupId) => (
                 <SelectItem key={groupId} value={groupId}>
-                  {groupId}
+                  {groupLabel(groupId)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -402,6 +420,7 @@ function matchesSearch(member: ConnectorMember, query: string) {
     member.displayName?.toLowerCase().includes(query) ||
     member.email?.toLowerCase().includes(query) ||
     member.user?.name.toLowerCase().includes(query) ||
+    member.user?.email.toLowerCase().includes(query) ||
     member.groups.some((group) => group.toLowerCase().includes(query))
   );
 }
@@ -432,13 +451,19 @@ function getInitials(name: string): string {
     .join("");
 }
 
-function MemberGroupBadges({ groups }: { groups: string[] }) {
+function MemberGroupBadges({
+  groups,
+  resolveLabel,
+}: {
+  groups: string[];
+  resolveLabel: (groupId: string) => string;
+}) {
   if (groups.length === 0) {
     return <span className="text-sm text-muted-foreground">-</span>;
   }
   return (
     <CollapsedBadgeList
-      items={groups.map((group) => ({ id: group, label: group }))}
+      items={groups.map((group) => ({ id: group, label: resolveLabel(group) }))}
     />
   );
 }

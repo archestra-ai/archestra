@@ -163,6 +163,10 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
 {{- end }}
+{{- if .Values.archestra.knowledgeBase.perforceShim.image }}
+- name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+  value: {{ .Values.archestra.knowledgeBase.perforceShim.image | quote }}
+{{- end }}
 {{- with .Values.archestra.orchestrator.mcpServerResources }}
 {{- if .requests.cpu }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST
@@ -281,11 +285,20 @@ genuinely missing key loudly at startup.
 Expose declared memory resources in MiB so the production Node launcher can
 derive a V8 old-space ceiling. Only emit fields that are explicitly configured:
 resourceFieldRef otherwise falls back to node allocatable memory.
+
+Callers may pass `reservedMib` for a container that runs something else besides
+this Node process. The launcher subtracts it from the limit before applying its
+percentage, so the split is taken over memory this process can actually use.
+Omit it for single-process containers.
 */}}
 {{- define "archestra-platform.nodeMemoryEnv" -}}
 {{- $resources := .resources | default dict -}}
 {{- $requests := get $resources "requests" | default dict -}}
 {{- $limits := get $resources "limits" | default dict -}}
+{{- if .reservedMib }}
+- name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
+  value: {{ .reservedMib | quote }}
+{{- end }}
 {{- if get $requests "memory" }}
 - name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
   valueFrom:

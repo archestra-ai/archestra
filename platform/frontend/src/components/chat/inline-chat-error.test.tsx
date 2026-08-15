@@ -3,11 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 vi.mock("sonner");
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: vi.fn(() => false),
+}));
 
 // The card brands the client-side fallback copy, which otherwise reaches for
 // the appearance-settings query and needs a QueryClientProvider.
@@ -18,6 +22,12 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     isPending: false,
     mutateAsync: vi.fn().mockResolvedValue({ id: "key-1" }),
   }),
+  useReconnectLlmProviderApiKey: () => ({
+    isPending: false,
+    mutateAsync: vi.fn().mockResolvedValue({ id: "key-1" }),
+  }),
+  // No existing personal subscription key → the card takes the create path.
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
 // Invoke onToken on click so we can exercise the connect → auto-resend flow.
@@ -39,6 +49,7 @@ describe("InlineChatError", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockReturnValue(false);
   });
 
   it("shows only the support message and correlation IDs in slim mode", () => {
@@ -356,6 +367,48 @@ describe("InlineChatError", () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("GitHub Copilot connected"),
     );
+  });
+
+  it("points at Model Providers for a provider that has no subscription flow", () => {
+    // The card picks a sign-in by looking the provider up in the subscription
+    // registry; a provider with no entry has no device flow to offer, so it
+    // must fall back to the Model Providers link rather than render nothing.
+    render(
+      <ProviderAuthRequiredCard
+        provider="anthropic"
+        providerLabel="anthropic"
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Connect in Model Providers" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Sign in with/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not suggest an ordinary Vault key for an exact subscription gate", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+
+    render(
+      <ProviderAuthRequiredCard
+        provider="xai"
+        providerLabel="X Premium (SuperGrok)"
+        agentName="Research Agent"
+        variant="preflight"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /managed secret storage, or choose an agent\/model/i,
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      /provider API key from Vault/i,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign in with X" }),
+    ).not.toBeInTheDocument();
   });
 
   const retryableError = () =>

@@ -103,4 +103,53 @@ describe("evaluateToolExecutionContextTrust", () => {
       reason: "agent_configured_untrusted",
     });
   });
+
+  test("reports the preexisting boundary, not a later tool result's, when context starts untrusted", async () => {
+    await TrustedDataPolicyModel.create({
+      toolId,
+      description: "Mark external mail as sensitive",
+      conditions: [
+        { key: "emails[*].from", operator: "contains", value: "@external.com" },
+      ],
+      action: "mark_as_untrusted",
+    });
+
+    const result = await evaluateToolExecutionContextTrust({
+      agentId,
+      organizationId,
+      userId: "user-123",
+      considerContextUntrusted: true,
+      policyContext: {
+        externalAgentId: "chat",
+      },
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Summarize what the email said." }],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call-email-1",
+              toolName: "read_email",
+              output: {
+                type: "json",
+                value: {
+                  emails: [{ from: "ceo@external.com", subject: "Urgent" }],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.contextIsTrusted).toBe(false);
+    expect(result.unsafeContextBoundary).toEqual({
+      kind: "preexisting_untrusted",
+      reason: "agent_configured_untrusted",
+    });
+  });
 });

@@ -73,6 +73,7 @@ import {
 } from "@/services/apps/app-ui-policy";
 import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -510,11 +511,22 @@ const registry = defineArchestraTools([
       // authoring agent's environment — the same environment search_tools
       // discovers in — so a tool the model just found is assignable and the
       // runtime gate agrees; an agent without one (or whose row is gone)
-      // falls back to the org Default environment. Resolution additionally
-      // accepts the Default baseline (toolInEnvironmentOrDefaultPredicate).
-      const environmentId = await AgentModel.findEnvironmentId(
-        context.agent.id,
-      );
+      // carries no signal, so the org's configured landing environment for new
+      // apps decides instead, and only then the Default one. Resolution
+      // additionally accepts the Default baseline
+      // (toolInEnvironmentOrDefaultPredicate).
+      const environmentId =
+        (await AgentModel.findEnvironmentId(context.agent.id)) ??
+        (await resolveDefaultEnvironmentForNewResource({
+          organizationId,
+          resource: "app",
+          canDeployToRestricted: await userHasPermission(
+            userId,
+            organizationId,
+            "app",
+            "deploy-to-restricted",
+          ),
+        }));
       const toolsResolution = await resolveToolsParam({
         agentId: context.agent.id,
         userId,

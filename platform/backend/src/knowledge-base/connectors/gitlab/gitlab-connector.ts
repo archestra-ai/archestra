@@ -1,10 +1,15 @@
 import { Gitlab } from "@gitbeaker/rest";
+import { LRUCacheManager } from "@/cache-manager";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
   GitlabCheckpoint,
   GitlabConfig,
+  GroupMembershipYield,
+  GroupMemberYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
 } from "@/types";
 import { GitlabConfigSchema } from "@/types";
 import {
@@ -12,11 +17,44 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { ConnectorIdentityCache } from "../identity-cache";
 
 const BATCH_SIZE = 50;
+/** Cap for the per-pass user → profile cache: sized so a normal instance never evicts. */
+const USER_PROFILE_CACHE_MAX_SIZE = 10_000;
+const READBACK_PAGE_SIZE = 200;
+/**
+ * Minimum access level whose members land in a project's audience. Reporter
+ * (20) is the lowest role that can read repository code, merge requests, and
+ * confidential issues on a private project — everything this connector
+ * ingests. Guests (10) can read plain issues but not code, and ingested issue
+ * documents carry no confidential flag, so admitting Guests would over-grant
+ * them code and confidential-issue content. Excluding them is the fail-closed
+ * direction: a Guest loses plain-issue retrieval, never the other way around.
+ */
+const REPORTER_ACCESS_LEVEL = 20;
 
 export class GitlabConnector extends BaseConnector {
   type = "gitlab" as const;
+  supportsPermissionSync = true;
+
+  /**
+   * Per-pass cache of GitLab username → profile (email null when hidden).
+   * Size-bounded LRU (no TTL — the instance is per-pass): a member inherited
+   * from a big ancestor group appears in every one of its projects' rosters,
+   * and must cost one profile lookup, not one per project.
+   */
+  private userProfileCache = new LRUCacheManager<GitlabProfile>({
+    maxSize: USER_PROFILE_CACHE_MAX_SIZE,
+    defaultTtl: 0,
+  });
+  /**
+   * Cross-pass persistence behind `userProfileCache`: username → profile
+   * results (including hidden-email negatives) survive the pass so the next
+   * run does not re-probe every member. Armed per permission pass.
+   */
+  private persistentProfileCache: ConnectorIdentityCache<GitlabProfile> | null =
+    null;
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -188,7 +226,267 @@ export class GitlabConnector extends BaseConnector {
     }
   }
 
+  // ===== Permission sync hooks =====
+
+  /**
+   * Project-scoped snapshot, one top-level container per project keyed
+   * `project:<path_with_namespace>` (byte-matching content-sync's
+   * `metadata.project`). A container's audience is a single group reference —
+   * the project's own roster group (see `gitlabProjectGroupId`) — so audiences
+   * stay O(1) regardless of member count and every member enumeration happens
+   * exactly once, in `syncGroups`. Public and internal projects are org-wide:
+   * both visibilities let any signed-in instance user read the project, which
+   * is the granularity `org:*` models. Already-ingested documents are assigned
+   * via read-back — upstream calls are O(projects), never O(docs). The
+   * read-back mirrors our own corpus, so the per-container fail-close diff is
+   * naturally empty (content-sync owns document deletions); a project that
+   * VANISHES upstream is caught by the pass's stale container sweep.
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    const config = parseGitlabConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid GitLab configuration for permission sync");
+    }
+    const client = createGitlabClient(config, params.credentials);
+    const host = gitlabInstanceId(config);
+    const projects = sortedUniqueProjects(await getProjects(client, config));
+
+    const scope = params.scope ? new Set(params.scope.containerKeys) : null;
+    for (const project of projects) {
+      const containerKey = `project:${project.pathWithNamespace}`;
+      if (scope && !scope.has(containerKey)) continue;
+      // Resume: containers strictly before the cursor are already done. The
+      // cursor container is re-processed (idempotent — same audience).
+      if (params.cursor && containerKey < params.cursor) continue;
+
+      yield {
+        kind: "container",
+        containerKey,
+        permissions: {
+          isPublic:
+            project.visibility === "public" ||
+            project.visibility === "internal",
+          users: [],
+          groups: [gitlabProjectGroupId(host, project.pathWithNamespace)],
+        },
+        audienceResolutionFailed: false,
+        cursor: containerKey,
+      };
+
+      let afterId: string | null = null;
+      for (;;) {
+        const { documents, nextAfterId } = await params.readIngestedDocuments({
+          metadataFilter: { project: project.pathWithNamespace },
+          afterId,
+          limit: READBACK_PAGE_SIZE,
+        });
+        for (const doc of documents) {
+          yield {
+            kind: "document",
+            sourceId: doc.sourceId,
+            containerKey,
+            cursor: containerKey,
+          };
+        }
+        if (documents.length < READBACK_PAGE_SIZE) break;
+        afterId = nextAfterId;
+      }
+    }
+  }
+
+  /**
+   * Local-adoption scoping for the pass: a stored document is covered by its
+   * project's enumeration (content-sync writes `metadata.project` =
+   * `<path_with_namespace>`, matching the container key). Scoping only — the
+   * project enumeration resolves the authoritative audience, so this can
+   * never over-grant.
+   */
+  scopeKeyForDocument(metadata: Record<string, unknown>): string | null {
+    const project = metadata.project;
+    return typeof project === "string" && project.length > 0
+      ? `project:${project}`
+      : null;
+  }
+
+  /**
+   * One roster group per project: id `<instance>//<path_with_namespace>`,
+   * members from `GET /projects/:id/members/all` (direct + inherited from
+   * ancestor groups + invited groups — GitLab flattens them all with the
+   * member's EFFECTIVE access level, so filtering to Reporter+ is exact where
+   * granting whole upstream GitLab groups could not be: a Guest-level member
+   * of an ancestor group must not ride its grant into code content).
+   *
+   * The instance prefix keeps the id globally distinctive across connectors of
+   * the same type: group tokens are namespaced by connector TYPE only (see
+   * acl-tokens.ts), and unlike github.com org names, GitLab project paths are
+   * only unique per instance — a bare `acme/docs` id would collide between two
+   * self-hosted instances and cross-grant their corpora.
+   *
+   * A project whose member list cannot be read yields
+   * `membershipResolutionFailed` — the pass replaces the roster with an empty
+   * fail-closed membership (project goes dark) rather than keeping a
+   * possibly-revoked grant alive.
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const config = parseGitlabConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid GitLab configuration for group sync");
+    }
+    const client = createGitlabClient(config, params.credentials);
+    const host = gitlabInstanceId(config);
+    this.initPersistentProfileCache(config, params.credentials, {
+      refresh: params.refreshIdentities,
+    });
+    const projects = sortedUniqueProjects(await getProjects(client, config));
+
+    const scope = params.scope?.groupIds
+      ? new Set(params.scope.groupIds)
+      : null;
+    for (const project of projects) {
+      const groupId = gitlabProjectGroupId(host, project.pathWithNamespace);
+      if (scope && !scope.has(groupId)) continue;
+      const name = `${project.pathWithNamespace} members`;
+
+      // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+      let rawMembers: any[];
+      try {
+        await this.rateLimit();
+        rawMembers = (await client.ProjectMembers.all(project.id, {
+          includeInherited: true,
+          perPage: 100,
+          // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+        })) as any[];
+      } catch (error) {
+        this.log.error(
+          {
+            project: project.pathWithNamespace,
+            error: extractErrorMessage(error),
+          },
+          "Could not read the project's member list; its roster is fail-closed for this pass",
+        );
+        yield {
+          groupId,
+          name,
+          members: [],
+          membershipResolutionFailed: true,
+          cursor: groupId,
+        };
+        continue;
+      }
+
+      const members = new Map<string, GroupMemberYield>();
+      for (const member of rawMembers) {
+        if ((member.access_level ?? 0) < REPORTER_ACCESS_LEVEL) continue;
+        // A blocked (or pending) account cannot sign in upstream; its email
+        // must not keep resolving to grants here.
+        if (member.state && member.state !== "active") continue;
+        const username = String(member.username);
+        // Every member is recorded; GitLab only exposes an email the user made
+        // public (or, on some tiers, to group owners — carried on the member
+        // row itself), so `email` is often null: fail-closed, but visible to
+        // admins as unresolvable and rescuable with a member mapping instead
+        // of silently dropped.
+        const profile = await this.resolveUserProfile(client, {
+          username,
+          userId: Number(member.id),
+          known: { email: member.email, name: member.name },
+        });
+        members.set(username, {
+          accountId: username,
+          displayName: profile.name ?? null,
+          email: profile.email ?? null,
+          accountType: profile.bot ? "bot" : null,
+        });
+      }
+
+      yield {
+        groupId,
+        name,
+        members: [...members.values()],
+        cursor: groupId,
+      };
+    }
+  }
+
   // ===== Private methods =====
+
+  /**
+   * Resolve a member to their profile. `known` is the email/name the member
+   * listing already carried (GitLab includes `email` for group owners on some
+   * tiers and for instance admins) — when present it costs no request. The
+   * fallback `GET /users/:id` exposes only `public_email` to a normal token,
+   * so `email` stays null for most members (fail-closed, documented
+   * limitation).
+   */
+  private async resolveUserProfile(
+    client: InstanceType<typeof Gitlab>,
+    params: {
+      username: string;
+      userId: number;
+      known?: { email?: string | null; name?: string | null };
+    },
+  ): Promise<GitlabProfile> {
+    if (params.known?.email) {
+      const profile: GitlabProfile = {
+        email: String(params.known.email),
+        name: params.known.name ? String(params.known.name) : null,
+        bot: isBotUsername(params.username),
+      };
+      this.userProfileCache.set(params.username, profile);
+      await this.persistentProfileCache?.set(params.username, profile);
+      return profile;
+    }
+
+    const cached = this.userProfileCache.get(params.username);
+    if (cached !== undefined) return cached;
+    const persisted = await this.persistentProfileCache?.get(params.username);
+    if (persisted !== undefined) {
+      this.userProfileCache.set(params.username, persisted);
+      return persisted;
+    }
+
+    let profile: GitlabProfile = {
+      email: null,
+      name: params.known?.name ? String(params.known.name) : null,
+      bot: isBotUsername(params.username),
+    };
+    try {
+      await this.rateLimit();
+      // biome-ignore lint/suspicious/noExplicitAny: Gitbeaker Camelize types
+      const user: any = await client.Users.show(params.userId);
+      profile = {
+        email: user.email ? String(user.email) : userPublicEmail(user),
+        name: user.name ? String(user.name) : profile.name,
+        bot: user.bot === true || isBotUsername(params.username),
+      };
+    } catch (error) {
+      this.log.debug(
+        { username: params.username, error: extractErrorMessage(error) },
+        "Could not resolve GitLab user profile",
+      );
+    }
+    this.userProfileCache.set(params.username, profile);
+    await this.persistentProfileCache?.set(params.username, profile);
+    return profile;
+  }
+
+  /** Arm the cross-pass profile cache for one permission pass. */
+  private initPersistentProfileCache(
+    config: GitlabConfig,
+    credentials: ConnectorCredentials,
+    opts: { refresh?: boolean },
+  ): void {
+    this.persistentProfileCache = new ConnectorIdentityCache({
+      namespace: "gitlab-profile",
+      host: config.gitlabUrl,
+      credentials,
+      refresh: opts.refresh,
+    });
+  }
 
   private async *syncProjectIssues(params: {
     client: InstanceType<typeof Gitlab>;
@@ -475,6 +773,7 @@ export class GitlabConnector extends BaseConnector {
           fallback: null,
           itemId: filePath,
           resource: "file_content",
+          itemUnavailable: true,
         });
 
         if (content !== null) {
@@ -519,6 +818,73 @@ interface GitlabProject {
   name: string;
   pathWithNamespace: string;
   webUrl: string;
+  /** "private" | "internal" | "public"; missing reads as private (fail-closed). */
+  visibility?: string;
+}
+
+interface GitlabProfile {
+  email: string | null;
+  name: string | null;
+  bot: boolean;
+}
+
+/**
+ * The connector's upstream identity space: host (with port) plus any
+ * relative-URL subpath the instance is served under, lowercased, no protocol,
+ * no trailing slash — e.g. `gitlab.example.com:8443` or `example.com/gitlab`.
+ * Two connectors pointing at the same instance MUST derive the same id (their
+ * group tokens are meant to be shared); different instances must never.
+ */
+function gitlabInstanceId(config: GitlabConfig): string {
+  const url = new URL(config.gitlabUrl);
+  const path = url.pathname.replace(/\/+$/, "");
+  return `${url.host}${path}`.toLowerCase();
+}
+
+/**
+ * Roster-group id for one project: `<instance>//<path_with_namespace>`. The
+ * double slash cannot occur inside either half (hostnames, instance subpaths,
+ * and GitLab namespace paths are all single-slash-normalized), so the mapping
+ * is unambiguous — `example.com/gitlab` + `a/b` never reads as `example.com`
+ * + `gitlab/a/b`. Written on container audiences and stored by syncGroups
+ * identically, so the group data-contract byte-matches.
+ */
+function gitlabProjectGroupId(
+  instanceId: string,
+  pathWithNamespace: string,
+): string {
+  return `${instanceId}//${pathWithNamespace}`;
+}
+
+/**
+ * Stable codepoint order so the resume cursor (a container key) is monotonic
+ * under plain string comparison, deduplicated by path so a project reachable
+ * twice (e.g. a duplicated config id) yields one container and one roster.
+ */
+function sortedUniqueProjects(projects: GitlabProject[]): GitlabProject[] {
+  const byPath = new Map<string, GitlabProject>();
+  for (const project of projects) {
+    byPath.set(project.pathWithNamespace, project);
+  }
+  return [...byPath.values()].sort((a, b) => {
+    const left = a.pathWithNamespace;
+    const right = b.pathWithNamespace;
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+}
+
+/**
+ * GitLab's own naming convention for the bot accounts backing project/group
+ * access tokens. Best-effort classification for admin stats only — never used
+ * for access decisions.
+ */
+function isBotUsername(username: string): boolean {
+  return username.startsWith("project_bot") || username.startsWith("group_bot");
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: GitLab API response types
+function userPublicEmail(user: any): string | null {
+  return user.public_email ? String(user.public_email) : null;
 }
 
 function createGitlabClient(
@@ -552,6 +918,7 @@ async function getProjects(
         name: project.name,
         pathWithNamespace: String(project.path_with_namespace),
         webUrl: String(project.web_url),
+        visibility: project.visibility ? String(project.visibility) : undefined,
       });
     }
     return projects;
@@ -567,6 +934,7 @@ async function getProjects(
       name: p.name,
       pathWithNamespace: String(p.path_with_namespace),
       webUrl: String(p.web_url),
+      visibility: p.visibility ? String(p.visibility) : undefined,
     }));
   }
 
@@ -580,6 +948,7 @@ async function getProjects(
     name: p.name,
     pathWithNamespace: String(p.path_with_namespace),
     webUrl: String(p.web_url),
+    visibility: p.visibility ? String(p.visibility) : undefined,
   }));
 }
 

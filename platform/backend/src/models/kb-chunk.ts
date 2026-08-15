@@ -3,7 +3,8 @@ import {
   getEmbeddingColumnName,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { count, eq, sql } from "drizzle-orm";
+import { count, eq, type SQL, sql } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
 
@@ -128,7 +129,7 @@ class KbChunkModel {
 
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
-    const rows = await db.execute(sql`
+    const rows = await executeWithSearchTimeout(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
@@ -232,102 +233,34 @@ class KbChunkModel {
     environmentId?: string | null;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
-    const {
-      connectorIds,
-      queryText,
-      languages,
-      userAcl,
-      bypassAcl = false,
-      environmentId,
-      limit = 10,
-    } = params;
+    const { connectorIds, queryText, userAcl, bypassAcl = false } = params;
     if (connectorIds.length === 0) return [];
     if (!bypassAcl && userAcl.length === 0) return [];
-    const ids = sql.join(
-      connectorIds.map((id) => sql`${id}`),
-      sql`, `,
-    );
-    const aclEntries = bypassAcl
-      ? null
-      : sql.join(
-          userAcl.map((entry) => sql`${entry}`),
-          sql`, `,
-        );
 
-    const envFilter =
-      environmentId !== undefined
-        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
-        : sql``;
+    const terms = queryText.split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return [];
 
-    const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
+    // AND-first, OR-fallback. The query text goes to websearch_to_tsquery
+    // as written, whose natural semantics AND the plain terms — a selective
+    // match set the GIN index serves with a bitmap scan. The previous
+    // always-OR rewrite matched ~40% of a 113k-chunk corpus (measured via
+    // EXPLAIN on that corpus): at that selectivity the planner rightly
+    // abandons the GIN for a parallel seq scan and ts_rank detoasts every
+    // match — ~7.6s per statement, growing with the corpus, which is what
+    // drove the keyword lane into the statement timeout. The OR form
+    // survives only as a recall fallback when the AND query matches nothing
+    // (no chunk holds every term), where RRF and the reranker downstream
+    // absorb its loose precision.
+    const andRows = await KbChunkModel.runFullTextStatement({
+      ...params,
+      tsQueryText: queryText,
+    });
+    if (andRows.length > 0 || terms.length <= 1) return andRows;
 
-    // The query is parsed once per text-search configuration present, and the
-    // per-language predicates are OR-ed together.
-    //
-    // The obvious formulation — `websearch_to_tsquery(c.fts_language, ...)`,
-    // matching each chunk under its own stored configuration — is a per-row
-    // expression, so PostgreSQL cannot constant-fold it into an index lookup
-    // key and the GIN index on search_vector becomes unusable. Measured on a
-    // 300k-chunk corpus that turned a bitmap index scan into a full sequential
-    // scan: ~18 buffers to ~14,000, growing with the corpus rather than with
-    // the number of matches, on the keyword leg of every hybrid query.
-    //
-    // Each branch here uses a literal configuration, so each is index-driven
-    // and PostgreSQL combines them with a BitmapOr. A single-language corpus —
-    // the common case — collapses to exactly one indexed predicate.
-    //
-    // A chunk is therefore matched under every configuration present, not only
-    // its own. In a mixed-language corpus that trades a little precision for
-    // recall, which RRF and the reranker downstream are well placed to absorb;
-    // the alternative failure (a chunk matched under no configuration at all,
-    // and so invisible to keyword search) is far worse.
-    const searchLanguages =
-      languages && languages.length > 0
-        ? languages
-        : [DEFAULT_TEXT_SEARCH_LANGUAGE];
-
-    // Bound parameters, not interpolated literals: a bound `regconfig` is still
-    // constant at execution time, so it stays index-eligible, and nothing from
-    // the column reaches the SQL text.
-    const matchPredicate = sql.join(
-      searchLanguages.map(
-        (language) =>
-          sql`c.search_vector @@ websearch_to_tsquery(${language}::regconfig, ${orQuery})`,
-      ),
-      sql` OR `,
-    );
-    // Rank under the best-matching configuration, so a chunk is not penalized
-    // for the languages it is not written in.
-    const scoreExpression = sql.join(
-      searchLanguages.map(
-        (language) =>
-          sql`ts_rank(c.search_vector, websearch_to_tsquery(${language}::regconfig, ${orQuery}))`,
-      ),
-      sql`, `,
-    );
-
-    const rows = await db.execute(sql`
-      SELECT
-        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
-        kbc.connector_type AS "connectorType",
-        GREATEST(${scoreExpression}) AS score
-      FROM kb_chunks c
-      JOIN kb_documents d ON d.id = c.document_id
-      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
-      WHERE d.connector_id IN (${ids})
-        -- Mirrors the same guard in vectorSearch: retrieval is a security
-        -- surface, so never serve chunks from a soft-deleted connector even if
-        -- a stale connectorId reaches this far.
-        AND kbc.deleted_at IS NULL
-        AND (${matchPredicate})
-        ${envFilter}
-        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
-      ORDER BY score DESC
-      LIMIT ${limit}
-    `);
-
-    return rows.rows as unknown as VectorSearchResult[];
+    return KbChunkModel.runFullTextStatement({
+      ...params,
+      tsQueryText: terms.join(" OR "),
+    });
   }
 
   /**
@@ -454,6 +387,130 @@ class KbChunkModel {
       `),
     );
   }
+
+  private static async runFullTextStatement(params: {
+    connectorIds: string[];
+    /** The text handed to websearch_to_tsquery, verbatim. */
+    tsQueryText: string;
+    languages?: TextSearchLanguage[];
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      connectorIds,
+      tsQueryText,
+      languages,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+      limit = 10,
+    } = params;
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    // The query is parsed once per text-search configuration present, and the
+    // per-language predicates are OR-ed together.
+    //
+    // The obvious formulation — `websearch_to_tsquery(c.fts_language, ...)`,
+    // matching each chunk under its own stored configuration — is a per-row
+    // expression, so PostgreSQL cannot constant-fold it into an index lookup
+    // key and the GIN index on search_vector becomes unusable. Measured on a
+    // 300k-chunk corpus that turned a bitmap index scan into a full sequential
+    // scan: ~18 buffers to ~14,000, growing with the corpus rather than with
+    // the number of matches, on the keyword leg of every hybrid query.
+    //
+    // Each branch here uses a literal configuration, so each is index-driven
+    // and PostgreSQL combines them with a BitmapOr. A single-language corpus —
+    // the common case — collapses to exactly one indexed predicate.
+    //
+    // A chunk is therefore matched under every configuration present, not only
+    // its own. In a mixed-language corpus that trades a little precision for
+    // recall, which RRF and the reranker downstream are well placed to absorb;
+    // the alternative failure (a chunk matched under no configuration at all,
+    // and so invisible to keyword search) is far worse.
+    const searchLanguages =
+      languages && languages.length > 0
+        ? languages
+        : [DEFAULT_TEXT_SEARCH_LANGUAGE];
+
+    // Bound parameters, not interpolated literals: a bound `regconfig` is still
+    // constant at execution time, so it stays index-eligible, and nothing from
+    // the column reaches the SQL text.
+    const matchPredicate = sql.join(
+      searchLanguages.map(
+        (language) =>
+          sql`c.search_vector @@ websearch_to_tsquery(${language}::regconfig, ${tsQueryText})`,
+      ),
+      sql` OR `,
+    );
+    // Rank under the best-matching configuration, so a chunk is not penalized
+    // for the languages it is not written in.
+    const scoreExpression = sql.join(
+      searchLanguages.map(
+        (language) =>
+          sql`ts_rank(c.search_vector, websearch_to_tsquery(${language}::regconfig, ${tsQueryText}))`,
+      ),
+      sql`, `,
+    );
+
+    const rows = await executeWithSearchTimeout(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        GREATEST(${scoreExpression}) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id IN (${ids})
+        -- Mirrors the same guard in vectorSearch: retrieval is a security
+        -- surface, so never serve chunks from a soft-deleted connector even if
+        -- a stale connectorId reaches this far.
+        AND kbc.deleted_at IS NULL
+        AND (${matchPredicate})
+        ${envFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+      ORDER BY score DESC
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
 }
 
 export default KbChunkModel;
+
+// === Internal helpers ===
+
+/**
+ * Run a search statement under the KB-specific statement timeout
+ * ({@link config.kb.searchStatementTimeoutMillis}), leaving the pool-wide
+ * statement_timeout in force for everything else. SET LOCAL semantics via
+ * set_config(..., true) scope the override to the wrapping transaction, and
+ * set_config takes the value as a bound parameter (plain SET cannot).
+ */
+async function executeWithSearchTimeout(query: SQL) {
+  const timeoutMillis = config.kb.searchStatementTimeoutMillis;
+  if (timeoutMillis <= 0) return db.execute(query);
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('statement_timeout', ${String(timeoutMillis)}, true)`,
+    );
+    return tx.execute(query);
+  });
+}

@@ -3,7 +3,10 @@ import type {
   ModelInputModality,
   SupportedProvider,
 } from "@archestra/shared";
-import { providerRequiresPerUserCredential } from "@archestra/shared";
+import {
+  isSubscriptionCredential,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
@@ -13,7 +16,10 @@ import {
   OrganizationModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  getEmbeddingClientAcceptedImageMimeTypes,
+  getEmbeddingClientInputModalities,
+} from "./embedding-clients";
 import {
   EmbeddingConfigUnresolvableError,
   RerankerConfigUnresolvableError,
@@ -37,6 +43,10 @@ export interface EmbeddingConfig {
    * Null when no matching record exists in the models table (e.g. the model name
    * hasn't been synced from models.dev yet, or no model is configured). */
   inputModalities: ModelInputModality[] | null;
+  /** Image MIME types the embedding client can send to this model, or null for
+   * no per-format restriction. Only meaningful when `inputModalities` includes
+   * "image"; connectors and the embedder skip images in other formats. */
+  acceptedImageMimeTypes: string[] | null;
 }
 
 /**
@@ -90,7 +100,17 @@ export async function resolveEmbeddingConfig(
      */
     dimensions: model?.embeddingDimensions ?? org.embeddingDimensions ?? 1536,
     provider: resolved.provider,
-    inputModalities: model?.inputModalities ?? null,
+    inputModalities: clampInputModalities({
+      declared: model?.inputModalities ?? null,
+      clientSupported: getEmbeddingClientInputModalities(
+        resolved.provider,
+        org.embeddingModel,
+      ),
+    }),
+    acceptedImageMimeTypes: getEmbeddingClientAcceptedImageMimeTypes(
+      resolved.provider,
+      org.embeddingModel,
+    ),
   };
 }
 
@@ -205,12 +225,33 @@ export async function resolveApiKeyFromChatApiKey(
   const apiKey = await getSecretValueForLlmProviderApiKey(chatApiKey.secretId);
   if (!apiKey) return null;
 
-  // A ChatGPT-subscription (Codex) credential only works through the proxy's
-  // openai adapter, which decodes the marker and redeems a short-lived Codex
-  // access token. KB embedding/reranking calls the provider directly (no codex
-  // decode), so the raw marker would be sent to api.openai.com as a bearer —
-  // leaking a long-lived refresh token. Skip it, like the per-user guard above.
-  if (isOpenAiCodexCredential(apiKey)) return null;
+  // A subscription credential only works through the proxy adapter, which
+  // decodes the marker and redeems a short-lived access token. KB
+  // embedding/reranking calls the provider directly (no decode), so the raw
+  // marker would be sent to the vendor's metered API as a bearer — leaking a
+  // long-lived refresh token. Skip it, like the per-user guard above.
+  if (isSubscriptionCredential(apiKey)) return null;
 
   return { apiKey, baseUrl, provider: chatApiKey.provider };
+}
+
+// ===== Internal helpers =====
+
+/**
+ * Intersect the models table's (admin-editable) input modalities with what the
+ * provider's embedding client can actually drive. Connectors gate image
+ * ingestion on the resolved value, so this single intersection guarantees no
+ * UI-reachable configuration makes them ingest images the embed call will
+ * reject. A `null` client capability means "trust the table"; a `null` declared
+ * list (no models row) stays `null`, which downstream treats as text-only.
+ */
+function clampInputModalities(params: {
+  declared: ModelInputModality[] | null;
+  clientSupported: ModelInputModality[] | null;
+}): ModelInputModality[] | null {
+  const { declared, clientSupported } = params;
+  if (!declared || !clientSupported) {
+    return declared;
+  }
+  return declared.filter((modality) => clientSupported.includes(modality));
 }

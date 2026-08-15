@@ -1,10 +1,13 @@
 import {
+  isSmallModel,
+  MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
   requiresPerplexityAgentApi,
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
 } from "@archestra/shared";
 import {
   type ModelsDevApiResponse,
@@ -12,6 +15,7 @@ import {
   modelsDevCostToPerToken,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
+import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -32,6 +36,7 @@ import {
   resolveCrossProviderPrices,
   resolveSelfHostedModelMetadata,
 } from "@/services/cross-provider-pricing";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   resolveVendorPublishedPrices,
   type VendorPublishedPrices,
@@ -88,8 +93,15 @@ class ModelSyncService {
     }
 
     try {
-      // 1. Fetch models from provider API
-      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders);
+      assertSubscriptionCredentialForProvider({
+        apiKey: apiKeyValue,
+        provider,
+      });
+      // 1. Fetch models from provider API. The row id lets subscription
+      // fetchers persist a rotated refresh token back to this key.
+      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders, {
+        providerApiKeyId: apiKeyId,
+      });
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
@@ -131,15 +143,31 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 4. Link models to the API key with best-model detection
+      // 4. Link models to the API key with best-model detection. The
+      // agent-suitability verdict rides the link, not the `models` row: the
+      // row is globally unique on (provider, model_id) while the evidence is
+      // endpoint-local (two Ollama keys can serve different builds under the
+      // same tag), so a row-level verdict would let whichever sync finished
+      // last speak for every key.
+      const verdictByProviderModelId = new Map(
+        providerModels.map((model) => [
+          model.id,
+          deriveRecommendedForAgents(model.capabilities),
+        ]),
+      );
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
+        recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
       }));
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
         provider,
+        // A tag is mutable (`ollama create` can repoint it), so the full
+        // refresh overwrites the verdict verbatim to self-correct; a normal
+        // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
+        { overwriteRecommendedForAgents: forceRefresh === true },
       );
 
       logger.info(
@@ -258,6 +286,7 @@ interface ProviderModelCapabilities {
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
+  supportedEndpoints: SupportedProviderEndpoint[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
@@ -355,6 +384,7 @@ export function buildModelsToUpsert(params: {
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
+      supportedEndpoints: capabilities.supportedEndpoints,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
@@ -368,6 +398,19 @@ export function buildModelsToUpsert(params: {
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * The one place the size threshold is applied. Null (not `true`) when the
+ * provider reported no count, so the link upsert can tell "no evidence this
+ * round" from "evidence says fine" and COALESCE the former away.
+ */
+function deriveRecommendedForAgents(
+  capabilities?: FetchedModelCapabilities,
+): boolean | null {
+  return capabilities?.parameterCount == null
+    ? null
+    : !isSmallModel(capabilities.parameterCount);
 }
 
 /**
@@ -432,7 +475,7 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-001") {
     return 3072;
   }
-  if (provider === "gemini" && id === "gemini-embedding-2-preview") {
+  if (provider === "gemini" && id === "gemini-embedding-2") {
     return 3072;
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
@@ -503,6 +546,7 @@ export function resolveModelCapabilities(params: {
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
+    underlyingModelName,
     capabilities: {
       description: capabilities?.description ?? null,
       contextLength:
@@ -536,6 +580,10 @@ export function resolveModelCapabilities(params: {
         inferredCapabilities.supportsToolCalling ??
         crossProviderMetadata?.supportsToolCalling ??
         null,
+      // Fetcher-only: no other tier knows which wire format a provider serves
+      // a given model over. models.dev describes the model, not the transport
+      // a particular reseller exposes it on.
+      supportedEndpoints: fetched?.supportedEndpoints ?? null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
@@ -597,7 +645,13 @@ function buildCapabilitiesMap(
   const map = new Map<string, ProviderModelCapabilities>();
 
   for (const [providerId, providerData] of Object.entries(modelsDevData)) {
-    const mappedProvider = MODELS_DEV_PROVIDER_MAP[providerId];
+    // Providers mapped to null in MODELS_DEV_PROVIDER_MAP are excluded from
+    // direct models.dev row creation, but some of them still carry the best
+    // per-model metadata for the models their own endpoint reports
+    // (GitHub Copilot, Azure) — the enrichment map re-admits those here.
+    const mappedProvider =
+      MODELS_DEV_PROVIDER_MAP[providerId] ??
+      MODELS_DEV_ENRICHMENT_PROVIDER_MAP[providerId];
     if (mappedProvider !== targetProvider) {
       continue;
     }
@@ -624,6 +678,9 @@ function buildCapabilitiesMap(
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
+        // models.dev describes the model, not which transport a given provider
+        // exposes it on — only a fetcher can know that.
+        supportedEndpoints: null,
         promptPricePerToken: prices.promptPricePerToken,
         completionPricePerToken: prices.completionPricePerToken,
         cacheReadPricePerToken: prices.cacheReadPricePerToken,
@@ -698,6 +755,21 @@ function inferModelCapabilities(params: {
 
   if (provider === "perplexity") {
     return inferPerplexityCapabilities(modelId);
+  }
+
+  if (provider === "github-copilot") {
+    // Every catalogued Copilot model is a chat model (the fetcher drops
+    // embeddings and `completion` types), so text-in/text-out is a safe floor
+    // for models the models.dev catalog doesn't cover. Sits below the
+    // models.dev tier in the resolution order, so a registry entry with richer
+    // modalities (image/pdf input) wins whenever one exists. Without the
+    // floor, an uncovered model stores null modalities, which makes the model
+    // edit dialog invalid the moment it opens (see inferOllamaCapabilities).
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    };
   }
 
   return emptyCapabilities();
@@ -849,21 +921,57 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
 function normalizeKnownModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
+  underlyingModelName?: string | null;
   capabilities: ProviderModelCapabilities;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities } = params;
+  const { provider, modelId, underlyingModelName, capabilities } = params;
   const normalizedModelId = modelId.toLowerCase();
 
-  if (
-    provider === "gemini" &&
-    normalizedModelId === "gemini-embedding-2-preview"
-  ) {
+  if (provider === "gemini" && normalizedModelId === "gemini-embedding-2") {
     return {
       ...capabilities,
       inputModalities: ["text", "image"],
       outputModalities: [],
       supportsToolCalling: false,
     };
+  }
+
+  // An Azure embedding deployment stays classified as one even when the
+  // models.dev azure entry it can now match (via the enrichment map) lists a
+  // "text" output — the registry records embeddings that way. Mirrors
+  // inferAzureCapabilities, which the registry tier would otherwise outrank.
+  if (provider === "azure") {
+    const isEmbedding = [modelId, underlyingModelName].some((name) =>
+      name?.toLowerCase().includes("embedding"),
+    );
+    if (isEmbedding) {
+      return {
+        ...capabilities,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
+  // KB-supported Bedrock embedding models: the KB's own Bedrock client is the
+  // only thing that drives them, so its declared modality support outranks
+  // whatever the models.dev / cross-provider tiers say about the vendor's model
+  // (Cohere Embed v3 direct also takes images, but that's a different client).
+  if (provider === "bedrock") {
+    const embedding =
+      findBedrockEmbeddingModel(modelId) ??
+      (underlyingModelName
+        ? findBedrockEmbeddingModel(underlyingModelName)
+        : undefined);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
   }
 
   return capabilities;
@@ -877,6 +985,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     inputModalities: null,
     outputModalities: null,
     supportsToolCalling: null,
+    supportedEndpoints: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
     cacheReadPricePerToken: null,

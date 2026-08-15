@@ -22,11 +22,16 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { DropboxConfigFields } from "./dropbox-config-fields";
-import { GoogleDriveConfigFields } from "./gdrive-config-fields";
+import {
+  DEFAULT_GDRIVE_AUTH_MODE,
+  GoogleDriveAuthFields,
+  GoogleDriveConfigFields,
+} from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { LinearConfigFields } from "./linear-config-fields";
+import { MFilesConfigFields, MFilesInlineFields } from "./mfiles-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { OneDriveConfigFields } from "./onedrive-config-fields";
 import { OutlineConfigFields } from "./outline-config-fields";
@@ -85,12 +90,14 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
   web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
   perforce: CONNECTOR_TYPE_LABELS.perforce,
+  mfiles: CONNECTOR_TYPE_LABELS.mfiles,
 };
 
 const CONNECTOR_DOC_ANCHORS: Partial<Record<ConnectorType, string>> = {
   gdrive: "google-drive",
   web_crawler: "web-crawler",
   perforce: "perforce-helix-core",
+  mfiles: "m-files",
 };
 
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
@@ -174,6 +181,11 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.perforce,
     description: "Sync text files from Perforce Helix Core depots",
   },
+  {
+    type: "mfiles",
+    label: CONNECTOR_DISPLAY_LABELS.mfiles,
+    description: "Sync documents and permissions from an M-Files vault",
+  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
@@ -253,6 +265,10 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description:
         "Base URL of the P4 REST API, served by the built-in P4 web server (p4 webserver). Use https when the server has an SSL certificate configured.",
     },
+    // Rendered inside MFilesInlineFields: the VAF Add On install precedes
+    // everything in the connection workflow, so its section must sit above
+    // the URL field — outside the shared slot's reach.
+    mfiles: null,
   };
 
 const CREATE_ADVANCED_CONFIG_FIELDS: Record<
@@ -279,6 +295,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
   web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
   perforce: ({ form }) => <PerforceConfigFields form={form} />,
+  mfiles: ({ form }) => <MFilesConfigFields form={form} />,
 };
 
 const EDIT_ADVANCED_CONFIG_FIELDS: Record<
@@ -318,17 +335,42 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Connector types whose backend implementation supports auto-sync-permissions
- * (`supportsPermissionSync`). Stage 1: GitHub, Confluence, Jira. Keep in sync
- * with the connectors that set `supportsPermissionSync = true`; the backend
- * re-validates on create/update (400 otherwise), so this only gates the UI.
+ * (`supportsPermissionSync`). Keep in sync with the connectors that set
+ * `supportsPermissionSync = true`; the backend re-validates on create/update
+ * (400 otherwise), so this only gates the UI.
  */
 const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "github",
+  "gitlab",
   "confluence",
   "jira",
+  "mfiles",
+  "gdrive",
+  "sharepoint",
+  "salesforce",
+  "onedrive",
+  "notion",
+  "asana",
+  "dropbox",
+  "linear",
+  "outline",
+  "servicenow",
+  "perforce",
 ]);
 
-export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+export function connectorSupportsAutoSync(
+  type: ConnectorType,
+  /**
+   * Value of the `orchestratorK8sRuntime` feature
+   * (`useFeature("orchestratorK8sRuntime")` in the calling component).
+   * Perforce permission sync runs the p4 client from an in-cluster pod, so
+   * its backend only sets `supportsPermissionSync` when the Kubernetes
+   * orchestrator is configured; without it Perforce must behave exactly like
+   * a non-perm-sync connector.
+   */
+  orchestratorK8sRuntime: boolean,
+): boolean {
+  if (type === "perforce" && !orchestratorK8sRuntime) return false;
   return AUTO_SYNC_CONNECTOR_TYPES.has(type);
 }
 
@@ -381,10 +423,35 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
  */
 export function getPermissionSyncCredentialNote(
   type: ConnectorType,
-): string | null {
+): ReactNode {
   switch (type) {
     case "github":
       return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
+    case "gitlab":
+      return "Auto-sync permissions matches project members by their public GitLab profile email. A non-admin token cannot read a private email, so members without a public profile email are recorded but stay unresolvable.";
+    case "asana":
+      return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
+    case "dropbox":
+      return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
+    case "outline":
+      return "Auto-sync permissions reads collection members, groups, and public share links through this API key. Use a workspace admin's API key: a member key may not see every share link or roster, and anything it cannot see stays unshared.";
+    case "servicenow":
+      return (
+        <>
+          Auto-sync permissions reads ServiceNow permission tables over the
+          Table API. Anything this account cannot read fails closed.{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(
+              DocsPage.PlatformKnowledge,
+              SERVICENOW_AUTO_SYNC_DOC_ANCHOR,
+            )}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      );
     default:
       return null;
   }
@@ -392,6 +459,38 @@ export function getPermissionSyncCredentialNote(
 
 const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
   "atlassian-organization-admin-api-key";
+const SERVICENOW_AUTO_SYNC_DOC_ANCHOR = "servicenow-auto-sync-permissions";
+
+/**
+ * Rendered under the visibility selector on the Notion create/edit forms when
+ * Auto-sync permissions is selected. Notion's public API cannot report who
+ * can see an individual page, so support is deliberately coarse ("Limited"
+ * in the docs): the admin must know the audience model and scope what the
+ * integration can see.
+ */
+export function NotionAutoSyncPermissionsNote() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Notion&apos;s API cannot report who can see each page, so auto-sync makes
+      every synced page visible to all workspace members matched by email, and
+      never to guests. Share only workspace-appropriate teamspaces and pages
+      with the integration, and grant it the &quot;read user information
+      including email addresses&quot; capability.{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledge,
+          NOTION_AUTO_SYNC_DOC_ANCHOR,
+        )}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </p>
+  );
+}
+
+const NOTION_AUTO_SYNC_DOC_ANCHOR = "notion-auto-sync-permissions";
 // SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(
@@ -425,7 +524,7 @@ export function getDefaultConnectorConfig(
     servicenow: { type, syncDataForLastMonths: 6 },
     notion: { type },
     sharepoint: { type, includePages: true, recursive: true },
-    gdrive: { type, recursive: true },
+    gdrive: { type, recursive: true, authMode: DEFAULT_GDRIVE_AUTH_MODE },
     dropbox: { type, rootPath: "" },
     asana: { type },
     onedrive: { type, userIds: "", recursive: true },
@@ -439,13 +538,30 @@ export function getDefaultConnectorConfig(
       allowPrivateNetwork: false,
     },
     perforce: { type },
+    // Tuning knobs (batch size, object types, client auth method, extension
+    // method) are deliberately not seeded: leaving them absent lets the
+    // backend defaults govern instead of pinning today's values into every
+    // stored config.
+    // authMethod is deliberately absent: Login Account is the default. The
+    // two oauth fields are presets for admins who switch the method to
+    // Application Account (where the gate allows it).
+    mfiles: {
+      type,
+      oauthAuthConfig: "Technical Credentials",
+      oauthAuthConfigScope: "technical",
+    },
   };
 
   return { ...defaultConfigs[type] };
 }
 
 export function connectorNeedsEmail(type: ConnectorType): boolean {
-  return type === "jira" || type === "confluence" || type === "salesforce";
+  return (
+    type === "jira" ||
+    type === "confluence" ||
+    type === "salesforce" ||
+    type === "mfiles"
+  );
 }
 
 export function getConnectorCredentialConfig(params: {
@@ -453,7 +569,13 @@ export function getConnectorCredentialConfig(params: {
   emailRequired: boolean;
   mode: "create" | "edit";
   authMethod?: string;
+  /** Google Drive's auth mode; decides whether a credential is pasted at all. */
+  authMode?: string;
 }): ConnectorCredentialConfig {
+  // In individual mode the credential arrives from Google, so there is nothing
+  // to type — the field is dropped the same way web_crawler drops it.
+  const gdriveUsesOAuth =
+    params.type === "gdrive" && params.authMode === "oauth";
   const jiraConfluenceApiTokenLabel = params.emailRequired
     ? "API Token"
     : "API Token / Personal Access Token";
@@ -466,11 +588,17 @@ export function getConnectorCredentialConfig(params: {
 
   const githubUsesApp =
     params.type === "github" && params.authMethod === "github_app";
+  // Absent authMethod means the legacy password-token mode, matching the
+  // backend default.
+  const mfilesUsesOAuth =
+    params.type === "mfiles" &&
+    (params.authMethod ?? "mfiles_password_token") ===
+      "oauth_client_credentials";
   const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
     sharepoint: "Client Secret",
-    gdrive: "Service Account Key / OAuth Token",
+    gdrive: gdriveUsesOAuth ? undefined : "Service Account JSON Key",
     dropbox: "Access Token",
     outline: "API Key",
     jira: jiraConfluenceApiTokenLabel,
@@ -485,14 +613,17 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password + Security Token",
     web_crawler: undefined,
     perforce: "Login Ticket",
+    mfiles: mfilesUsesOAuth ? "Client Secret" : "Password",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
     {
       servicenow: "Your ServiceNow password",
-      notion: "secret_...",
+      notion: "ntn_...",
       sharepoint: "Your Azure AD client secret",
-      gdrive: "Paste service account JSON key or OAuth access token",
+      gdrive: gdriveUsesOAuth
+        ? undefined
+        : "Paste the whole service account key file",
       dropbox: "Your Dropbox access token",
       outline: "Your Outline API key (starts with ol_api_)",
       jira: jiraConfluenceApiTokenPlaceholder,
@@ -507,6 +638,9 @@ export function getConnectorCredentialConfig(params: {
       salesforce: "Your Salesforce password followed by your security token",
       web_crawler: undefined,
       perforce: "Ticket from p4 login -a -p",
+      mfiles: mfilesUsesOAuth
+        ? "Your Application Account client secret"
+        : "Your M-Files service account password",
     };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
@@ -514,7 +648,9 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Leave empty to keep existing password + security token",
     notion: "Leave empty to keep existing token",
     sharepoint: "Leave empty to keep existing token",
-    gdrive: "Leave empty to keep existing token",
+    gdrive: gdriveUsesOAuth
+      ? undefined
+      : "Leave empty to keep the existing service account key",
     dropbox: "Leave empty to keep existing token",
     outline: "Leave empty to keep existing token",
     jira: "Leave empty to keep existing token",
@@ -528,13 +664,18 @@ export function getConnectorCredentialConfig(params: {
     onedrive: "Leave empty to keep existing token",
     web_crawler: undefined,
     perforce: "Leave empty to keep existing credentials",
+    mfiles: mfilesUsesOAuth
+      ? "Leave empty to keep existing client secret"
+      : "Leave empty to keep existing password",
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
     servicenow: "Password is required",
     notion: "Integration token is required",
     sharepoint: "Client secret is required",
-    gdrive: "Service account key or OAuth token is required",
+    gdrive: gdriveUsesOAuth
+      ? undefined
+      : "A service account JSON key is required",
     dropbox: "Access token is required",
     outline: "API key is required",
     jira: jiraConfluenceApiTokenRequiredMessage,
@@ -549,11 +690,16 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password and security token are required",
     web_crawler: undefined,
     perforce: "Login ticket is required",
+    mfiles: mfilesUsesOAuth
+      ? "Client secret is required"
+      : "Password is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({
     type: params.type,
     mode: params.mode,
+    authMethod: params.authMethod,
+    authMode: params.authMode,
   });
 
   return {
@@ -571,6 +717,8 @@ export function getConnectorCredentialConfig(params: {
 function getApiTokenHelpText(params: {
   type: ConnectorType;
   mode: "create" | "edit";
+  authMethod?: string;
+  authMode?: string;
 }): ReactNode | undefined {
   if (params.type === "sharepoint") {
     return (
@@ -593,8 +741,10 @@ function getApiTokenHelpText(params: {
   if (params.type === "gdrive") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        Paste a service account JSON key (entire file content) or an OAuth2
-        access token with <code>drive.readonly</code> scope.
+        The entire key file, including its <code>private_key</code>.{" "}
+        {params.authMode === "service_account_delegated"
+          ? "Its client ID must be authorized for domain-wide delegation with the drive.readonly and admin.directory.user.readonly scopes."
+          : "Grant it access by sharing each folder or shared drive with the key's own email address."}
       </p>
     );
   }
@@ -611,11 +761,31 @@ function getApiTokenHelpText(params: {
     );
   }
 
+  if (params.type === "mfiles") {
+    const usesOAuth =
+      (params.authMethod ?? "oauth_client_credentials") ===
+      "oauth_client_credentials";
+    if (usesOAuth) return undefined;
+    return (
+      <p className="text-[0.8rem] text-muted-foreground">
+        Exchanged for short-lived MFWS tokens; never sent with content requests.
+      </p>
+    );
+  }
+
   if (params.type === "notion") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        Your Notion integration token (starts with <code>secret_</code>). Create
-        one at notion.so/my-integrations.
+        Your Notion internal integration secret (starts with <code>ntn_</code>,
+        older <code>secret_</code> tokens keep working). Create one in the{" "}
+        <ExternalDocsLink
+          href="https://app.notion.com/developers/connections"
+          className="underline"
+          showIcon={false}
+        >
+          Notion Developer portal
+        </ExternalDocsLink>
+        .
       </p>
     );
   }
@@ -891,7 +1061,7 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  gdrive: () => <></>,
+  gdrive: ({ form }) => <GoogleDriveAuthFields form={form} />,
   dropbox: () => <></>,
   asana: ({ form, mode }) =>
     mode === "create" ? (
@@ -1120,6 +1290,7 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
+  mfiles: ({ form, mode }) => <MFilesInlineFields form={form} mode={mode} />,
 };
 
 export function ConnectorInlineConfigFields({

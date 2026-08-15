@@ -3,8 +3,7 @@ import { getHeapStatistics } from "node:v8";
 import { isClaudeSessionSource, TimeInMs } from "@archestra/shared";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
-import { decryptInteractionRow } from "@/content-encryption/rows.ee";
+import { readInteractionRow } from "@/content-encryption/audit-rows";
 import db, { schema } from "@/database";
 import type { InsertInteraction } from "@/types";
 
@@ -494,29 +493,32 @@ class InteractionDeltaManager {
     }>(sql`
       WITH RECURSIVE chain AS (
         SELECT id, parent_id, thread_id, request_shared_prefix,
-               processed_request_shared_prefix, request, processed_request
+               processed_request_shared_prefix, request, processed_request,
+               incognito_conversation_id
         FROM interactions
         WHERE id IN (${seedList})
         UNION
         SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix,
-               i.processed_request_shared_prefix, i.request, i.processed_request
+               i.processed_request_shared_prefix, i.request, i.processed_request,
+               i.incognito_conversation_id
         FROM interactions i
         JOIN chain c ON i.id = c.parent_id
       )
       SELECT id, parent_id, thread_id, request_shared_prefix,
-             processed_request_shared_prefix, request, processed_request
+             processed_request_shared_prefix, request, processed_request,
+             incognito_conversation_id
       FROM chain
     `);
 
     const map = new Map<string, ChainRow>();
     for (const row of rows.rows) {
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // A chain may mix plaintext delta rows with rows the backfill has
-      // already encrypted — decrypt each row independently before folding.
-      decryptInteractionRow(row);
-      // SPDX-SnippetEnd
+      // already encrypted — resolve each row independently before folding.
+      // An incognito row cannot appear here (they are written
+      // delta-ineligible, so nothing links to them), but going through the
+      // locked-safe reader keeps that a property of this code rather than an
+      // assumption about a different file.
+      readInteractionRow(row);
       map.set(row.id, {
         id: row.id,
         parentId: row.parent_id,

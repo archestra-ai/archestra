@@ -2,7 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
+import {
+  INCOGNITO_DRAFT_SHORTCUT_EVENT,
+  NEW_INCOGNITO_CHAT_HREF,
+  SHORTCUT_NEW_CHAT,
+  SHORTCUT_NEW_INCOGNITO_CHAT,
+  SHORTCUT_SEARCH,
+} from "@/consts";
+import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 export function useConversationSearch() {
@@ -10,6 +17,7 @@ export function useConversationSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [recentChatsView, setRecentChatsView] = useState(false);
   const { isMac } = usePlatform();
+  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
 
   useEffect(() => {
     const handleOpenPalette = (event: Event) => {
@@ -43,8 +51,32 @@ export function useConversationSearch() {
       if (event.altKey && event.code === SHORTCUT_NEW_CHAT.code) {
         event.preventDefault();
         event.stopPropagation();
+        suppressDeadKeyComposition();
         setIsOpen(false);
         router.push("/chat");
+      }
+
+      // Alt + I: New Incognito Chat. Same Alt-qualified shape as Alt+N, and
+      // inert while the instance has incognito chats disabled.
+      if (
+        incognitoEnabled &&
+        event.altKey &&
+        event.code === SHORTCUT_NEW_INCOGNITO_CHAT.code
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressDeadKeyComposition();
+        setIsOpen(false);
+        // Handshake with the new-chat composer: when it's on screen it
+        // claims the shortcut (preventDefault on this cancelable event) and
+        // toggles its draft in place; dispatchEvent returns false in that
+        // case. Anywhere else, navigate to a fresh incognito draft.
+        const unclaimed = window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+        if (unclaimed) {
+          router.push(NEW_INCOGNITO_CHAT_HREF);
+        }
       }
     };
 
@@ -55,11 +87,29 @@ export function useConversationSearch() {
       window.removeEventListener("open-conversation-search", handleOpenPalette);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [router, isMac]);
+  }, [router, isMac, incognitoEnabled]);
 
   return {
     isOpen,
     setIsOpen,
     recentChatsView,
   };
+}
+
+/**
+ * On macOS, Option+N / Option+I are dead keys and Chromium starts their
+ * composition even when the keydown is preventDefault'ed — so a "˜" or "ˆ"
+ * would still land in whichever editable has focus (e.g. the chat textarea).
+ * Blur it for the duration of the event so the composition has no target,
+ * then restore focus.
+ */
+function suppressDeadKeyComposition() {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) {
+    active.blur();
+    setTimeout(() => {
+      // No-op if navigation replaced the view and detached the element.
+      active.focus();
+    }, 0);
+  }
 }

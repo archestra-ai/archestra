@@ -116,7 +116,10 @@ describe("TaskQueueService", () => {
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(handler).toHaveBeenCalledWith({ connectorId: "conn-99" });
+      expect(handler).toHaveBeenCalledWith(
+        { connectorId: "conn-99" },
+        { taskId: task.id },
+      );
       expect((await getTask(task.id))?.status).toBe("completed");
     });
 

@@ -81,6 +81,24 @@ export function NoToolsBadge() {
   );
 }
 
+/**
+ * Marks a model the sync judged a poor fit for agent work. Phrased as advice
+ * rather than a verdict on the model: the only evidence today is parameter
+ * count, which is a weak predictor of agentic skill, so the copy stops short of
+ * calling the model bad. Muted rather than amber for the same reason — this is
+ * a suggestion to pick something else, not an error.
+ *
+ * There is deliberately no positive counterpart: `recommendedForAgents` is
+ * `true` by default, so it cannot distinguish "known good" from "no evidence".
+ */
+export function NotRecommendedForAgentsBadge() {
+  return (
+    <InlineTag className="text-muted-foreground bg-muted">
+      Limited for complex tasks
+    </InlineTag>
+  );
+}
+
 export function BestModelBadge() {
   return (
     <InlineTag

@@ -10,6 +10,7 @@ export { deepseekAdapterFactory } from "./deepseek";
 export { geminiAdapterFactory } from "./gemini";
 export { geminiEmbeddingsAdapterFactory } from "./gemini-embeddings";
 export { githubCopilotAdapterFactory } from "./github-copilot";
+export { githubCopilotResponsesAdapterFactory } from "./github-copilot-responses";
 export { groqAdapterFactory } from "./groq";
 export { kimiAdapterFactory } from "./kimi";
 export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";

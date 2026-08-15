@@ -10,7 +10,7 @@ workspace = true
 [dependencies]
 archestra-bench-core = { path = "../core" }
 axum = "0.8"
-askama = "0.14"
+askama = "0.16"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"

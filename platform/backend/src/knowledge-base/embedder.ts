@@ -2,6 +2,7 @@ import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
+  BedrockPartialEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
@@ -25,11 +26,14 @@ const RETRY_BASE_DELAY_MS = 1000;
 /**
  * The outcome of an embedding batch, reported to the connector run so a failure's
  * cause is visible (not just server logs). `errorMessage` carries the same typed,
- * user-facing message the query path surfaces.
+ * user-facing message the query path surfaces. `skippedImageChunkCount` counts
+ * image chunks the configured embedding model can't take, which are skipped
+ * (documents complete without them) rather than sent to a certain rejection.
  */
 interface EmbeddingBatchOutcome {
   failedDocumentCount: number;
   errorMessage: string | null;
+  skippedImageChunkCount: number;
 }
 
 class EmbeddingService {
@@ -64,10 +68,26 @@ class EmbeddingService {
         return;
       }
 
+      const { embeddable, skippedImageChunkCount } = partitionEmbeddableChunks(
+        chunks,
+        ctx,
+      );
+      if (skippedImageChunkCount > 0) {
+        logger.warn(
+          {
+            documentId,
+            skippedImageChunkCount,
+            provider: ctx.provider,
+            model: ctx.model,
+          },
+          "[Embedder] Skipped image chunks the configured embedding model can't embed",
+        );
+      }
+
       const allUpdates: Array<{ chunkId: string; embedding: number[] }> = [];
 
-      for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
-        const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+      for (let i = 0; i < embeddable.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = embeddable.slice(i, i + EMBEDDING_BATCH_SIZE);
         const inputs = batch.map((c) =>
           chunkToEmbeddingInput({
             model: ctx.model,
@@ -200,7 +220,11 @@ class EmbeddingService {
     }
 
     if (allChunks.length === 0) {
-      return { failedDocumentCount: 0, errorMessage: null };
+      return {
+        failedDocumentCount: 0,
+        errorMessage: null,
+        skippedImageChunkCount: 0,
+      };
     }
 
     // 2. Get embedding config
@@ -222,6 +246,7 @@ class EmbeddingService {
       return {
         failedDocumentCount: docChunkMap.length,
         errorMessage: message,
+        skippedImageChunkCount: 0,
       };
     }
     if (!orgConfig) {
@@ -236,16 +261,43 @@ class EmbeddingService {
           embeddingStatus: "pending",
         });
       }
-      return { failedDocumentCount: 0, errorMessage: null };
+      return {
+        failedDocumentCount: 0,
+        errorMessage: null,
+        skippedImageChunkCount: 0,
+      };
     }
 
     const ctx = orgConfig.config;
+
+    // Image chunks the configured embedding model can't take (already-ingested
+    // media after a model switch, or a mid-sync config change) are skipped, not
+    // sent to a certain rejection: their documents complete with the remaining
+    // chunks — a media document simply embeds none — instead of sticking in
+    // "failed" with a cause only visible in server logs. The count is surfaced
+    // on the connector run.
+    const { embeddable, skippedImageChunkCount } = partitionEmbeddableChunks(
+      allChunks,
+      ctx,
+    );
+    if (skippedImageChunkCount > 0) {
+      logger.warn(
+        {
+          runId: connectorRunId,
+          skippedImageChunkCount,
+          provider: ctx.provider,
+          model: ctx.model,
+        },
+        "[Embedder] Skipped image chunks the configured embedding model can't embed",
+      );
+    }
+
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
     let firstErrorMessage: string | null = null;
 
-    for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
-      const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+    for (let i = 0; i < embeddable.length; i += EMBEDDING_BATCH_SIZE) {
+      const batch = embeddable.slice(i, i + EMBEDDING_BATCH_SIZE);
       try {
         const inputs = batch.map((c) =>
           chunkToEmbeddingInput({
@@ -283,8 +335,23 @@ class EmbeddingService {
           },
           "[Embedder] Batch embedding API call failed",
         );
-        for (const chunk of batch) {
-          failedChunkIds.add(chunk.chunkId);
+        if (error instanceof BedrockPartialEmbeddingError) {
+          for (const success of error.successes) {
+            const chunk = batch[success.index];
+            if (chunk) {
+              embeddingResults.set(chunk.chunkId, success.embedding);
+            }
+          }
+          for (const failure of error.failures) {
+            const chunk = batch[failure.index];
+            if (chunk) {
+              failedChunkIds.add(chunk.chunkId);
+            }
+          }
+        } else {
+          for (const chunk of batch) {
+            failedChunkIds.add(chunk.chunkId);
+          }
         }
       }
     }
@@ -340,6 +407,7 @@ class EmbeddingService {
     return {
       failedDocumentCount,
       errorMessage: failedDocumentCount > 0 ? firstErrorMessage : null,
+      skippedImageChunkCount,
     };
   }
 
@@ -349,42 +417,133 @@ class EmbeddingService {
     connectorId: string | null;
   }): Promise<EmbeddingApiResponse> {
     const { ctx, inputs, connectorId } = params;
+    let pending = inputs.map((input, index) => ({ input, index }));
+    const successes = new Map<number, number[]>();
+    const terminalFailures: Array<{ index: number; reason: unknown }> = [];
+    let promptTokens = 0;
+
+    const callObserved = (attemptInputs: EmbeddingInput[]) =>
+      withKbObservability({
+        operationName: "embedding",
+        provider: ctx.provider,
+        model: ctx.model,
+        source: "knowledge:embedding",
+        connectorId,
+        type: getEmbeddingDiscriminator(ctx.provider),
+        callback: () =>
+          callEmbedding({
+            inputs: attemptInputs,
+            model: ctx.model,
+            apiKey: ctx.apiKey,
+            baseUrl: ctx.baseUrl,
+            dimensions: ctx.dimensions,
+            provider: ctx.provider,
+          }),
+        buildInteraction: (resp) =>
+          buildEmbeddingInteraction({
+            model: ctx.model,
+            input: attemptInputs.map(embeddingInputLogValue),
+            dimensions: ctx.dimensions,
+            response: resp,
+          }),
+        buildInteractionOnError: (error) => {
+          if (
+            !(error instanceof BedrockPartialEmbeddingError) ||
+            error.successes.length === 0
+          ) {
+            return null;
+          }
+          return buildEmbeddingInteraction({
+            model: ctx.model,
+            input: error.successes
+              .map((success) => attemptInputs[success.index])
+              .filter((input): input is EmbeddingInput => input !== undefined)
+              .map(embeddingInputLogValue),
+            dimensions: ctx.dimensions,
+            response: {
+              object: "list",
+              data: error.successes.map((success, index) => ({
+                object: "embedding",
+                embedding: success.embedding,
+                index,
+              })),
+              model: ctx.model,
+              usage: {
+                prompt_tokens: error.tokens,
+                total_tokens: error.tokens,
+              },
+            },
+          });
+        },
+      });
+
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+      let response: EmbeddingApiResponse;
       try {
-        return await withKbObservability({
-          operationName: "embedding",
-          provider: ctx.provider,
-          model: ctx.model,
-          source: "knowledge:embedding",
-          connectorId,
-          type: getEmbeddingDiscriminator(ctx.provider),
-          callback: () =>
-            callEmbedding({
-              inputs,
-              model: ctx.model,
-              apiKey: ctx.apiKey,
-              baseUrl: ctx.baseUrl,
-              dimensions: ctx.dimensions,
-              provider: ctx.provider,
-            }),
-          buildInteraction: (resp) =>
-            buildEmbeddingInteraction({
-              model: ctx.model,
-              input: inputs.map((i) =>
-                typeof i === "string" ? i : `[image:${i.mimeType}]`,
-              ),
-              dimensions: ctx.dimensions,
-              response: resp,
-            }),
-        });
+        response = await callObserved(pending.map(({ input }) => input));
       } catch (error) {
+        let retryReason: unknown = error;
+        if (error instanceof BedrockPartialEmbeddingError) {
+          promptTokens += error.tokens;
+          for (const success of error.successes) {
+            const original = pending[success.index];
+            if (original) {
+              successes.set(original.index, success.embedding);
+            }
+          }
+
+          const retryable: typeof pending = [];
+          for (const failure of error.failures) {
+            const original = pending[failure.index];
+            if (!original) continue;
+            if (isRetryableEmbeddingError(failure.reason)) {
+              retryable.push(original);
+              retryReason = failure.reason;
+            } else {
+              terminalFailures.push({
+                index: original.index,
+                reason: failure.reason,
+              });
+            }
+          }
+          pending = retryable;
+        }
+
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
-        if (isLastAttempt || !isRetryableEmbeddingError(error)) {
+        const canRetry =
+          !isLastAttempt &&
+          (error instanceof BedrockPartialEmbeddingError
+            ? pending.length > 0
+            : isRetryableEmbeddingError(error));
+        if (!canRetry) {
+          if (
+            error instanceof BedrockPartialEmbeddingError ||
+            successes.size > 0 ||
+            terminalFailures.length > 0
+          ) {
+            if (!(error instanceof BedrockPartialEmbeddingError)) {
+              terminalFailures.push(
+                ...pending.map(({ index }) => ({ index, reason: error })),
+              );
+            } else {
+              terminalFailures.push(
+                ...pending.map(({ index }) => ({
+                  index,
+                  reason: retryReason,
+                })),
+              );
+            }
+            throw aggregateBedrockPartialError({
+              successes,
+              failures: terminalFailures,
+              tokens: promptTokens,
+            });
+          }
           throw error;
         }
 
         const delayMs = getEmbeddingRetryDelayMs(
-          error,
+          retryReason,
           RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
         );
         logger.warn(
@@ -396,7 +555,40 @@ class EmbeddingService {
           "[Embedder] Retryable embedding error, backing off",
         );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
       }
+
+      promptTokens += response.usage.prompt_tokens;
+      for (const result of response.data) {
+        const original = pending[result.index];
+        if (original) {
+          successes.set(original.index, result.embedding);
+        }
+      }
+      pending = [];
+
+      if (terminalFailures.length > 0) {
+        throw aggregateBedrockPartialError({
+          successes,
+          failures: terminalFailures,
+          tokens: promptTokens,
+        });
+      }
+
+      return {
+        ...response,
+        data: [...successes.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([index, embedding]) => ({
+            object: "embedding" as const,
+            embedding,
+            index,
+          })),
+        usage: {
+          prompt_tokens: promptTokens,
+          total_tokens: promptTokens,
+        },
+      };
     }
 
     // Unreachable, but satisfies TypeScript
@@ -407,6 +599,25 @@ class EmbeddingService {
 export const embeddingService = new EmbeddingService();
 
 // ===== Internal helpers =====
+
+function embeddingInputLogValue(input: EmbeddingInput): string {
+  return typeof input === "string" ? input : `[image:${input.mimeType}]`;
+}
+
+function aggregateBedrockPartialError(params: {
+  successes: Map<number, number[]>;
+  failures: Array<{ index: number; reason: unknown }>;
+  tokens: number;
+}): BedrockPartialEmbeddingError {
+  return new BedrockPartialEmbeddingError(
+    [...params.successes.entries()].map(([index, embedding]) => ({
+      index,
+      embedding,
+    })),
+    params.failures,
+    params.tokens,
+  );
+}
 
 /**
  * A cause-specific, user-facing message for an embedding failure. When the
@@ -455,18 +666,79 @@ function chunkToEmbeddingInput(params: {
 }): EmbeddingInput {
   const { model, content, metadataSuffix, contextualHeader } = params;
 
-  if (content.startsWith("data:image/")) {
-    // Parse the data URL: data:<mimeType>;base64,<data>
-    const semicolonIdx = content.indexOf(";base64,");
-    if (semicolonIdx > 5) {
-      const mimeType = content.slice(5, semicolonIdx);
-      const data = content.slice(semicolonIdx + 8); // len(";base64,") === 8
-      return { mimeType, data };
-    }
+  const image = parseImageDataUrl(content);
+  if (image) {
+    return image;
   }
   return addNomicTaskPrefix(
     model,
     (contextualHeader ?? "") + content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+/**
+ * Parse an image data URL (`data:<mimeType>;base64,<data>`) into an inline
+ * image input, or null when the content is ordinary text.
+ */
+function parseImageDataUrl(
+  content: string,
+): { mimeType: string; data: string } | null {
+  if (!content.startsWith("data:image/")) {
+    return null;
+  }
+  const semicolonIdx = content.indexOf(";base64,");
+  if (semicolonIdx <= 5) {
+    return null;
+  }
+  return {
+    mimeType: content.slice(5, semicolonIdx),
+    data: content.slice(semicolonIdx + 8), // len(";base64,") === 8
+  };
+}
+
+/**
+ * Split chunks into ones the configured embedding model can embed and image
+ * chunks it can't: `inputModalities` excludes "image" (including `null`, which
+ * means the model's capabilities are unknown and image support can't be
+ * assumed), or the image's format is outside the model's accepted MIME types
+ * (Bedrock's multimodal models take JPEG/PNG only). Connectors gate NEW image
+ * ingestion on the same resolved capability, so this catches what ingested
+ * earlier under a different configuration.
+ */
+function partitionEmbeddableChunks<T extends { content: string }>(
+  chunks: T[],
+  ctx: EmbeddingConfig,
+): { embeddable: T[]; skippedImageChunkCount: number } {
+  const imageAllowed = ctx.inputModalities?.includes("image") ?? false;
+  const acceptedMimeTypes = ctx.acceptedImageMimeTypes;
+  if (imageAllowed && acceptedMimeTypes === null) {
+    return { embeddable: chunks, skippedImageChunkCount: 0 };
+  }
+  const embeddable = chunks.filter((chunk) => {
+    const image = parseImageDataUrl(chunk.content);
+    if (image === null) {
+      return true;
+    }
+    if (!imageAllowed) {
+      return false;
+    }
+    return (
+      acceptedMimeTypes === null ||
+      acceptedMimeTypes.includes(normalizeImageMimeType(image.mimeType))
+    );
+  });
+  return {
+    embeddable,
+    skippedImageChunkCount: chunks.length - embeddable.length,
+  };
+}
+
+/**
+ * Canonicalize an image MIME type for capability checks: lowercase, with the
+ * common non-standard "image/jpg" spelling mapped to "image/jpeg".
+ */
+function normalizeImageMimeType(mimeType: string): string {
+  const lower = mimeType.toLowerCase();
+  return lower === "image/jpg" ? "image/jpeg" : lower;
 }

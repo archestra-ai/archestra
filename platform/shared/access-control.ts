@@ -701,6 +701,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // skill admin) are conditional on what the setup includes and enforced in
   // the route handler. The script GET is public (token-authenticated).
   [RouteId.CreateConnectionSetup]: {},
+  // Reports whether a pre-built VAF Add On package exists for this
+  // installation, so the connector form can offer a download link that is
+  // never a known 404. Reads nothing protected — the answer is the same for
+  // every caller — so any authenticated member may ask.
+  [RouteId.GetMfilesVafAddOnDistribution]: {},
   // Provisions a personal virtual key for the manual /connection flow. The
   // llmVirtualKey:create check is enforced in the handler (mirrors the
   // virtual-key branch of CreateConnectionSetup).
@@ -740,6 +745,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
   [RouteId.UpdateAgentSubagentExclusions]: {},
+  // Skill assignments/exclusions (what the gateway publishes over skill://):
+  // agent-type read/update permission checked dynamically in handler, on top
+  // of this floor. `skill:read` is the floor rather than `{}` because these
+  // routes both disclose skills (name, description, scope, author) and decide
+  // which ones a gateway hands to every holder of its token — neither belongs
+  // to a caller whose role was deliberately stripped of the skill resource.
+  // Visibility of each named skill is checked per id in the assignment
+  // service; this is the capability half, and both are load-bearing.
+  [RouteId.GetAgentSkills]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkills]: { skill: ["read"] },
+  [RouteId.GetAgentSkillExclusions]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkillExclusions]: { skill: ["read"] },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -1182,12 +1199,23 @@ export const requiredEndpointPermissionsMap: Partial<
   // OpenAI (ChatGPT subscription) key.
   [RouteId.OpenaiCodexDeviceAuthStart]: {},
   [RouteId.OpenaiCodexDeviceAuthPoll]: {},
+  // Same self-service rationale for the X Premium (SuperGrok) device flow: it
+  // only obtains the caller's own OAuth credential for a new personal xAI
+  // (X Premium subscription) key.
+  [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
   [RouteId.UpdateLlmProviderApiKey]: {
     llmProviderApiKey: ["update"],
   },
+  // Self-service like the create route and the device flows: reconnecting your
+  // OWN personal subscription key after its sign-in expires must not require
+  // llmProviderApiKey:update, or default members complete the device flow and
+  // then can't save the refreshed credential. The handler restricts it to the
+  // caller's own personal key holding subscription material.
+  [RouteId.ReconnectLlmProviderApiKey]: {},
   [RouteId.DeleteLlmProviderApiKey]: {
     llmProviderApiKey: ["delete"],
   },
@@ -1367,6 +1395,9 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["delete"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
+    environment: ["update"],
+  },
+  [RouteId.UpdateEnvironmentResourceDefaults]: {
     environment: ["update"],
   },
   [RouteId.GetK8sCapabilities]: {
@@ -1670,6 +1701,15 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
+  // Starting an authorization ends in a credential being written onto the
+  // connector, so it takes the same grant as any other edit.
+  [RouteId.StartGoogleDriveConnectorOAuth]: { knowledgeSource: ["update"] },
+  // Google redirects the browser here, and the session rides along (the
+  // cookie is SameSite=Lax, which a top-level GET navigation carries). The
+  // handler additionally requires that session to be the one that started the
+  // flow, so an authorization cannot be redeemed onto someone else's
+  // connector.
+  [RouteId.CompleteGoogleDriveConnectorOAuth]: { knowledgeSource: ["update"] },
 
   // Connector Knowledge Base Assignment Routes
   [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },

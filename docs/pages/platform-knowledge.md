@@ -3,12 +3,12 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-07
+lastUpdated: 2026-08-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and M-Files. An agent assigned a Knowledge Base can query that data to answer questions.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
@@ -22,7 +22,7 @@ The whole pipeline runs inside Archestra on PostgreSQL with pgvector. There is n
 
 Connectors run on a cron schedule. Each document goes through the same four steps.
 
-1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. With a multimodal embedding model configured, images are embedded directly rather than described.
+1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. A PDF without a text layer — a scan, for example — is skipped and counted in the sync run details. With a multimodal embedding model configured, images are embedded directly rather than described.
 2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
 3. **Add context.** Optionally, the document is summarized once and that summary is indexed with every one of its chunks. See [Contextual Retrieval](#contextual-retrieval).
 4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.
@@ -65,6 +65,8 @@ flowchart LR
 ### Citations
 
 Every result carries the document title, its URL in the source system, the connector it came from, and the position of the chunk within the document. An agent answering from a Knowledge Base cites those sources in its reply, so a reader can open the original.
+
+In the built-in chat, the agent also marks each claim with a numbered reference and lists a short verbatim quote for each — tagged with the chunk it came from — in a Sources section at the end of the answer. Archestra checks each quote against the chunk it cites — a quote found in no returned chunk is logged as a likely fabrication. The check never blocks or alters an answer, and it covers the built-in chat only. Set `ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED` to `false` to turn it off.
 
 ### Contextual Retrieval
 
@@ -109,10 +111,24 @@ Open **Settings > Knowledge**. An embedding model must be set before Knowledge B
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
-- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072. Keys connected through a subscription sign-in (an X Premium login, for example) do not appear — Knowledge needs an API key.
 - **Model** — any embedding-capable model exposed by the selected key.
 
-To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions and input modalities cannot be edited until the configuration is dropped.
+
+### Image Embedding
+
+Connectors index image files only when the configured embedding model accepts image input. These models do:
+
+| Provider    | Model                                                                 | Image formats                |
+| ----------- | --------------------------------------------------------------------- | ---------------------------- |
+| Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
+
+Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
+
+Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 2048 characters — roughly 500 tokens. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model when your corpus is mostly documents.
 
 ### Reranking Configuration
 
@@ -120,7 +136,7 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
 
-- **Key** — any LLM provider key.
+- **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
 
 A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.
@@ -166,35 +182,49 @@ Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permis
 
 Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
 
-Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
+Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
-| Connector    | Auto-sync permissions |
-| ------------ | --------------------- |
-| Confluence   | Supported             |
-| GitHub       | Supported             |
-| Jira         | Supported             |
-| Google Drive | Planned               |
-| Salesforce   | Planned               |
-| SharePoint   | Planned               |
-| Asana        | Not supported         |
-| Dropbox      | Not supported         |
-| GitLab       | Not supported         |
-| Linear       | Not supported         |
-| Notion       | Not supported         |
-| OneDrive     | Not supported         |
-| Outline      | Not supported         |
-| Perforce     | Not supported         |
-| ServiceNow   | Not supported         |
-| Web Crawler  | Not supported         |
+| Connector    | Auto-sync permissions                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| Asana        | Supported                                                                                                 |
+| Confluence   | Supported                                                                                                 |
+| Dropbox      | Supported                                                                                                 |
+| GitHub       | Supported                                                                                                 |
+| GitLab       | Supported                                                                                                 |
+| Jira         | Supported                                                                                                 |
+| Linear       | Supported                                                                                                 |
+| M-Files      | Supported with the VAF Add On                                                                             |
+| Google Drive | Supported                                                                                                 |
+| Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
+| OneDrive     | Supported                                                                                                 |
+| Outline      | Supported                                                                                                 |
+| Perforce     | Supported with the Kubernetes orchestrator ([details](#perforce-helix-core))                              |
+| Salesforce   | Supported                                                                                                 |
+| ServiceNow   | Supported ([details](#servicenow-auto-sync-permissions))                                                  |
+| SharePoint   | Supported                                                                                                 |
+| Web Crawler  | Not supported                                                                                             |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 
 - **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
 - **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
+- **GitLab** only exposes an email the user has made **public on their profile**. An instance admin token also reads private emails; a regular token does not.
+- **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
+- **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
+- **Linear** returns member emails to any workspace API key. No extra credential is needed.
+- **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
+- **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
+- **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
+- **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
+- **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
+- **ServiceNow** reads user emails from the `sys_user` table with the same credential the connector uses. A user whose email field is empty stays unresolvable.
+- **Perforce** reads each account's `Email` field from its user spec, through the connector's admin user. Accounts without one stay unresolvable. See [Perforce](#perforce-helix-core).
 
-**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
+**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
 **Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
+
+**Editing a connector.** Saving new settings or credentials stops the permission sync running against the old ones — that run ends as **Superseded**. A replacement run starts straight away, so you don't wait for the next scheduled one.
 
 #### Atlassian Organization Admin API Key
 
@@ -219,6 +249,8 @@ Global admins can also delete an entry from the trash for good, with **Delete pe
 ## Supported Connectors
 
 Archestra ships with these built-in connector types.
+
+A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 
 ### Jira
 
@@ -281,7 +313,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 Sync issues and merge request discussions from GitLab.
 
-**Indexed:** issues, merge requests, and their comments from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
+**Indexed:** issues, merge requests, their comments, and (optionally) Markdown files from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
 
 **Authentication:** a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/).
 
@@ -292,7 +324,12 @@ Sync issues and merge request discussions from GitLab.
 | Project IDs            | Comma-separated specific project IDs to sync (optional -- leave blank to sync all) |
 | Include Issues         | Toggle to sync issues and their comments (default: on)                             |
 | Include Merge Requests | Toggle to sync merge requests and their comments (default: on)                     |
+| Include Markdown Files | Toggle to sync `.md` and `.mdx` files from the repository (default: off)           |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
+
+**Auto-sync permissions.** Each project is one permission scope. Its audience is the project's members with the **Reporter** role or higher — direct members, members inherited from ancestor groups, and members of invited groups, each at their effective access level. Guests are excluded: GitLab does not let them read code or confidential issues, so including them would over-share. **Public** and **internal** projects are readable by everyone in your Archestra organization.
+
+Each sync snapshots one member roster per project, shown in the connector's **Users** and **Groups** tabs as `<project path> members`. A member whose email is hidden upstream stays unresolvable — assign them to an Archestra user from the Users tab, or ask them to set a public email on their GitLab profile.
 
 ### Asana
 
@@ -308,13 +345,37 @@ Sync tasks and discussions from Asana projects.
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
 
+**Auto-sync permissions.** Each project is one permission scope. A project shared with the whole workspace grants every workspace member — guests excluded. Any other project grants its explicit members: users directly, teams through their team rosters. A task in several projects is readable through any of them; its scope is the union of those audiences. Task collaborators are granted individually on their tasks.
+
+Each permission sync also snapshots workspace members and team rosters — the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Users added to a project directly — guests included — appear there too, under the synthetic **Direct project members** group. Limited-access team members get only the projects they are explicitly added to. Guests get only explicit project and task grants.
+
+Permission reads run as the token's user. A project or roster the token cannot read stays fail-closed — use a token from a user who can see every synced project. A task removed from every synced project is hidden until a sync sees it again.
+
 ### ServiceNow
 
 Sync ITSM records from a ServiceNow instance.
 
-**Indexed:** incidents, change requests, change tasks, problems, and business applications. Incidents are enabled by default; the rest are opt-in.
+**Indexed:** incidents, change requests, change tasks, problems, business applications, and published knowledge articles. Incidents are enabled by default; the rest are opt-in.
 
 **Authentication:** basic auth (username + password) or an OAuth bearer token. For basic auth, put the username in the Email field and the password in the API Token field. For OAuth, leave Email empty and put the bearer token in the API Token field.
+
+**Required roles.** Use a dedicated service account ("Web service access only" is fine). The account needs roles that can read every synced table:
+
+| Role | Grants read on |
+| --- | --- |
+| `itil` | Incidents, changes, change tasks, problems, and business applications |
+| `knowledge` | Knowledge articles |
+| `user_criteria_admin`, `user_admin` | User criteria definitions and the user, group, and role tables auto-sync reads |
+
+The Can Read / Cannot Read criteria mappings (`kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`) have no role-based read access out of the box — built-in roles such as `knowledge_admin` do not open them. Auto-sync permissions needs explicit access control lists (ACLs) on both tables.
+
+Creating ACLs requires the `security_admin` role. ServiceNow grants it by elevation for the current session, and hides the **New** button on the ACL list until you elevate: open the profile menu, select **Elevate role**, and check **security_admin**. Then:
+
+1. Go to **System Security → Access Control (ACL)** and select **New**. Set Type `record`, Operation `read`, and Name `kb_uc_can_read_mtom` with the field left as `--None--`. Under **Requires role**, add a role the service account holds. Submit.
+2. Create a second ACL for the same table with the field set to `*`, which grants read on its fields.
+3. Repeat both ACLs for `kb_uc_cannot_read_mtom`.
+
+An account without the right roles fails in one of two ways, depending on the instance's ACLs: the sync errors with HTTP 403 "Insufficient rights to query records", or ServiceNow silently filters the rows and the sync succeeds with nothing ingested. Test the account directly before connecting: `curl -u '<user>:<password>' 'https://<instance>.service-now.com/api/now/table/incident?sysparm_limit=1'` should return a record, not an error and not an empty result.
 
 | Field                         | Description                                                                                                                   |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -324,9 +385,32 @@ Sync ITSM records from a ServiceNow instance.
 | Include Change Tasks          | Sync change tasks from the `change_task` table (default: off)                                                                 |
 | Include Problems              | Sync problems from the `problem` table (default: off)                                                                         |
 | Include Business Applications | Sync business applications from the `cmdb_ci_business_app` CMDB table (default: off)                                          |
+| Include Knowledge Articles    | Sync published knowledge articles from the `kb_knowledge` table (default: off)                                                |
+| Role audiences                | Per-table ServiceNow role names for auto-sync permissions — see below (optional)                                              |
 | States                        | Comma-separated state values to filter by (e.g. `1, 2`). Applies to incidents, changes, change tasks, and problems (optional) |
 | Assignment Groups             | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional)                     |
 | Batch Size                    | Records per batch (default: 50)                                                                                               |
+
+#### ServiceNow Auto-Sync Permissions
+
+ServiceNow decides record access with ACL rules, and those rules cannot be read through its REST API. For ITSM records and business applications, the connector grants each record to its participants instead: assignment group members plus the referenced users — the caller, the opener, and the assignee. That never grants wider than ServiceNow itself, but a user who could read a record upstream through roles or custom ACLs may not see it here. To widen a table's audience, add role names under **Role audiences** (`itil`, for example) — every holder of those roles may then read every synced record of that table, including business applications.
+
+Knowledge articles follow ServiceNow's own permission model: **Can Read** and **Cannot Read** user criteria at knowledge-base and article level. The connector expands each criteria to its users, groups, roles, companies, departments, and locations. Script-based (advanced) criteria cannot be evaluated over the API: on an allow path they grant nobody; on a deny path the affected knowledge base or article is hidden from everyone. A knowledge base without criteria follows the instance's `glide.knowman.block_access_with_no_user_criteria` property — open to your whole Archestra organization when `false`, hidden when `true` or unreadable.
+
+**Required access.** The connector account needs read access to these tables:
+
+| Tables | Used for |
+| --- | --- |
+| `incident`, `change_request`, `change_task`, `problem`, `cmdb_ci_business_app`, `kb_knowledge` | Content sync of the enabled entities. Reading the ITSM tables needs the `itil` role on most instances |
+| `sys_user`, `sys_user_group`, `sys_user_grmember`, `sys_user_has_role` | Resolving participants, group rosters, and role audiences to user emails |
+| `user_criteria`, `kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`, `sys_properties` | Knowledge-article audiences |
+| `core_company`, `cmn_department`, `cmn_location` | Expanding criteria that reference them |
+
+The [Required roles](#servicenow) section above covers these, including the explicit ACLs the criteria mapping tables need.
+
+**Misconfiguration behaves silently.** ServiceNow filters out rows an account cannot read instead of returning an error. An under-privileged account therefore looks like missing data: content sync ingests nothing from a table it cannot read, and a permission table it cannot read makes the affected audiences fail closed — the documents exist but nobody can retrieve them. Each permission sync run reports how many audiences it could not read, so check the run details when documents seem to be missing or hidden. Knowledge bases in the HR Service Delivery scope (`sn_hr_core`) additionally need the `sn_hr_core.content_reader` role; without it their criteria read as empty and the articles fail closed.
+
+Users granted directly on records appear in the connector's **Users** tab under the synthetic `direct-grants` group. A user whose `sys_user` email is empty stays unresolvable; assign such an account manually from the Users tab.
 
 ### Notion
 
@@ -334,12 +418,29 @@ Sync pages and databases from a Notion workspace.
 
 **Indexed:** pages from a Notion workspace.
 
-**Authentication:** a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your workspace and share the relevant pages or databases with it.
+**Authentication:** an internal integration secret from the [Notion Developer portal](https://app.notion.com/developers/connections). New secrets start with `ntn_`; older `secret_` tokens keep working. Create an internal integration in your workspace and share the relevant pages or databases with it.
 
 | Field        | Description                                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
 | Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
+
+#### Notion Auto-Sync Permissions
+
+Support is *Limited*. Notion's API does not say who can see a page — there is no sharing endpoint, and teamspaces are not exposed. Archestra cannot mirror per-page access, so every synced page shares one workspace-wide audience:
+
+- A synced page is visible to every workspace member whose Notion email matches an Archestra user's email.
+- Each permission sync refreshes the member roster from Notion's users API. The connector page shows a **Workspaces** tab in place of Groups, with one row per connector: the workspace, named as it is in Notion.
+- Guests are never in Notion's member listing, so a guest never gains access through Archestra.
+- Member emails need the integration capability **"read user information including email addresses"** (integration settings, **Capabilities** tab). A member without a readable email stays unresolvable (fail-closed) until you assign them from the Users tab.
+
+A page that is private or teamspace-restricted in Notion, but shared with the integration, becomes readable by every workspace member through Archestra. Set up the integration's access with that in mind:
+
+- Share only workspace-appropriate content with the integration — a company wiki teamspace, for example.
+- Do not share private pages or restricted teamspaces with the integration.
+- For content that must reach a narrower audience, use a separate connector with **Team-scoped** visibility.
+
+This is still stricter than an org-wide connector: access stops at the workspace member roster instead of your whole Archestra organization, and it updates as members join and leave.
 
 ### SharePoint
 
@@ -367,9 +468,23 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
+**Auto-sync permissions.** Each document library is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. Site pages follow the site's default library audience; per-page unique sharing is not modeled. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Group grants (Microsoft 365 / Entra groups and SharePoint site groups) carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream (or does not match an Archestra user's email) can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. The roster covers groups granted on library roots; a group granted only on a single item is listed in the Groups tab but resolves no members until it also holds a library-level grant.
+
+`Sites.Read.All` covers library and item grants. Three more application permissions unlock more, progressively:
+
+| Extra permission | Unlocks |
+| ---------------- | ------- |
+| `User.Read.All` | User grants expand to emails, and organization-wide links expand to the tenant's active users. |
+| `GroupMember.Read.All` | Microsoft 365 / Entra group member rosters (the Users and Groups tabs, and group-based document access). |
+| `Sites.FullControl.All` | SharePoint site-group member rosters through the site's REST API, and permission sync switches to cheaper sharing-aware delta runs. |
+
+Each tier is detected at runtime: without it, that kind of grant or roster drops (fail-closed) and the rest of the sync proceeds.
+
 ### OneDrive
 
-Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (see [Image Embedding](#image-embedding)), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
 | Field         | Description                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -392,6 +507,20 @@ To configure the connector:
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
+**Auto-sync permissions.** Each configured user's drive is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. The drive's owner is always part of its audience. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Grants to Microsoft 365 / Entra groups carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. SharePoint site groups granted on a personal drive are listed in the Groups tab but resolve no members; assign their users manually if you need them.
+
+`Files.Read.All` covers drive and item grants. Three more application permissions unlock more, progressively:
+
+| Extra permission | Unlocks |
+| ---------------- | ------- |
+| `User.Read.All` | User and owner grants expand to emails, and organization-wide links expand to the tenant's active users. |
+| `GroupMember.Read.All` | Microsoft 365 / Entra group member rosters (the Users and Groups tabs, and group-based document access). |
+| `Sites.FullControl.All` | Permission sync switches to cheaper sharing-aware delta runs. |
+
+Each tier is detected at runtime: without it, that kind of grant or roster drops (fail-closed) and the rest of the sync proceeds.
+
 #### Known Limitations
 
 - Only OneDrive for Business (work/school accounts) is supported. Consumer OneDrive is not supported.
@@ -403,27 +532,73 @@ Sync files from Google Drive (My Drive and Shared Drives).
 
 **Indexed:** files from My Drive and Shared Drives. Supported document types include `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log`, `.docx`, `.pdf`, and `.pptx`. Google Workspace files (Docs, Sheets, Slides) are also indexed. When a multimodal embedding model is configured, image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) are indexed too. Files larger than 10 MB are skipped.
 
-**Authentication:** either a service account JSON key (recommended) or a short-lived OAuth2 access token with the `drive.readonly` scope. For a service account: create one in the [Google Cloud Console](https://console.cloud.google.com/), enable the Google Drive API, download the JSON key, and share the target folders or drives with the service account email. Paste the full JSON contents (or the bearer token) into the **Service Account Key / OAuth Token** field.
+**Authentication:** pick one of three modes. The mode decides which Google identity the connector acts as, and so what it can index.
 
-| Field               | Description                                                                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drive IDs           | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
-| Folder ID           | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)                                                               |
-| File Types          | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
-| Recursive Traversal | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
+| Mode                        | What it indexes                                                    | Who signs in to Google    | The catch                                                              |
+| --------------------------- | ------------------------------------------------------------------ | ------------------------- | ---------------------------------------------------------------------- |
+| **Google Workspace domain** | Every shared drive, plus every user's My Drive, across your domain | Nobody                    | A super admin has to authorize delegation once, in the Admin console   |
+| **One Google account**      | Whatever that one person can already see in Drive                  | That person, once         | Everyone the Knowledge Base reaches sees whatever that person can see  |
+| **Service account only**    | Only what has been shared with the key's own address               | Nobody                    | Somebody has to share every folder with it, by hand, forever           |
+
+Use the Workspace domain mode if you have a Workspace tenant -- coverage keeps up with the organization on its own. Reach for one Google account when a single person's Drive is the corpus, or when nobody can change Admin console settings. Service account only suits a small, fixed set of folders somebody is willing to maintain.
+
+#### Google Workspace Domain
+
+A service account with domain-wide delegation impersonates users across your domain. Coverage follows the organization -- a drive created next week is picked up by the next sync, with nobody sharing anything by hand.
+
+In the [Google Cloud Console](https://console.cloud.google.com/), create a service account, enable the Google Drive API and the Admin SDK API, and download the JSON key. Copy the service account's client ID from its **Advanced settings**.
+
+In the [Google Admin console](https://admin.google.com/), go to **Security -> Access and data control -> API controls -> Domain-wide delegation**. Add that client ID with two scopes:
+
+```
+https://www.googleapis.com/auth/drive.readonly
+https://www.googleapis.com/auth/admin.directory.user.readonly
+```
+
+Paste the JSON key into the connector and enter a Workspace admin address as the **Delegated admin email**. Setting a Folder ID or Drive IDs scopes the sync to those instead, and the connector then acts as that one admin.
+
+#### One Google Account
+
+Someone authorizes their own Drive through Google, and the connector indexes what they can see. Archestra stores a refresh token, so the sync keeps working once the first hour is up.
+
+Only that one person authorizes -- whoever sets the connector up. Nobody else signs in to Google, and there is no per-user prompt. What they can see becomes readable by everyone the Knowledge Base is shared with, so pick the account whose view of Drive matches the audience you intend.
+
+This mode needs a Google OAuth client on the deployment. Create a **Web application** client in the Cloud Console, enable the Google Drive API, and register the redirect URI the connector form shows you. Set `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID` and `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` to that client's credentials.
+
+Saving the connector sends you to Google. The connector page then names the connected account and offers **Reconnect** -- you need it if that account ever revokes access.
+
+#### Service Account Only
+
+The connector sees only what someone has shared with the service account's email address. Create the service account and key as above, then share each target folder or drive with that address.
+
+| Field                 | Description                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delegated admin email | Workspace admin the service account impersonates (Google Workspace domain mode)                                                                             |
+| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
+| Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)                                                               |
+| File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
+| Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
+
+**Test connection** checks the setup rather than just the credential. It confirms that impersonation works for the delegated admin, that the directory can be read when the sync will enumerate one, and that any folder or shared drive you named is reachable. The result says which of those failed.
 
 ### Dropbox
 
 Sync text and source files from a Dropbox account or team folder.
 
-**Indexed:** text-based files from a Dropbox account or team folder. Supported extensions: `.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`.
+**Indexed:** files from a Dropbox account or team folder — text and source files (`.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`), documents (`.pdf`, `.docx`, `.pptx`, `.xlsx` — every sheet of a workbook, not just the first), and images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) when the configured embedding model accepts image input. Files the connector cannot extract are reported as skipped on the run.
 
-**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission.
+**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission. Auto-sync permissions also needs `sharing.read`. The token can be a member token or a Dropbox Business team token. With a team token, the connector acts as the admin who generated it. On a Business team with a team space, the connector syncs from the team root automatically — the team space and the member folder are both visible.
 
 | Field      | Description                                                                                              |
 | ---------- | -------------------------------------------------------------------------------------------------------- |
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
+
+**Auto-sync permissions.** Each shared folder is one permission scope — a file belongs to its nearest containing shared folder. Files outside every shared folder are visible only to the token's account. Shared-folder members resolve to their emails directly; pending invitees are excluded until they accept. A file shared with extra people directly carries those people as additional grants. A file shared directly with a group does not carry that group — only shared-folder group grants are mirrored.
+
+Grants to Dropbox groups carry the group's identity. Reading a group's member roster is a Business team API. Dropbox serves it only to team access tokens — a member token cannot read it, whatever scopes the app holds. To expand groups, give the connector a team access token as its one Access Token. In the [App Console](https://www.dropbox.com/developers/apps), add the `groups.read` and `members.read` team scopes next to the app's files and sharing scopes. Then generate a new access token as a team admin — an app with team scopes issues team tokens. The connector detects the team token and syncs content as the admin who generated it. Granted groups — including the automatic "Everyone at ..." team group — then expand to their active members. With a member token, granted groups appear in the **Groups** tab with no members; assign their users manually from the **Users** tab. Direct grantees appear there too, under the synthetic `direct-grants` group.
+
+Shared links are not reflected. A file shared only by link stays visible to the audiences above, nobody more.
 
 ### Linear
 
@@ -444,6 +619,10 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
+**Auto-sync permissions.** Linear's access unit is the team. Issues and cycles get their team's audience: a public team admits every workspace member, a private team only its listed members. Guests get access only through teams they were invited to. A project's audience is the members of its teams plus the users listed on the project. Each sync also snapshots every team's roster, so the connector's **Users** and **Groups** tabs show each member with their assignment status. Suspended accounts belong to no audience.
+
+The API key sees what its owner can see. A private team the owner does not belong to syncs no content and grants no access. Use a key from an owner whose access matches what you want indexed.
+
 ### Outline
 
 Sync published documents from an [Outline](https://www.getoutline.com/) workspace.
@@ -457,6 +636,14 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL).    |
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
+
+**Auto-sync permissions.** Each collection is one permission scope. A collection's audience is its individual members, its granted groups, and — when the collection has workspace-wide default access — every active workspace member except guests. Guests only see collections they are explicitly added to, directly or through a group.
+
+Each permission sync also snapshots group member rosters, so the connector's **Users** and **Groups** tabs show every member with their assignment status. Members granted a collection individually appear there too, under the synthetic `direct-grants` group. Workspace-wide default access appears as a group named after your workspace, holding every active non-guest member.
+
+Published share links are the only public surface. A published document share maps that document — and its child documents, when the share includes them — to everyone in your Archestra organization. A published collection share does the same for the whole collection.
+
+A collection whose permissions cannot be read hides its documents from everyone until a later sync reads them. Documents an Outline user can only reach through a direct per-document share (not a public link) are not carried over; they stay limited to the collection's audience.
 
 ### Salesforce
 
@@ -489,6 +676,10 @@ Example advanced config:
 ```
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
+
+**Auto-sync permissions.** Each object is one permission scope, decided by its organization-wide default: a public object grants every active Salesforce user; a private object resolves each record individually from its owner and its share table (manual, team, and sharing-rule grants). A contact inherits its parent account's audience. Restriction rules, territory hierarchies, and high-volume portal shares are not modeled — they only ever hide content, never over-grant. The same username/password login is used for everything; no extra credential or scope is needed. Private objects on very large orgs resolve per record, so give those connectors a longer permission-sync interval.
+
+Every permission sync also snapshots the org's groups and queues with their (recursively expanded) memberships, plus record owners and per-user share grantees under the synthetic `direct-grants` group — so the connector's **Users** and **Groups** tabs show every grant-holder with their assignment status, and an account whose email is hidden (or matches no Archestra user's email) can be assigned manually from the Users tab. Inactive users stay visible in the roster but never resolve to access.
 
 ### Web Crawler
 
@@ -537,6 +728,61 @@ Each depot path and extension combination is listed in its own REST API request.
 | Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
+#### Permission Sync
+
+The connector supports [auto-sync permissions](#auto-sync-permissions). The REST API cannot read the protections table, so permission sync runs the `p4` CLI in a dedicated in-cluster pod — the p4 shim. This requires the Kubernetes orchestrator. The shim pod is isolated: it accepts connections only from platform pods and connects out only to the Perforce server. For `ssl:` targets the server's certificate fingerprint is trusted on first use, like `p4 trust`. The image contains no Perforce software; the backend downloads the pinned `p4` binary when it provisions the pod — see [Deployment](/docs/platform-deployment#perforce-permission-sync-p4-shim) for the image and binary-source variables (air-gapped installs point them at an internal mirror).
+
+Choosing the auto-sync-permissions visibility adds three fields to the form:
+
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Admin Username     | The Perforce user permission sync authenticates as                                |
+| Admin Password     | That account's password                                                            |
+| P4 Port            | Wire-protocol address of the server, when that is not the Server URL's host        |
+
+The admin user needs `super` access — or `admin` with the `dm.protects.allow.admin=1` configurable — to read the full protections table (`p4 protects -a`), group definitions, and the user list.
+
+Leave P4 Port empty on a normal server. The P4 web server runs inside the Perforce server, so Archestra dials the Server URL's host on port 1666 and works out the transport by trying plain and SSL. Fill the field in only when something else serves the REST API — an ingress in front of the web server, for example.
+
+Test Connection checks the whole path. It reaches the server over the wire address, signs the admin user in, and reads the protections table, so a wrong address or an under-privileged account shows up here rather than at the first permission sync.
+
+Permission sync runs in a pod of its own, one per connector. The pod exists while the connector syncs permissions and is removed when it stops — when you delete the connector, disable it, or change its visibility. Changing the server, the admin user or any credential replaces the pod, so a revoked credential stops working straight away.
+
+A document's audience is the set of users whose effective read access to its depot path the protections table grants, walked with the exclusion lines honored. Access is evaluated as from an unnamed host, so host-restricted lines don't participate. Audiences are always individual users — granting through a group still resolves to its members, because an exclusion line can carve a member out of a granted group.
+
+Users are matched to Archestra accounts by the `Email` field of their Perforce user spec. A user without a resolvable email is dropped from audiences (fail-closed); assign such accounts to Archestra users from the connector's Users tab.
+
+### M-Files
+
+Sync versioned files and their source permissions from an M-Files vault.
+
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the connector type. See [Deployment](/docs/platform-deployment).
+
+**Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
+
+**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication.
+
+| Field | Description |
+| --- | --- |
+| M-Files Web Service URL | Classic Web/MFWS base URL; `/REST` is appended automatically (for example, `https://mfiles.example.com/m-files`) |
+| Vault GUID | GUID of the vault to index |
+| Username | Dedicated M-Files login account for the connector |
+| Password | That account's password; exchanged for a short-lived MFWS token |
+| Windows Domain | Optional, under Advanced — only for domain-authenticated accounts |
+
+Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
+
+#### M-Files VAF Add On
+
+The Archestra VAF Add On is a vault application for M-Files Server. Syncing requires it. MFWS does not expose change tracking, exact permission reads, or group membership — the add-on supplies them from inside the vault. File content never flows through it. Every call requires the **Change full control role**, enforced by M-Files itself. Unreadable permissions fail closed.
+
+Install it once per connected vault, from the connector form:
+
+- **Installation script** — copy the one-line command and run it in PowerShell on the M-Files server as a system administrator. It downloads the add-on, installs it into the vault you choose, and restarts the vault.
+- **Manual installation** — download the `.mfappx` package and install it in M-Files Admin: right-click the vault, then Applications, then Install.
+
+Pre-built packages are published as `m-files-vaf-add-on-v<version>` [releases on GitHub](https://github.com/archestra-ai/archestra/releases). The source lives in [`integrations/m-files-vaf-add-on`](https://github.com/archestra-ai/archestra/tree/main/integrations/m-files-vaf-add-on); its README covers building from source and the add-on contract. For development deployments, two variables override where the install script gets the package — see [Deployment](/docs/platform-deployment).
 
 ## Environments
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
-import { isEditApiKeyFormValid } from "./edit-key-form.utils";
+import {
+  isEditApiKeyFormValid,
+  subscriptionSignInRequired,
+} from "./edit-key-form.utils";
 
 function makeValues(
   overrides: Partial<LlmProviderApiKeyFormValues>,
@@ -21,7 +24,7 @@ function makeValues(
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
-    openaiAuthMethod: "api-key",
+    authMethod: "api-key",
     ...overrides,
   };
 }
@@ -104,6 +107,70 @@ describe("isEditApiKeyFormValid", () => {
           teamId: null,
         }),
       ),
+    ).toBe(false);
+  });
+});
+
+describe("subscriptionSignInRequired", () => {
+  const placeholder = "••••••••••••••••";
+
+  it("requires a sign-in when the subscription tab is selected on a key that is not that subscription", () => {
+    // Submitting here would privatize the shared key (subscription keys are
+    // personal-only) while silently keeping its old shared secret.
+    const values = makeValues({
+      scope: "org",
+      authMethod: "subscription",
+      apiKey: null,
+    });
+    expect(subscriptionSignInRequired(values, { subscriptionKind: null })).toBe(
+      true,
+    );
+    expect(isEditApiKeyFormValid(values, { subscriptionKind: null })).toBe(
+      false,
+    );
+  });
+
+  it("treats the masked placeholder as no sign-in", () => {
+    expect(
+      subscriptionSignInRequired(
+        makeValues({ authMethod: "subscription", apiKey: placeholder }),
+        { subscriptionKind: null },
+      ),
+    ).toBe(true);
+  });
+
+  it("passes once a sign-in produced a credential", () => {
+    expect(
+      subscriptionSignInRequired(
+        makeValues({ authMethod: "subscription", apiKey: "chatgpt-oauth:abc" }),
+        { subscriptionKind: null },
+      ),
+    ).toBe(false);
+  });
+
+  it("needs no fresh sign-in when the key already holds this subscription", () => {
+    expect(
+      subscriptionSignInRequired(
+        makeValues({ authMethod: "subscription", apiKey: placeholder }),
+        { subscriptionKind: "chatgpt" },
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a provider with no credential-level subscription", () => {
+    expect(
+      subscriptionSignInRequired(
+        makeValues({ provider: "anthropic", authMethod: "subscription" }),
+        { subscriptionKind: null },
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores the api-key auth mode entirely", () => {
+    expect(
+      subscriptionSignInRequired(makeValues({ authMethod: "api-key" }), {
+        subscriptionKind: null,
+      }),
     ).toBe(false);
   });
 });

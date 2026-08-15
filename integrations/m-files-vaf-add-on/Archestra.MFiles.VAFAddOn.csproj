@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>Archestra.MFiles.VAFAddOn</AssemblyName>
+    <RootNamespace>Archestra.MFiles.VAFAddOn</RootNamespace>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.0.0</Version>
+    <!-- The official MFiles.ProjectTemplates csproj zips the whole output
+         directory into the .mfappx. Keep the output flat (no net472/
+         subfolder) so the package layout matches the manually built,
+         live-certified package from build-package.ps1: appdef.xml and the
+         assemblies at the package root. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Kebab-case package base name: the user-facing artifact/release asset
+         is archestra-m-files-vaf-add-on[-<version>].mfappx while the
+         assembly keeps .NET naming (Archestra.MFiles.VAFAddOn.dll). -->
+    <MfappxBaseName>archestra-m-files-vaf-add-on</MfappxBaseName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MFiles.VAF" Version="25.3.727.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="appdef.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <!-- Packaging target from the official M-Files VAF project template
+       (MFiles.ProjectTemplates, vaf-latest-empty): read the application
+       version from appdef.xml, then zip the build output into
+       $(MfappxBaseName)-$(AppDefVersion).mfappx. `dotnet build -c Release`
+       therefore produces the deployable package with no M-Files
+       installation present; the assemblies come from the MFiles.VAF
+       NuGet package. -->
+  <Target Name="RunWhenBuildChanges" AfterTargets="Build">
+    <XmlPeek XmlInputPath="appdef.xml" Query="//version/text()">
+      <Output TaskParameter="Result" PropertyName="AppDefVersion" />
+    </XmlPeek>
+    <Message Importance="High" Text="Cleaning old .mfappx files (if available)..." />
+    <ItemGroup>
+      <_FilesToDelete Include="$(BaseIntermediateOutputPath)\$(MfappxBaseName)-*.mfappx" />
+      <_FilesToDelete Include="bin\$(Configuration)\$(MfappxBaseName)-*.mfappx" />
+    </ItemGroup>
+    <Delete Files="@(_FilesToDelete)" />
+    <Message Importance="High" Text="Creating new .mfappx file..." />
+    <ZipDirectory SourceDirectory="bin\$(Configuration)" DestinationFile="$(BaseIntermediateOutputPath)\$(MfappxBaseName)-$(AppDefVersion).mfappx" />
+    <Message Importance="High" Text="Copying .mfappx to output" />
+    <Copy SourceFiles="$(BaseIntermediateOutputPath)\$(MfappxBaseName)-$(AppDefVersion).mfappx" DestinationFolder="bin\$(Configuration)" />
+  </Target>
+</Project>

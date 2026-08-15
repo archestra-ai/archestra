@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   isProviderApiKeyOptional,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -27,7 +28,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
-  useUpdateLlmProviderApiKey,
+  useReconnectLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 
 export type CreateLlmProviderApiKeyDialogProps = {
@@ -41,6 +42,8 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   /** Selects the focused progressive flow shown by this dialog. */
   credentialMode?: "api-key" | "subscription";
+  /** This dialog must connect the exact subscription kind pinned by an agent. */
+  requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
   onSuccess?: () => void;
   /**
@@ -59,12 +62,13 @@ export function CreateLlmProviderApiKeyDialog({
   defaultValues,
   allowedProviders,
   credentialMode = "api-key",
+  requiresExactSubscriptionCredential = false,
   showConsoleLink = false,
   onSuccess,
   reconnectKeyId,
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
-  const updateMutation = useUpdateLlmProviderApiKey();
+  const reconnectMutation = useReconnectLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
@@ -103,22 +107,32 @@ export function CreateLlmProviderApiKeyDialog({
   const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    // A subscription key defaults to the subscription's own name rather than the
+    // provider's, so an unnamed ChatGPT key isn't just called "OpenAI".
+    const subscriptionKind =
+      values.authMethod === "subscription"
+        ? subscriptionKindForProvider(values.provider)
+        : null;
+    // Subscription credentials are per-user, so the key is always personal.
+    // Resolved here rather than via the form's scope coercion: that coercion is
+    // deferred until a sign-in completes (so switching tabs can't silently
+    // privatize anything), and the sign-in callback reads form values in the
+    // same tick the credential lands — before any effect has run.
+    const scope = subscriptionKind ? "personal" : values.scope;
     try {
       await createMutation.mutateAsync({
         name:
           values.name?.trim() ||
-          (values.provider === "openai" &&
-          values.openaiAuthMethod === "chatgpt-subscription"
-            ? CHATGPT_SUBSCRIPTION_LABEL
+          (subscriptionKind
+            ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
             : PROVIDER_CONFIG[values.provider].name),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        scope,
+        teamId: scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -140,32 +154,33 @@ export function CreateLlmProviderApiKeyDialog({
       });
       onOpenChange(false);
       onSuccess?.();
+      return true;
     } catch {
       // Error handled by mutation
+      return false;
     }
   };
   const handleCreate = form.handleSubmit(createCredential);
-  const handleSubscriptionCredential = (credential: string) => {
+  const handleSubscriptionCredential = async (credential: string) => {
     if (reconnectKeyId) {
       // Re-authentication: rotate the existing key's secret in place — a
       // second create would leave a duplicate credential row behind, with the
-      // stale one still selected in conversations.
-      void (async () => {
-        try {
-          await updateMutation.mutateAsync({
-            id: reconnectKeyId,
-            data: { apiKey: credential },
-          });
-          onOpenChange(false);
-          onSuccess?.();
-        } catch {
-          // Error handled by mutation
-        }
-      })();
+      // stale one still selected in conversations. Uses the self-service
+      // reconnect endpoint rather than the permission-gated PATCH, so default
+      // members can refresh their own expired sign-in.
+      await reconnectMutation.mutateAsync({
+        id: reconnectKeyId,
+        apiKey: credential,
+      });
+      onOpenChange(false);
+      onSuccess?.();
       return;
     }
     const values = { ...form.getValues(), apiKey: credential };
-    void createCredential(values);
+    const created = await createCredential(values);
+    if (!created) {
+      throw new Error("Subscription credential was not saved");
+    }
   };
 
   return (
@@ -191,6 +206,9 @@ export function CreateLlmProviderApiKeyDialog({
             isPending={createMutation.isPending}
             allowedProviders={allowedProviders}
             credentialMode={credentialMode}
+            requiresExactSubscriptionCredential={
+              requiresExactSubscriptionCredential
+            }
             progressive
             allowPersonalSubscriptions={credentialMode === "subscription"}
             onSubscriptionCredential={handleSubscriptionCredential}
@@ -238,7 +256,7 @@ function getDefaultFormValues(params: {
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
-    openaiAuthMethod: "api-key",
+    authMethod: "api-key",
     ...defaultValues,
   };
 }

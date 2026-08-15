@@ -238,10 +238,10 @@ describe("gemini model fetchers", () => {
           };
         }
 
-        if (model === "gemini-embedding-2-preview") {
+        if (model === "gemini-embedding-2") {
           return {
-            name: "publishers/google/models/gemini-embedding-2-preview",
-            displayName: "Gemini Embedding 2 Preview",
+            name: "publishers/google/models/gemini-embedding-2",
+            displayName: "Gemini Embedding 2",
           };
         }
 
@@ -281,8 +281,8 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-embedding-2-preview",
-          displayName: "Gemini Embedding 2 Preview",
+          id: "gemini-embedding-2",
+          displayName: "Gemini Embedding 2",
           provider: "gemini",
         },
         {
@@ -312,7 +312,7 @@ describe("gemini model fetchers", () => {
       const mockGet = vi.fn(async ({ model }: { model: string }) => {
         if (
           model === "gemini-embedding-001" ||
-          model === "gemini-embedding-2-preview" ||
+          model === "gemini-embedding-2" ||
           model === "gemini-2.5-pro" ||
           model === "gemini-2.5-flash" ||
           model === "gemini-2.5-flash-lite"
@@ -347,8 +347,8 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-embedding-2-preview",
-          displayName: "Gemini Embedding 2 Preview",
+          id: "gemini-embedding-2",
+          displayName: "Gemini Embedding 2",
           provider: "gemini",
         },
         {

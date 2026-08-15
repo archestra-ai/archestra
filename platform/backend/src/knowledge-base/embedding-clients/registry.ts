@@ -6,7 +6,11 @@ import { callAzureEmbedding } from "./azure";
 import { callBedrockEmbedding } from "./bedrock";
 import { callGeminiEmbedding } from "./gemini";
 import { callOpenAIEmbedding } from "./openai";
-import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
+import type {
+  EmbeddingApiResponse,
+  EmbeddingInput,
+  EmbeddingPurpose,
+} from "./types";
 
 type EmbeddingCall = (params: {
   inputs: EmbeddingInput[];
@@ -14,6 +18,8 @@ type EmbeddingCall = (params: {
   apiKey: string | null;
   baseUrl?: string | null;
   dimensions?: number;
+  /** Forwarded to clients that condition the vector on it (Bedrock/Cohere). */
+  purpose?: EmbeddingPurpose;
 }) => Promise<EmbeddingApiResponse>;
 
 interface EmbeddingAdapter {

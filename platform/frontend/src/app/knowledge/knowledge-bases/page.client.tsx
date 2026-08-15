@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
 import {
   ArchiveRestore,
   ArrowLeft,
@@ -22,7 +21,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
-import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   PERMANENT_DELETE_LABEL,
@@ -55,7 +54,7 @@ import {
   useRestoreKnowledgeBase,
 } from "@/lib/knowledge/knowledge-base.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
@@ -502,23 +501,10 @@ function ExpandedConnectors({
       id: "status",
       header: "Status",
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          {row.original.lastSyncAt ? (
-            <>
-              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-              <span
-                className="text-xs text-muted-foreground"
-                title={formatDate({ date: row.original.lastSyncAt })}
-              >
-                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                  addSuffix: true,
-                })}
-              </span>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Never synced</span>
-          )}
-        </div>
+        <ConnectorStatusCell
+          lastSyncAt={row.original.lastSyncAt}
+          lastSyncStatus={row.original.lastSyncStatus}
+        />
       ),
     },
     {

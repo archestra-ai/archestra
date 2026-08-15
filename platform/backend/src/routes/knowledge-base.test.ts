@@ -7,18 +7,24 @@ import config from "@/config";
 import db from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
-import { buildGroupToken } from "@/knowledge-base/acl-tokens";
+import {
+  buildContainerToken,
+  buildGroupToken,
+} from "@/knowledge-base/acl-tokens";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   ConnectorRunModel,
   GithubAppConfigModel,
   KbChunkModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -47,6 +53,8 @@ describe("knowledge base routes", () => {
         }
       ).organizationId = organizationId;
     });
+
+    registerAuditLogHook(app);
 
     const { default: knowledgeBaseRoutes } = await import("./knowledge-base");
     await app.register(knowledgeBaseRoutes);
@@ -826,6 +834,129 @@ describe("knowledge base routes", () => {
       );
     });
 
+    test("rejects an M-Files connector while its beta gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = false;
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "M-Files Vault",
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+          },
+          credentials: { email: "svc-archestra", apiToken: "vault-password" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "The M-Files connector is not enabled",
+      );
+    });
+
+    test("rejects the M-Files Application Account auth method while its gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "M-Files Vault",
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+          credentials: { email: "client-id", apiToken: "client-secret" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "Application Account authentication method is not enabled",
+      );
+    });
+
+    test("rejects switching an M-Files connector to the Application Account method while its gate is off", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "mfiles_password_token",
+          },
+        },
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "Application Account authentication method is not enabled",
+      );
+    });
+
+    test("keeps editing an M-Files connector that already uses the Application Account method", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const oauthConfig = {
+        type: "mfiles",
+        baseUrl: "https://mfiles.example.com/m-files",
+        vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+        authMethod: "oauth_client_credentials",
+        oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+        oauthAuthConfig: "Entra ID",
+      } as const;
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "mfiles", config: oauthConfig },
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { name: "Renamed Vault", config: oauthConfig },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().name).toBe("Renamed Vault");
+    });
+
     test("rejects team-scoped connector creation without enterprise license", async () => {
       const original = config.enterpriseFeatures.knowledgeBase;
       Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
@@ -955,24 +1086,25 @@ describe("knowledge base routes", () => {
     });
 
     test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
-      // notion is not a permission-sync connector (Stage 1: jira/confluence/github;
-      // Stage 2: gdrive/salesforce/sharepoint) — so this must 400.
+      // A crawled site has no upstream ACL to mirror, so web_crawler is the
+      // stable stand-in here: connectors gaining permission sync one by one
+      // never turn this case green by accident.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Auto-sync Notion",
-          connectorType: "notion",
+          name: "Auto-sync Web Crawler",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
           teamIds: [],
-          config: { type: "notion" },
+          config: { type: "web_crawler", startUrl: "https://example.com" },
           credentials: { apiToken: "token" },
         },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "Auto-sync permissions is not supported for notion connectors",
+        "Auto-sync permissions is not supported for web_crawler connectors",
       );
     });
 
@@ -1518,6 +1650,59 @@ describe("knowledge base routes", () => {
           AND payload->>'connectorId' = ${connector.id}
       `);
       expect(rows[0]?.count).toBe(1);
+    });
+
+    test("editing an auto-sync connector stops the pass computed against its old settings", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Edited Auto-Sync Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        visibility: "auto-sync-permissions",
+      });
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        runType: "permission",
+        status: "running",
+        startedAt: new Date(),
+        leaseOwner: "worker-1",
+        leaseEpoch: 0,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "moved-org",
+            authMethod: "pat",
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      // That pass holds the previous settings for its whole duration; left
+      // running it would keep reading from the old source and, for a connector
+      // that provisions its own runtime, roll that runtime back onto them.
+      expect((await ConnectorRunModel.findById(run.id))?.status).toBe(
+        "superseded",
+      );
+      // ...and the replacement pass reconciles the new settings, so the corpus
+      // is not left half-reconciled behind a fail-closed ACL.
+      expect(
+        await TaskModel.hasPendingOrProcessing("permission_sync", connector.id),
+      ).toBe(true);
     });
 
     test("rejects switching to auto-sync-permissions for a member without the dedicated permission", async ({
@@ -2670,13 +2855,13 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      // notion is not a permission-sync connector, but a stored row can still
-      // carry the auto-sync visibility; the trigger must reject it.
+      // web_crawler is not a permission-sync connector, but a stored row can
+      // still carry the auto-sync visibility; the trigger must reject it.
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
         {
-          connectorType: "notion",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
         },
       );
@@ -2709,7 +2894,7 @@ describe("knowledge base routes", () => {
           visibility: "auto-sync-permissions",
         },
       );
-      // One tagged doc + one still fail-closed (awaiting a pass).
+      // One directly tagged doc + one still fail-closed (awaiting a pass).
       await KbDocumentModel.create({
         organizationId,
         sourceId: "tagged",
@@ -2728,6 +2913,59 @@ describe("knowledge base routes", () => {
         contentHash: "h2",
         acl: [],
       });
+      const emptyContainerKey = "repo:empty";
+      const missingContainerKey = "repo:missing";
+      const emptyContainerToken = buildContainerToken({
+        connectorId: connector.id,
+        containerKey: emptyContainerKey,
+      });
+      await KbContainerAclModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          containerKey: emptyContainerKey,
+          acl: [],
+        },
+      ]);
+      // An assignment token is not access by itself: empty and missing
+      // container audiences are effectively fail-closed.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "empty-container",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h3",
+        acl: [emptyContainerToken],
+        containerKey: emptyContainerKey,
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "missing-container",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h4",
+        acl: [
+          buildContainerToken({
+            connectorId: connector.id,
+            containerKey: missingContainerKey,
+          }),
+        ],
+        containerKey: missingContainerKey,
+      });
+      // A direct exception remains readable even if its shared audience is
+      // empty, so it must not inflate the fail-closed count.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "direct-exception",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h5",
+        acl: [emptyContainerToken, "user_email:alice@example.com"],
+        containerKey: emptyContainerKey,
+      });
 
       const response = await app.inject({
         method: "GET",
@@ -2736,8 +2974,8 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.totalDocuments).toBe(2);
-      expect(body.failClosedDocuments).toBe(1);
+      expect(body.totalDocuments).toBe(5);
+      expect(body.failClosedDocuments).toBe(3);
       expect(body.permissionSyncRunning).toBe(false);
       // Effective global schedule always yields a next run in tests.
       expect(typeof body.nextScheduledAt).toBe("string");
@@ -2916,6 +3154,7 @@ describe("knowledge base routes", () => {
       const engineers = groups.find(
         (g: { groupId: string }) => g.groupId === "engineers",
       );
+      expect(engineers.name).toBeNull();
       expect(engineers.token).toBe("group:github_engineers");
       expect(engineers.documentCount).toBe(2);
       expect(engineers.lastSyncedAt).toEqual(expect.any(String));
@@ -2925,7 +3164,7 @@ describe("knowledge base routes", () => {
           displayName: "Alice A",
           email: "alice@example.com",
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "email",
         },
         {
@@ -2953,11 +3192,53 @@ describe("knowledge base routes", () => {
       );
       expect(ghosts).toEqual({
         groupId: "ghosts",
+        name: null,
         token: "group:github_ghosts",
         documentCount: 1,
         lastSyncedAt: null,
         members: [],
       });
+    });
+
+    test("returns catalog display names and groups with no memberships or documents", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "mfiles",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      await KbExternalGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "mfiles",
+          groupId: "7",
+          name: "Engineering Readers",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().groups).toEqual([
+        {
+          groupId: "7",
+          name: "Engineering Readers",
+          token: "group:mfiles_7",
+          documentCount: 0,
+          lastSyncedAt: expect.any(String),
+          members: [],
+        },
+      ]);
     });
 
     test("does not resolve a user from another organization's membership", async ({
@@ -3094,7 +3375,7 @@ describe("knowledge base routes", () => {
           displayName: "Hidden H",
           email: null,
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "override",
         },
       ]);
@@ -3140,7 +3421,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${connector.id}/user-groups`,
       });
       expect(response.json().groups[0].members[0]).toMatchObject({
-        user: { id: alice.id, name: alice.name },
+        user: { id: alice.id, name: alice.name, email: alice.email },
         resolvedVia: "email",
       });
     });
@@ -3268,6 +3549,89 @@ describe("knowledge base routes", () => {
       });
       expect(deleteResponse.statusCode).toBe(200);
       expect(await refreshTasks()).toHaveLength(2);
+    });
+
+    test("mapping writes a connector.updated audit row whose snapshot diffs the override", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+      expect(response.statusCode).toBe(200);
+      // The audit row is written fire-and-forget after the response.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "PUT",
+      );
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([]);
+      expect(row?.after?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+    });
+
+    test("unmapping writes connector.updated (not connector.deleted) with the override removed", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+      await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "DELETE",
+      );
+      // The mapping DELETE must read as a connector update (the connector
+      // survives), with the removed mapping visible in the diff.
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+      expect(row?.after?.memberOverrides).toEqual([]);
     });
   });
 

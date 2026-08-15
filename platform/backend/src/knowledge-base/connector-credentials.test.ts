@@ -1,5 +1,6 @@
 import { describe, expect } from "vitest";
 import { GithubAppConfigModel } from "@/models";
+import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import { test } from "@/test";
 import type { ConnectorConfig } from "@/types";
@@ -103,6 +104,41 @@ describe("resolveConnectorCredentials", () => {
     // user API token, which Atlassian's admin APIs reject.
     expect(credentials.adminApiKey).toBe("org-admin-key");
     expect(credentials.apiToken).toBe("user-token");
+  });
+
+  test("uncached reads a rotation this process never handled", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await secretManager().createSecret(
+      { apiToken: "t", adminApiKey: "old-password" },
+      "perforce-secret",
+    );
+    const config: ConnectorConfig = {
+      type: "perforce",
+      serverUrl: "https://perforce.example.com:8080",
+      depotPaths: ["//depot/docs"],
+      adminUsername: "p4admin",
+    };
+    const connector = { config, organizationId: org.id, secretId: secret.id };
+    await resolveConnectorCredentials(connector);
+
+    // A rotation on another replica: this process's secrets cache still holds
+    // the retired password and will for the rest of its TTL.
+    await SecretModel.update(secret.id, {
+      secret: { apiToken: "t", adminApiKey: "new-password" },
+    });
+
+    expect((await resolveConnectorCredentials(connector)).adminApiKey).toBe(
+      "old-password",
+    );
+    // Perforce provisions a pod from this password and rolls that pod when it
+    // changes, so the cached read would authenticate the fresh pod with the
+    // credential the rotation retired.
+    expect(
+      (await resolveConnectorCredentials(connector, { uncached: true }))
+        .adminApiKey,
+    ).toBe("new-password");
   });
 
   test("throws when the referenced App config is missing", async ({

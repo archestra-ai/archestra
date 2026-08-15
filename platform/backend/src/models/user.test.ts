@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
 import SecretModel from "./secret";
+import SkillModel from "./skill";
 import UserModel from "./user";
 
 describe("User.getUserPermissions", () => {
@@ -141,6 +142,98 @@ describe("UserModel.delete", () => {
     const deleted = await UserModel.delete(crypto.randomUUID());
 
     expect(deleted).toBe(false);
+  });
+});
+
+/**
+ * Deleting a user must take their personal skills with them. `skills.author_id`
+ * is `set null`, so without this the skill survives as an active orphan: a
+ * personal row no one can see or edit, and — because the author id is a
+ * `skill://` URI segment — one no MCP URI can name.
+ *
+ * Soft-deleted, not purged: content stays recoverable, and nothing here can
+ * fail on a cascade FK and block the user's removal.
+ */
+describe("UserModel.delete personal skill cleanup", () => {
+  async function makePersonalSkill(params: {
+    organizationId: string;
+    authorId: string | null;
+    name: string;
+    scope?: "personal" | "org";
+  }) {
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: params.organizationId,
+        authorId: params.authorId,
+        name: params.name,
+        description: "A personal skill",
+        content: "# Instructions",
+        scope: params.scope ?? "personal",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error(`seed failed for ${params.name}`);
+    return skill;
+  }
+
+  test("soft-deletes the user's personal skills, leaving others alone", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const bystander = await makeUser({ email: "bystander@test.com" });
+    const personal = await makePersonalSkill({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "own-notes",
+    });
+    // Neither an org-scoped skill the user authored nor another user's
+    // personal skill is theirs to take along.
+    const authored = await makePersonalSkill({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "org-runbook",
+      scope: "org",
+    });
+    const someoneElses = await makePersonalSkill({
+      organizationId: org.id,
+      authorId: bystander.id,
+      name: "their-notes",
+    });
+
+    expect(await UserModel.delete(user.id)).toBe(true);
+
+    // Soft-deleted, not purged: the row survives with `deletedAt` stamped,
+    // invisible to filtered reads.
+    expect(await SkillModel.findById(personal.id)).toBeNull();
+    expect(
+      await SkillModel.findDeletedById(personal.id, org.id),
+    ).not.toBeNull();
+    expect(await SkillModel.findById(authored.id)).not.toBeNull();
+    expect(await SkillModel.findById(someoneElses.id)).not.toBeNull();
+  });
+
+  test("runs the same cleanup inside a caller's transaction", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const personal = await makePersonalSkill({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "tx-notes",
+    });
+
+    await withDbTransaction(async (tx) => {
+      expect(await UserModel.delete(user.id, tx)).toBe(true);
+    });
+
+    expect(await SkillModel.findById(personal.id)).toBeNull();
+    expect(
+      await SkillModel.findDeletedById(personal.id, org.id),
+    ).not.toBeNull();
   });
 });
 

@@ -5,16 +5,20 @@
  * request/response orchestration. Each function is independently testable.
  */
 
+import { createHmac, randomBytes } from "node:crypto";
 import {
+  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  perUserCredentialLabel,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -29,22 +33,31 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import {
-  credentialRequiresPerUserScope,
-  perUserCredentialLabel,
-} from "@/services/openai-codex-credentials";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
   type GatewayAgent,
   type ResourceVisibilityScope,
 } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { isLoopbackAddress } from "@/utils/network";
+import { isLoopbackRequest } from "@/utils/network";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 // =========================================================================
 // Agent Resolution
 // =========================================================================
+
+/**
+ * The model named in an already-parsed request body, for the credential
+ * resolution that runs before the handler builds its request adapter.
+ *
+ * Untrusted input read defensively: every provider this reaches puts the model
+ * in a top-level `model` string, and anything else resolves as if unspecified.
+ */
+function requestedModelFromBody(request: FastifyRequest): string | null {
+  const model = (request.body as { model?: unknown } | undefined)?.model;
+  return typeof model === "string" && model.length > 0 ? model : null;
+}
 
 /**
  * Resolve the target agent from the request URL or fall back to the default profile.
@@ -164,6 +177,17 @@ export async function validateVirtualApiKey(
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
       );
     }
+  }
+
+  // Some provider routes (for example Gemini query-key rewriting and Bedrock
+  // model listing) consume this result directly instead of entering the
+  // unified proxy handler. Guard here so no virtual-key sink can forward a
+  // marker-owned refresh credential to the wrong provider or custom URL.
+  if (isSupportedProvider(expectedProvider)) {
+    assertSubscriptionCredentialForProvider({
+      apiKey,
+      provider: expectedProvider,
+    });
   }
 
   // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
@@ -310,6 +334,12 @@ export async function validateLlmOAuthAccessToken(params: {
   tokenValue: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  /**
+   * Model named in the request body, when the caller has already parsed it.
+   * Providers whose keys are servers (vLLM, Ollama, …) resolve the endpoint
+   * that hosts this model rather than an arbitrary sibling.
+   */
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
@@ -335,6 +365,7 @@ export async function validateLlmOAuthAccessToken(params: {
       clientId: accessToken.clientId,
       expectedProvider: params.expectedProvider,
       agent: params.agent,
+      requestedModel: params.requestedModel,
     });
   }
 
@@ -431,6 +462,7 @@ export async function attemptJwksAuth(
       organizationId: jwksResult.organizationId,
       userId: jwksResult.userId,
       provider: providerName,
+      modelName: requestedModelFromBody(request),
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
@@ -461,7 +493,12 @@ export function assertAuthenticatedForKeylessProvider(params: {
   apiKey: string | undefined;
   wasVirtualKeyResolved: boolean;
   wasJwksAuthenticated: boolean;
-  requestIp: string;
+  /**
+   * Whether the request arrived over the loopback socket. Resolve it with
+   * `isLoopbackRequest`, never from `request.ip`, which `trustProxy` rewrites
+   * from forwarded headers.
+   */
+  isLoopbackCaller: boolean;
   /**
    * True when the backend authenticates upstream with its OWN credentials and
    * discards whatever the caller sent (Gemini in Vertex AI mode). A
@@ -476,14 +513,14 @@ export function assertAuthenticatedForKeylessProvider(params: {
     apiKey,
     wasVirtualKeyResolved,
     wasJwksAuthenticated,
-    requestIp,
+    isLoopbackCaller,
     providerSuppliesServerCredential = false,
   } = params;
 
   if (wasVirtualKeyResolved || wasJwksAuthenticated) return;
   if (apiKey && !providerSuppliesServerCredential) return;
 
-  if (!isLoopbackAddress(requestIp)) {
+  if (!isLoopbackCaller) {
     throw new ApiError(
       401,
       providerSuppliesServerCredential
@@ -521,7 +558,12 @@ export async function authenticatePassthroughProxyRequest(params: {
 
   // Internal loopback callers (in-app chat → proxy) are trusted, matching the
   // keyless-provider allowance in the instrumented handler.
-  if (isLoopbackAddress(request.ip)) return;
+  //
+  // NOTE: this remains a broad allowance — traffic the frontend rewrites to the
+  // API genuinely arrives over loopback, so it still lands here (#7229). Reading
+  // the socket peer only removes the ability to *forge* that state through
+  // forwarded headers; it does not narrow which callers qualify.
+  if (isLoopbackRequest(request)) return;
 
   const unauthenticated = new ApiError(
     401,
@@ -542,7 +584,11 @@ export async function authenticatePassthroughProxyRequest(params: {
     throw unauthenticated;
   }
 
-  await virtualKeyRateLimiter.check(request.ip);
+  const presentedCredential = passthroughToken ?? bearerToken ?? undefined;
+  await virtualKeyRateLimiter.check({
+    ip: request.ip,
+    credential: presentedCredential,
+  });
   try {
     if (passthroughToken) {
       await validatePassthroughVirtualKey({
@@ -571,6 +617,7 @@ export async function authenticatePassthroughProxyRequest(params: {
         tokenValue: bearerToken,
         expectedProvider: provider,
         agent,
+        requestedModel: requestedModelFromBody(request),
       })
     ) {
       return;
@@ -578,7 +625,10 @@ export async function authenticatePassthroughProxyRequest(params: {
     throw unauthenticated;
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
-      await virtualKeyRateLimiter.recordFailure(request.ip);
+      await virtualKeyRateLimiter.recordFailure({
+        ip: request.ip,
+        credential: presentedCredential,
+      });
     }
     throw error;
   }
@@ -588,7 +638,18 @@ export async function authenticatePassthroughProxyRequest(params: {
 // Virtual Key Rate Limiter
 // =========================================================================
 
+/**
+ * Failures allowed per (IP, credential) pair before that pair is rejected.
+ * Sized for a client retrying one credential, not for a shared origin.
+ */
 const RATE_LIMIT_MAX_FAILURES = 10;
+/**
+ * Failures allowed from one IP across ALL credentials before the whole IP is
+ * rejected. This is the anti-enumeration backstop, so it must stay well above
+ * the per-credential threshold: a single misconfigured client should exhaust
+ * its own bucket long before it can exhaust its origin's.
+ */
+const RATE_LIMIT_MAX_FAILURES_PER_IP = 100;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 interface RateLimitEntry {
@@ -597,8 +658,23 @@ interface RateLimitEntry {
 
 /**
  * Distributed rate limiter for failed virtual API key validation attempts.
- * Prevents brute-force enumeration of valid tokens by tracking failures per
- * client IP and rejecting further attempts after exceeding the threshold.
+ *
+ * Counts failures in two buckets, both of which can reject a request:
+ *
+ *  - **(IP, credential)** at {@link RATE_LIMIT_MAX_FAILURES} — the bucket that
+ *    does the day-to-day work. Scoping to the presented credential means one
+ *    client hammering a revoked token cannot lock out a different client that
+ *    holds a valid one, which is the failure mode a shared origin produces:
+ *    behind a reverse proxy or LB (or, for requests the frontend rewrites to
+ *    the API, behind loopback) many unrelated callers share a single `ip`.
+ *  - **IP-wide** at {@link RATE_LIMIT_MAX_FAILURES_PER_IP} — retains the
+ *    brute-force ceiling the per-credential bucket alone would give up, since
+ *    an enumerator gets a fresh credential bucket for every token it guesses.
+ *
+ * The credential is reduced to a short salted-by-nothing SHA-256 fingerprint
+ * rather than used verbatim: cache keys are persisted to PostgreSQL by the
+ * shared CacheManager, and a bearer token (or any prefix long enough to
+ * identify one) must not be written there in the clear.
  *
  * Uses the PostgreSQL-backed CacheManager (Keyv) so rate limit state is
  * shared across all application pods. Entries expire automatically via TTL.
@@ -624,11 +700,17 @@ export class VirtualKeyRateLimiter {
     this.cacheManager = cacheManager;
   }
 
-  async check(ip: string): Promise<void> {
-    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
-    if (!entry) return;
+  async check(params: { ip: string; credential?: string }): Promise<void> {
+    const { ip, credential } = params;
+    const [credentialEntry, ipEntry] = await Promise.all([
+      this.cacheManager.get<RateLimitEntry>(this.credentialKey(ip, credential)),
+      this.cacheManager.get<RateLimitEntry>(this.ipKey(ip)),
+    ]);
 
-    if (entry.count >= RATE_LIMIT_MAX_FAILURES) {
+    if (
+      (credentialEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES ||
+      (ipEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES_PER_IP
+    ) {
       throw new ApiError(
         429,
         "Too many failed virtual API key attempts. Please try again later.",
@@ -636,18 +718,32 @@ export class VirtualKeyRateLimiter {
     }
   }
 
-  async recordFailure(ip: string): Promise<void> {
-    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
-    const newCount = (entry?.count ?? 0) + 1;
+  async recordFailure(params: {
+    ip: string;
+    credential?: string;
+  }): Promise<void> {
+    const { ip, credential } = params;
+    await Promise.all([
+      this.increment(this.credentialKey(ip, credential)),
+      this.increment(this.ipKey(ip)),
+    ]);
+  }
+
+  private async increment(key: AllowedCacheKey): Promise<void> {
+    const entry = await this.cacheManager.get<RateLimitEntry>(key);
     await this.cacheManager.set<RateLimitEntry>(
-      this.key(ip),
-      { count: newCount },
+      key,
+      { count: (entry?.count ?? 0) + 1 },
       RATE_LIMIT_WINDOW_MS,
     );
   }
 
-  private key(ip: string): AllowedCacheKey {
-    return `${CacheKey.VirtualKeyRateLimit}-${ip}`;
+  private credentialKey(ip: string, credential?: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-${ip}-${fingerprintCredential(credential)}`;
+  }
+
+  private ipKey(ip: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-ip-${ip}`;
   }
 }
 
@@ -734,6 +830,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   clientId: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const member = await MemberModel.getFirstMembershipForUser(params.userId);
   if (!member || member.organizationId !== params.agent.organizationId) {
@@ -770,6 +867,7 @@ async function validateUserLlmOAuthAccessToken(params: {
     organizationId: member.organizationId,
     userId: params.userId,
     provider: params.expectedProvider,
+    modelName: params.requestedModel,
   });
   const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
 
@@ -853,4 +951,45 @@ function isJwtLike(token: string): boolean {
   const parts = token.split(".");
   if (parts.length !== 3) return false;
   return parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
+}
+
+/**
+ * Domain-separated key for {@link fingerprintCredential}.
+ *
+ * Derived from the session-signing secret, so an existing deployment needs no
+ * new configuration, and domain-separated so a rate-limit fingerprint can never
+ * be mistaken for another HMAC that secret protects. The key must be identical
+ * on every pod — limiter state is shared through PostgreSQL, so a per-process
+ * key would give one credential a different bucket on each pod and multiply its
+ * effective threshold by the replica count. A deployment with no auth secret
+ * configured falls back to a per-process key and accepts that fragmentation.
+ */
+const CREDENTIAL_FINGERPRINT_KEY = config.auth.secret
+  ? createHmac("sha256", config.auth.secret)
+      .update("virtual-key-rate-limit-fingerprint")
+      .digest()
+  : randomBytes(32);
+
+/**
+ * Reduce a presented credential to a stable, non-reversible bucket id for the
+ * rate limiter's cache key.
+ *
+ * Truncated to 32 bits: enough that unrelated callers on a shared origin get
+ * their own bucket (the whole point of scoping by credential), short enough
+ * that the key stays readable in the cache table. A collision merely puts two
+ * credentials in one bucket — the same situation as before this scoping
+ * existed — so collision resistance is not what this needs to buy.
+ *
+ * Keyed rather than a bare digest because these keys are persisted: an observer
+ * of the cache table can neither read a token out of a bucket id nor confirm a
+ * guessed one, which matters most for whatever low-entropy bearer tokens a
+ * deployment's upstream may accept.
+ *
+ * Requests that present no credential at all share the "none" bucket.
+ */
+function fingerprintCredential(credential: string | undefined): string {
+  if (!credential) return "none";
+  const hmac = createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY);
+  // codeql[js/insufficient-password-hash] Buckets a bearer token for rate limiting, not password verification: the digest is never stored as a credential nor compared against one.
+  return hmac.update(credential).digest("hex").slice(0, 8);
 }

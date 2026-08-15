@@ -181,9 +181,29 @@ export const CONNECTOR_TYPE_LABELS = {
   salesforce: "Salesforce",
   web_crawler: "Web Crawler",
   perforce: "Perforce (Helix Core)",
+  mfiles: "M-Files",
 } as const;
 
 export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;
+
+/**
+ * Notion has no groups: its permission sync rosters the whole workspace as one
+ * synthetic group whose id embeds the Notion workspace id, so two Notion
+ * connectors never share a grant. The connector builds the id; the UI strips
+ * the prefix back off to show the workspace's own id.
+ */
+export const NOTION_WORKSPACE_MEMBERS_GROUP_ID_PREFIX = "workspace-members-";
+
+/**
+ * The Notion workspace id carried by a synthetic members-group id, or null for
+ * an id that does not carry one.
+ */
+export function notionWorkspaceIdFromGroupId(groupId: string): string | null {
+  if (!groupId.startsWith(NOTION_WORKSPACE_MEMBERS_GROUP_ID_PREFIX)) {
+    return null;
+  }
+  return groupId.slice(NOTION_WORKSPACE_MEMBERS_GROUP_ID_PREFIX.length) || null;
+}
 
 const CONNECTOR_PLACEHOLDER_DEPARTMENTS = [
   "Engineering",

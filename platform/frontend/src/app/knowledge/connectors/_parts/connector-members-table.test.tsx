@@ -55,7 +55,7 @@ function mockGroups() {
               displayName: "Alice A",
               email: "alice@example.com",
               accountType: "atlassian",
-              user: { id: "user-1", name: "Alice" },
+              user: { id: "user-1", name: "Alice", email: "alice@corp.com" },
               resolvedVia: "email",
             },
             // Hidden email, manually assigned by an admin.
@@ -64,7 +64,7 @@ function mockGroups() {
               displayName: "Dave D",
               email: null,
               accountType: null,
-              user: { id: "user-2", name: "Dave" },
+              user: { id: "user-2", name: "Dave", email: "dave@corp.com" },
               resolvedVia: "override",
             },
             // Hidden email, unresolved — the actionable row.
@@ -98,7 +98,7 @@ function mockGroups() {
               displayName: "Alice A",
               email: "alice@example.com",
               accountType: "atlassian",
-              user: { id: "user-1", name: "Alice" },
+              user: { id: "user-1", name: "Alice", email: "alice@corp.com" },
               resolvedVia: "email",
             },
           ],
@@ -157,9 +157,11 @@ describe("ConnectorMembersTable", () => {
     // Group memberships render as badges (one per group the user is in).
     expect(screen.getAllByText("engineers")).toHaveLength(3);
     expect(screen.getByText("ops")).toBeInTheDocument();
-    // The resolved org user shows name over email (joined from org members).
+    // The resolved org user shows name over email — for the manual
+    // assignment exactly as for the email match.
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("alice@corp.com")).toBeInTheDocument();
+    expect(screen.getByText("dave@corp.com")).toBeInTheDocument();
     // The Assigned column distinguishes the three states.
     expect(screen.getByText("Dave")).toBeInTheDocument();
     expect(screen.getByText("Automatically")).toBeInTheDocument();

@@ -119,6 +119,7 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  ChatIncognitoNotice: "chat-incognito-notice",
   ChatContextUsageTrigger: "chat-context-usage-trigger",
   ChatContextUsagePanel: "chat-context-usage-panel",
   ChatContextUsageTooltip: "chat-context-usage-tooltip",
@@ -127,6 +128,7 @@ export const E2eTestId = {
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
+  ChatThinkingEffortSelector: "chat-thinking-effort-selector",
   ChatPromptTextarea: "chat-prompt-textarea",
   // Queue of messages composed while a response was in-flight
   ChatMessageQueue: "chat-message-queue",

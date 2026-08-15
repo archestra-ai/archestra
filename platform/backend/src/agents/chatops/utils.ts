@@ -163,8 +163,63 @@ export function isLlmProviderAuthError(message: string): boolean {
  * the constant anchor across normal and error replies alike.
  */
 export function buildAgentFooter(agentName: string, extra?: string): string {
-  const base = `🤖 ${agentName}`;
-  return extra ? `${base} · ${extra}` : base;
+  const base = `${AGENT_FOOTER_GLYPH} ${agentName}`;
+  return extra ? `${base}${FOOTER_DETAIL_SEPARATOR}${extra}` : base;
+}
+
+/**
+ * Drop a footer the model wrote itself at the end of a reply, so appending the
+ * real one can never render the branding line twice.
+ *
+ * Models mimic what they are shown: earlier bot replies are replayed to them as
+ * thread history, and any branding that survives sanitation (see
+ * {@link stripAgentFooterChrome}) teaches them to sign off the same way. The
+ * provider then appends the genuine footer on top of that echo — the "double
+ * footer". Since the footer is chrome the platform owns, the echo is the copy
+ * that goes.
+ *
+ * Deliberately strict: only a trailing line that is exactly the footer about to
+ * be appended (or its identity half, without the error detail) is removed, with
+ * markdown emphasis and a horizontal rule above it tolerated. A line that merely
+ * mentions the glyph is left alone — this runs on user-visible text, so a false
+ * positive would silently delete an answer's last line.
+ */
+export function stripDuplicateAgentFooter(
+  text: string,
+  footer: string,
+): string {
+  const identity = footer.split(FOOTER_DETAIL_SEPARATOR)[0].trim();
+  if (!identity.startsWith(AGENT_FOOTER_GLYPH)) return text;
+
+  const duplicates = new Set([identity, footer.trim()]);
+  return stripTrailingChrome(text, (line) => duplicates.has(unemphasize(line)));
+}
+
+/**
+ * Strip the trailing chrome the platform stamps onto a bot reply — the agent
+ * footer and the horizontal rule above it — from a message replayed to the
+ * model as thread history, so it never learns to write that chrome itself.
+ *
+ * Looser than {@link stripDuplicateAgentFooter} because this text is only ever
+ * model context, never something a user reads: the responding agent of a past
+ * message isn't known here (a thread can involve several), so any trailing line
+ * leading with the glyph counts as a footer, and repeats are stripped until none
+ * is left. An error footer's detail ("🤖 Name · <error>") can spill onto further
+ * lines, and it is always the last thing in the message, so everything from such
+ * a line onwards goes with it.
+ */
+export function stripAgentFooterChrome(text: string): string {
+  const lines = text.split("\n");
+  const detailAt = lines.findLastIndex(
+    (line) =>
+      unemphasize(line).startsWith(AGENT_FOOTER_GLYPH) &&
+      line.includes(FOOTER_DETAIL_SEPARATOR),
+  );
+  const body = detailAt >= 0 ? lines.slice(0, detailAt).join("\n") : text;
+
+  return stripTrailingChrome(body, (line) =>
+    unemphasize(line).startsWith(AGENT_FOOTER_GLYPH),
+  ).trim();
 }
 
 /**
@@ -188,6 +243,60 @@ export function errorMessage(error: unknown): string {
 // ===========================================================================
 // Internal helpers
 // ===========================================================================
+
+/** The glyph every agent footer leads with, and how a footer is recognized. */
+const AGENT_FOOTER_GLYPH = "🤖";
+
+/** Separates the agent identity from any extra detail inside a footer. */
+const FOOTER_DETAIL_SEPARATOR = " · ";
+
+/**
+ * Remove trailing lines the caller recognizes as chrome, plus the blank lines
+ * and markdown horizontal rule that separate them from the body. Repeats until
+ * a non-chrome line is reached, so a message that already carries two footers
+ * comes back with none. Returns the input unchanged when nothing matched.
+ */
+function stripTrailingChrome(
+  text: string,
+  isChrome: (line: string) => boolean,
+): string {
+  const lines = text.split("\n");
+  let end = lines.length;
+
+  for (;;) {
+    const footer = lastContentIndex(lines, end);
+    if (footer < 0 || !isChrome(lines[footer])) break;
+    end = footer;
+
+    const above = lastContentIndex(lines, end);
+    if (above >= 0 && isHorizontalRule(lines[above])) end = above;
+  }
+
+  if (end === lines.length) return text;
+  return lines.slice(0, end).join("\n").trimEnd();
+}
+
+/** Index of the last non-blank line before `end`, or -1 when there is none. */
+function lastContentIndex(lines: string[], end: number): number {
+  for (let i = end - 1; i >= 0; i--) {
+    if (lines[i].trim() !== "") return i;
+  }
+  return -1;
+}
+
+/** A markdown horizontal rule, e.g. the "---" MS Teams puts above the footer. */
+function isHorizontalRule(line: string): boolean {
+  return /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+}
+
+/** Drop wrapping markdown emphasis, so "_🤖 Bot_" reads as "🤖 Bot". */
+function unemphasize(line: string): string {
+  return line
+    .trim()
+    .replace(/^[*_~]{1,3}/, "")
+    .replace(/[*_~]{1,3}$/, "")
+    .trim();
+}
 
 /**
  * Human-readable byte size (e.g. "15.8 MB", "107 KB"), matching the units the

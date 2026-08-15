@@ -144,6 +144,15 @@ const agentsTable = softDeletablePgTable(
     accessAllTools: boolean("access_all_tools").notNull().default(false),
 
     /**
+     * "Auto" skill mode (vs "Custom"): whether the gateway's `skill://`
+     * resource surface exposes every org-scoped skill visible in this agent's
+     * environment (minus `agent_excluded_skills`) instead of only the skills
+     * explicitly assigned in `agent_skills`. Org scope only — team and personal
+     * skills never flow through Auto and must be Custom-assigned.
+     */
+    accessAllSkills: boolean("access_all_skills").notNull().default(false),
+
+    /**
      * "Auto" subagent mode (vs "Custom"): whether this agent may delegate to
      * any internal agent the *calling user* can access (team/scope visibility),
      * beyond the explicitly-configured delegation targets. Mirrors

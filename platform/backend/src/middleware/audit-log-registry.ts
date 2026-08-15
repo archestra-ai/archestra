@@ -7,6 +7,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -579,6 +580,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/environments/:id": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
+  },
+  // Org-wide setting rather than one environment's row, so the audited
+  // resource is the organization and the snapshot is the whole defaults map.
+  "/api/environments/defaults": {
+    resourceType: "environment",
+    action: "environment.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) =>
+      EnvironmentResourceDefaultModel.findByIdForAudit(id, orgId),
   },
   // Team / org tokens — rotation is semantically distinct from a generic update.
   "/api/tokens/:tokenId/rotate": {

@@ -1,4 +1,6 @@
 import {
+  credentialRequiresPerUserScope,
+  perUserCredentialLabel,
   providerRequiresPerUserCredential,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -21,6 +23,7 @@ import {
   LlmProviderApiKeyModel,
   TeamModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   ApiError,
   constructResponseSchema,
@@ -400,12 +403,23 @@ async function validateLlmOauthClientConfig(params: {
       );
     }
     // OAuth client credentials are a shared service credential with no acting
-    // user, so a per-user provider (GitHub Copilot) can't be mapped — its token
-    // belongs to one person and would be served to every caller.
-    if (providerRequiresPerUserCredential(mapping.provider)) {
+    // user. Resolve credential-level markers as well as provider-level cases:
+    // OpenAI/xAI may contain either a normal API key or one person's subscription.
+    const secret =
+      apiKey.secretId && !providerRequiresPerUserCredential(mapping.provider)
+        ? ((await getSecretValueForLlmProviderApiKey(apiKey.secretId)) as
+            | string
+            | undefined)
+        : undefined;
+    if (
+      credentialRequiresPerUserScope({
+        provider: mapping.provider,
+        apiKey: secret,
+      })
+    ) {
       throw new ApiError(
         400,
-        `${mapping.provider} is per-user and cannot be mapped to an OAuth client; each user connects their own account.`,
+        `${perUserCredentialLabel({ provider: mapping.provider, apiKey: secret })} is per-user and cannot be mapped to an OAuth client; each user connects their own account.`,
       );
     }
   }

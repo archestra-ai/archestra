@@ -8,10 +8,12 @@ export { default as A2ATaskApprovalRequestModel } from "./a2a/task-approval-requ
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
+export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as AgentVersionModel } from "./agent-version";
@@ -41,6 +43,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
+export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as GithubPatModel } from "./github-pat";
@@ -52,6 +55,7 @@ export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbContainerAclModel } from "./kb-container-acl";
 export { default as KbDocumentModel } from "./kb-document";
+export { default as KbExternalGroupModel } from "./kb-external-group";
 export { default as KbExternalUserGroupModel } from "./kb-external-user-group";
 export { default as KbMemberOverrideModel } from "./kb-member-override";
 export { default as KnowledgeBaseModel } from "./knowledge-base";

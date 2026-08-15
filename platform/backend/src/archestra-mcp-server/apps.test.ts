@@ -40,6 +40,7 @@ import {
   AppToolModel,
   AppVersionModel,
   EnvironmentModel,
+  EnvironmentResourceDefaultModel,
   InternalMcpCatalogModel,
   McpServerModel,
   OrganizationModel,
@@ -4186,5 +4187,91 @@ describe("set_app_labels", () => {
       structured(matching).id as string,
     ]);
     expect(apps[0]?.labels).toEqual([{ key: "env", value: "prod" }]);
+  });
+});
+
+describe("scaffold_app environment binding", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Scaffold Env Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function scaffold(name: string) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name },
+      context,
+    );
+  }
+
+  test("an authoring agent with its own environment still wins over the configured default", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const authoring = await EnvironmentModel.create({
+      organizationId,
+      name: "Authoring",
+    });
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "Launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+    const agent = await makeAgent({
+      name: "Bound Agent",
+      organizationId,
+      environmentId: authoring.id,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+
+    const created = await scaffold("Inherited");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBe(authoring.id);
+  });
+
+  test("an authoring agent with no environment falls back to the configured default for apps", async () => {
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "Launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+
+    const created = await scaffold("Configured");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBe(launch.id);
+  });
+
+  test("with no default configured the app still lands in the Default environment", async () => {
+    const created = await scaffold("Plain");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBeNull();
   });
 });

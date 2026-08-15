@@ -23,6 +23,7 @@ import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
@@ -74,6 +75,7 @@ import {
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
+import { isActionAvailableForConversation } from "@/lib/chat/incognito";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
@@ -337,10 +339,18 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
-    const showCreateProject = canCreateProjectFromChat({
-      hasCreatePermission: canCreateProject === true,
-      conversation: conv,
-    });
+    const showCreateProject =
+      isActionAvailableForConversation(conv, "createProject") &&
+      canCreateProjectFromChat({
+        hasCreatePermission: canCreateProject === true,
+        conversation: conv,
+      });
+    // AI title generation is rejected for incognito chats (the server would
+    // have to read encrypted messages), so hide both regenerate affordances.
+    const canRegenerateTitle = isActionAvailableForConversation(
+      conv,
+      "generateTitle",
+    );
 
     return (
       <SidebarMenuSubItem key={conv.id}>
@@ -363,35 +373,37 @@ export function ChatSidebarSection({
                 onClick={(e) => e.stopPropagation()}
                 className="h-7 text-sm flex-1"
               />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      aria-label="Regenerate title"
-                      size="icon-sm"
-                      variant="ghost"
-                      onMouseDown={(e) => {
-                        // Prevent input blur from triggering handleSaveEdit
-                        e.preventDefault();
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRegenerateTitle(conv.id);
-                      }}
-                      disabled={generateTitleMutation.isPending}
-                      className="h-7 w-7 shrink-0"
-                    >
-                      <AISparkleIcon
-                        isAnimating={generateTitleMutation.isPending}
-                      />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    Regenerate title with AI
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {canRegenerateTitle && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        aria-label="Regenerate title"
+                        size="icon-sm"
+                        variant="ghost"
+                        onMouseDown={(e) => {
+                          // Prevent input blur from triggering handleSaveEdit
+                          e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegenerateTitle(conv.id);
+                        }}
+                        disabled={generateTitleMutation.isPending}
+                        className="h-7 w-7 shrink-0"
+                      >
+                        <AISparkleIcon
+                          isAnimating={generateTitleMutation.isPending}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      Regenerate title with AI
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           ) : (
             <SidebarMenuButton
@@ -400,6 +412,16 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
+                {conv.incognito && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <IncognitoIcon className="h-3.5 w-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Locked chat</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {conv.share && (
                   <TooltipProvider>
                     <Tooltip>
@@ -532,16 +554,18 @@ export function ChatSidebarSection({
                         <Pencil className="h-4 w-4 mr-2" />
                         Rename
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRegenerateTitle(conv.id);
-                        }}
-                        disabled={generateTitleMutation.isPending}
-                      >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Regenerate title
-                      </DropdownMenuItem>
+                      {canRegenerateTitle && (
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRegenerateTitle(conv.id);
+                          }}
+                          disabled={generateTitleMutation.isPending}
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Regenerate title
+                        </DropdownMenuItem>
+                      )}
                     </>
                   )}
                   {showCreateProject && (

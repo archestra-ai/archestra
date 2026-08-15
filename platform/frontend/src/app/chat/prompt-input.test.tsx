@@ -1,7 +1,8 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
@@ -14,6 +15,8 @@ const {
   mockFeatureState,
   mockProfileState,
   mockUploadPolicy,
+  mockToolbarState,
+  mockConversationState,
 } = vi.hoisted(() => ({
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
@@ -22,12 +25,18 @@ const {
   mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: {
     chatSecretScanEnabled: false,
+    chatIncognitoEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
     apiBodyLimitBytes: undefined as number | undefined,
     sandboxArtifactBytesLimit: undefined as number | undefined,
   },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
+  },
+  // What useConversation resolves to — lets tests exercise an existing
+  // incognito conversation (vs the new-chat toggle).
+  mockConversationState: {
+    conversation: null as { incognito?: boolean } | null,
   },
   // The upload policy the composer hands to the file picker: the byte cap it
   // enforces and the per-file check it runs. Captured so tests can exercise
@@ -36,6 +45,13 @@ const {
     maxFileSize: undefined as number | undefined,
     validateFile: undefined as ((file: File) => string | null) | undefined,
   },
+  // Drives the toolbar's collapsed (narrow) layout, which jsdom's 0-width
+  // measurements would otherwise never trigger.
+  mockToolbarState: { isNarrow: false },
+}));
+
+vi.mock("@/lib/hooks/use-toolbar-collapse", () => ({
+  useToolbarCollapse: () => mockToolbarState.isNarrow,
 }));
 
 // Mock ResizeObserver (used by Radix UI components and the prompt input's
@@ -224,6 +240,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   }),
   usePromptInputAttachments: () => ({
     openFileDialog: vi.fn(),
+    clear: vi.fn(),
   }),
 }));
 
@@ -286,7 +303,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
-  useConversation: () => ({ data: null }),
+  useConversation: () => ({ data: mockConversationState.conversation }),
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
@@ -307,7 +324,10 @@ vi.mock("@/lib/config/config.query");
 // Import the component after mocks are set up
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("ArchestraPromptInput", () => {
@@ -326,6 +346,10 @@ describe("ArchestraPromptInput", () => {
       data: null,
       isLoading: false,
     } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       isPending: false,
@@ -334,6 +358,9 @@ describe("ArchestraPromptInput", () => {
     vi.mocked(useFeature).mockImplementation((flag) => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
+      }
+      if (flag === "chatIncognitoEnabled") {
+        return mockFeatureState.chatIncognitoEnabled;
       }
       if (flag === "chatAttachmentStorageBytesLimit") {
         return mockFeatureState.chatAttachmentStorageBytesLimit;
@@ -362,7 +389,10 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
+    mockFeatureState.chatIncognitoEnabled = false;
     mockProfileState.agent = null;
+    mockToolbarState.isNarrow = false;
+    mockConversationState.conversation = null;
     localStorage.clear();
   });
 
@@ -390,6 +420,79 @@ describe("ArchestraPromptInput", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(mockTextInputClear).not.toHaveBeenCalled();
+  });
+
+  it("uses the subscription registry's X sign-in label", () => {
+    render(
+      <ArchestraPromptInput
+        {...defaultProps}
+        subscriptionConnectRequired
+        subscriptionProvider="xai"
+        modelSource="agent"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Sign in with X" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sign in with xAI" }),
+    ).not.toBeInTheDocument();
+  });
+
+  describe("Limited-for-complex-tasks badge", () => {
+    const badgeName = /limited for complex tasks/i;
+
+    it("stays visible in the collapsed toolbar for an agent-inherited model", () => {
+      // The collapsed toolbar's logo-shortcut branch (agent-sourced model with
+      // a provider logo) once rendered only the logo, dropping the warning
+      // that the wide toolbar showed.
+      mockToolbarState.isNarrow = true;
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          notRecommendedForAgents
+          modelSource="agent"
+          currentProvider="ollama"
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("stays visible in the collapsed toolbar without provider-settings permission", () => {
+      // beforeEach denies every permission — the restricted user must still
+      // see the warning, not just users who can open provider settings.
+      mockToolbarState.isNarrow = true;
+      render(
+        <ArchestraPromptInput {...defaultProps} notRecommendedForAgents />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders in the wide toolbar", () => {
+      render(
+        <ArchestraPromptInput {...defaultProps} notRecommendedForAgents />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders nothing when the model is not flagged", () => {
+      mockToolbarState.isNarrow = true;
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(
+        screen.queryByRole("button", { name: badgeName }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("File Upload Button", () => {
@@ -736,6 +839,176 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+  });
+
+  describe("incognito composer", () => {
+    it("greys out (not hides) the attach button and shows the explainer drawer while the new-chat toggle is on", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito
+          onIncognitoChange={vi.fn()}
+        />,
+      );
+
+      // The drawer carries the copy that used to live in the toggle tooltip.
+      const notice = screen.getByTestId(E2eTestId.ChatIncognitoNotice);
+      expect(notice).toHaveTextContent(
+        /Locked chat — encrypted with a key that stays in this browser/,
+      );
+
+      // Attach affordance stays visible but disabled, with the reason on hover.
+      const disabledUpload = screen.getByTestId(
+        E2eTestId.ChatDisabledFileUploadButton,
+      );
+      expect(disabledUpload.querySelector("button")).toBeDisabled();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+      ).not.toBeInTheDocument();
+      expect(
+        screen
+          .getAllByTestId("tooltip-content")
+          .some((tooltip) =>
+            tooltip.textContent?.includes(
+              "Attachments are stored unencrypted, so locked chats can't use them",
+            ),
+          ),
+      ).toBe(true);
+    });
+
+    it("renders no drawer and a normal attach button when incognito is off", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId(E2eTestId.ChatIncognitoNotice),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the drawer and greyed-out attach button on an existing incognito conversation", () => {
+      mockConversationState.conversation = { incognito: true };
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatIncognitoNotice),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(E2eTestId.ChatDisabledFileUploadButton),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+      ).not.toBeInTheDocument();
+    });
+
+    it("toggles incognito from the composer button, whose tooltip is just the name", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Locked chat" }));
+      expect(onIncognitoChange).toHaveBeenCalledWith(true);
+
+      // The long explanation moved to the drawer; the hover stays succinct —
+      // just the name plus the global shortcut.
+      expect(
+        screen
+          .getAllByTestId("tooltip-content")
+          .some((tooltip) =>
+            tooltip.textContent?.trim().startsWith("Locked chat"),
+          ),
+      ).toBe(true);
+    });
+
+    it("claims the Alt+I handshake event and toggles the draft off and back on", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      // Armed draft + shortcut: claimed (no navigation) and toggled off.
+      const disarm = new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, {
+        cancelable: true,
+      });
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(disarm);
+      });
+      expect(unclaimed).toBe(false);
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(false);
+
+      // Shortcut again on the disarmed composer: toggled back on.
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+      act(() => {
+        window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it("leaves the handshake event unclaimed while chatting in a conversation", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+
+      // Unclaimed → the global handler proceeds to navigate to a fresh draft.
+      expect(unclaimed).toBe(true);
+      expect(onIncognitoChange).not.toHaveBeenCalled();
     });
   });
 

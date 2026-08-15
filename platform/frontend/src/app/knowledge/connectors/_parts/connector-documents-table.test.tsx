@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { ConnectorDocumentsTable } from "./connector-documents-table";
 
@@ -48,6 +49,7 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 }));
 
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectorUserGroups: () => ({ data: null, isPending: false }),
@@ -100,6 +102,9 @@ describe("ConnectorDocumentsTable", () => {
     vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useTeams
     >);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockDeleteMutateAsync.mockResolvedValue({ success: true });
   });
 

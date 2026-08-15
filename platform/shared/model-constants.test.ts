@@ -1,10 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
+  anthropicEffortForThinkingEffort,
+  anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
+  isSmallModel,
   requiresOpenAiResponsesApi,
+  SMALL_MODEL_MAX_PARAMETERS,
   stripClaudeContextVariantSuffix,
 } from "./model-constants";
 
@@ -30,6 +34,56 @@ describe("anthropicThinksByDefault", () => {
     expect(anthropicThinksByDefault("claude-sonnet-4-6")).toBe(false);
     expect(anthropicThinksByDefault("claude-sonnet-4-5")).toBe(false);
     expect(anthropicThinksByDefault("claude-3-5-haiku-20241022")).toBe(false);
+  });
+});
+
+describe("anthropicSupportsThinkingEffort", () => {
+  test("offers a depth on models that already reason", () => {
+    expect(anthropicSupportsThinkingEffort("claude-opus-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-fable-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-mythos-5")).toBe(true);
+  });
+
+  test("offers none where a depth would mean switching thinking on", () => {
+    // These accept output_config.effort but keep thinking off until asked, so a
+    // depth would move token spend without producing any reasoning.
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-8")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-7")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-6")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-4-6")).toBe(false);
+  });
+
+  test("offers none where the field is rejected outright", () => {
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-4-5")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-haiku-4-5")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-3-5-haiku-20241022")).toBe(
+      false,
+    );
+  });
+});
+
+describe("anthropicEffortForThinkingEffort", () => {
+  test.each([
+    "low",
+    "medium",
+    "high",
+  ] as const)("%s maps to itself, because the null default carries 'unchanged' instead", (effort) => {
+    // Anthropic's own default is `high`, but a conversation nobody has
+    // touched has no depth and never reaches here — so the levels mean what
+    // they say rather than being shifted to keep one standing in for it.
+    expect(anthropicEffortForThinkingEffort("claude-opus-5", effort)).toBe(
+      effort,
+    );
+  });
+
+  test("sends nothing for a model without a selectable depth", () => {
+    expect(
+      anthropicEffortForThinkingEffort("claude-sonnet-4-5", "high"),
+    ).toBeNull();
+    expect(
+      anthropicEffortForThinkingEffort("claude-opus-4-8", "low"),
+    ).toBeNull();
   });
 });
 
@@ -169,5 +223,24 @@ describe("stripClaudeContextVariantSuffix", () => {
     expect(stripClaudeContextVariantSuffix("claude-[1m]-opus")).toBe(
       "claude-[1m]-opus",
     );
+  });
+});
+
+describe("isSmallModel", () => {
+  test("makes no claim when the serving backend reported no size", () => {
+    // Only Ollama reports a parameter count today; everywhere else this is null
+    // and the model must go unmarked rather than be assumed large or small.
+    expect(isSmallModel(null)).toBe(false);
+  });
+
+  test("includes a model sitting exactly on the threshold", () => {
+    expect(isSmallModel(SMALL_MODEL_MAX_PARAMETERS)).toBe(true);
+  });
+
+  test("marks models below the threshold and spares those above it", () => {
+    expect(isSmallModel(1_000_000_000)).toBe(true);
+    expect(isSmallModel(3_212_749_888)).toBe(true);
+    expect(isSmallModel(8_030_261_248)).toBe(false);
+    expect(isSmallModel(70_000_000_000)).toBe(false);
   });
 });

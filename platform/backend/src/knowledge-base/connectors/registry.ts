@@ -7,6 +7,7 @@ import { GithubConnector } from "./github/github-connector";
 import { GitlabConnector } from "./gitlab/gitlab-connector";
 import { JiraConnector } from "./jira/jira-connector";
 import { LinearConnector } from "./linear/linear-connector";
+import { MFilesConnector } from "./mfiles/mfiles-connector";
 import { NotionConnector } from "./notion/notion-connector";
 import { OneDriveConnector } from "./onedrive/onedrive-connector";
 import { OutlineConnector } from "./outline/outline-connector";
@@ -33,6 +34,7 @@ const connectorRegistry: Record<ConnectorType, () => Connector> = {
   salesforce: () => new SalesforceConnector(),
   web_crawler: () => new WebCrawlerConnector(),
   perforce: () => new PerforceConnector(),
+  mfiles: () => new MFilesConnector(),
 };
 
 export function getConnector(type: string): Connector {

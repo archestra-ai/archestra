@@ -38,6 +38,7 @@ export function CopyButton({
     return (
       <>
         <Button
+          type="button"
           variant="ghost"
           size={buttonSize}
           className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
@@ -53,6 +54,7 @@ export function CopyButton({
 
   return (
     <Button
+      type="button"
       variant="ghost"
       size={buttonSize}
       className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}

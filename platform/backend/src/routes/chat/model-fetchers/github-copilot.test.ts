@@ -17,6 +17,16 @@ function aliveProbeResponse() {
   );
 }
 
+/** The same, as the Responses endpoint phrases it (the probe omits `input`). */
+function aliveResponsesProbeResponse() {
+  return Response.json(
+    {
+      error: { message: "Missing required parameter: 'input'.", code: "" },
+    },
+    { status: 400 },
+  );
+}
+
 /** What a dead-but-catalogued model answers any chat/completions request. */
 function modelNotSupportedResponse() {
   return Response.json(
@@ -44,7 +54,7 @@ afterEach(() => {
 });
 
 describe("fetchGithubCopilotModels", () => {
-  test("exchanges the GitHub token, then keeps only chat/completions-capable models", async () => {
+  test("exchanges the GitHub token, then keeps every model either proxy surface can serve", async () => {
     // Shapes mirror a real Copilot /models response (verified live): a
     // Responses-only codex model, the Anthropic /v1/messages shim, embeddings
     // and `completion` types, a policy-disabled model, and legacy chat models
@@ -56,6 +66,9 @@ describe("fetchGithubCopilotModels", () => {
       }
       if (url.endsWith("/chat/completions")) {
         return Promise.resolve(aliveProbeResponse());
+      }
+      if (url.endsWith("/responses")) {
+        return Promise.resolve(aliveResponsesProbeResponse());
       }
       return Promise.resolve(
         Response.json({
@@ -79,9 +92,15 @@ describe("fetchGithubCopilotModels", () => {
             },
             {
               id: "gpt-5.3-codex",
-              // Responses-only — must be dropped even though picker=true
+              // Responses-only — kept, and tagged so it is routed there
               model_picker_enabled: true,
               supported_endpoints: ["/responses"],
+              capabilities: { type: "chat" },
+            },
+            {
+              id: "gpt-5.1",
+              // Serves both — preferred over chat completions
+              supported_endpoints: ["/chat/completions", "/responses"],
               capabilities: { type: "chat" },
             },
             {
@@ -116,33 +135,143 @@ describe("fetchGithubCopilotModels", () => {
         id: "gpt-4o",
         displayName: "GPT-4o",
         provider: "github-copilot",
-        capabilities: { contextLength: 128000, supportsToolCalling: true },
+        capabilities: {
+          contextLength: 128000,
+          supportsToolCalling: true,
+          supportedEndpoints: ["/chat/completions"],
+        },
       },
       {
         id: "claude-sonnet-4",
         displayName: "claude-sonnet-4",
         provider: "github-copilot",
-        capabilities: { contextLength: null, supportsToolCalling: false },
+        capabilities: {
+          contextLength: null,
+          supportsToolCalling: false,
+          supportedEndpoints: ["/chat/completions"],
+        },
+      },
+      {
+        id: "gpt-5.3-codex",
+        displayName: "gpt-5.3-codex",
+        provider: "github-copilot",
+        capabilities: {
+          contextLength: null,
+          supportsToolCalling: null,
+          supportedEndpoints: ["/responses"],
+        },
+      },
+      {
+        id: "gpt-5.1",
+        displayName: "gpt-5.1",
+        provider: "github-copilot",
+        capabilities: {
+          contextLength: null,
+          supportsToolCalling: null,
+          supportedEndpoints: ["/chat/completions", "/responses"],
+        },
       },
     ]);
 
-    const modelsCall = fetchMock.mock.calls.find(
-      ([input]) =>
-        !String(input).includes("copilot_internal") &&
-        !String(input).endsWith("/chat/completions"),
+    const modelsCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/models"),
     );
     expect(modelsCall).toBeDefined();
     const headers = modelsCall?.[1]?.headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer copilot-bearer");
     expect(headers.get("copilot-integration-id")).toBe("vscode-chat");
 
-    // Only the statically-kept candidates are probed for invocability — the
-    // Responses-only/disabled/embedding entries are already out.
-    const probedModels = fetchMock.mock.calls
-      .filter(([input]) => String(input).endsWith("/chat/completions"))
-      .map(([, init]) => JSON.parse(String(init?.body)).model)
-      .sort();
-    expect(probedModels).toEqual(["claude-sonnet-4", "gpt-4o"]);
+    // Each candidate is probed on the surface it declares — probing a
+    // Responses-only model on chat completions would read as
+    // model_not_supported and drop every GPT-5.x model. A model serving both
+    // is probed on chat completions, the surface it will be served over.
+    const probesByEndpoint = (suffix: string) =>
+      fetchMock.mock.calls
+        .filter(([input]) => String(input).endsWith(suffix))
+        .map(([, init]) => JSON.parse(String(init?.body)).model)
+        .sort();
+    expect(probesByEndpoint("/chat/completions")).toEqual([
+      "claude-sonnet-4",
+      "gpt-4o",
+      "gpt-5.1",
+    ]);
+    expect(probesByEndpoint("/responses")).toEqual(["gpt-5.3-codex"]);
+  });
+
+  test("probes a Responses-only model without an `input`, so nothing is generated", async () => {
+    // An empty `input: []` is a *valid* Responses request and would invoke the
+    // model, burning a premium request per model per sync. Omitting `input`
+    // entirely is rejected before any inference happens.
+    let probeBody: unknown;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((input: string | URL, init) => {
+        const url = String(input);
+        if (url.includes("copilot_internal")) {
+          return Promise.resolve(tokenExchangeResponse());
+        }
+        if (url.endsWith("/responses")) {
+          probeBody = JSON.parse(String(init?.body));
+          return Promise.resolve(aliveResponsesProbeResponse());
+        }
+        return Promise.resolve(
+          Response.json({
+            data: [
+              {
+                id: "gpt-5.5",
+                supported_endpoints: ["/responses"],
+                capabilities: { type: "chat" },
+              },
+            ],
+          }),
+        );
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const models = await fetchGithubCopilotModels(uniqueGithubToken());
+
+    expect(models.map((model) => model.id)).toEqual(["gpt-5.5"]);
+    expect(probeBody).toEqual({ model: "gpt-5.5" });
+  });
+
+  test("drops a Responses-only model the responses endpoint rejects as not supported", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((input: string | URL, init) => {
+        const url = String(input);
+        if (url.includes("copilot_internal")) {
+          return Promise.resolve(tokenExchangeResponse());
+        }
+        if (url.endsWith("/responses")) {
+          const body = JSON.parse(String(init?.body)) as { model?: string };
+          return Promise.resolve(
+            body.model === "retired-codex"
+              ? modelNotSupportedResponse()
+              : aliveResponsesProbeResponse(),
+          );
+        }
+        return Promise.resolve(
+          Response.json({
+            data: [
+              {
+                id: "gpt-5.5",
+                supported_endpoints: ["/responses"],
+                capabilities: { type: "chat" },
+              },
+              {
+                id: "retired-codex",
+                supported_endpoints: ["/responses"],
+                capabilities: { type: "chat" },
+              },
+            ],
+          }),
+        );
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const models = await fetchGithubCopilotModels(uniqueGithubToken());
+
+    expect(models.map((model) => model.id)).toEqual(["gpt-5.5"]);
   });
 
   test("drops a catalogued model that chat/completions rejects as not supported (T-959)", async () => {

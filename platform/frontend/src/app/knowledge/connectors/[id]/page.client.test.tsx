@@ -42,6 +42,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
   useTestConnectorConnection: () => noopMutation(),
   useAssignConnectorToKnowledgeBases: () => noopMutation(),
   useUnassignConnectorFromKnowledgeBase: () => noopMutation(),
+  useStartGoogleDriveOAuth: () => noopMutation(),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
@@ -772,7 +773,7 @@ describe("ConnectorDetailPage", () => {
         screen.getAllByText(
           (_, el) =>
             el?.tagName === "DIV" &&
-            el.textContent === "40 documents awaiting permission sync",
+            el.textContent === "40 documents with no resolvable readers",
         )[0],
       ).toBeInTheDocument();
       // The permissions row mirrors the content row's Last/cadence items.

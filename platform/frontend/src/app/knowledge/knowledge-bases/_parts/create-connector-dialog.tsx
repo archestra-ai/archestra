@@ -41,7 +41,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
-import { useCreateConnector } from "@/lib/knowledge/connector.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
+import {
+  useCreateConnector,
+  useStartGoogleDriveOAuth,
+} from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
   CONNECTOR_OPTIONS,
@@ -57,8 +63,10 @@ import {
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
   getPermissionSyncCredentialNote,
+  NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -95,14 +103,42 @@ export function CreateConnectorDialog({
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const createConnector = useCreateConnector();
+  const startGoogleDriveOAuth = useStartGoogleDriveOAuth();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
   const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
-  const filteredConnectorOptions = CONNECTOR_OPTIONS.filter((option) =>
-    option.label.toLowerCase().includes(search.toLowerCase()),
+  // M-Files is in beta: deployments that haven't opted in never see the type.
+  const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Auto-sync permissions is the preferred visibility: whenever the feature
+  // is enabled, the chosen type supports it, and this user may select it, a
+  // NEW connector defaults to it (any type in the allowlist, current or
+  // future). The user can still switch to Organization or Teams.
+  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
+  const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
+  const { data: hasAutoSyncCreate } = useHasPermissions({
+    knowledgeSourceAutoSync: ["create"],
+  });
+  const defaultVisibilityFor = (type: ConnectorType): ConnectorVisibility =>
+    autoSyncBeta &&
+    knowledgeBaseEnterprise &&
+    hasAutoSyncCreate &&
+    connectorSupportsAutoSync(type, orchestratorK8sRuntime)
+      ? "auto-sync-permissions"
+      : "org-wide";
+  // SPDX-SnippetEnd
+  const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
+    (option) =>
+      (option.type !== "mfiles" || mfilesEnabled) &&
+      option.label.toLowerCase().includes(search.toLowerCase()),
   );
 
   const form = useForm<CreateConnectorFormValues>({
@@ -122,18 +158,21 @@ export function CreateConnectorDialog({
   });
 
   const connectorType = form.watch("connectorType");
+  // A brand-new connector starts in the org's configured landing environment
+  // for knowledge connectors.
+  useDefaultEnvironmentSeed({
+    resource: "knowledgeSource",
+    enabled: open,
+    apply: (environmentId) => form.setValue("environmentId", environmentId),
+  });
 
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
-    // Reset an auto-sync selection when switching to a type that can't support it.
-    if (
-      visibility === "auto-sync-permissions" &&
-      !connectorSupportsAutoSync(type)
-    ) {
-      setVisibility("org-wide");
-    }
+    // Picking a type re-establishes that type's default visibility (which
+    // also clears an auto-sync selection a new type can't support).
+    setVisibility(defaultVisibilityFor(type));
     setStep("configure");
   };
 
@@ -155,7 +194,13 @@ export function CreateConnectorDialog({
     const usesGithubApp =
       values.connectorType === "github" &&
       (values.config as { authMethod?: string }).authMethod === "github_app";
-    const requiresCredentials = values.connectorType !== "web_crawler";
+    // Individual Google Drive: the credential comes back from Google after the
+    // connector exists, so nothing is sent with the create.
+    const awaitsGoogleDriveOAuth =
+      values.connectorType === "gdrive" &&
+      (values.config as { authMode?: string }).authMode === "oauth";
+    const requiresCredentials =
+      values.connectorType !== "web_crawler" && !awaitsGoogleDriveOAuth;
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
@@ -187,6 +232,17 @@ export function CreateConnectorDialog({
       setVisibility("org-wide");
       setTeamIds([]);
       onOpenChange(false);
+
+      // Hand straight over to Google rather than leaving behind a connector
+      // that cannot sync until someone finds the Connect button on its page.
+      // Google returns to the connector itself, where the first sync is
+      // already running and the connected account is on screen.
+      if (awaitsGoogleDriveOAuth) {
+        startGoogleDriveOAuth.mutate({
+          connectorId: result.id,
+          returnTo: `${window.location.origin}/knowledge/connectors/${result.id}`,
+        });
+      }
     }
   };
 
@@ -203,6 +259,7 @@ export function CreateConnectorDialog({
 
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
@@ -224,6 +281,7 @@ export function CreateConnectorDialog({
     emailRequired,
     mode: "create",
     authMethod,
+    authMode,
   });
   const permissionSyncCredentialNote =
     getPermissionSyncCredentialNote(connectorType);
@@ -318,11 +376,13 @@ export function CreateConnectorDialog({
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  Configure{" "}
-                  {selectedType ? (
-                    <span>{getConnectorTypeLabel(selectedType)}</span>
-                  ) : null}{" "}
-                  Connector
+                  <span>
+                    Configure{" "}
+                    {selectedType
+                      ? `${getConnectorTypeLabel(selectedType)} `
+                      : ""}
+                    Connector
+                  </span>
                 </DialogTitle>
                 <DialogDescription>
                   Enter the connection details for your{" "}
@@ -404,9 +464,17 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
-                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  supportsAutoSync={connectorSupportsAutoSync(
+                    connectorType,
+                    orchestratorK8sRuntime,
+                  )}
                   autoSyncPermissionAction="create"
                 />
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "notion" && (
+                    <NotionAutoSyncPermissionsNote />
+                  )}
 
                 <div className="border-t" />
 
@@ -503,8 +571,16 @@ export function CreateConnectorDialog({
                     />
                   )}
 
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "perforce" && (
+                    <PerforcePermissionSyncFields form={form} mode="create" />
+                  )}
+
                 <Collapsible>
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                  <CollapsibleTrigger
+                    type="button"
+                    className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
+                  >
                     <span className="text-sm font-medium">Advanced</span>
                     <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>

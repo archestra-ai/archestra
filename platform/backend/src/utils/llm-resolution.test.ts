@@ -42,6 +42,7 @@ const MOCK_MODEL = {
   inputModalities: null,
   outputModalities: null,
   supportsToolCalling: null,
+  supportedEndpoints: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
   cacheReadPricePerToken: null,
@@ -848,6 +849,91 @@ describe("resolveAgentLlmOrDefault", () => {
       apiKey: undefined,
       modelName: "claude-configured",
       baseUrl: null,
+    });
+  });
+
+  test("moves an agent to the vLLM endpoint that serves its model", async () => {
+    // The agent is pinned to one vLLM server while its model is served by a
+    // sibling. Only the host can answer for the model, so the agent's own
+    // credential and base URL must give way to the serving endpoint's.
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-vllm-a",
+      provider: "vllm",
+      secretId: "secret-vllm-a",
+      baseUrl: "http://vllm-a:8000/v1",
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(
+      secretsManager,
+      "getSecretValueForLlmProviderApiKey",
+    ).mockResolvedValue("token-a");
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-qwen",
+        provider: "vllm",
+        modelId: "Qwen/Qwen2.5-7B-Instruct",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "token-b",
+      source: "org",
+      chatApiKeyId: "key-vllm-b",
+      baseUrl: "http://vllm-b:8000/v1",
+    });
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: "key-vllm-a", modelId: "model-qwen" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      provider: "vllm",
+      apiKey: "token-b",
+      modelName: "Qwen/Qwen2.5-7B-Instruct",
+      baseUrl: "http://vllm-b:8000/v1",
+      chatApiKeyId: "key-vllm-b",
+    });
+  });
+
+  test("keeps an agent on its own vLLM endpoint when that endpoint serves the model", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-vllm-a",
+      provider: "vllm",
+      secretId: "secret-vllm-a",
+      baseUrl: "http://vllm-a:8000/v1",
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(
+      secretsManager,
+      "getSecretValueForLlmProviderApiKey",
+    ).mockResolvedValue("token-a");
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-llama",
+        provider: "vllm",
+        modelId: "meta-llama/Llama-3.1-8B-Instruct",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "token-a",
+      source: "org",
+      chatApiKeyId: "key-vllm-a",
+      baseUrl: "http://vllm-a:8000/v1",
+    });
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: "key-vllm-a", modelId: "model-llama" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      provider: "vllm",
+      apiKey: "token-a",
+      modelName: "meta-llama/Llama-3.1-8B-Instruct",
+      baseUrl: "http://vllm-a:8000/v1",
+      chatApiKeyId: "key-vllm-a",
     });
   });
 

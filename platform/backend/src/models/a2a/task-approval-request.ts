@@ -1,8 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import type {
-  A2AArchestraApprovalRequest,
-  A2AArchestraTaskApprovalDecision,
-} from "@/agents/a2a/a2a-protocol";
+import { eq, inArray } from "drizzle-orm";
+import type { A2AArchestraApprovalRequest } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import type {
   A2ATaskApprovalRequest,

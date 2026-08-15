@@ -1,4 +1,7 @@
-import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
+import {
+  getResourceForAgentType,
+  TOOL_LIST_AGENTS_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   assertAgentTeams,
@@ -7,6 +10,7 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -15,6 +19,7 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
@@ -294,6 +299,10 @@ export async function handleCreateResource<
       teams,
       labels,
       agentType: targetAgentType,
+      environmentId: await resolveNewAgentEnvironmentId({
+        context,
+        agentType: targetAgentType,
+      }),
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
@@ -632,6 +641,33 @@ export async function handleEditResource<
   } catch (error) {
     return catchError(error, `editing ${toolLabel}`);
   }
+}
+
+/**
+ * These tools take no environment, so a new agent lands wherever the org says
+ * new agents of its type go (the Default environment until an admin configures
+ * otherwise). A restricted target the caller may not deploy to resolves back to
+ * Default rather than failing the create.
+ */
+async function resolveNewAgentEnvironmentId(params: {
+  context: ArchestraContext;
+  agentType: "agent" | "llm_proxy" | "mcp_gateway";
+}): Promise<string | null> {
+  const { context, agentType } = params;
+  const { userId, organizationId } = context;
+  if (!userId || !organizationId) return null;
+
+  const resource = getResourceForAgentType(agentType);
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource,
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      resource,
+      "deploy-to-restricted",
+    ),
+  });
 }
 
 async function validateKnowledgeAssignments(params: {

@@ -151,4 +151,67 @@ describe("ConnectorRunDetailsDialog", () => {
       screen.getByText(/only covered documents ingested before it started/),
     ).toBeInTheDocument();
   });
+
+  it("surfaces the count of documents with no extractable text and its explanation", () => {
+    mockUseConnectorRun.mockReturnValue({
+      data: {
+        status: "success",
+        runType: "content",
+        startedAt: "2026-08-01T10:00:00.000Z",
+        completedAt: "2026-08-01T10:05:00.000Z",
+        documentsProcessed: 10,
+        documentsIngested: 6,
+        totalItems: 10,
+        itemsSkipped: 4,
+        documentsWithoutText: 3,
+        logs: null,
+      },
+    });
+
+    render(
+      <ConnectorRunDetailsDialog
+        connectorId="connector-1"
+        runId="run-1"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("No text extracted:")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    // The explanation states the count is a subset of the skipped total.
+    expect(
+      screen.getByText(
+        /3 of the 4 skipped items contained no extractable text/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/The run log names each one/)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be exported/)).not.toBeInTheDocument();
+  });
+
+  it("hides the no-text row when every document extracted text", () => {
+    mockUseConnectorRun.mockReturnValue({
+      data: {
+        status: "success",
+        runType: "content",
+        startedAt: "2026-08-01T10:00:00.000Z",
+        completedAt: "2026-08-01T10:05:00.000Z",
+        documentsProcessed: 5,
+        documentsIngested: 5,
+        totalItems: 5,
+        itemsSkipped: 0,
+        documentsWithoutText: 0,
+        logs: null,
+      },
+    });
+
+    render(
+      <ConnectorRunDetailsDialog
+        connectorId="connector-1"
+        runId="run-1"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("No text extracted:")).not.toBeInTheDocument();
+  });
 });

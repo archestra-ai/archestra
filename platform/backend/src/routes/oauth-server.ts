@@ -112,13 +112,16 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // request Host so Docker containers can reach them directly.
       const browserBaseUrl = config.frontendBaseUrl;
 
-      // The issuer MUST match the JWT "iss" claim exactly. Pydantic's AnyHttpUrl
-      // (used by MCP clients like Open WebUI) normalizes URLs by appending a
-      // trailing slash when the path is empty. We include the trailing slash so
-      // the JWT iss claim, the well-known issuer, and the normalized URL all match.
-      const issuer = browserBaseUrl.endsWith("/")
-        ? browserBaseUrl
-        : `${browserBaseUrl}/`;
+      // The issuer identifier MUST byte-match both the JWT "iss" claim and the
+      // RFC 9207 `iss` authorization-response parameter, which better-auth
+      // derives from the JWT plugin issuer with any trailing slash stripped —
+      // strict clients (Claude Code, MCP TS SDK) abort authorization on any
+      // mismatch. RFC 8414 §3.3 likewise requires this value to be identical
+      // to the (slash-free) URL clients built the well-known URL from, and
+      // /.well-known/oauth-protected-resource advertises the same slash-free
+      // origin in authorization_servers. frontendBaseUrl is normalized
+      // slash-free in config, so it is used verbatim.
+      const issuer = browserBaseUrl;
 
       reply.type("application/json");
       return {

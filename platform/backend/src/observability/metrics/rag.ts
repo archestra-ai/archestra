@@ -18,6 +18,7 @@ let ragConnectorSyncDuration: client.Histogram<string>;
 let ragConnectorSyncsTotal: client.Counter<string>;
 let ragDocumentsProcessedTotal: client.Counter<string>;
 let ragDocumentsIngestedTotal: client.Counter<string>;
+let ragDocumentsWithoutTextTotal: client.Counter<string>;
 let ragChunksCreatedTotal: client.Counter<string>;
 
 // ===== Embedding metrics =====
@@ -28,6 +29,8 @@ let ragEmbeddingDocumentsTotal: client.Counter<string>;
 let ragQueryDuration: client.Histogram<string>;
 let ragQueriesTotal: client.Counter<string>;
 let ragQueryResultsCount: client.Histogram<string>;
+let ragQuoteVerificationTotal: client.Counter<string>;
+let ragSearchLaneTimeoutTotal: client.Counter<string>;
 
 // ===== Permission-sync metrics (auto-sync-permissions connectors) =====
 let ragPermissionSyncsTotal: client.Counter<string>;
@@ -71,6 +74,12 @@ export function initializeRagMetrics(): void {
     labelNames: ["connector_type"],
   });
 
+  ragDocumentsWithoutTextTotal = new client.Counter({
+    name: "rag_documents_without_text_total",
+    help: "Documents a content sync found but could not index (scanned PDF with no text layer, unparseable or empty file, oversized image) — skipped, so invisible to search",
+    labelNames: ["connector_type"],
+  });
+
   ragChunksCreatedTotal = new client.Counter({
     name: "rag_chunks_created_total",
     help: "Total chunks created during document ingestion",
@@ -110,6 +119,18 @@ export function initializeRagMetrics(): void {
     labelNames: ["search_type"],
     buckets: [0, 1, 2, 5, 10, 20, 50],
     enableExemplars: true,
+  });
+
+  ragQuoteVerificationTotal = new client.Counter({
+    name: "rag_quote_verification_total",
+    help: "Chat-answer quotes checked against their cited knowledge chunk (issue #7161). result=matched|wrong_ref|failed|unverifiable|unparseable; `failed` = the quote appears where it should not (fabrication), `wrong_ref` = the cited ref names no returned chunk but the quote exists in another one (mis-citation), `unverifiable` = unresolvable ref and the quote is too short to search for broadly, `unparseable` (once per turn) = chunks were returned but the answer carried no parseable quote, i.e. thin citation coverage",
+    labelNames: ["result"],
+  });
+
+  ragSearchLaneTimeoutTotal = new client.Counter({
+    name: "rag_search_lane_timeout_total",
+    help: "Search lanes of a knowledge query cut by the database statement timeout (ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS). A timed-out lane is dropped and the remaining lanes' results are merged; a query where every lane times out fails with an actionable error",
+    labelNames: ["lane"],
   });
 
   ragPermissionSyncsTotal = new client.Counter({
@@ -177,6 +198,7 @@ export function reportConnectorSync(params: {
   durationSeconds: number;
   documentsProcessed: number;
   documentsIngested: number;
+  documentsWithoutText?: number;
 }): void {
   if (!ragConnectorSyncsTotal) {
     logger.warn("RAG metrics not initialized, skipping connector sync report");
@@ -201,6 +223,12 @@ export function reportConnectorSync(params: {
     ragDocumentsIngestedTotal.inc(
       { connector_type: params.connectorType },
       params.documentsIngested,
+    );
+  }
+  if (params.documentsWithoutText && params.documentsWithoutText > 0) {
+    ragDocumentsWithoutTextTotal.inc(
+      { connector_type: params.connectorType },
+      params.documentsWithoutText,
     );
   }
 }
@@ -369,6 +397,46 @@ export function reportAccessTokenTruncation(params: {
 export function reportKnowledgeQueryUnresolvedIdentity(): void {
   if (!ragKnowledgeQueryUnresolvedIdentityTotal) return;
   ragKnowledgeQueryUnresolvedIdentityTotal.inc();
+}
+
+/**
+ * Reports the outcome of verifying a chat answer's cited quotes against the
+ * knowledge chunks that were returned (issue #7161). `matched`, `wrongRef`
+ * (mis-citations: real quote, unresolvable ref), `failed` (fabrications), and
+ * `unverifiable` (unresolvable ref and too short to search for) count
+ * individual quotes; `unparseable` is 0 or 1 for the whole turn (chunks
+ * returned but no quote parsed) — a rising `unparseable` rate means models are
+ * largely ignoring the quote convention, so real coverage is thin.
+ */
+export function reportQuoteVerification(params: {
+  matched: number;
+  wrongRef: number;
+  failed: number;
+  unverifiable: number;
+  unparseable: number;
+}): void {
+  if (!ragQuoteVerificationTotal) return;
+  const outcomes: Array<[result: string, count: number]> = [
+    ["matched", params.matched],
+    ["wrong_ref", params.wrongRef],
+    ["failed", params.failed],
+    ["unverifiable", params.unverifiable],
+    ["unparseable", params.unparseable],
+  ];
+  for (const [result, count] of outcomes) {
+    if (count > 0) {
+      ragQuoteVerificationTotal.inc({ result }, count);
+    }
+  }
+}
+
+/**
+ * Reports a search lane (one vector or keyword statement of a knowledge query)
+ * cut by the database statement timeout.
+ */
+export function reportSearchLaneTimeout(lane: "vector" | "keyword"): void {
+  if (!ragSearchLaneTimeoutTotal) return;
+  ragSearchLaneTimeoutTotal.inc({ lane });
 }
 
 /**

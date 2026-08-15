@@ -11,6 +11,7 @@ import {
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach } from "vitest";
@@ -101,76 +102,85 @@ describe("syncBuiltInAgents", () => {
     );
   });
 
-  test("gives every environment its own advisor, and no other built-in one", async ({
+  test("seeds one org-wide advisor even when environments exist", async ({
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
-    const [staging] = await db
+    await db
       .insert(schema.environmentsTable)
       .values({ organizationId: organization.id, name: "Staging" })
       .returning();
 
     await syncBuiltInAgents();
 
-    // An agent in Staging can only delegate to a target in Staging, so an
-    // advisor only in the Default environment would be unreachable there.
-    const stagingAdvisor = await AgentModel.getAdvisorForEnvironment({
-      organizationId: organization.id,
-      environmentId: staging.id,
-    });
-    const defaultAdvisor = await AgentModel.getAdvisorForEnvironment({
-      organizationId: organization.id,
-      environmentId: null,
-    });
-
-    expect(stagingAdvisor).not.toBeNull();
-    expect(defaultAdvisor).not.toBeNull();
-    expect(stagingAdvisor?.id).not.toBe(defaultAdvisor?.id);
-    expect(stagingAdvisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
-
-    // Every other built-in is invoked by the platform, not delegated to, so it
-    // stays org-wide — one row, in the Default environment.
-    const titleAgents = await db
-      .select({ id: schema.agentsTable.id })
+    // Delegation carries an explicit advisor exception across environment
+    // boundaries, so one env-less row serves every environment.
+    const advisors = await db
+      .select({
+        id: schema.agentsTable.id,
+        environmentId: schema.agentsTable.environmentId,
+      })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.organizationId, organization.id),
           eq(
             sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+            BUILT_IN_AGENT_IDS.ADVISOR,
           ),
+          isNull(schema.agentsTable.deletedAt),
         ),
       );
-    expect(titleAgents).toHaveLength(1);
+    expect(advisors).toHaveLength(1);
+    expect(advisors[0].environmentId).toBeNull();
   });
 
-  test("seeds an advisor into an environment created after the first boot", async ({
+  test("retires a stray environment-scoped advisor left by a pre-collapse replica", async ({
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
     await syncBuiltInAgents();
 
-    const [added] = await db
+    const [staging] = await db
       .insert(schema.environmentsTable)
-      .values({ organizationId: organization.id, name: "Added later" })
+      .values({ organizationId: organization.id, name: "Staging" })
       .returning();
-
-    expect(
-      await AgentModel.getAdvisorForEnvironment({
+    // What an old replica's createEnvironment hook used to write.
+    const [stray] = await db
+      .insert(schema.agentsTable)
+      .values({
         organizationId: organization.id,
-        environmentId: added.id,
-      }),
-    ).toBeNull();
+        name: BUILT_IN_AGENT_NAMES.ADVISOR,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: ADVISOR_SYSTEM_PROMPT,
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+        environmentId: staging.id,
+      })
+      .returning({ id: schema.agentsTable.id });
 
     await syncBuiltInAgents();
 
-    expect(
-      await AgentModel.getAdvisorForEnvironment({
-        organizationId: organization.id,
-        environmentId: added.id,
-      }),
-    ).not.toBeNull();
+    const [strayAfter] = await db
+      .select({ deletedAt: schema.agentsTable.deletedAt })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, stray.id));
+    expect(strayAfter.deletedAt).not.toBeNull();
+
+    const liveAdvisors = await db
+      .select({ environmentId: schema.agentsTable.environmentId })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organization.id),
+          eq(
+            sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+            BUILT_IN_AGENT_IDS.ADVISOR,
+          ),
+          isNull(schema.agentsTable.deletedAt),
+        ),
+      );
+    expect(liveAdvisors).toEqual([{ environmentId: null }]);
   });
 
   test("carries a renamed or reworded built-in to an org that already has it", async ({
@@ -777,12 +787,12 @@ describe("decideEnvSeed", () => {
 
   test("skips vLLM when no base URL is configured", () => {
     config.llm.vllm.baseUrl = undefined;
-    expect(decideEnvSeed("vllm").kind).toBe("skip");
+    expect(decideEnvSeed("vllm", "sk-env").kind).toBe("skip");
   });
 
   test("creates vLLM with the base URL persisted when configured", () => {
     config.llm.vllm.baseUrl = "https://vllm.example.com/v1";
-    expect(decideEnvSeed("vllm")).toEqual({
+    expect(decideEnvSeed("vllm", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: "https://vllm.example.com/v1",
     });
@@ -790,17 +800,17 @@ describe("decideEnvSeed", () => {
 
   test("skips Azure when no base URL is configured", () => {
     config.llm.azure.baseUrl = "";
-    expect(decideEnvSeed("azure").kind).toBe("skip");
+    expect(decideEnvSeed("azure", "sk-env").kind).toBe("skip");
   });
 
   test("treats a whitespace-only base URL as not configured", () => {
     config.llm.azure.baseUrl = "   ";
-    expect(decideEnvSeed("azure").kind).toBe("skip");
+    expect(decideEnvSeed("azure", "sk-env").kind).toBe("skip");
   });
 
   test("creates Azure with the base URL persisted when configured", () => {
     config.llm.azure.baseUrl = "https://my-resource.openai.azure.com/openai";
-    expect(decideEnvSeed("azure")).toEqual({
+    expect(decideEnvSeed("azure", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: "https://my-resource.openai.azure.com/openai",
     });
@@ -808,7 +818,7 @@ describe("decideEnvSeed", () => {
 
   test("creates a normal provider without persisting its base URL", () => {
     config.llm.openai.baseUrl = "https://api.openai.com/v1";
-    expect(decideEnvSeed("openai")).toEqual({
+    expect(decideEnvSeed("openai", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: null,
     });
@@ -816,9 +826,22 @@ describe("decideEnvSeed", () => {
 
   test("creates Bedrock without a base URL (region fallback)", () => {
     config.llm.bedrock.baseUrl = "";
-    expect(decideEnvSeed("bedrock")).toEqual({
+    expect(decideEnvSeed("bedrock", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: null,
+    });
+  });
+
+  test("skips a subscription credential in the env var", () => {
+    // The encoded value is one person's refresh token; seeding it org-wide
+    // would redeem that personal subscription for every user on every boot.
+    const encoded = `${SUBSCRIPTION_CREDENTIALS["x-premium"].marker}${Buffer.from(
+      JSON.stringify({ refreshToken: "rt" }),
+    ).toString("base64")}`;
+    expect(decideEnvSeed("xai", encoded)).toEqual({
+      kind: "skip",
+      reason:
+        "subscription credentials are per-user; refusing to seed an org-wide key",
     });
   });
 });

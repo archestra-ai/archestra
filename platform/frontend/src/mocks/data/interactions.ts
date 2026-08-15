@@ -65,6 +65,8 @@ export function makeSessionSummary(
     authMethods: [],
     authenticatedAppNames: [],
     userNames: [],
+    userIds: [],
+    unattributedReason: null,
     lastUserMessagePreview: null,
     lastInteractionType: null,
     conversationTitle: null,

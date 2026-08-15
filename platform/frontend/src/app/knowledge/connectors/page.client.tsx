@@ -6,15 +6,15 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
+import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnector,
@@ -44,7 +45,6 @@ import {
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
-import { formatDate } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
@@ -58,12 +58,14 @@ const CONNECTOR_TYPE_OPTIONS = [
   "gitlab",
   "servicenow",
   "perforce",
+  "mfiles",
   "web_crawler",
 ] as ConnectorType[];
 
 export default function ConnectorsPage() {
   return (
     <div className="w-full h-full">
+      <GoogleDriveOAuthResultToast />
       <ErrorBoundary>
         <ConnectorsList />
       </ErrorBoundary>
@@ -80,6 +82,11 @@ function ConnectorsList() {
   const pageSizeFromUrl = searchParams.get("pageSize");
   const search = searchParams.get("search") || "";
   const connectorTypeFilter = searchParams.get("connectorType") || "all";
+  // M-Files is in beta: deployments that haven't opted in never see the type.
+  const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  const connectorTypeOptions = CONNECTOR_TYPE_OPTIONS.filter(
+    (type) => type !== "mfiles" || mfilesEnabled,
+  );
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
@@ -200,29 +207,12 @@ function ConnectorsList() {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => {
-        return (
-          <div className="flex items-center gap-2">
-            {row.original.lastSyncAt ? (
-              <>
-                <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-                <span
-                  className="text-xs text-muted-foreground"
-                  title={formatDate({ date: row.original.lastSyncAt })}
-                >
-                  {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                    addSuffix: true,
-                  })}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Never synced
-              </span>
-            )}
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <ConnectorStatusCell
+          lastSyncAt={row.original.lastSyncAt}
+          lastSyncStatus={row.original.lastSyncStatus}
+        />
+      ),
     },
     {
       id: "accessibleTo",
@@ -359,7 +349,7 @@ function ConnectorsList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All connector types</SelectItem>
-                {CONNECTOR_TYPE_OPTIONS.map((type) => (
+                {connectorTypeOptions.map((type) => (
                   <SelectItem key={type} value={type}>
                     <div className="flex items-center gap-2">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />

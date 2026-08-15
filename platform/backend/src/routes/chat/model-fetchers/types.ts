@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type {
+  SupportedProvider,
+  SupportedProviderEndpoint,
+} from "@archestra/shared";
 import { ApiError } from "@/types";
 import type { ModelDefaultParameters } from "@/types/model";
 
@@ -46,6 +49,21 @@ export interface FetchedModelCapabilities {
   embeddingDimensions?: number | null;
   /** Provider-reported default generation parameters (Ollama `/api/show`). */
   defaultParameters?: ModelDefaultParameters | null;
+  /**
+   * Total parameter count reported by the serving backend (Ollama `/api/show`).
+   * Null/undefined for every provider that does not report one — which is all of
+   * them except Ollama, vLLM included (its `ModelCard` carries no size field).
+   */
+  parameterCount?: number | null;
+  /**
+   * Provider surfaces this model can be invoked through, when the provider
+   * publishes that per model (GitHub Copilot's `supported_endpoints`). Needed
+   * where a provider serves two wire formats off one catalog and the model id
+   * does not reveal which: Copilot's Codex and GPT-5.x models accept only
+   * `/responses`, while the rest accept only `/chat/completions`, and both
+   * families use bare ids. `undefined` means the provider said nothing.
+   */
+  supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }
 
 export interface ModelInfo {
@@ -66,8 +84,20 @@ export interface StaticModel {
   displayName: string;
 }
 
+export interface ModelFetchOptions {
+  /**
+   * The llm_provider_api_keys row the credential came from, when it already
+   * exists. Subscription-credential fetchers (ChatGPT/Codex, X Premium) pass it
+   * to their token manager so a rotated refresh token is cached and persisted
+   * back to the row — an ID-less redemption instead stashes the rotation for
+   * `latestKnownRefreshToken`, which only helps within the same request.
+   */
+  providerApiKeyId?: string;
+}
+
 export type ModelFetcher = (
   apiKey: string,
   baseUrl?: string | null,
   extraHeaders?: Record<string, string> | null,
+  opts?: ModelFetchOptions,
 ) => Promise<ModelInfo[]>;

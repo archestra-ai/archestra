@@ -7,6 +7,7 @@ import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -91,6 +92,10 @@ export const AUDIT_DECISIONS = {
   environmentDefaultUserLimitsTable: {
     audited: true,
     model: EnvironmentDefaultUserLimitModel,
+  },
+  environmentResourceDefaultsTable: {
+    audited: true,
+    model: EnvironmentResourceDefaultModel,
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   githubPatsTable: { audited: true, model: GithubPatModel },
@@ -318,6 +323,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedSkillsTable: {
+    audited: false,
+    reason: "join: agent × skill exclusion; parent (agent) audited",
+  },
   agentExcludedSubagentsTable: {
     audited: false,
     reason: "join: agent × subagent exclusion; parent (agent) audited",
@@ -329,6 +338,10 @@ export const AUDIT_DECISIONS = {
   agentKnowledgeBasesTable: {
     audited: false,
     reason: "join: agent × knowledge base; parent (agent) audited",
+  },
+  agentSkillsTable: {
+    audited: false,
+    reason: "join: agent × skill assignment; parent (agent) audited",
   },
   agentLabelsTable: {
     audited: false,
@@ -559,6 +572,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbExternalGroupsTable: {
+    audited: false,
+    reason:
+      "permission-sync source-group catalog; derived upstream data, not config",
+  },
   kbExternalUserGroupsTable: {
     audited: false,
     reason:
@@ -567,7 +585,7 @@ export const AUDIT_DECISIONS = {
   kbMemberOverridesTable: {
     audited: false,
     reason:
-      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated",
+      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated; the connector audit snapshot carries the mapping list so upsert/delete diffs",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,

@@ -1,4 +1,16 @@
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AclEntry,
@@ -387,6 +399,127 @@ class KbDocumentModel {
     return result.length > 0;
   }
 
+  static async deleteByConnectorAndSources(params: {
+    connectorId: string;
+    targets: Array<{
+      sourceId: string;
+      sourceScope?: {
+        metadataField: "userId" | "driveId";
+        value: string;
+      };
+    }>;
+  }): Promise<number> {
+    if (params.targets.length === 0) return 0;
+
+    const targetConditions: SQL[] = [];
+    const unscopedSourceIds = params.targets
+      .filter((target) => !target.sourceScope)
+      .map((target) => target.sourceId);
+    if (unscopedSourceIds.length > 0) {
+      targetConditions.push(
+        inArray(schema.kbDocumentsTable.sourceId, unscopedSourceIds),
+      );
+    }
+
+    // Group scoped IDs so a batch remains a small number of DELETE clauses
+    // instead of issuing a query per skipped item. Graph drive-item IDs are
+    // drive-local, so the metadata scope is part of their external identity.
+    const scopedSourceIds = new Map<
+      string,
+      {
+        metadataField: "userId" | "driveId";
+        value: string;
+        sourceIds: string[];
+      }
+    >();
+    for (const target of params.targets) {
+      if (!target.sourceScope) continue;
+      const key = `${target.sourceScope.metadataField}\0${target.sourceScope.value}`;
+      const group = scopedSourceIds.get(key);
+      if (group) {
+        group.sourceIds.push(target.sourceId);
+      } else {
+        scopedSourceIds.set(key, {
+          ...target.sourceScope,
+          sourceIds: [target.sourceId],
+        });
+      }
+    }
+    for (const scope of scopedSourceIds.values()) {
+      const condition = and(
+        inArray(schema.kbDocumentsTable.sourceId, scope.sourceIds),
+        sql`${schema.kbDocumentsTable.metadata} ->> ${scope.metadataField} = ${scope.value}`,
+      );
+      if (condition) targetConditions.push(condition);
+    }
+
+    const sourceCondition = or(...targetConditions);
+    if (!sourceCondition) return 0;
+
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          sourceCondition,
+        ),
+      )
+      .returning({ id: schema.kbDocumentsTable.id });
+
+    return result.length;
+  }
+
+  /**
+   * Reconcile one connector-owned source scope after a complete upstream read.
+   * The connector id is always part of the predicate, so an identical metadata
+   * value in another connector can never be deleted. Chunk rows cascade.
+   */
+  static async deleteMissingFromMetadataScope(params: {
+    connectorId: string;
+    metadataFilter: Record<string, string>;
+    seenSourceIds: string[];
+  }): Promise<number> {
+    const t = schema.kbDocumentsTable;
+    const metadataConditions = Object.entries(params.metadataFilter).map(
+      ([key, value]) => sql`${t.metadata}->>${key} = ${value}`,
+    );
+    const result = await db
+      .delete(t)
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          ...metadataConditions,
+          params.seenSourceIds.length > 0
+            ? or(
+                isNull(t.sourceId),
+                notInArray(t.sourceId, params.seenSourceIds),
+              )
+            : undefined,
+        ),
+      )
+      .returning({ id: t.id });
+    return result.length;
+  }
+
+  /** Completion-gated full-baseline sweep for connector-owned generations. */
+  static async deleteOutsideMetadataGeneration(params: {
+    connectorId: string;
+    metadataKey: string;
+    generation: string;
+  }): Promise<number> {
+    const t = schema.kbDocumentsTable;
+    const result = await db
+      .delete(t)
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          sql`${t.metadata}->>${params.metadataKey} IS DISTINCT FROM ${params.generation}`,
+        ),
+      )
+      .returning({ id: t.id });
+    return result.length;
+  }
+
   static async deleteByOrganization(organizationId: string): Promise<number> {
     const result = await db
       .delete(schema.kbDocumentsTable)
@@ -430,11 +563,16 @@ class KbDocumentModel {
   // ===== Permission-sync pass (auto-sync-permissions connectors) =====
 
   /**
-   * Live ACL coverage for a connector: how many documents exist and how many
-   * are still fail-closed (`acl = []` — awaiting a permission-sync pass, or
-   * swept because they are no longer visible upstream). This is the number an
-   * admin reads to know whether "everything ingested is reconciled right now",
-   * instead of inferring it from run history.
+   * Live effective ACL coverage for a connector. A document is fail-closed
+   * when its own ACL is empty, or when it has only a `container:` assignment
+   * and that container is missing, stale, or has an empty audience. Direct
+   * exception tokens on the document still count as readable even when the
+   * shared container audience is empty.
+   *
+   * Counting only `d.acl = []` is incorrect under the container-audience
+   * model: a container token deliberately becomes unmatchable when its
+   * upstream ACL cannot be read. Admin coverage must surface that effective
+   * fail-closed state, not report the assignment token itself as access.
    */
   static async getAclCoverageByConnector(connectorId: string): Promise<{
     totalDocuments: number;
@@ -445,9 +583,27 @@ class KbDocumentModel {
       fail_closed: number;
     }>(sql`
       SELECT count(*)::int AS total,
-             count(*) FILTER (WHERE acl = '[]'::jsonb)::int AS fail_closed
-      FROM ${schema.kbDocumentsTable}
-      WHERE connector_id = ${connectorId}
+             count(*) FILTER (
+               WHERE d.acl = '[]'::jsonb
+                  OR (
+                    d.container_key IS NOT NULL
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements_text(d.acl) AS entry(token)
+                      WHERE entry.token NOT LIKE 'container:%'
+                    )
+                    AND (
+                      c.id IS NULL
+                      OR c.stale
+                      OR c.acl = '[]'::jsonb
+                    )
+                  )
+             )::int AS fail_closed
+      FROM ${schema.kbDocumentsTable} d
+      LEFT JOIN ${schema.kbContainerAclsTable} c
+        ON c.connector_id = d.connector_id
+       AND c.container_key = d.container_key
+      WHERE d.connector_id = ${connectorId}
     `);
     return {
       totalDocuments: Number(rows[0]?.total ?? 0),

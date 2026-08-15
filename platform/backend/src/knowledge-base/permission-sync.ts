@@ -12,6 +12,7 @@ import {
   ConnectorRunModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
@@ -21,7 +22,9 @@ import type {
   AclEntry,
   Connector,
   ConnectorCredentials,
+  ConnectorIdentity,
   InsertKbContainerAcl,
+  InsertKbExternalGroup,
   InsertKbExternalUserGroup,
   KnowledgeBaseConnector,
   PermissionProbeResult,
@@ -31,7 +34,10 @@ import type {
   ResolveMappedEmail,
 } from "@/types";
 import { buildContainerToken, normalizeEmail } from "./acl-tokens";
-import { resolveConnectorCredentials } from "./connector-credentials";
+import {
+  resolveConnectorCredentials,
+  resolveConnectorCredentialVersion,
+} from "./connector-credentials";
 import {
   BaseConnector,
   extractErrorMessage,
@@ -132,6 +138,20 @@ class PermissionSyncService {
       log.debug(
         { connectorId, visibility: connector.visibility },
         "Connector is not auto-sync-permissions; skipping permission pass",
+      );
+      return { runId: "", status: "skipped" };
+    }
+
+    // Disabled means disabled, for permissions as much as for content. Stated
+    // here rather than left to the scheduler: a task enqueued before the
+    // connector was switched off still arrives afterwards, and a pass costs a
+    // pod, a token and an egress rule against the customer's Perforce server.
+    // Stored ACLs are untouched, so nothing is opened up by not running — the
+    // audience simply stops being refreshed until the connector is re-enabled.
+    if (!connector.enabled) {
+      log.info(
+        { connectorId },
+        "Connector is disabled; skipping permission pass",
       );
       return { runId: "", status: "skipped" };
     }
@@ -300,8 +320,21 @@ class PermissionSyncService {
     // the scheduled cadence is the retry path instead).
     let snapshotProgressed = false;
 
+    // Ownership, as the write paths take it: every access-granting write in
+    // this pass carries it, so a pass whose run was reclaimed cannot land one
+    // even if it never notices it lost the lease.
+    const fence = { runId, epoch };
+
     try {
-      const credentials = await resolveConnectorCredentials(connector);
+      const credentials = await resolveConnectorCredentials(connector, {
+        // Perforce alone provisions a runtime from these credentials: the pass
+        // rotates the shim's pod whenever the stored password changes, and a
+        // cached read on this replica would hand the fresh pod the password it
+        // just retired. Every other connector authenticates upstream directly,
+        // where a stale read costs one failed pass and no rotation.
+        uncached: connector.connectorType === "perforce",
+      });
+      const identity = await connectorIdentity(connector, fence);
       // Read-back of already-ingested docs, injected into the hooks so
       // container-scoped connectors (GitHub) can tag a container's documents
       // without re-enumerating upstream. Keyset-paginated, O(page) memory.
@@ -362,6 +395,7 @@ class PermissionSyncService {
         try {
           probe = await connectorImpl.probePermissionChanges({
             config: connector.config as Record<string, unknown>,
+            identity,
             credentials,
             state: previousState,
           });
@@ -380,11 +414,10 @@ class PermissionSyncService {
         !Number.isFinite(lastFullAt) ||
         Date.now() - lastFullAt >=
           PERMISSION_SYNC_FULL_RECONCILE_INTERVAL_SECONDS * 1000;
-      // Delta passes VERIFY, never infer: every one re-resolves all stored
-      // container audiences (O(containers) upstream requests) and re-syncs
-      // group memberships, so any upstream permission change — however it was
-      // (or wasn't) audited — lands on the next pass. A connector that can
-      // probe but cannot refresh audiences has no delta mode.
+      // Delta passes verify the exact scope returned by the probe. Sources with
+      // an authoritative, gap-detecting journal may return only dirty objects
+      // and groups; other probes keep the conservative all-container refresh.
+      // A connector that can probe but cannot refresh audiences has no delta.
       const audienceRefreshUnsupported =
         !connectorImpl.refreshContainerAudiences;
       const mode: "full" | "delta" =
@@ -444,17 +477,24 @@ class PermissionSyncService {
       // ---- Phase 1: groups (completion-gated stale sweep). Not resumed
       // mid-way — small and dedupable; a restart re-marks and re-observes.
       //
-      // Per-step failure isolation: the group step and the document reconcile
-      // (Phase 2) are two independent steps of the one pass. A group-enumeration
-      // failure is logged + metered but MUST NOT abort Phase 2 — documents still
-      // reconcile against the previous group snapshot. On failure we skip the
-      // completion-gated revoked-membership delete, so the prior snapshot's rows
-      // (now flagged stale, but `findGroupTokensForUser` ignores the flag) stay
-      // resolvable until a later pass enumerates cleanly. ----
-      // Runs on EVERY pass, delta included: membership drift is verified by
-      // re-enumeration (diff-based, unchanged memberships cost zero writes),
-      // never inferred from audit events — see PermissionProbeResult.
-      if (connectorImpl.syncGroups) {
+      // Per-step failure isolation is retained for legacy connectors. Connectors
+      // that declare atomic security sync abort the pass if groups fail, so the
+      // journal cursor never commits past a security change. In both cases the
+      // completion-gated diff preserves the prior snapshot on interruption. ----
+      // Sources with an authoritative, gap-detecting journal enumerate only
+      // dirty groups on delta passes. Other sources retain the conservative
+      // full-membership verification behavior.
+      const authoritativeGroupScope =
+        mode === "delta" && probe?.authoritativeAudienceScope === true;
+      const dirtyGroupIds = [...new Set(probe?.dirtyGroupIds ?? [])];
+      const deletedGroupIds = [...new Set(probe?.deletedGroupIds ?? [])];
+      const affectedGroupIds = [
+        ...new Set([...dirtyGroupIds, ...deletedGroupIds]),
+      ];
+      const shouldSyncGroups =
+        connectorImpl.syncGroups &&
+        (!authoritativeGroupScope || affectedGroupIds.length > 0);
+      if (shouldSyncGroups && connectorImpl.syncGroups) {
         // Counted separately from `stats` so the persisted numbers stay
         // honest on failure: `membershipsUpserted` only ever reflects batches
         // that actually landed (a mid-pass throw once reported 75 upserted
@@ -468,10 +508,14 @@ class PermissionSyncService {
           // completes (completion-gated), so an interrupted run never drops a
           // membership it simply had not reached; on failure the previous
           // snapshot stays fully resolvable.
-          const current =
-            await KbExternalUserGroupModel.findMembershipSnapshotByConnector(
-              connectorId,
-            );
+          const current = authoritativeGroupScope
+            ? await KbExternalUserGroupModel.findMembershipSnapshotByGroups({
+                connectorId,
+                groupIds: affectedGroupIds,
+              })
+            : await KbExternalUserGroupModel.findMembershipSnapshotByConnector(
+                connectorId,
+              );
           const membershipKey = (groupId: string, accountId: string) =>
             `${groupId}\u0000${accountId}`;
           const currentByKey = new Map(
@@ -481,15 +525,35 @@ class PermissionSyncService {
             ]),
           );
           const seen = new Set<string>();
+          const seenGroupIds = new Set<string>();
           let pending: InsertKbExternalUserGroup[] = [];
+          const pendingGroups: InsertKbExternalGroup[] = [];
           for await (const group of connectorImpl.syncGroups({
             config: connector.config as Record<string, unknown>,
+            identity,
             credentials,
             cursor: null,
             readIngestedDocuments,
             refreshIdentities,
+            ...(authoritativeGroupScope
+              ? { scope: { containerKeys: [], groupIds: dirtyGroupIds } }
+              : {}),
           })) {
             groupsEnumerated += 1;
+            seenGroupIds.add(group.groupId);
+            pendingGroups.push({
+              organizationId: connector.organizationId,
+              connectorId,
+              connectorType: connector.connectorType,
+              groupId: group.groupId,
+              name: group.name ?? null,
+            });
+            if (group.membershipResolutionFailed) {
+              runLog.warn(
+                { groupId: group.groupId, groupName: group.name ?? null },
+                "Group membership could not be resolved; replacing it with an empty fail-closed membership",
+              );
+            }
             for (const member of group.members) {
               const key = membershipKey(group.groupId, member.accountId);
               seen.add(key);
@@ -522,15 +586,29 @@ class PermissionSyncService {
               });
             }
             if (pending.length >= this.batchSize) {
-              await KbExternalUserGroupModel.upsertMany(pending);
+              await this.assertStillOwnsRun({ runId, epoch });
+              if (
+                !(await KbExternalUserGroupModel.upsertMany(pending, fence))
+              ) {
+                throw new LeaseLostError();
+              }
               membershipsPersisted += pending.length;
               pending = [];
               await yieldToEventLoop();
             }
           }
           if (pending.length > 0) {
-            await KbExternalUserGroupModel.upsertMany(pending);
+            await this.assertStillOwnsRun({ runId, epoch });
+            if (!(await KbExternalUserGroupModel.upsertMany(pending, fence))) {
+              throw new LeaseLostError();
+            }
             membershipsPersisted += pending.length;
+          }
+          for (let i = 0; i < pendingGroups.length; i += this.batchSize) {
+            await this.assertStillOwnsRun({ runId, epoch });
+            await KbExternalGroupModel.upsertMany(
+              pendingGroups.slice(i, i + this.batchSize),
+            );
           }
           // Completion-gated diff delete of revoked memberships. Read off the
           // map's VALUES rather than by splitting its keys apart again: the
@@ -543,11 +621,34 @@ class PermissionSyncService {
               externalAccountId: row.externalAccountId,
             }));
           for (let i = 0; i < revoked.length; i += this.batchSize) {
+            await this.assertStillOwnsRun({ runId, epoch });
             membershipsRemoved += await KbExternalUserGroupModel.deleteByKeys({
               connectorId,
               keys: revoked.slice(i, i + this.batchSize),
             });
             await yieldToEventLoop();
+          }
+          if (authoritativeGroupScope) {
+            // Deleted groups are absent by definition; dirty groups that were
+            // requested but not returned are also treated as deleted. The
+            // journal is authoritative and the connector has completed the
+            // scoped read, so retaining either would be fail-open.
+            const absent = affectedGroupIds.filter(
+              (groupId) => !seenGroupIds.has(groupId),
+            );
+            await KbExternalUserGroupModel.deleteByGroupIds({
+              connectorId,
+              groupIds: absent,
+            });
+            await KbExternalGroupModel.deleteByGroupIds({
+              connectorId,
+              groupIds: absent,
+            });
+          } else {
+            await KbExternalGroupModel.deleteAbsent({
+              connectorId,
+              seenGroupIds: [...seenGroupIds],
+            });
           }
           stats.groupsSynced = groupsEnumerated;
           stats.membershipsUpserted = membershipsPersisted;
@@ -555,6 +656,11 @@ class PermissionSyncService {
           // read as "nothing changed" — the removal IS the change.
           stats.membershipsRemoved = membershipsRemoved;
         } catch (error) {
+          // Losing the run is not a group-step failure to be absorbed: this
+          // pass has no authority to write anything at all any more, so it
+          // must not fall through to the document reconcile below. The catch
+          // exists for an upstream group read that failed, not for this.
+          if (error instanceof LeaseLostError) throw error;
           stats.groupsSynced = groupsEnumerated;
           stats.membershipsUpserted = membershipsPersisted;
           // Deletions that completed before the failure are real revocations
@@ -574,6 +680,7 @@ class PermissionSyncService {
             "Permission sync group step failed; continuing to document reconcile with the previous group snapshot",
           );
           metrics.rag.reportPermissionSyncGroupFailure(connector.connectorType);
+          if (connectorImpl.requiresAtomicSecuritySync) throw error;
         }
       }
 
@@ -622,22 +729,24 @@ class PermissionSyncService {
 
       let deltaContainerKeys: string[] | null = null;
       if (mode === "delta" && probe) {
-        // ---- Audience verification, EVERY delta pass: re-resolve every
-        // stored container's audience — O(containers) upstream requests, zero
-        // document enumeration — and write only the ones that changed. This
-        // is what guarantees an upstream grant OR revocation lands on the
-        // next pass: audience drift is never inferred from audit events or
-        // cursor windows (both proved lossy — see PermissionProbeResult).
-        // Mapping edits materialize the same way, so their follow-up task
-        // needs no special flag. ----
+        // ---- Audience verification: authoritative journals re-resolve only
+        // dirty containers; conservative probes re-resolve every stored row.
+        // Both paths write only changed audiences and scan zero documents.
+        // Mapping edits materialize through the same refresh path. ----
         if (connectorImpl.refreshContainerAudiences) {
           await this.refreshStoredContainerAudiences({
             connector,
+            identity,
             connectorImpl,
             credentials,
             resolveMappedEmail,
+            readIngestedDocuments,
+            containerKeys: probe.authoritativeAudienceScope
+              ? probe.dirtyContainerKeys
+              : undefined,
             stats,
             runLog,
+            fence: { runId, epoch },
           });
         }
 
@@ -662,11 +771,11 @@ class PermissionSyncService {
         }
 
         if (scopeKeys.size === 0) {
-          // No document-level drift since the recorded cursors and no
-          // documents awaiting adoption. Audiences and group memberships were
-          // still verified above — their writes (if any) already landed.
+          // No document-level drift since the recorded cursor and no documents
+          // awaiting adoption. The exact dirty audience/group scope, if any,
+          // already completed above.
           runLog.info(
-            "Delta pass verified audiences and memberships; no document-level drift to re-enumerate",
+            "Delta pass applied its authoritative security scope; no documents require reassignment",
           );
           await this.finishSuccessfulPass({
             connectorId,
@@ -698,6 +807,7 @@ class PermissionSyncService {
 
       const generator = connectorImpl.syncPermissionSnapshot?.({
         config: connector.config as Record<string, unknown>,
+        identity,
         credentials,
         cursor: resumeCursor,
         readIngestedDocuments,
@@ -711,6 +821,9 @@ class PermissionSyncService {
         for await (const item of generator) {
           if (!unit || item.cursor !== unit.key) {
             if (unit) {
+              // Before the unit's writes, which fail-close documents the unit
+              // did not see — the most destructive write the pass makes.
+              await this.assertStillOwnsRun({ runId, epoch });
               await this.finishUnit({ connector, unit, stats, aclConfigEpoch });
               lastCompletedUnit = unit.key;
               snapshotProgressed = true;
@@ -747,6 +860,7 @@ class PermissionSyncService {
               clearsStaleMarks: true,
               stats,
               runLog,
+              fence: { runId, epoch },
             });
             stats.containersChanged = (stats.containersChanged ?? 0) + changed;
           } else {
@@ -758,6 +872,7 @@ class PermissionSyncService {
               exceptionUsers: item.exceptionUsers,
             });
             if (unit.pending.length >= this.batchSize) {
+              await this.assertStillOwnsRun({ runId, epoch });
               await this.flushAssignments({
                 connector,
                 batch: unit.pending.splice(0),
@@ -775,6 +890,7 @@ class PermissionSyncService {
           }
         }
         if (unit) {
+          await this.assertStillOwnsRun({ runId, epoch });
           await this.finishUnit({ connector, unit, stats, aclConfigEpoch });
           lastCompletedUnit = unit.key;
           snapshotProgressed = true;
@@ -827,6 +943,17 @@ class PermissionSyncService {
       });
       return { runId, status: "success" };
     } catch (error) {
+      if (error instanceof LeaseLostError) {
+        // Someone else owns this connector now — a settings edit superseded
+        // this pass, or the reaper declared it dead and a replacement ran.
+        // That owner has already written the run's terminal row and the
+        // connector's status; anything written here would overwrite a newer
+        // truth with an older one. Leaving quietly IS the correct ending.
+        runLog.info(
+          "Permission run was reclaimed while it was running; stopping without writing",
+        );
+        return { runId, status: "superseded" };
+      }
       const message = extractErrorMessage(error);
       // A run that advanced its snapshot cursor is `partial` (checkpoint
       // preserved; a re-enqueued resume picks up from the last completed
@@ -836,7 +963,7 @@ class PermissionSyncService {
       // enqueued and the next scheduled pass is the retry.
       const status = snapshotProgressed ? "partial" : "failed";
       runLog.error({ error: message, status }, "Permission sync pass failed");
-      await ConnectorRunModel.updateIfOwned({
+      const owned = await ConnectorRunModel.updateIfOwned({
         runId,
         epoch,
         data: {
@@ -848,9 +975,14 @@ class PermissionSyncService {
       });
       // `stats` is scoped to the try block (it captures the content-run check);
       // the terminal row keeps whatever the last checkpoint persisted.
-      await KnowledgeBaseConnectorModel.update(connectorId, {
-        lastPermissionSyncStatus: status,
-      });
+      // Mirrored onto the connector only while we still own the run: a pass
+      // reclaimed between its last check and this one must not stamp `failed`
+      // over the success a replacement pass already recorded.
+      if (owned) {
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastPermissionSyncStatus: status,
+        });
+      }
       metrics.rag.reportPermissionSync({
         connectorType: connector.connectorType,
         status,
@@ -860,35 +992,41 @@ class PermissionSyncService {
   }
 
   /**
-   * Audience-verification phase, run on every delta pass: re-resolve the
-   * audience of every STORED container row through the connector's
-   * `refreshContainerAudiences` and write only the rows whose audience
-   * actually changed. O(containers) upstream requests and container-row
-   * writes; documents and chunks are never touched — they reference the
+   * Audience-verification phase: re-resolve either the probe's authoritative
+   * dirty scope or every stored container for conservative probes, and write
+   * only rows whose audience changed. Documents and chunks are never touched;
+   * they reference the
    * container by token. Keys the connector does not yield back (it cannot
    * refresh them without an assignment reconcile) keep their stored audience
    * until the periodic full reconcile.
    */
   private async refreshStoredContainerAudiences(params: {
+    identity: ConnectorIdentity;
     connector: KnowledgeBaseConnector;
     connectorImpl: Connector;
     credentials: ConnectorCredentials;
     resolveMappedEmail: ResolveMappedEmail;
+    readIngestedDocuments: ReadIngestedDocuments;
+    containerKeys?: string[];
     stats: PermissionSyncRunStats;
     runLog: pino.Logger;
+    /** The run whose ownership authorises these writes. */
+    fence: { runId: string; epoch: number };
   }): Promise<void> {
     const {
       connector,
       connectorImpl,
       credentials,
+      identity,
       resolveMappedEmail,
+      readIngestedDocuments,
       stats,
       runLog,
     } = params;
     if (!connectorImpl.refreshContainerAudiences) return;
-    const containerKeys = await KbContainerAclModel.findKeysByConnector(
-      connector.id,
-    );
+    const containerKeys =
+      params.containerKeys ??
+      (await KbContainerAclModel.findKeysByConnector(connector.id));
     if (containerKeys.length === 0) return;
 
     let refreshed = 0;
@@ -907,13 +1045,16 @@ class PermissionSyncService {
           clearsStaleMarks: false,
           stats,
           runLog,
+          fence: params.fence,
         }));
       pending = [];
     };
     for await (const item of connectorImpl.refreshContainerAudiences({
       config: connector.config as Record<string, unknown>,
+      identity,
       credentials,
       containerKeys,
+      readIngestedDocuments,
       resolveMappedEmail,
     })) {
       refreshed += 1;
@@ -1005,8 +1146,10 @@ class PermissionSyncService {
     clearsStaleMarks: boolean;
     stats: PermissionSyncRunStats;
     runLog: pino.Logger;
+    /** The run whose ownership authorises these writes. */
+    fence: { runId: string; epoch: number };
   }): Promise<number> {
-    const { connector, batch, clearsStaleMarks, stats, runLog } = params;
+    const { connector, batch, clearsStaleMarks, stats, runLog, fence } = params;
     if (batch.length === 0) return 0;
 
     // Keyed, so a container yielded twice in one batch collapses to its last
@@ -1068,7 +1211,8 @@ class PermissionSyncService {
       }
     }
 
-    await KbContainerAclModel.upsertMany(toWrite);
+    const written = await KbContainerAclModel.upsertMany(toWrite, fence);
+    if (!written) throw new LeaseLostError();
     return changed;
   }
 
@@ -1246,13 +1390,42 @@ class PermissionSyncService {
     checkpoint: PermissionSyncCheckpoint,
     stats?: PermissionSyncRunStats,
   ): Promise<void> {
-    await ConnectorRunModel.updateIfOwned({
+    const owned = await ConnectorRunModel.updateIfOwned({
       runId,
       epoch,
       // Stats ride along with every checkpoint so a running pass shows live
       // progress (they are cheap — same fenced UPDATE).
       data: { checkpoint, ...(stats ? { stats: { ...stats } } : {}) },
     });
+    // The fenced UPDATE not matching is the signal that this pass no longer
+    // owns its run. Discarding it was how a thawed worker got to keep writing.
+    if (!owned) throw new LeaseLostError();
+  }
+
+  /**
+   * Renew the lease and stop the pass if it has been reclaimed.
+   *
+   * Called immediately BEFORE each unit of ACL writes, not after: the point is
+   * to not write at all once a newer pass owns the connector. Renewing here
+   * also couples liveness to actual work, so a unit that takes minutes starts
+   * with a full lease TTL of headroom rather than depending on the heartbeat
+   * timer, which a blocked event loop starves.
+   *
+   * The same shape as the content family's per-batch check in
+   * `connector-sync.ts`; the permission family reads its own writes through
+   * `kb_container_acls`, where a stale audience silently restores access.
+   */
+  private async assertStillOwnsRun(params: {
+    runId: string;
+    epoch: number;
+  }): Promise<void> {
+    const held = await ConnectorRunModel.renewLease({
+      runId: params.runId,
+      owner: WORKER_ID,
+      epoch: params.epoch,
+      leaseTtlSeconds: config.kb.connectorRunLeaseTtlSeconds,
+    });
+    if (!held) throw new LeaseLostError();
   }
 
   /**
@@ -1271,7 +1444,7 @@ class PermissionSyncService {
     getLogOutput?: () => string;
     nextSyncState: PermissionSyncState | null;
   }): Promise<void> {
-    await this.finalize({
+    const owned = await this.finalize({
       connectorId: params.connectorId,
       runId: params.runId,
       epoch: params.epoch,
@@ -1279,6 +1452,12 @@ class PermissionSyncService {
       stats: params.stats,
       getLogOutput: params.getLogOutput,
     });
+    // Every write below describes THIS pass's view of upstream. A pass that
+    // lost its run mid-flight has an older view than whoever took it over, and
+    // `permissionSyncState` is the probe fingerprint the next pass diffs
+    // against: writing a stale one there makes the next pass skip real
+    // changes. So the pass ends silently rather than reporting.
+    if (!owned) throw new LeaseLostError();
     if (params.nextSyncState) {
       await KnowledgeBaseConnectorModel.update(params.connectorId, {
         permissionSyncState: params.nextSyncState,
@@ -1297,7 +1476,7 @@ class PermissionSyncService {
     startedAt: Date;
     stats?: PermissionSyncRunStats;
     getLogOutput?: () => string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const owned = await ConnectorRunModel.updateIfOwned({
       runId: params.runId,
       epoch: params.epoch,
@@ -1314,6 +1493,7 @@ class PermissionSyncService {
         lastPermissionSyncStatus: "success",
       });
     }
+    return !!owned;
   }
 }
 
@@ -1322,6 +1502,22 @@ export const permissionSyncService = new PermissionSyncService();
 // ===== Internal helpers =====
 
 const EMPTY_SOURCE_ID_SET: ReadonlySet<string> = new Set();
+
+/**
+ * This pass no longer owns its run: it was superseded by a settings edit, or
+ * reclaimed after its lease expired and a replacement has since run.
+ *
+ * Thrown rather than returned because every remaining step of the pass would
+ * write a view of upstream that is older than the current owner's, and the
+ * call stack at the point of discovery is many frames deep in an enumeration.
+ * Caught in `runClaimedPass`, where it ends the pass without touching the run
+ * row or the connector.
+ */
+class LeaseLostError extends Error {
+  constructor() {
+    super("The permission run was reclaimed by another pass");
+  }
+}
 
 /**
  * A document's ACL under the container model: its `container:` token plus any
@@ -1359,4 +1555,26 @@ function aclEquals(a: string[], b: string[]): boolean {
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
   return sortedA.every((entry, index) => entry === sortedB[index]);
+}
+
+/**
+ * The connector's identity, handed to every extraction hook. Connectors that
+ * provision their own runtime key it off this so one connector's credentials
+ * never pass through another's infrastructure, and so an edit retires that
+ * runtime — see {@link ConnectorIdentity}.
+ */
+async function connectorIdentity(
+  connector: KnowledgeBaseConnector,
+  run?: { runId: string; epoch: number },
+): Promise<ConnectorIdentity> {
+  return {
+    connectorId: connector.id,
+    organizationId: connector.organizationId,
+    environmentId: connector.environmentId,
+    secretId: connector.secretId,
+    ...(run ? { run } : {}),
+    credentialVersion: await resolveConnectorCredentialVersion(
+      connector.secretId,
+    ),
+  };
 }

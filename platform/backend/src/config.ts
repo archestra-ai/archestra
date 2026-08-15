@@ -83,8 +83,26 @@ if (devAutoAuthenticateEmail) {
   );
 }
 
-const frontendBaseUrl =
-  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+/**
+ * Parse `ARCHESTRA_FRONTEND_URL` into the canonical frontend base URL.
+ *
+ * Trailing slashes are stripped: every consumer appends its own path
+ * (`${frontendBaseUrl}/settings`), and the OAuth issuer identifier is this
+ * exact string — RFC 8414 requires the metadata issuer to be byte-identical
+ * to the URL clients resolved the well-known document from, and better-auth
+ * derives the RFC 9207 `iss` authorization-response parameter from it with
+ * any trailing slash stripped. A slashed value here would re-introduce the
+ * issuer mismatch that makes strict clients abort authorization.
+ * @public — exported for testability
+ */
+export function parseFrontendBaseUrl(rawValue: string | undefined): string {
+  const trimmed = rawValue?.trim();
+  return (trimmed || "http://localhost:3000").replace(/\/+$/, "");
+}
+
+const frontendBaseUrl = parseFrontendBaseUrl(
+  process.env.ARCHESTRA_FRONTEND_URL,
+);
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -1810,6 +1828,17 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    /**
+     * Publish this deployment's Agent Skills over the gateway as `skill://`
+     * resources, per the MCP Skills extension (SEP-2640).
+     *
+     * Rides the ARCHESTRA_BETA master switch rather than a flag of its own: the
+     * SEP is still a draft with no shipped interoperating client, which is
+     * exactly what that switch already means. Deployment-global for v1 —
+     * enabling turns the capability on for every organization and gateway at
+     * once; per-tenant gating is a follow-up.
+     */
+    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpServer: {
     /**
@@ -2056,6 +2085,43 @@ const config = {
     },
     xai: {
       baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+      /**
+       * "X Premium (SuperGrok)" subscription auth mode on the xAI provider:
+       * reuse a user's X Premium subscription for chat instead of a metered
+       * console API key. xAI serves OAuth sessions through the Grok CLI chat
+       * proxy, separately from the metered `api.x.ai` API-key surface above.
+       */
+      subscription: {
+        /** OpenAI-compatible inference/model endpoint for OAuth sessions. */
+        baseUrl:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL ||
+          "https://cli-chat-proxy.grok.com/v1",
+        /** OAuth issuer; its OIDC discovery document supplies the endpoints. */
+        issuer:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_ISSUER || "https://auth.x.ai",
+        /** Browser origin allowed for the device-flow verification page. */
+        verificationOrigin:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN ||
+          "https://accounts.x.ai",
+        /** First-party session protocol version this integration targets. */
+        clientVersion:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION || "1.0.0",
+        /** Public OAuth client id used for the X Premium device-code login. */
+        clientId:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID ||
+          "b1a00492-073a-47ea-816f-4c329264a828",
+        /**
+         * Scopes requested at device-authorization time, space-separated.
+         * `offline_access` is what yields the long-lived refresh token the
+         * provider key stores; `grok-cli:access` authorizes the session proxy.
+         * Overridable because xAI gates some
+         * scopes by plan — an operator whose accounts are refused
+         * `grok-cli:access` can drop it without a code change.
+         */
+        scopes:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_SCOPES ||
+          "openid profile email offline_access api:access grok-cli:access",
+      },
     },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),
@@ -2717,8 +2783,63 @@ const config = {
     autoSyncPermissionsEnabled: betaFeatureEnabled(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
     ),
+    // BETA gate for the M-Files connector: hides the connector type in the
+    // frontend, rejects creating connectors of the type, and disables the VAF
+    // Add On distribution endpoints. Off by default; a blank value falls back
+    // to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    mfilesConnectorEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED,
+    ),
+    // Gate for the M-Files Application Account (OAuth client-credentials)
+    // auth method. Deliberately NOT wired through betaFeatureEnabled: the
+    // method stays hidden until this flag is set explicitly, even on
+    // deployments running with the ARCHESTRA_BETA master switch on.
+    // Intentionally undocumented while the method is being validated.
+    mfilesOauthEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
+    /**
+     * The p4 shim: the in-cluster pod that executes allowlisted Perforce CLI
+     * commands for Perforce permission sync (k8s/p4-shim-runtime). The image
+     * contains no Perforce software; the backend downloads the pinned `p4`
+     * binary from `p4Binary.<arch>.url`, verifies its sha256, and pushes it to
+     * the pod at provision time. Air-gapped installs point the URL at an
+     * internal mirror (the checksum must then match that mirror's binary).
+     */
+    perforceShim: {
+      image:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
+        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:${appVersion}`,
+      p4Binary: {
+        x64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64 ||
+            "ba4b931bd37a1fd073785c3194a608906934f62b52d407178121a8184bee8ae6",
+        },
+        arm64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64 ||
+            "a67bcae67dd810fdc099525289457ab6af6f647f6e3aceadc0260f42d19cbc93",
+        },
+      },
+    },
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    /**
+     * Verifiable citations (issue #7161): in the internal chat, check the
+     * verbatim quotes the model tags with a chunk ref against the chunks
+     * `query_knowledge_sources` returned, and log + meter any quote that matches
+     * no returned chunk. Log-only — never blocks or alters the answer — so it is
+     * safe on by default; set to "false" to disable the pass entirely.
+     */
+    quoteVerificationEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED !==
+      "false",
     /**
      * Token budget for one chunk, inclusive of its title prefix and metadata
      * suffix. Applies at ingest only: existing chunks keep the size they were
@@ -2772,6 +2893,22 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),
+    /**
+     * Per-statement timeout for the chunk search lanes (vector + keyword),
+     * tighter than the pool-wide statement_timeout. Retrieval fans out into
+     * several parallel search statements per tool call, so a corpus where one
+     * lane degenerates (e.g. a keyword query matching most of a large corpus)
+     * would otherwise burn the full pool timeout once per lane and fail the
+     * whole call. A lane that exceeds this budget is dropped and the remaining
+     * lanes' results are merged instead. 0 disables the override (lanes
+     * inherit the pool-wide statement_timeout).
+     */
+    searchStatementTimeoutMillis: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS,
+      8_000,
+      0,
+      120_000,
+    ),
     // Liveness lease for connector sync runs. The owning worker renews the
     // lease every `heartbeatInterval`; a run whose lease is not renewed within
     // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
@@ -2795,6 +2932,29 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
+    /**
+     * Development override for where the Archestra VAF Add On install script
+     * gets the add-on from. Set to a git ref of archestra-ai/archestra (a
+     * pushed commit SHA, branch, or tag) to have the script compile the
+     * add-on from that source instead of downloading a release package, or
+     * to the special value `local` to use this backend checkout's HEAD
+     * commit. Unset (the default, and the right value for production), the
+     * script downloads the package of the release matching this platform
+     * version, falling back to the latest release.
+     */
+    mfilesVafAddOnSourceRef:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
+      null,
+    /**
+     * GitHub token used to download the source ref's CI-built add-on package
+     * (GitHub requires authentication for Actions artifact downloads even on
+     * public repositories). Only read when the source-ref override above is
+     * set; without it the install script compiles the add-on from source
+     * instead. Never sent to clients — the backend proxies the package.
+     */
+    mfilesVafAddOnGithubToken:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN?.trim() ||
+      null,
     // A document still `pending`/`processing` this long after its last touch has
     // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
     // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
@@ -2805,6 +2965,30 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
       15 * 60,
     ),
+    /**
+     * Google OAuth client backing the Google Drive connector's individual
+     * ("connect my own Drive") auth mode. Deployment-level rather than
+     * per-connector because the redirect URI has to be registered against one
+     * client in the Google Cloud Console anyway — so every Drive connector on
+     * this deployment authorizes through the same client, and whoever connects
+     * only has to click a button.
+     *
+     * Either one unset ⇒ the mode is unavailable, and the UI names the
+     * variables to set rather than failing at connect time. The
+     * service-account modes do not use this and are unaffected.
+     *
+     * Only the client id is stored per connector (next to the refresh token,
+     * so a client swap is detectable); the secret is read from here on every
+     * refresh, so rotating just the secret needs no reconnect.
+     */
+    googleDriveOAuth: {
+      clientId:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID?.trim() ||
+        undefined,
+      clientSecret:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim() ||
+        undefined,
+    },
   },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
@@ -2849,6 +3033,23 @@ const config = {
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET?.trim() || undefined,
     secretPrevious:
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      undefined,
+  },
+  /**
+   * Incognito chats: per-conversation encryption under a browser-held key.
+   * Configuring `escrowPublicKey` is the whole switch — the feature is off
+   * until one is set, and unsetting it turns the feature off again.
+   */
+  chatIncognito: {
+    /**
+     * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
+     * to for break-glass recovery; the private half stays offline with the
+     * customer's security team. Setting it enables incognito chats; an
+     * unparseable or undersized key fails startup (see
+     * verifyIncognitoChatConfig).
+     */
+    escrowPublicKey:
+      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },
   test: {

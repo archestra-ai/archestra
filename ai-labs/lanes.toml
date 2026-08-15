@@ -104,7 +104,7 @@ api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.2"
 
 [[lane]]
-name = "qwen36-35b-a3b-adv-deepseek-flash"
+name = "mimo-25-adv-deepseek-flash"
 provider = "openrouter"
-model = "qwen/qwen3.6-35b-a3b"
+model = "xiaomi/mimo-v2.5"
 advisor = "deepseek-flash"

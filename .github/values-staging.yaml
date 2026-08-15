@@ -72,6 +72,13 @@ archestra:
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
+    # BETA: the M-Files connector (off by default everywhere else). Explicit
+    # for the same reason as the auto-sync flag above.
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
+    # Serve the VAF Add On from main's CI build (proxied with the GitHub
+    # token the deploy workflow injects): no release carries the package yet.
+    # Remove both once the first release ships with the .mfappx asset.
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
@@ -127,11 +134,31 @@ archestra:
     #     first-time Slack/Teams sender still lands in the org.
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
-    ARCHESTRA_TRUST_PROXY: "false"
+    # Trust only the Google Front End ranges that terminate the ingress, so
+    # request.ip is the real caller instead of the load balancer. Per-IP rate
+    # limits and audit sourceIp then stop collapsing onto one shared address.
+    # These two CIDRs are the documented GCLB/health-check ranges, and are the
+    # socket peers this deployment actually sees. NOT "true": that would trust a
+    # client-supplied X-Forwarded-For and let any caller choose its own IP.
+    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
+    # Incognito chats. Configuring the escrow public key is what ENABLES the
+    # feature (it is off everywhere it is unset), because an incognito
+    # conversation's audit trail — LLM interactions, MCP tool calls, chat
+    # errors — is stored encrypted under a key that exists only in the
+    # browser that created the chat. Without an escrowed copy those rows
+    # would be recoverable by nobody, which is worse for an auditable
+    # deployment than not offering the feature.
+    #
+    # This is the PUBLIC half of an RSA-4096 keypair, so it is not a secret
+    # and does not belong in a repo secret — publishing it is how escrow is
+    # meant to work. The PRIVATE half is deliberately NOT in this repo or in
+    # the cluster: it lives offline with the security team and is used only
+    # in the documented break-glass procedure.
+    ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFvakRQWU5RbjNSYktoamJ5MUVzTgpvYXYwNGUyQnpoOTFWaEs0TlErNDFEcGVwcjg0dGx6R3ZjandYVC9OQ0txODJvem9kUGwyZE5NeWFxdDE0UG5FCnQ0NUsvRXdrTXE0VlFEUWtlTUJJTFh6c1ZlY0YzQmZ3Rko1eGNLdGFCNXRsNXRRRWVPakhPU2xiamN0czVyaDkKN2wzcE5DdURoUXRkajNmSE80NTN2UXN4eDEyK0drZlpQVVNWeFpiNEhhYkdhazMxWTl3UG1pZVV5ajVzSkkwTwp6VzFrVHFiMkFocEVSQnIxUkNFeUgrSzlvdmRCZlZiYUdGTFZIdmtiSkdSbVNzYk85SVZsQUpNUHE5ZnJXam1VCm5oR2h0UVFzeTQ2TG92ZXFSaTMxM2RaeDUweXEvVGd2TFJLSVFDZEtKYmkvVEoyRmtVMk9VSXdpYWFTQjdyNTAKa0YvZDhGUTNsUVdKWlA4YXU1UWQzQjV1bzl1M3NTMWk1WTZOeHRBYWN0TjBEV2k2L3ZjbEtlRjg5YTFtbkZ3TApBTkZteENsbkVxL3UydmpwbWhOQS9JMnVFVXFvQmZ5NkUxVFFyNSsySUhnZGVXT2tPTFJnYXc5QWE3Z3g1SzlqCkdjaHhXUDkzMDhvN01SS1JsdjlPaTl2UUZsMVB3YUZPbEIyUzIvb2RCcTNhNDFzMkhNUU1ZalJZMC9wR0NuWjUKM2xuN1BzZm9qOEZMd1NoZkRHNVhmNTNnREo0UXB4a3N0amdrekx5ZkxHaThUVGdwSjVmeDJWdVZQajdtTk5JMwpoNWxYZnh4N09Gd1daZEJUVFBnZ3h6LzN1MUs5TTNoUnlObUxrOXZEUVhRS2k2TWdMNVF1THRvQTdVL01GSzBXClY2ZVIyTG4zMFhMVDduaDNlcnRNYnNFQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo="
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
     # 20 connections per Node process. The old value of 8 predates the Cloud

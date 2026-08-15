@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  isSpecCompliantSkillName,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import {
@@ -649,6 +650,16 @@ export function SkillEditorDialog({
                   </Tooltip>
                 )}
               </div>
+              {!openFile &&
+                parsed.name !== null &&
+                !isSpecCompliantSkillName(parsed.name) && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    This name cannot be published over MCP: the Agent Skills
+                    specification allows only lowercase letters, digits, and
+                    single hyphens (max 64 characters). The skill still works
+                    everywhere else.
+                  </p>
+                )}
               {openFile && openFile.encoding === "base64" ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">

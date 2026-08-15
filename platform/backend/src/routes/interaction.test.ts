@@ -935,4 +935,106 @@ describe("interaction routes", () => {
       expect(other.statusCode).toBe(404);
     });
   });
+
+  describe("session user attribution", () => {
+    const seedSession = async (opts: {
+      profileId: string;
+      sessionId: string;
+      userId?: string;
+      authMethod: InsertInteraction["authMethod"];
+    }) =>
+      InteractionModel.create({
+        profileId: opts.profileId,
+        sessionId: opts.sessionId,
+        sessionSource: "claude_metadata",
+        type: "anthropic:messages",
+        userId: opts.userId,
+        authMethod: opts.authMethod,
+        request: {
+          model: "claude-3-5-sonnet",
+          max_tokens: 16,
+          messages: [{ role: "user", content: "hi" }],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        } as unknown as InsertInteraction["response"],
+      });
+
+    const fetchSession = async (sessionId: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/interactions/sessions?limit=10&offset=0&sessionId=${sessionId}`,
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json().data[0];
+    };
+
+    test("an attributed session exposes user ids and no reason", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const user = await makeUser({ email: "dev@example.com" });
+      await seedSession({
+        profileId: agent.id,
+        sessionId: "attributed-session",
+        userId: user.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("attributed-session");
+      expect(session.userIds).toEqual([user.id]);
+      expect(session.unattributedReason).toBeNull();
+    });
+
+    test("a shared virtual key reports why the session has no user", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      // An org-scoped virtual key never sets the interaction's user — only
+      // personal ones carry an owner.
+      await seedSession({
+        profileId: agent.id,
+        sessionId: "shared-key-session",
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("shared-key-session");
+      expect(session.userIds).toEqual([]);
+      expect(session.userNames).toEqual([]);
+      expect(session.unattributedReason).toBe("shared_virtual_key");
+    });
+
+    test("a raw provider key is distinguished from a shared key", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      await seedSession({
+        profileId: agent.id,
+        sessionId: "provider-key-session",
+        authMethod: "provider_key",
+      });
+
+      const session = await fetchSession("provider-key-session");
+      expect(session.unattributedReason).toBe("provider_key");
+    });
+  });
 });

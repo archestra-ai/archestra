@@ -242,25 +242,20 @@ describe("AnthropicRequestAdapter", () => {
       { type: "text_editor_20250124", name: "str_replace_editor" },
     ] as unknown as Anthropic.Types.MessagesRequest["tools"];
 
-    // The availability set is built from the declared names, so built-ins are
-    // counted even though getTools() drops them. The two must not converge:
-    // getTools() feeds persistence and other callers that want schemas.
-    test("getDeclaredToolNames counts built-ins that getTools drops", () => {
+    // getTools() feeds persistence and other callers that want schemas, so it
+    // drops the schema-less built-ins. That loss is why availability is read
+    // from the request body instead — see utils/declared-tool-names.
+    test("getTools drops built-ins that carry no schema", () => {
       const adapter = anthropicAdapterFactory.createRequestAdapter(
         createMockRequest(messages, { tools }),
       );
 
-      expect(adapter.getDeclaredToolNames?.()).toEqual([
-        "github__list_issues",
-        "bash",
-        "str_replace_editor",
-      ]);
       expect(adapter.getTools().map((t) => t.name)).toEqual([
         "github__list_issues",
       ]);
     });
 
-    test("a request declaring only built-ins still names them", () => {
+    test("a request declaring only built-ins has no schema-carrying tools", () => {
       const adapter = anthropicAdapterFactory.createRequestAdapter(
         createMockRequest(messages, {
           tools: [
@@ -269,8 +264,10 @@ describe("AnthropicRequestAdapter", () => {
         }),
       );
 
-      expect(adapter.getDeclaredToolNames?.()).toEqual(["bash"]);
       expect(adapter.getTools()).toEqual([]);
+      // The caller did declare a tool, so the request still counts as having
+      // one even though nothing schema-carrying survives getTools().
+      expect(adapter.hasTools()).toBe(true);
     });
 
     test("is empty when no tools are declared", () => {
@@ -278,25 +275,8 @@ describe("AnthropicRequestAdapter", () => {
         createMockRequest(messages),
       );
 
-      expect(adapter.getDeclaredToolNames?.()).toEqual([]);
+      expect(adapter.getTools()).toEqual([]);
       expect(adapter.hasTools()).toBe(false);
-    });
-
-    // These names become availability-set members, so an entry with no usable
-    // name must not land in the set — nothing a model can call would match it,
-    // and it would make an otherwise-empty set look populated.
-    test("skips entries carrying no usable name", () => {
-      const adapter = anthropicAdapterFactory.createRequestAdapter(
-        createMockRequest(messages, {
-          tools: [
-            { type: "bash_20250124" },
-            { name: "" },
-            { name: "kept", input_schema: { type: "object", properties: {} } },
-          ] as unknown as Anthropic.Types.MessagesRequest["tools"],
-        }),
-      );
-
-      expect(adapter.getDeclaredToolNames?.()).toEqual(["kept"]);
     });
   });
 

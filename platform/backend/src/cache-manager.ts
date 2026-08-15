@@ -44,6 +44,12 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  /** Archestra VAF Add On package proxy rate limiting per IP */
+  MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
+  /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
+  MfilesVafAddOnReleasePin: "mfiles-vaf-add-on-release-pin",
+  /** Latest CI-built add-on artifact for the dev source-ref override */
+  MfilesVafAddOnCiArtifact: "mfiles-vaf-add-on-ci-artifact",
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
@@ -54,6 +60,8 @@ export const CacheKey = {
     "microsoft-365-copilot-device-auth-rate-limit",
   /** ChatGPT/Codex subscription device-flow sign-in rate limiting per user */
   OpenaiCodexDeviceAuthRateLimit: "openai-codex-device-auth-rate-limit",
+  /** X Premium (SuperGrok) subscription device-flow sign-in rate limiting per user */
+  XaiSubscriptionDeviceAuthRateLimit: "xai-subscription-device-auth-rate-limit",
   /** RUM event-batch ingest rate limiting per user */
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
@@ -94,6 +102,14 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
+  /** Positive "this chat session is incognito" lookups for LLM proxy redaction */
+  /**
+   * v2: entries changed from a bare `true` to a facts object (fingerprint +
+   * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
+   * and shared across replicas, so during a rolling deploy new code must not
+   * read an old boolean and mistake it for "not incognito".
+   */
+  IncognitoChatSession: "incognito-chat-session-v2",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

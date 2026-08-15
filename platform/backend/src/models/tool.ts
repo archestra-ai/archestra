@@ -187,6 +187,67 @@ function notDisabledAppLaunchTool(): SQL {
   );
 }
 
+/**
+ * Excludes tools whose assignment is pinned to an MCP install that has been
+ * uninstalled, and for which no surviving install of the same catalog can
+ * stand in.
+ *
+ * Uninstalling a server is a soft delete that deliberately retains the `tools`
+ * rows and the `agent_tools` assignments so a reconnect restores them
+ * (`McpServerModel.delete`). Because the row survives, the assignment's
+ * `mcp_server_id` FK (`on delete set null`) never fires and the pin is left
+ * dangling at a dead install. Without this predicate those tools stay
+ * advertised on the gateway forever: the caller sees a tool it can never
+ * invoke, and because the subscription fingerprint hashes this same name set,
+ * no `notifications/tools/list_changed` fires either.
+ *
+ * Mirrors what the execution path can actually service
+ * (`McpClient.determineTargetMcpServer`): a static assignment resolves through
+ * its pinned install, else through any surviving install of the same catalog,
+ * else it errors.
+ *
+ * Deliberately scoped to *pinned* assignments. An unpinned assignment
+ * (`mcp_server_id IS NULL`) covers built-in tools, delegation tools, and
+ * dynamic / enterprise-managed assignments that resolve a connection per caller
+ * at call time — all of which are meant to be advertised before anyone has
+ * connected, so the caller gets an actionable "connect" prompt rather than a
+ * missing tool.
+ *
+ * Correlates on `agent_tools` and `tools`, so every caller must have both in
+ * its FROM.
+ *
+ * @param agentTools pass an aliased agent_tools table when the query aliases it.
+ */
+function toolInstallNotUninstalled(agentTools = schema.agentToolsTable): SQL {
+  const pinnedInstall = alias(schema.mcpServersTable, "pinned_install");
+  const siblingInstall = alias(schema.mcpServersTable, "sibling_install");
+  return or(
+    isNull(agentTools.mcpServerId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(pinnedInstall)
+        .where(
+          and(
+            eq(pinnedInstall.id, agentTools.mcpServerId),
+            notDeleted(pinnedInstall),
+          ),
+        ),
+    ),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(siblingInstall)
+        .where(
+          and(
+            eq(siblingInstall.catalogId, schema.toolsTable.catalogId),
+            notDeleted(siblingInstall),
+          ),
+        ),
+    ),
+  ) as SQL;
+}
+
 class ToolModel {
   /**
    * Slugify a tool name to get a unique name for the MCP server's tool.
@@ -885,6 +946,9 @@ class ToolModel {
                 ),
                 toolInEnvironmentPredicate(agentEnvironmentId),
                 notDisabledAppLaunchTool(),
+                // Hide tools pinned to an uninstalled install (retained
+                // assignment); see toolInstallNotUninstalled.
+                toolInstallNotUninstalled(),
                 // Hide tools whose catalog was soft-deleted (retained binding).
                 notDeleted(schema.toolsTable),
               ),

@@ -10,6 +10,7 @@ import {
 } from "@archestra/shared";
 import {
   EnvironmentModel,
+  EnvironmentResourceDefaultModel,
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
@@ -1220,5 +1221,43 @@ describe("mcp server tools respect the agent's environment", () => {
       "Agent Authored Server",
     );
     expect(created?.environmentId).toBe(stagingEnvId);
+  });
+
+  test("an authoring agent with no environment falls back to the org's configured default", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId: orgId,
+      resource: "mcpRegistry",
+      environmentId: prodEnvId,
+    });
+    const looseAgent = await makeAgent({
+      name: "Default Env Agent",
+      organizationId: orgId,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: "admin" });
+
+    const result = await executeArchestraTool(
+      tool(TOOL_CREATE_MCP_SERVER_SHORT_NAME),
+      {
+        name: "Unbound Agent Server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      },
+      {
+        agent: { id: looseAgent.id, name: looseAgent.name },
+        userId: user.id,
+        organizationId: orgId,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    const created = await InternalMcpCatalogModel.findByName(
+      "Unbound Agent Server",
+    );
+    expect(created?.environmentId).toBe(prodEnvId);
   });
 });

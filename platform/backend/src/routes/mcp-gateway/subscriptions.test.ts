@@ -10,6 +10,7 @@
 
 import { EventEmitter } from "node:events";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import McpServerModel from "@/models/mcp-server";
 import { describe, expect, test } from "@/test";
 import {
   acknowledgedFilter,
@@ -245,5 +246,35 @@ describe("toolsListFingerprint", () => {
     // Stable when nothing changed — an unstable fingerprint would spam
     // list_changed on every poll.
     expect(await toolsListFingerprint(agent.id)).toBe(after);
+  });
+
+  test("changes when the tool's pinned install is uninstalled", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeAgentTool,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "uninstall-fp-catalog",
+    });
+    const mcpServer = await makeMcpServer({ catalogId: catalog.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "uninstall-fp-catalog__alpha",
+    });
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: mcpServer.id });
+
+    const before = await toolsListFingerprint(agent.id);
+
+    await McpServerModel.delete(mcpServer.id);
+
+    // The fingerprint hashes the same name set the gateway advertises, so
+    // dropping the tool is what lets subscribers get a list_changed at all.
+    expect(await toolsListFingerprint(agent.id)).not.toBe(before);
   });
 });

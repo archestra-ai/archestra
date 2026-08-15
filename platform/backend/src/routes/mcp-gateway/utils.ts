@@ -78,10 +78,8 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import {
-  agentToolExclusionsService,
-  isToolRowExcluded,
-} from "@/services/agent-tool-exclusions";
+import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
   appLaunchToolDescription,
@@ -94,6 +92,7 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
+import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
   type AgentType,
@@ -121,10 +120,11 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
-  type McpProtocolRevision,
+  RESOURCE_NOT_FOUND_ERROR_CODE,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import { serveSkillResource } from "./skills";
 import {
   clientDeclaredTasks,
   runToolCallMaybeTask,
@@ -336,7 +336,7 @@ export async function createAgentServer(params: {
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const { tools: fetchedMcpTools, exclusionSets } =
+    const { tools: fetchedMcpTools } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
     // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
@@ -355,45 +355,24 @@ export async function createAgentServer(params: {
     // host and server both: it mounts an app from the tool RESULT — render_app
     // for owned apps, run_tool for any UI tool — resolving the `ui://` resource
     // from its own catalog, so it advertises render_app and NO UI-providing tool,
-    // keeping the list compact regardless of dynamic reach. An external MCP client
-    // on any other surface (mcp_gateway, legacy profile) renders only from a
-    // discovery-time tool DEFINITION (per the MCP Apps extension), so it must
-    // advertise UI-providing tools — both assigned and dynamically-reached, which
-    // have no agent_tools row — and drops the chat-only built-ins, which no-op
-    // for it. The three flags are independently motivated; they coincide on
-    // agentType, the surface signal this codebase keys on throughout.
+    // keeping the list compact. An external MCP client on any other surface
+    // (mcp_gateway, legacy profile) renders from a discovery-time tool
+    // DEFINITION (per the MCP Apps extension), so it must advertise the
+    // UI-providing tools the agent ASSIGNS — and drops the chat-only built-ins,
+    // which no-op for it. Both flags are independently motivated; they coincide
+    // on agentType, the surface signal this codebase keys on throughout.
+    //
+    // Neither surface widens this list with the tools Auto mode can reach
+    // DYNAMICALLY: that set is the caller's whole accessible corpus, which
+    // grows without bound (every Archestra App contributes a `__open` launch
+    // tool), so advertising it is exactly the context-window cost Auto mode
+    // exists to avoid. Dynamically-reached tools are found with search_tools
+    // and dispatched with run_tool, whose result still carries the tool's
+    // `ui://` pointer for a host that renders from results.
     const surface =
       agent.agentType === "agent"
-        ? {
-            widenDynamicUiTools: false,
-            advertiseUiTools: false,
-            keepChatOnlyTools: true,
-          }
-        : {
-            widenDynamicUiTools: true,
-            advertiseUiTools: true,
-            keepChatOnlyTools: false,
-          };
-
-    const dynamicUiTools = (
-      agent.accessAllTools &&
-      surface.widenDynamicUiTools &&
-      tokenAuth?.userId &&
-      tokenAuth.organizationId
-        ? await ToolModel.getMcpToolsAccessibleToUser({
-            userId: tokenAuth.userId,
-            organizationId: tokenAuth.organizationId,
-            environmentId: agent.environmentId,
-            isAdmin: await userHasPermission(
-              tokenAuth.userId,
-              tokenAuth.organizationId,
-              "mcpServerInstallation",
-              "admin",
-            ),
-            requireUiResource: true,
-          })
-        : []
-    ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
+        ? { advertiseUiTools: false, keepChatOnlyTools: true }
+        : { advertiseUiTools: true, keepChatOnlyTools: false };
 
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"
@@ -422,7 +401,6 @@ export async function createAgentServer(params: {
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter((tool) => !tool.delegateToAgentId),
-        ...dynamicUiTools,
         ...implicitMetaTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
@@ -445,6 +423,7 @@ export async function createAgentServer(params: {
     const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
       advertiseUiResourceTools: surface.advertiseUiTools,
+      autoToolMode: agent.accessAllTools,
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
     const permittedTools = surface.keepChatOnlyTools
@@ -461,12 +440,12 @@ export async function createAgentServer(params: {
 
     // Resolve the backing catalogs of the advertised tools once: their names
     // feed both the search_tools description and the app launch-tool title and
-    // description below. Cover BOTH assigned tools and the dynamically-widened
-    // ones (access-all-tools) — otherwise a dynamically-surfaced app launch
-    // tool has no catalog here and falls through to its raw stored metadata.
+    // description below. Only assigned tools can be advertised, so only their
+    // catalogs are needed here; buildSearchToolsDescription fetches the
+    // catalogs of the dynamically discoverable tools it names itself.
     const catalogsById = await InternalMcpCatalogModel.getByIds([
       ...new Set(
-        [...mcpTools, ...dynamicUiTools]
+        mcpTools
           .map((tool) => tool.catalogId)
           .filter(
             (id): id is string =>
@@ -591,11 +570,56 @@ export async function createAgentServer(params: {
   server.setRequestHandler(
     ReadResourceRequestSchema,
     async ({ params: { uri } }) => {
+      logger.info(
+        { agentId, uri },
+        "MCP gateway read resource request received",
+      );
+
+      // Skills (SEP-2640) are served from this platform's own database, never
+      // proxied upstream. This is the one part of the skills surface that is
+      // an ordinary SDK request — the extension's own methods are intercepted
+      // at the route in index.ts — so the branch lives here. The whole
+      // skill://archestra authority is reserved in every state: with the
+      // surface disabled (flag off, backfill pending), the skill unexposed,
+      // or the URI malformed, it answers not-found rather than falling
+      // through, so an upstream server can never serve its own bytes under
+      // the platform's prefix. Within the namespace an unexposed skill and a
+      // nonexistent one still answer identically.
+      if (isPlatformSkillUri(uri)) {
+        let skillResource: Awaited<ReturnType<typeof serveSkillResource>> =
+          null;
+        try {
+          if (skillsSurfaceEnabled()) {
+            skillResource = await serveSkillResource({ uri, agentId });
+          }
+        } catch (error) {
+          logger.error(
+            {
+              agentId,
+              uri,
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
+            "Skill resource read failed",
+          );
+          throw { code: -32603, message: "Resource read failed" };
+        }
+        if (skillResource) {
+          return complete(withPrivateCacheHint(skillResource));
+        }
+        // The current revision's code for a missing resource: SEP-2164 retired
+        // the MCP-specific -32002 in favor of JSON-RPC's Invalid Params, and
+        // SEP-2640 pins unknown skill resources to the same code. Every reason
+        // for not-found — unexposed, deleted, never existed, malformed, surface
+        // disabled — still answers the same way, so the surface stays
+        // unprobeable.
+        throw {
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
+          message: `Resource not found: ${uri}`,
+          data: { uri },
+        };
+      }
+
       try {
-        logger.info(
-          { agentId, uri },
-          "MCP gateway read resource request received",
-        );
         const result = await mcpClient.readResource(uri, agentId, tokenAuth);
         logger.info(
           { agentId, uri, resultType: typeof result },
@@ -699,9 +723,10 @@ export async function createAgentServer(params: {
         const isSkillDelegationTool = isSkillTool(name);
         const contextIsTrusted = !agent.considerContextUntrusted;
 
-        // tools/list advertises an all-tools agent's dynamically-accessible
-        // UI-providing tools top-level (see the dynamicUiTools widening above),
-        // so a caller may call one directly rather than through run_tool. Two
+        // An all-tools agent's dynamically-accessible tools are not advertised
+        // by tools/list (see the surface policy above), but a caller that knows
+        // a name — from search_tools, or from a definition it cached before —
+        // may still call one directly rather than through run_tool. Two
         // gates on this path only know assigned tools and must be told about
         // the dynamic resolution, exactly as run_tool's own dispatch does
         // (archestra-mcp-server/run-tool.ts): the invocation-policy evaluator
@@ -736,11 +761,13 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth.organizationId,
               })
             : null;
-        // Direct-call availability mirrors tools/list exposure: only the
-        // UI-providing subset is listed top-level, so only that subset is
-        // directly callable. A non-UI dynamic tool stays behind
-        // search_tools/run_tool — resolving it here would silently make every
-        // hidden tool name directly executable.
+        // Direct-call availability stays limited to the UI-providing subset.
+        // Accepting those is not a widening — Auto mode already grants the
+        // caller dynamic access and run_tool would dispatch the same tool under
+        // the same policies — and it keeps an MCP Apps host working when it
+        // calls a launch tool by a name it already holds. A non-UI dynamic tool
+        // stays behind search_tools/run_tool: resolving it here would silently
+        // make every hidden tool name directly executable.
         const availableTool =
           dynamicTool && providesUiResource(dynamicTool)
             ? dynamicTool
@@ -2245,25 +2272,41 @@ export async function buildKnowledgeSourcesDescription(
   return description;
 }
 
+/**
+ * The single point where the advertised tool list is finalized. Every
+ * contributor (assigned catalog tools, Archestra Apps, built-ins, delegation
+ * tools) funnels through here, so a new tool source cannot reintroduce a leak
+ * by skipping a filter of its own.
+ */
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
   advertiseUiResourceTools: boolean;
+  autoToolMode: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, advertiseUiResourceTools, tools } = params;
+  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
+    params;
   return tools.filter((tool) => {
-    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
-    // but the meta tools themselves and the always-exposed skill path must stay
+    // `search_and_run_only` hides every tool behind search_tools/run_tool, but
+    // the meta tools themselves and the always-exposed skill path must stay
     // top-level. UI-providing tools (app launch tools, external ext-apps tools)
-    // stay too ONLY on a surface that advertises them: an MCP Apps host renders a
-    // UI from a tool DEFINITION listed at discovery time, so a gateway must keep
-    // it top-level; the chat surface renders from the tool result instead, so it
-    // reaches UI tools through search_tools/run_tool and keeps its list compact.
-    // `full` mode hides only the meta tools.
+    // stay too, on two conditions. First, only on a surface that advertises
+    // them: an MCP Apps host renders a UI from a tool DEFINITION listed at
+    // discovery time, so a gateway must keep it top-level; the chat surface
+    // renders from the tool result instead, so it reaches UI tools through
+    // search_tools/run_tool and keeps its list compact. Second, only when the
+    // agent is NOT in Auto tool mode: Auto mode promises a list that never
+    // burns context on the catalog, and its reachable set is the caller's
+    // entire accessible corpus, so no per-class carve-out may widen it — the
+    // model discovers those tools with search_tools instead. A Custom-mode
+    // agent advertises the UI tools it explicitly assigns, a bounded set the
+    // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
-          (advertiseUiResourceTools && providesUiResource(tool))
+          (advertiseUiResourceTools &&
+            !autoToolMode &&
+            providesUiResource(tool))
       : !isArchestraMetaTool(tool.name);
   });
 }

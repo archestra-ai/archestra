@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
+import { useFeature } from "@/lib/config/config.query";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
@@ -42,8 +43,11 @@ import {
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
+  getPermissionSyncCredentialNote,
+  NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -79,6 +83,18 @@ type EditConnectorFormValues = {
   environmentId: string | null;
 };
 
+function editableConnectorConfig(connector: ConnectorItem) {
+  if (
+    connector.connectorType === "mfiles" &&
+    typeof (connector.config as Record<string, unknown>).authMethod !== "string"
+  ) {
+    // Connectors created before OAuth support used password-derived MFWS
+    // tokens. Preserve that meaning when opening/saving the upgraded form.
+    return { ...connector.config, authMethod: "mfiles_password_token" };
+  }
+  return connector.config;
+}
+
 export function EditConnectorDialog({
   connector,
   open,
@@ -89,6 +105,8 @@ export function EditConnectorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateConnector = useUpdateConnector();
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
   const [visibility, setVisibility] = useState(connector.visibility);
   const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
 
@@ -97,7 +115,7 @@ export function EditConnectorDialog({
       name: connector.name,
       description: connector.description ?? "",
       enabled: connector.enabled,
-      config: connector.config,
+      config: editableConnectorConfig(connector),
       email: "",
       apiToken: "",
       adminApiKey: "",
@@ -116,7 +134,7 @@ export function EditConnectorDialog({
         name: connector.name,
         description: connector.description ?? "",
         enabled: connector.enabled,
-        config: connector.config,
+        config: editableConnectorConfig(connector),
         email: "",
         apiToken: "",
         adminApiKey: "",
@@ -135,6 +153,7 @@ export function EditConnectorDialog({
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
@@ -151,7 +170,10 @@ export function EditConnectorDialog({
     emailRequired,
     mode: "edit",
     authMethod,
+    authMode,
   });
+  const permissionSyncCredentialNote =
+    getPermissionSyncCredentialNote(connectorType);
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
@@ -318,9 +340,15 @@ export function EditConnectorDialog({
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
-            supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+            supportsAutoSync={connectorSupportsAutoSync(
+              connectorType,
+              orchestratorK8sRuntime,
+            )}
             autoSyncPermissionAction="update"
           />
+
+          {visibility === "auto-sync-permissions" &&
+            connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
 
           <div className="border-t" />
 
@@ -378,6 +406,12 @@ export function EditConnectorDialog({
                     Leave empty to keep existing credentials unchanged.
                   </FormDescription>
                   {apiTokenHelpText}
+                  {visibility === "auto-sync-permissions" &&
+                    permissionSyncCredentialNote && (
+                      <FormDescription>
+                        {permissionSyncCredentialNote}
+                      </FormDescription>
+                    )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -408,8 +442,16 @@ export function EditConnectorDialog({
               />
             )}
 
+          {visibility === "auto-sync-permissions" &&
+            connectorType === "perforce" && (
+              <PerforcePermissionSyncFields form={form} mode="edit" />
+            )}
+
           <Collapsible>
-            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+            <CollapsibleTrigger
+              type="button"
+              className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
+            >
               <span className="text-sm font-medium">Advanced</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>

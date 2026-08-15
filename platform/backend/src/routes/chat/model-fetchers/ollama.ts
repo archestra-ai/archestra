@@ -189,6 +189,11 @@ function toFetchedCapabilities(
   const contextLength =
     readModelInfoNumber(show.model_info, ".context_length") ?? null;
   const defaultParameters = parseOllamaParameters(show.parameters);
+  // GGUF `general.parameter_count`. Unprefixed, unlike the architecture-scoped
+  // keys above, but suffix matching is still unambiguous: the arch-prefixed
+  // counts are `block_count` / `expert_count`, never `parameter_count`.
+  const parameterCount =
+    readModelInfoNumber(show.model_info, ".parameter_count") ?? null;
 
   // `capabilities` distinguishes embedding models from generative ones. Tri-state:
   // - embedding model with a reported dimension -> the number (authoritative).
@@ -203,7 +208,12 @@ function toFetchedCapabilities(
       : null;
   }
 
-  return { contextLength, embeddingDimensions, defaultParameters };
+  return {
+    contextLength,
+    embeddingDimensions,
+    defaultParameters,
+    parameterCount,
+  };
 }
 
 function readModelInfoNumber(

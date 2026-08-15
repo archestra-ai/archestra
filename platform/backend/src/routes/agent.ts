@@ -1,5 +1,6 @@
 import {
   type AgentType,
+  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   getResourceForAgentType,
   isModelSelectionComplete,
@@ -24,6 +25,7 @@ import {
   type AgentTypePermissionChecker,
   assertAgentTeams,
 } from "@/auth/agent-type-permissions";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -39,15 +41,23 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import {
   type Agent,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
+  AgentSkillAssignmentsResponseSchema,
+  AgentSkillAssignmentsSchema,
+  AgentSkillExclusionsResponseSchema,
+  AgentSkillExclusionsSchema,
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
@@ -541,12 +551,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Always assert on create: a null/omitted environment still lands on the
-      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      const environmentId = await resolveNewAgentEnvironmentId({
+        userId: user.id,
+        organizationId,
+        agentType,
+        requested: body.environmentId,
+      });
+      // Always assert on create: a null environment still lands on the org
+      // default, which may itself be restricted (mirrors the MCP-catalog path).
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
         agentType,
       });
 
@@ -560,9 +576,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Omit teams if scope is not 'team' — scope takes precedence
+      // Omit teams if scope is not 'team' — scope takes precedence.
+      // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
+      // is a trust attribute (the advisor discriminator drives the delegation
+      // environment exception), so a client-supplied value is dropped here.
       const createData = {
         ...body,
+        environmentId,
+        builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
@@ -1208,6 +1229,112 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/agents/:id/skills",
+    {
+      schema: {
+        operationId: RouteId.GetAgentSkills,
+        description:
+          "Get the skills this gateway publishes over MCP: the explicitly assigned set, plus whether Auto mode ('access all skills') is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentSkillAssignmentsResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireAgentSkillReadAccess({ id, user, organizationId });
+      return reply.send(await agentSkillAssignmentService.getAssignments(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/skills",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSkills,
+        description:
+          "Replace the skills this gateway publishes over MCP (full replace of the assigned set) and set Auto mode",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentSkillAssignmentsSchema,
+        response: constructResponseSchema(AgentSkillAssignmentsResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+        id,
+        user,
+        organizationId,
+      });
+      return reply.send(
+        await agentSkillAssignmentService.replaceAssignments({
+          agentId: id,
+          organizationId,
+          userId: user.id,
+          isSkillAdmin,
+          assignments: body,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/skill-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentSkillExclusions,
+        description:
+          "Get the agent's Auto-skill-mode exclusions: skills removed from its published skill surface while 'access all skills' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentSkillExclusionsResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireAgentSkillReadAccess({ id, user, organizationId });
+      return reply.send(await agentSkillAssignmentService.getExclusions(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/skill-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSkillExclusions,
+        description:
+          "Replace the agent's Auto-skill-mode exclusions (full replace of the excluded skill set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentSkillExclusionsSchema,
+        response: constructResponseSchema(AgentSkillExclusionsResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+        id,
+        user,
+        organizationId,
+      });
+      return reply.send(
+        await agentSkillAssignmentService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          userId: user.id,
+          isSkillAdmin,
+          excludedSkillIds: body.excludedSkillIds,
+        }),
+      );
+    },
+  );
+
   fastify.put(
     "/api/agents/:id",
     {
@@ -1374,6 +1501,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // The advisor is one org-wide row every environment's agents reach
+        // through delegation. A team scope would hide it from everyone
+        // outside that team's delegation surface, and an environment would
+        // re-fence it — reject a narrowing change rather than silently scoping
+        // a shared resource. A no-op that restates org scope or an empty team
+        // list is allowed (the dialog may resend it).
+        if (
+          existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
+        ) {
+          const narrowsScope = body.scope !== undefined && body.scope !== "org";
+          const assignsTeams =
+            body.teams !== undefined && body.teams.length > 0;
+          if (narrowsScope || assignsTeams) {
+            throw new ApiError(
+              400,
+              "The Advisor is shared by the whole organization and cannot be scoped to teams",
+            );
+          }
+          if (body.environmentId !== undefined && body.environmentId !== null) {
+            throw new ApiError(
+              400,
+              "The Advisor is org-wide and cannot be assigned to an environment",
+            );
+          }
+        }
+
         // Only allow specific fields for built-in agents.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
@@ -1390,9 +1543,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.teams !== undefined && { teams: body.teams }),
         };
       } else {
-        // Omit teams if scope is not 'team' — scope takes precedence
+        // Omit teams if scope is not 'team' — scope takes precedence.
+        // `builtInAgentConfig` is server-owned and a trust attribute (drives
+        // the advisor delegation exception), so a client cannot promote an
+        // ordinary agent into a built-in by supplying it on update.
+        const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
+          body;
         updateData = {
-          ...body,
+          ...bodyWithoutBuiltIn,
           ...((body.scope ?? existingAgent.scope) !== "team" &&
             body.teams !== undefined && { teams: [] }),
         };
@@ -1927,6 +2085,144 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
   });
+}
+
+/**
+ * The environment a new agent binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for the agent's
+ * type — agents, MCP gateways, and LLM proxies are configured separately.
+ */
+async function resolveNewAgentEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  agentType: AgentType;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, agentType, requested } = params;
+  if (requested !== undefined) return requested;
+  const resource = getResourceForAgentType(agentType);
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource,
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      resource,
+      "deploy-to-restricted",
+    ),
+  });
+}
+
+/**
+ * Read-permission gate for the skill-publication endpoints.
+ *
+ * Same shape as the tool/subagent exclusion endpoints: every failure is a 404
+ * rather than a 403, so the response cannot be used to discover which agents
+ * exist.
+ */
+async function requireAgentSkillReadAccess(params: {
+  id: string;
+  user: { id: string };
+  organizationId: string;
+}): Promise<void> {
+  const { id, user, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, user.id, true);
+  // findById is not org-scoped, so check it here: an admin must not reach
+  // across organizations either.
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  if (!checker.isAdmin(agent.agentType)) {
+    const filteredAgent = await AgentModel.findById(id, user.id, false);
+    if (!filteredAgent) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+}
+
+/**
+ * Write-permission gate for the skill-publication endpoints, in two halves.
+ *
+ * The gateway half is here: editing what a gateway publishes requires the same
+ * permission as editing the gateway itself, so this runs the identical
+ * agent-type and scope checks `PUT /api/agents/:id` runs.
+ *
+ * The skill half is in two places, and both are load-bearing. The capability
+ * — `skill:read` — is enforced by the middleware from
+ * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
+ * skill resource cannot reach these routes at all. The per-skill visibility
+ * check is enforced by the assignment service, and this function only resolves
+ * the `skill:admin` flag that service needs: publishing or excluding a skill
+ * requires that the caller could already read it (org-scoped, their own,
+ * shared with them, or assigned to one of their teams), with `skill:admin`
+ * bypassing that as it does everywhere else. Neither half implies the other —
+ * visibility is a property of the skill, the capability a property of the
+ * role. Gateway permission alone is not sufficient for either, because
+ * `mcpGateway:update` is a default member permission and publishing hands the
+ * skill's full body to every holder of the gateway's token.
+ *
+ * Deliberately NOT re-checked at serve time: revoking a user's team membership
+ * (or narrowing a skill's team assignments) does not retroactively un-publish
+ * what they already published. The audit log records who published what; a
+ * serve-time re-check is a known follow-up.
+ */
+async function requireAgentSkillWriteAccess(params: {
+  id: string;
+  user: { id: string };
+  organizationId: string;
+}): Promise<{ isSkillAdmin: boolean }> {
+  const { id, user, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, user.id, true);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, "update");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const userTeamIds = !checker.isAdmin(agent.agentType)
+    ? await TeamModel.getUserTeamIds(user.id)
+    : [];
+  requireAgentModifyPermission({
+    checker,
+    agentType: agent.agentType,
+    agentScope: agent.scope,
+    agentAuthorId: agent.authorId,
+    agentTeamIds: agent.teams.map((t) => t.id),
+    userTeamIds,
+    userId: user.id,
+  });
+
+  // Skill permissions are a separate resource from the agent's: an mcpGateway
+  // admin is not automatically a skill admin.
+  const skillChecker = await getSkillPermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+  return { isSkillAdmin: skillChecker.isAdmin };
 }
 
 /**

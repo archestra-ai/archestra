@@ -1269,6 +1269,84 @@ describe("SlackProvider.sendReply", () => {
     ]);
   });
 
+  test("renders one branding line when the model signed off with the footer itself", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      // The model copied the footer off an earlier bot reply in the thread.
+      text: "Here you go.\n\n🤖 Agent",
+      footer: "🤖 Agent",
+      hint: 'Reply "mute" to stop',
+    });
+
+    const { blocks, text } = postMessage.mock.calls[0][0];
+    expect(blocks).toEqual([
+      { type: "markdown", text: "Here you go." },
+      {
+        type: "context",
+        elements: [
+          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+        ],
+      },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+    // The notification fallback carries the branding once too.
+    expect(text).toBe("Here you go.\n\n🤖 Agent");
+  });
+
+  test("posts the footer alone when the reply was nothing but an echoed footer", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text: "🤖 Agent",
+      footer: "🤖 Agent",
+    });
+
+    // Slack rejects an empty `markdown` block, so the body block is dropped
+    // rather than posted blank.
+    const { blocks, text } = postMessage.mock.calls[0][0];
+    expect(blocks).toEqual([
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+    expect(text).toBe("🤖 Agent");
+  });
+
   test("splits into thread follow-ups when markdown expansion would exceed Slack's 50-block cap", async () => {
     const provider = createProvider();
     const postMessage = vi

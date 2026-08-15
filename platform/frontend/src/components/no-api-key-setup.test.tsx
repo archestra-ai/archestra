@@ -11,12 +11,12 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   }: {
     open: boolean;
     title: string;
-    defaultValues?: { provider?: string; openaiAuthMethod?: string };
+    defaultValues?: { provider?: string; authMethod?: string };
   }) =>
     open ? (
       <div role="dialog" aria-label={title}>
         <span>{defaultValues?.provider}</span>
-        <span>{defaultValues?.openaiAuthMethod}</span>
+        <span>{defaultValues?.authMethod}</span>
       </div>
     ) : null,
 }));
@@ -38,6 +38,9 @@ describe("NoApiKeySetup", () => {
       }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "Sign in with X" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Add API Key" }),
     ).toBeInTheDocument();
 
@@ -49,6 +52,6 @@ describe("NoApiKeySetup", () => {
       screen.getByRole("dialog", { name: "Sign in with ChatGPT" }),
     ).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
-    expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
   });
 });

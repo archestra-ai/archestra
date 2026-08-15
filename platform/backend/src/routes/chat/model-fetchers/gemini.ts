@@ -111,7 +111,7 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
 
 const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
   "gemini-embedding-001",
-  "gemini-embedding-2-preview",
+  "gemini-embedding-2",
   "gemini-2.5-pro",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",

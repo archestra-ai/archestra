@@ -42,6 +42,7 @@ import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
   assertValuesMatchEnvironmentRegex,
+  resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import {
   extractLocalConfigSecrets,
@@ -297,15 +298,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
 
+      const canDeployToRestricted = await callerCanDeployToRestricted(
+        request.headers,
+      );
+
+      // No environment chosen at all (as opposed to an explicit null, which
+      // picks the default environment on purpose) hands the choice to the org's
+      // configured landing environment for new MCP servers.
+      if (restBody.environmentId === undefined) {
+        restBody.environmentId = await resolveDefaultEnvironmentForNewResource({
+          organizationId: request.organizationId,
+          resource: "mcpRegistry",
+          canDeployToRestricted,
+        });
+      }
+
       // Gate assigning a restricted environment. Requires
       // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
       // environments are open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
-        canDeployToRestricted: await callerCanDeployToRestricted(
-          request.headers,
-        ),
+        canDeployToRestricted,
       });
 
       let clientSecretId: string | undefined;

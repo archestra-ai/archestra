@@ -1215,6 +1215,202 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     ).toBeUndefined();
   });
 
+  test("sends the conversation's flash effort as a minimal thinking level", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "minimal" },
+    });
+  });
+
+  test("sends the conversation's thinking effort as a high level with summaries", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("prefers the effort sent with the turn over the stored one", async ({
+    makeConversation,
+  }) => {
+    // The row is written by a separate request the send can overtake, so the
+    // depth the composer showed has to win for this turn.
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+        thinkingEffort: "high",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("falls back to the stored effort when the turn sends none", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("never sends a thinking level to a model that cannot honor one", async ({
+    makeConversation,
+  }) => {
+    // The 2.5 family takes a numeric budget; a level cannot be paired with it,
+    // so a stored effort must stay dormant rather than reach the provider.
+    const model = await makeGeminiModelRow("gemini-2.5-pro");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { includeThoughts: true },
+    });
+  });
+
+  test("asks Pro for the shallowest level it accepts, not the shallowest there is", async ({
+    makeConversation,
+  }) => {
+    // Pro rejects "minimal" outright, so "low" has to resolve to its own floor.
+    const model = await makeGeminiModelRow("gemini-3.1-pro-preview");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      // Reasoning happens at this level, so its summary is worth showing.
+      thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
+    });
+  });
+
   test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
     makeConversation,
   }) => {
@@ -1328,6 +1524,246 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
       maxCompletionTokens: expect.any(Number),
     });
+  });
+
+  test("adds a chosen depth to the Responses options without displacing them", async ({
+    makeConversation,
+  }) => {
+    // The two OpenAI blocks each build a fresh `openai` object, so a depth
+    // written as a third assignment would drop store/reasoningSummary instead
+    // of joining them.
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+      reasoningEffort: "high",
+    });
+  });
+
+  test("leaves a non-reasoning OpenAI model without a depth", async ({
+    makeConversation,
+  }) => {
+    // gpt-4o rejects reasoning_effort outright, and the chat transport emits
+    // whatever it is handed — so the field must never be built for it.
+    const model = await makeOpenAiModelRow("gpt-4o");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).not.toHaveProperty("reasoningEffort");
+  });
+
+  test("lets a turn's own depth outrank the conversation's stored one", async ({
+    makeConversation,
+  }) => {
+    // A pick made mid-conversation rides with the message it was made for,
+    // rather than racing the row write.
+    const model = await makeOpenAiModelRow("gpt-5-mini");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        thinkingEffort: "high",
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).toMatchObject({ reasoningEffort: "high" });
+  });
+
+  // Seeds a synced Anthropic model row.
+  const makeAnthropicModelRow = (anthropicModelId: string) =>
+    ModelModel.create({
+      externalId: `anthropic/${anthropicModelId}`,
+      provider: "anthropic",
+      modelId: anthropicModelId,
+      description: anthropicModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("sends each chosen depth to Anthropic unchanged", async ({
+    makeConversation,
+  }) => {
+    const model = await makeAnthropicModelRow("claude-opus-5");
+    const cases = ["low", "medium", "high"] as const;
+
+    for (const thinkingEffort of cases) {
+      const conversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+        thinkingEffort,
+      });
+      mockStreamText.mockClear();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: conversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
+
+      expect(
+        mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+      ).toEqual({ effort: thinkingEffort });
+    }
+  });
+
+  test("never writes `thinking`, which the display wrapper would then skip", async ({
+    makeConversation,
+  }) => {
+    // Visible reasoning comes from the fetch wrapper in clients/llm-client.ts
+    // adding `display: "summarized"`, and that wrapper bails on a body that
+    // already declares `thinking`.
+    const model = await makeAnthropicModelRow("claude-sonnet-5");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+    ).not.toHaveProperty("thinking");
+  });
+
+  test("leaves Anthropic models without a selectable depth untouched", async ({
+    makeConversation,
+  }) => {
+    const anthropicModelIds = [
+      // Accepts output_config.effort but keeps thinking off, so a depth would
+      // move token spend without producing any reasoning.
+      "claude-opus-4-8",
+      // Rejects the field outright.
+      "claude-haiku-4-5",
+    ];
+
+    for (const anthropicModelId of anthropicModelIds) {
+      const model = await makeAnthropicModelRow(anthropicModelId);
+      const conversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+        thinkingEffort: "high",
+      });
+      mockStreamText.mockClear();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: conversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
+
+      expect(
+        mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+      ).toBeUndefined();
+    }
   });
 
   // Seeds a synced Perplexity model row; the provider serves two transports

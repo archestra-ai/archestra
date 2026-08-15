@@ -35,7 +35,10 @@ import {
   ToolModel,
 } from "@/models";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   extractLocalConfigSecrets,
@@ -170,7 +173,7 @@ const CatalogMetadataToolSchema = z
     environmentId: UuidIdSchema.nullable()
       .optional()
       .describe(
-        "ID of the environment this server belongs to. Omit (or pass null) to leave it in the default environment.",
+        "ID of the environment this server belongs to. Pass null for the default environment. Omit it to use your own environment, or the organization's landing environment for new MCP servers when you have none.",
       ),
   })
   .strict();
@@ -1047,23 +1050,30 @@ async function handleCreateMcpServer(
       return errorResult("user/organization context not available.");
     }
 
+    // Deploying a catalog item to a restricted environment requires
+    // mcpRegistry:deploy-to-restricted.
+    const hasDeploy = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpRegistry",
+      "deploy-to-restricted",
+    );
     // A server created by an agent lands in that agent's environment unless the
     // caller names one explicitly, so the creator can still see it through the
-    // environment-scoped registry tools (mirrors `scaffold_app`).
+    // environment-scoped registry tools (mirrors `scaffold_app`). An agent with
+    // no environment of its own carries no signal, so the org's configured
+    // landing environment for new MCP servers decides instead.
     const targetEnvironmentId =
       args.environmentId !== undefined
         ? args.environmentId
-        : await AgentModel.findEnvironmentId(contextAgent.id);
+        : ((await AgentModel.findEnvironmentId(contextAgent.id)) ??
+          (await resolveDefaultEnvironmentForNewResource({
+            organizationId,
+            resource: "mcpRegistry",
+            canDeployToRestricted: hasDeploy,
+          })));
 
     try {
-      // Deploying a catalog item to a restricted environment requires
-      // mcpRegistry:deploy-to-restricted.
-      const hasDeploy = await userHasPermission(
-        context.userId,
-        organizationId,
-        "mcpRegistry",
-        "deploy-to-restricted",
-      );
       await assertCanAssignEnvironment({
         environmentId: targetEnvironmentId,
         organizationId,

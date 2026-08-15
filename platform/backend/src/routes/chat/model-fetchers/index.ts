@@ -4,7 +4,6 @@ import {
   PERPLEXITY_AGENT_MODELS,
   PERPLEXITY_MODELS,
 } from "@archestra/shared";
-import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
 import { fetchArchestraModels } from "./archestra";
 import { fetchAzureModels } from "./azure";
@@ -20,21 +19,7 @@ import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
 import type { ModelFetcher, ModelInfo } from "./types";
 import { fetchVllmModels } from "./vllm";
-
-function mapOpenAiCompatibleOptionalCreated(
-  model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
-  provider: SupportedProvider,
-): ModelInfo {
-  return {
-    id: model.id,
-    displayName: model.id,
-    provider,
-    createdAt:
-      "created" in model && typeof model.created === "number"
-        ? new Date(model.created * 1000).toISOString()
-        : undefined,
-  };
-}
+import { fetchXaiModels } from "./xai";
 
 const ZHIPUAI_CHAT_PREFIXES = ["glm-", "chatglm-"];
 const ZHIPUAI_EXCLUDE_PATTERNS = ["-embedding"];
@@ -94,15 +79,6 @@ const fetchMistralModels = makeBearerFetcher({
   provider: "mistral",
   configKey: "mistral",
   errorLabel: "Mistral models",
-});
-
-const fetchXaiModels = makeBearerFetcher<
-  OpenAi.Types.Model | OpenAi.Types.OrlandoModel
->({
-  provider: "xai",
-  configKey: "xai",
-  errorLabel: "xAI models",
-  mapModel: mapOpenAiCompatibleOptionalCreated,
 });
 
 const fetchZhipuaiModels = makeBearerFetcher({

@@ -128,6 +128,35 @@ describe("DynamicInteraction with a normal provider response", () => {
     expect(interaction.getToolNamesRequested()).toEqual(["get_weather"]);
   });
 
+  it("renders no conversation for an incognito interaction instead of throwing", () => {
+    // Provider mappers read request.messages.length unguarded, so a locked
+    // payload has to stop before delegation — otherwise the whole session
+    // detail page crashes on one incognito row.
+    for (const sentinel of [
+      { __incognitoLocked: "11111111-1111-4111-8111-111111111111" },
+      { __redacted: "incognito" },
+    ]) {
+      const locked = {
+        ...okInteraction,
+        request: sentinel,
+        response: sentinel,
+      } as unknown as typeof okInteraction;
+      const interaction = new DynamicInteraction(locked);
+      // Every payload-derived accessor must answer neutrally rather than
+      // dereference the sentinel — the session detail page calls several of
+      // them per row, so one unguarded accessor crashes the whole page.
+      expect(interaction.mapToUiMessages()).toEqual([]);
+      expect(interaction.getLastUserMessage()).toBe("");
+      expect(interaction.getLastAssistantResponse()).toBe("");
+      expect(interaction.getToolNamesRequested()).toEqual([]);
+      expect(interaction.getToolNamesUsed()).toEqual([]);
+      expect(interaction.getToolNamesRefused()).toEqual([]);
+      expect(interaction.getToolRefusedCount()).toBe(0);
+      expect(interaction.isLastMessageToolCall()).toBe(false);
+      expect(interaction.getLastToolCallId()).toBeNull();
+    }
+  });
+
   it("delegates mapToUiMessages to the provider mapper", () => {
     const messages = new DynamicInteraction(okInteraction).mapToUiMessages();
     const hasAssistantText = messages.some(

@@ -84,6 +84,99 @@ describe("transformConfigArrayFields", () => {
     expect(result.projectIds).toEqual(["proj-a", "proj-b"]);
   });
 
+  it("converts M-Files objectTypeIds to non-negative integers", () => {
+    const config = {
+      type: "mfiles",
+      objectTypeIds: "0, 2, invalid, -1, 7",
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.objectTypeIds).toEqual([0, 2, 7]);
+  });
+
+  it("treats an absent M-Files authMethod as password mode and strips the seeded OAuth presets", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        domain: "CONTOSO",
+        oauthAuthConfig: "Technical Credentials",
+        oauthAuthConfigScope: "technical",
+      }),
+    ).toEqual({
+      type: "mfiles",
+      domain: "CONTOSO",
+    });
+  });
+
+  it("removes credentials-mode fields that do not apply to M-Files", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        authMethod: "mfiles_password_token",
+        domain: "CONTOSO",
+        oauthTokenEndpoint: "https://login.example.com/token",
+        oauthAuthConfig: "Entra ID",
+        oauthAuthConfigScope: "technical",
+        oauthAccountName: String.raw`integration\archestra`,
+        oauthUseIdToken: true,
+      }),
+    ).toEqual({
+      type: "mfiles",
+      authMethod: "mfiles_password_token",
+      domain: "CONTOSO",
+    });
+
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        authMethod: "oauth_client_credentials",
+        domain: "CONTOSO",
+        oauthTokenEndpoint: "https://login.example.com/token",
+        oauthAuthConfig: "Entra ID",
+        oauthAuthConfigScope: "technical",
+        oauthAccountName: String.raw`integration\archestra`,
+        oauthScope: "",
+        oauthResource: "",
+      }),
+    ).toEqual({
+      type: "mfiles",
+      authMethod: "oauth_client_credentials",
+      oauthTokenEndpoint: "https://login.example.com/token",
+      oauthAuthConfig: "Entra ID",
+      oauthAuthConfigScope: "technical",
+      oauthAccountName: String.raw`integration\archestra`,
+    });
+  });
+
+  it("drops empty Perforce permission-sync fields and keeps filled ones", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: "//depot/docs",
+        p4Port: "",
+        adminUsername: "",
+      }),
+    ).toEqual({
+      type: "perforce",
+      serverUrl: "https://perforce.example.com:8080",
+      depotPaths: ["//depot/docs"],
+    });
+
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        p4Port: "ssl:perforce.example.com:1666",
+        adminUsername: "p4admin",
+      }),
+    ).toEqual({
+      type: "perforce",
+      p4Port: "ssl:perforce.example.com:1666",
+      adminUsername: "p4admin",
+    });
+  });
+
   it("trims whitespace and filters empty entries", () => {
     const config = {
       repos: " repo1 ,, repo2 , , repo3 ",
@@ -119,5 +212,36 @@ describe("transformConfigArrayFields", () => {
     expect(result.jiraBaseUrl).toBe("https://example.atlassian.net");
     expect(result.isCloud).toBe(true);
     expect(result.repos).toEqual(["repo1", "repo2"]);
+  });
+
+  it("converts ServiceNow role audiences and drops empty entries", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: {
+        incident: "itil, sn_incident_read",
+        problem: "",
+        change_request: ["itil"],
+      },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toEqual({
+      incident: ["itil", "sn_incident_read"],
+      change_request: ["itil"],
+    });
+  });
+
+  it("drops an all-empty ServiceNow role audience map", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: { incident: "", problem: " " },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toBeUndefined();
   });
 });

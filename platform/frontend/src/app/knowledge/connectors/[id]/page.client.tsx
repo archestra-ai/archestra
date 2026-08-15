@@ -1,7 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE } from "@archestra/shared";
+import {
+  CONNECTOR_TYPE_LABELS,
+  PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
@@ -26,6 +29,13 @@ import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/con
 import { ConnectorUnassignedUsersAlert } from "@/app/knowledge/connectors/_parts/connector-unassigned-users-alert";
 import { ConnectorUserGroupsTable } from "@/app/knowledge/connectors/_parts/connector-user-groups-table";
 import { contentRunPhase } from "@/app/knowledge/connectors/_parts/content-run-phase";
+import { GoogleDriveConnectionCard } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
+import {
+  capitalizeNoun,
+  GROUP_ROSTER_NOUN,
+  type RosterNoun,
+  WORKSPACE_ROSTER_NOUN,
+} from "@/app/knowledge/connectors/_parts/roster-noun";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -70,6 +80,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDialogFlagUrlParam,
   useDialogUrlParam,
@@ -126,6 +137,7 @@ export default function ConnectorDetailPage({
 }
 
 function ConnectorDetail({ connectorId }: { connectorId: string }) {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const from = searchParams.get("from");
   const backHref =
@@ -168,6 +180,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   // live behind the in-tab filter rather than a separate tab.
   const isAutoSync =
     connector?.visibility === "auto-sync-permissions" && autoSyncBeta;
+  // Notion's one roster row per connector IS the workspace, so its page says
+  // "Workspace(s)" wherever the group snapshot would say "Group(s)".
+  const rosterNoun =
+    connector?.connectorType === "notion" ? WORKSPACE_ROSTER_NOUN : undefined;
   const tabs = [
     { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
     {
@@ -181,7 +197,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             href: `/knowledge/connectors/${connectorId}?tab=users`,
           },
           {
-            label: "Groups",
+            label: rosterNoun ? capitalizeNoun(rosterNoun.plural) : "Groups",
             href: `/knowledge/connectors/${connectorId}?tab=groups`,
           },
         ]
@@ -361,7 +377,9 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         // compact Status/Type columns.
         size: 520,
         minSize: 220,
-        cell: ({ row }) => <RunResultsSummary run={row.original} />,
+        cell: ({ row }) => (
+          <RunResultsSummary run={row.original} noun={rosterNoun} />
+        ),
       },
       {
         id: "logs",
@@ -389,7 +407,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         },
       },
     ],
-    [isAutoSync, openRunDetails],
+    [isAutoSync, openRunDetails, rosterNoun],
   );
 
   if (isPending) {
@@ -433,12 +451,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               </p>
             ) : (
               <div>
-                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                <Badge variant="secondary" className="gap-1.5 mt-1">
                   <ConnectorTypeIcon
                     type={connector.connectorType}
                     className="h-3.5 w-3.5"
                   />
-                  {connector.connectorType}
+                  {CONNECTOR_TYPE_LABELS[connector.connectorType] ??
+                    connector.connectorType}
                 </Badge>
               </div>
             )}
@@ -573,6 +592,8 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           </Link>
         </Button>
 
+        <GoogleDriveConnectionCard connector={connector} />
+
         <div className="rounded-lg border p-4">
           {/* Two symmetric rows on wide screens: the documents family (Last
               Documents Sync / Documents Sync Schedule) sits directly above
@@ -618,7 +639,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <MetadataItem label="Permissions Coverage">
                     <div
                       className="text-amber-600"
-                      title="Access-restricted until a permission sync tags them with their source permissions"
+                      title={`Their source permissions grant only accounts ${appName} hasn't matched to a user, so no one can read them yet. Map those accounts in the Users tab — they also resolve automatically once the source exposes their emails. Re-running a permission sync alone won't change this.`}
                     >
                       <span>
                         {coverage.failClosedDocuments.toLocaleString()} document
@@ -626,7 +647,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                       {coverage.failClosedDocuments === 1 ? null : (
                         <span>s</span>
                       )}
-                      <span> awaiting permission sync</span>
+                      <span> with no resolvable readers</span>
                     </div>
                   </MetadataItem>
                 )}
@@ -649,11 +670,15 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           <ConnectorDocumentsTable
             connectorId={connectorId}
             showGroupFilter={isAutoSync}
+            noun={rosterNoun}
           />
         ) : currentTab === "users" && isAutoSync ? (
-          <ConnectorMembersTable connectorId={connectorId} />
+          <ConnectorMembersTable connectorId={connectorId} noun={rosterNoun} />
         ) : currentTab === "groups" && isAutoSync ? (
-          <ConnectorUserGroupsTable connectorId={connectorId} />
+          <ConnectorUserGroupsTable
+            connectorId={connectorId}
+            noun={rosterNoun}
+          />
         ) : (
           <div>
             <TableFilters>
@@ -698,6 +723,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <SelectItem value="completed_with_errors">
                     Completed with errors
                   </SelectItem>
+                  <SelectItem value="no_documents">No documents</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
                   <SelectItem value="superseded">Superseded</SelectItem>
@@ -778,7 +804,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
  * is what visually identifies it; there is no mode label. Full numbers live
  * in the run details dialog.
  */
-function RunResultsSummary({ run }: { run: ConnectorRunItem }) {
+function RunResultsSummary({
+  run,
+  noun = GROUP_ROSTER_NOUN,
+}: {
+  run: ConnectorRunItem;
+  noun?: RosterNoun;
+}) {
   if (run.status === "queued") {
     return (
       <div className="text-sm text-muted-foreground">Waiting for a worker…</div>
@@ -805,8 +837,8 @@ function RunResultsSummary({ run }: { run: ConnectorRunItem }) {
         ? [
             countedItem(
               stats.membershipsUpserted,
-              "group member updated",
-              "group members updated",
+              `${noun.singular} member updated`,
+              `${noun.singular} members updated`,
             ),
           ]
         : []),
@@ -814,8 +846,8 @@ function RunResultsSummary({ run }: { run: ConnectorRunItem }) {
         ? [
             countedItem(
               membersRemoved,
-              "group member removed",
-              "group members removed",
+              `${noun.singular} member removed`,
+              `${noun.singular} members removed`,
             ),
           ]
         : []),
@@ -825,8 +857,12 @@ function RunResultsSummary({ run }: { run: ConnectorRunItem }) {
       warn: stats.failClosed > 0,
     };
     const groupsItem: RunStatItem = stats.groupSyncFailed
-      ? { label: "group sync failed", warn: true }
-      : countedItem(stats.groupsSynced, "group checked", "groups checked");
+      ? { label: `${noun.singular} sync failed`, warn: true }
+      : countedItem(
+          stats.groupsSynced,
+          `${noun.singular} checked`,
+          `${noun.plural} checked`,
+        );
     // A pass that could not READ a project's permissions hid everything in it.
     // It must never settle as "no changes" — from the outside that is
     // indistinguishable from a pass that found nothing to do.

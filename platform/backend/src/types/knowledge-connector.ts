@@ -19,6 +19,7 @@ const LINEAR = z.literal("linear");
 const SALESFORCE = z.literal("salesforce");
 const WEB_CRAWLER = z.literal("web_crawler");
 const PERFORCE = z.literal("perforce");
+const MFILES = z.literal("mfiles");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -37,6 +38,7 @@ export const ConnectorTypeSchema = z.union([
   SALESFORCE,
   WEB_CRAWLER,
   PERFORCE,
+  MFILES,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -49,6 +51,13 @@ export const ConnectorSyncStatusSchema = z.enum([
   "running",
   "success",
   "completed_with_errors",
+  // Ran cleanly and indexed nothing, with nothing indexed previously either.
+  // Distinct from `success` because it almost always means the connector is
+  // pointed somewhere it cannot see: nothing shared with the identity it
+  // authenticates as, a folder or project filter aimed at something invisible
+  // to it, or a file-type filter that excludes every file found. A green tick
+  // on that is how a connector silently indexes nothing for weeks.
+  "no_documents",
   "failed",
   "partial",
   // A newer sync run for the same connector replaced this one. Distinct from
@@ -87,6 +96,18 @@ export const ConnectorCredentialsSchema = z.object({
       githubUrl: z.string(),
       appId: z.string(),
       installationId: z.string(),
+    })
+    .optional(),
+  // Google OAuth credentials for a Drive connector in `oauth` mode. The client
+  // the token was issued to travels with the token because refreshing needs
+  // all three: Google mints a new access token only for the same client.
+  // `refreshToken` is absent until the authorization-code flow completes, which
+  // is what "created but not yet connected" looks like on disk.
+  googleOAuth: z
+    .object({
+      clientId: z.string(),
+      clientSecret: z.string(),
+      refreshToken: z.string().optional(),
     })
     .optional(),
 });
@@ -210,8 +231,17 @@ export const ServiceNowConfigSchema = z.object({
   includeChangeRequests: z.boolean().optional(),
   includeProblems: z.boolean().optional(),
   includeBusinessApps: z.boolean().optional(),
+  includeKnowledgeArticles: z.boolean().optional(),
   states: z.array(z.string()).optional(),
   assignmentGroups: z.array(z.string()).optional(),
+  /**
+   * Auto-sync permissions: per-table extra audience of ServiceNow role names
+   * (e.g. `{ "incident": ["itil"] }`) granted read on every synced record of
+   * that table, rostered from `sys_user_has_role`. Without an entry a table's
+   * records are visible only to their participants (assignment-group members
+   * and the referenced users).
+   */
+  roleAudiences: z.record(z.string(), z.array(z.string())).optional(),
   batchSize: z.number().optional(),
   syncDataForLastMonths: z.number().min(1).max(12).optional(),
 });
@@ -264,8 +294,41 @@ export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 
 // ===== Google Drive Config & Checkpoint =====
 
+/**
+ * Which identity the Drive client acts as. Chosen deliberately rather than
+ * inferred from whether the stored credential happens to parse as JSON:
+ *
+ * - `service_account` — a service-account key on its own. The connector sees
+ *   exactly what somebody remembered to share with the key's email address.
+ * - `service_account_delegated` — the same key with domain-wide delegation, so
+ *   it can impersonate users in the Workspace domain. Coverage follows the
+ *   organization instead of a manual share list.
+ * - `oauth` — one person's own Drive, via the authorization-code flow.
+ */
+export const GoogleDriveAuthModeSchema = z.enum([
+  "service_account",
+  "service_account_delegated",
+  "oauth",
+]);
+export type GoogleDriveAuthMode = z.infer<typeof GoogleDriveAuthModeSchema>;
+
 export const GoogleDriveConfigSchema = z.object({
   type: GDRIVE,
+  /**
+   * Absent on connectors created before auth modes existed. Those keep the old
+   * behavior — a credential that parses as JSON is a service-account key, and
+   * anything else is a bare access token — so an upgrade does not change which
+   * identity an existing connector syncs as.
+   */
+  authMode: GoogleDriveAuthModeSchema.optional(),
+  /** Workspace user the service account impersonates in delegated mode. */
+  delegatedAdminEmail: z.string().optional(),
+  /**
+   * Google account the OAuth flow last connected, for display. Overwritten
+   * from the token response on every (re)connect, so it cannot drift into
+   * claiming an account that is not the one syncing.
+   */
+  connectedAccountEmail: z.string().optional(),
   driveId: z.string().optional(),
   driveIds: z.array(z.string()).optional(),
   folderId: z.string().optional(),
@@ -279,6 +342,33 @@ export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
 export const GoogleDriveCheckpointSchema = z.object({
   type: GDRIVE,
   lastSyncedAt: z.string().optional(),
+  /**
+   * Domain-wide sync progress. The pass walks the domain's shared drives and
+   * users one at a time, so an interrupted run has to know where it got to —
+   * without this it would restart at the first target every time and a domain
+   * bigger than one run could never finish.
+   *
+   * Progress is a count into the ordered target list, not the list of finished
+   * targets: a domain of twenty thousand identities would otherwise write a
+   * list that size into this checkpoint on every batch. `domainTargetsFingerprint`
+   * is what makes the count meaningful — when the domain's membership changes
+   * the count refers to different targets, so the pass starts over rather than
+   * skipping ones it never visited.
+   *
+   * `domainSyncStartedAt` stamps the pass the count belongs to; when a pass
+   * completes, both are cleared and `lastSyncedAt` advances to it.
+   */
+  domainTargetsCompleted: z.number().int().nonnegative().optional(),
+  domainTargetsFingerprint: z.string().optional(),
+  domainSyncStartedAt: z.string().optional(),
+  /**
+   * Targets a pass could not read — an account with no Drive licence, a shared
+   * drive with no reachable member, a request that hit a rate limit. The next
+   * pass crawls these in full: everything that existed while they were
+   * unreachable is older than the cursor, so an incremental query would never
+   * look at it again.
+   */
+  domainFullCrawlTargets: z.array(z.string()).optional(),
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 
@@ -518,6 +608,30 @@ export const PerforceConfigSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * Optional override for the wire-protocol address of the Perforce server
+   * (`[ssl:]host:port`) that permission sync's in-cluster p4 shim dials.
+   *
+   * Normally left unset: `p4 webserver` is served by the p4d process itself,
+   * so the wire address is derived from `serverUrl`'s host at p4d's default
+   * port and then verified by probing it from the pod (both transports — the
+   * `ssl:` prefix is discovered, not configured). Set this only when the REST
+   * endpoint is genuinely not the p4d host, e.g. an ingress fronting the web
+   * server alone. Permission sync additionally needs `adminUsername` and the
+   * admin password in the credential `adminApiKey` field.
+   */
+  p4Port: z
+    .string()
+    .regex(/^(ssl:)?[A-Za-z0-9_.[\]-]+:\d{1,5}$/, {
+      message: 'p4Port must look like "host:1666" or "ssl:host:1666"',
+    })
+    .optional(),
+  /**
+   * Admin-level Perforce user for permission sync. Reading the full
+   * protections table (`p4 protects -a`) requires super access, or admin with
+   * the `dm.protects.allow.admin=1` configurable.
+   */
+  adminUsername: z.string().min(1).max(256).optional(),
 });
 export type PerforceConfig = z.infer<typeof PerforceConfigSchema>;
 
@@ -539,6 +653,73 @@ export const PerforceCheckpointSchema = z.object({
 });
 export type PerforceCheckpoint = z.infer<typeof PerforceCheckpointSchema>;
 
+// ===== M-Files Config & Checkpoint =====
+
+export const MFilesConfigSchema = z.object({
+  type: MFILES,
+  /** M-Files Classic Web base URL. The connector appends /REST itself. */
+  baseUrl: connectorUrlSchema,
+  /** Vault GUID, normally in {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} form. */
+  vaultGuid: z
+    .string()
+    .regex(
+      /^\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/i,
+      {
+        message:
+          "Vault GUID must use {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} format",
+      },
+    ),
+  /** Headless OAuth application accounts are preferred; absent means the legacy password-token mode. */
+  authMethod: z
+    .enum(["oauth_client_credentials", "mfiles_password_token"])
+    .optional(),
+  /** OAuth token endpoint owned by the configured identity provider. */
+  oauthTokenEndpoint: connectorUrlSchema.optional(),
+  /** Space-delimited OAuth scopes (for Entra ID this is normally `<resource>/.default`). */
+  oauthScope: z.string().min(1).optional(),
+  /** OAuth resource/audience for providers that use `resource` instead of `scope`. */
+  oauthResource: z.string().min(1).optional(),
+  /** Exact M-Files authentication provider name sent in X-AuthConfig. */
+  oauthAuthConfig: z.string().min(1).optional(),
+  /** Scope containing the authentication provider, sent in X-AuthConfigScope. */
+  oauthAuthConfigScope: z.string().min(1).optional(),
+  /** M-Files application-account username selected through X-ExtraAuthData. */
+  oauthAccountName: z.string().min(1).optional(),
+  /** Use the ID token only when the M-Files provider requires it. */
+  oauthUseIdToken: z.boolean().optional(),
+  /** How the OAuth client authenticates to the token endpoint. */
+  oauthClientAuthMethod: z
+    .enum(["client_secret_post", "client_secret_basic"])
+    .optional(),
+  /** Windows domain for domain-authenticated M-Files accounts. */
+  domain: z.string().optional(),
+  /** M-Files object types to ingest. Built-in Documents is type 0. */
+  objectTypeIds: z.array(z.number().int().nonnegative()).min(1).optional(),
+  /** Documents emitted per Archestra connector batch. */
+  batchSize: z.number().int().min(1).max(500).optional(),
+  /**
+   * VAF extension method that exposes effective ACLs and group membership.
+   * MFWS itself intentionally has no documented ACL/users/groups resources.
+   */
+  permissionExtensionMethod: z.string().min(1).optional(),
+});
+export type MFilesConfig = z.infer<typeof MFilesConfigSchema>;
+
+export const MFilesCheckpointSchema = z.object({
+  type: MFILES,
+  lastSyncedAt: z.string().optional(),
+  /** Durable add-on-journal cursor committed only after its page mutations. */
+  changeCursor: z.string().optional(),
+  /** Baseline state is retained across time-boxed continuation runs. */
+  baselineCursor: z.string().nullable().optional(),
+  baselineHeadCursor: z.string().optional(),
+  baselineGeneration: z.string().uuid().optional(),
+  addOnInstanceId: z.string().uuid().optional(),
+  addOnVersion: z.string().optional(),
+  configFingerprint: z.string().optional(),
+});
+export type MFilesCheckpoint = z.infer<typeof MFilesCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -556,6 +737,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SalesforceConfigSchema,
   WebCrawlerConfigSchema,
   PerforceConfigSchema,
+  MFilesConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -576,6 +758,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SalesforceCheckpointSchema,
   WebCrawlerCheckpointSchema,
   PerforceCheckpointSchema,
+  MFilesCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -603,6 +786,11 @@ export interface ConnectorDocument {
   content: string;
   sourceUrl?: string;
   metadata: Record<string, unknown>;
+  /**
+   * Metadata keys used only for sync bookkeeping. They are persisted but do
+   * not change the content hash or force re-chunking when their values rotate.
+   */
+  operationalMetadataKeys?: string[];
   updatedAt?: Date;
   /** Access control permissions extracted from the source system */
   permissions?: DocumentPermissions;
@@ -623,20 +811,81 @@ export interface ConnectorItemFailure {
   itemId: string | number;
   resource: string;
   error: string;
+  /**
+   * True when the fallback omitted the top-level document rather than merely
+   * degrading an optional sub-resource such as comments. These failures must
+   * make the run visible as completed-with-errors while preserving any
+   * last-known-good indexed copy.
+   */
+  itemUnavailable?: boolean;
+  /**
+   * Source id that can resolve this provisional failure later in the same
+   * run. Domain-wide connectors may see the same source through another
+   * identity; a later document with this id cancels the unavailable-item
+   * error instead of double-counting a source that was ultimately ingested.
+   */
+  recoverySourceId?: string;
 }
+
+/**
+ * Machine-readable classification of a skipped item. `no_extractable_text`
+ * marks documents that were found but yielded nothing indexable (scanned PDF
+ * with no text layer, unparseable or empty file, oversized image);
+ * `unsupported_type` distinguishes file-filter guidance from unrelated
+ * uncategorized skips. Transient fetch/export failures must use `failures`, not
+ * this definitive category. The no-text subset is counted separately on the
+ * run so silent data loss is visible (issue #7157).
+ */
+export type ConnectorSkipCategory = "no_extractable_text" | "unsupported_type";
 
 export interface ConnectorItemSkipped {
   itemId: string | number;
+  /**
+   * Identity used by kb_documents.source_id. Defaults to String(itemId).
+   * Connectors whose document IDs add a prefix (for example SharePoint site
+   * pages) must provide it so a definitive skip can retire stale indexed text.
+   */
+  sourceId?: string;
+  /**
+   * Optional metadata scope that the existing kb_document must match before
+   * retirement. Microsoft Graph drive-item IDs are only unique within a
+   * user/drive, so raw IDs must never delete a sibling drive's row.
+   */
+  sourceScope?: {
+    metadataField: "userId" | "driveId";
+    value: string;
+  };
   name: string;
   reason: string;
+  category?: ConnectorSkipCategory;
 }
 
 export interface ConnectorSyncBatch {
   documents: ConnectorDocument[];
   failures?: ConnectorItemFailure[];
   skipped?: ConnectorItemSkipped[];
+  /**
+   * Successfully fetched source ids that must resolve later provisional
+   * failures even when success preceded the failed attempt. Connectors only
+   * need this when their normal cross-identity dedupe guarantee is degraded.
+   */
+  recoveredSourceIds?: string[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
+  /**
+   * Completion-gated object/file reconciliation. After every listed document
+   * in the batch ingests successfully, delete stored documents matching the
+   * connector-scoped metadata filter whose source id is not in `seenSourceIds`.
+   */
+  reconcileScopes?: Array<{
+    metadataFilter: Record<string, string>;
+    seenSourceIds: string[];
+  }>;
+  /** Completion-gated full-baseline sweep using a connector-owned metadata generation. */
+  completionSweep?: {
+    metadataKey: string;
+    generation: string;
+  };
 }
 
 // ===== Permission Sync Types =====
@@ -663,10 +912,53 @@ export type ReadIngestedDocuments = (args: {
   limit: number;
 }) => Promise<{ documents: IngestedDocumentRef[]; nextAfterId: string | null }>;
 
+/**
+ * Identifies the connector a sync is running for. Connectors that provision
+ * their own infrastructure key it off this so one connector's workload — and
+ * credentials — never share a runtime with another's, and so a settings change
+ * can retire that runtime; see the Perforce shim (`k8s/p4-shim-runtime`), the
+ * only current consumer.
+ */
+export interface ConnectorIdentity {
+  /** Scopes the connector's own infrastructure. */
+  connectorId: string;
+  organizationId: string;
+  /** The connector's environment, or null when it uses the default. */
+  environmentId: string | null;
+  secretId: string | null;
+  /**
+   * Version marker for the connector's stored credentials — the secret row's
+   * `updatedAt`, not the connector's. It is the credential half of the
+   * Perforce shim's rotation fingerprint, so a credential change retires the
+   * pod without any secret material reaching a Kubernetes annotation.
+   *
+   * The connector's own `updatedAt` deliberately does NOT appear here: a
+   * permission-sync pass writes that row on every run, so keying rotation off
+   * it would restart the pod on every pass.
+   */
+  credentialVersion: string;
+  /**
+   * The run this work is being done under, when there is one.
+   *
+   * Carried on the identity so a connector that provisions its own runtime
+   * (Perforce) can make that runtime refuse a caller whose run has since been
+   * reclaimed — a worker resuming from a freeze would otherwise rebuild a pod
+   * and drive upstream commands for a pass that ended. Absent for callers that
+   * legitimately hold no run, such as Test Connection.
+   */
+  run?: { runId: string; epoch: number };
+}
+
 /** Shared input for the permission-sync extraction hooks (§1 of the plan). */
 export interface PermissionSyncParams {
   config: Record<string, unknown>;
   credentials: ConnectorCredentials;
+  /**
+   * Optional so the hooks stay callable without it; a connector that needs it
+   * must fail closed when it is absent rather than fall back to a shared or
+   * install-wide resource.
+   */
+  identity?: ConnectorIdentity;
   /**
    * Opaque resume cursor from a prior interrupted run of the same generation,
    * or null on a fresh enumeration. Connectors treat it as their own
@@ -683,7 +975,7 @@ export interface PermissionSyncParams {
    * Delta-pass scoping: when set, `syncPermissionSnapshot` enumerates ONLY
    * these top-level containers (the probe's dirty set). Absent on full passes.
    */
-  scope?: { containerKeys: string[] };
+  scope?: { containerKeys: string[]; groupIds?: string[] };
   /**
    * True only on a MANUAL pass ("Sync Permissions Now"): cross-pass identity
    * caches are bypassed on read and rewritten, so an upstream email/profile
@@ -749,6 +1041,12 @@ export interface PermissionProbeResult {
   fullRequired: boolean;
   /** Next probe cursors/fingerprints to persist on success. */
   nextState: PermissionSyncState;
+  /** The dirty container list comes from an authoritative, gap-detecting source. */
+  authoritativeAudienceScope?: boolean;
+  /** Authoritative group ids whose membership/name must be re-read. */
+  dirtyGroupIds?: string[];
+  /** Groups authoritatively removed upstream. */
+  deletedGroupIds?: string[];
 }
 
 /**
@@ -831,7 +1129,11 @@ export interface GroupMemberYield {
  */
 export interface GroupMembershipYield {
   groupId: string;
+  /** Human-readable source name. Authorization continues to use stable groupId. */
+  name?: string | null;
   members: GroupMemberYield[];
+  /** A failed expansion is an observed fail-closed empty group, not a clean empty group. */
+  membershipResolutionFailed?: boolean;
   cursor?: string;
 }
 
@@ -891,6 +1193,8 @@ export interface Connector {
   testConnection(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    /** See {@link ConnectorTenant}; only connectors with per-tenant infrastructure read it. */
+    identity?: ConnectorIdentity;
   }): Promise<{ success: boolean; error?: string }>;
 
   /** Estimate the total number of items to sync (for progress display). Returns null if unknown. */
@@ -899,6 +1203,7 @@ export interface Connector {
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null>;
 
   sync(params: {
@@ -913,6 +1218,12 @@ export interface Connector {
      * (e.g. images) only when the embedding model can handle it.
      */
     embeddingInputModalities?: ModelInputModality[];
+    /**
+     * Image MIME types the embedding client accepts for the configured model
+     * (undefined = no per-format restriction). Connectors ingest only image
+     * formats in this list; the embedder skips other formats at embed time.
+     */
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch>;
 
   // ===== Permission sync (optional; default-off, see BaseConnector) =====
@@ -924,6 +1235,9 @@ export interface Connector {
    * generators. Nothing else in the core changes.
    */
   supportsPermissionSync: boolean;
+
+  /** Abort the security pass if either group or permission reconciliation fails. */
+  requiresAtomicSecuritySync?: boolean;
 
   /**
    * Yield the pass's permission snapshot — container audiences interleaved
@@ -953,6 +1267,7 @@ export interface Connector {
   probePermissionChanges?(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    identity?: ConnectorIdentity;
     state: PermissionSyncState | null;
   }): Promise<PermissionProbeResult>;
 
@@ -970,7 +1285,10 @@ export interface Connector {
   refreshContainerAudiences?(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    identity?: ConnectorIdentity;
     containerKeys: string[];
+    /** Read cached object-version metadata so the source can under-grant across revision races. */
+    readIngestedDocuments: ReadIngestedDocuments;
     resolveMappedEmail?: ResolveMappedEmail;
   }): AsyncGenerator<{
     containerKey: string;

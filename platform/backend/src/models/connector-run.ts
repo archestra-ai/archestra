@@ -36,6 +36,7 @@ class ConnectorRunModel {
         completedBatches: t.completedBatches,
         itemErrors: t.itemErrors,
         itemsSkipped: t.itemsSkipped,
+        documentsWithoutText: t.documentsWithoutText,
         error: t.error,
         checkpoint: t.checkpoint,
         stats: t.stats,
@@ -187,6 +188,33 @@ class ConnectorRunModel {
     return run ? { outcome: "claimed", run } : { outcome: "busy" };
   }
 
+  /**
+   * Whether this exact run is still `running` at this lease epoch — the
+   * ownership test, without renewing anything.
+   *
+   * Separate from `renewLease` because a reader wants the answer without
+   * extending a lease it may not deserve, and separate from the fenced write
+   * helpers because some callers act on the answer rather than writing rows.
+   */
+  static async isOwnedRun(params: {
+    runId: string;
+    epoch: number;
+  }): Promise<boolean> {
+    const t = schema.connectorRunsTable;
+    const [row] = await db
+      .select({ id: t.id })
+      .from(t)
+      .where(
+        and(
+          eq(t.id, params.runId),
+          eq(t.status, "running"),
+          eq(t.leaseEpoch, params.epoch),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
   /** Whether a run of the given family is currently `running` for the connector. */
   static async hasRunningRun(params: {
     connectorId: string;
@@ -245,16 +273,37 @@ class ConnectorRunModel {
    * (status still `running` AND `lease_epoch` unchanged). Returns `null` if the
    * run was reclaimed/finalized — the fencing signal that tells a paused-then-
    * revived owner to stop writing (its epoch is now stale).
+   *
+   * `increments` applies counter deltas additively (`col + delta`) in the same
+   * UPDATE. The item counters have TWO writers — the sync loop and concurrent
+   * `completeBatch` calls from batch-embedding handlers — so an absolute SET
+   * from one would silently erase what the other added in the interim; both
+   * must go through additive SQL. An increment wins over a same-named key in
+   * `data`.
    */
   static async updateIfOwned(params: {
     runId: string;
     epoch: number;
     data: Partial<UpdateConnectorRun>;
+    increments?: { itemErrors?: number; itemsSkipped?: number };
   }): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
+    const { increments } = params;
     const [result] = await db
       .update(t)
-      .set(params.data)
+      .set({
+        ...params.data,
+        ...(increments?.itemErrors
+          ? {
+              itemErrors: sql`COALESCE(${t.itemErrors}, 0) + ${increments.itemErrors}`,
+            }
+          : {}),
+        ...(increments?.itemsSkipped
+          ? {
+              itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${increments.itemsSkipped}`,
+            }
+          : {}),
+      })
       .where(
         and(
           eq(t.id, params.runId),
@@ -298,38 +347,78 @@ class ConnectorRunModel {
   static async completeBatch(
     runId: string,
     /**
-     * An embedding batch failure to record on the run, atomically with the batch
+     * An embedding batch outcome to record on the run, atomically with the batch
      * completion. `failedItems` is added to `itemErrors` (which drives the
      * completed_with_errors status); `error` is recorded as the run error, keeping
-     * any earlier error. Recording via a separate read-then-write would race with
-     * concurrent batch handlers, so it happens in this single UPDATE.
+     * any earlier error; `skippedItems` is added to `itemsSkipped` and is purely
+     * informational (skips don't fail a run). Recording via a separate
+     * read-then-write would race with concurrent batch handlers, so it happens in
+     * this single UPDATE.
      */
-    failure?: { failedItems: number; error: string },
+    outcome?: { failedItems?: number; error?: string; skippedItems?: number },
+    /**
+     * Queue task whose outcome is being recorded. When supplied, the task is
+     * stamped in the same transaction as the run update, making retries after
+     * a worker crash idempotent. Kept optional for non-queue callers and tests.
+     */
+    taskId?: string,
   ): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
-    const failedItems = failure?.failedItems ?? 0;
-    const [result] = await db
-      .update(t)
-      .set({
-        completedBatches: sql`${t.completedBatches} + 1`,
-        itemErrors: sql`${t.itemErrors} + ${failedItems}`,
-        ...(failure?.error
-          ? { error: sql`COALESCE(${t.error}, ${failure.error})` }
-          : {}),
-        // Include this batch's failures in the terminal-status decision — SET
-        // expressions all see the pre-update row, so add `failedItems` explicitly.
-        status: sql`CASE
-          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} + ${failedItems} > 0 THEN 'completed_with_errors'
-          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
-          ELSE ${t.status}
-        END`,
-        completedAt: sql`CASE WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
-      })
-      // Only advance a still-running run. Orphaned embedding batches belonging
-      // to a superseded/failed run must not bump its counters or resurrect it.
-      .where(and(eq(t.id, runId), eq(t.status, "running")))
-      .returning();
-    return result ?? null;
+    return db.transaction(async (tx) => {
+      if (taskId) {
+        const tasks = schema.tasksTable;
+        const [claimed] = await tx
+          .update(tasks)
+          .set({
+            payload: sql`${tasks.payload} || jsonb_build_object('connectorRunOutcomeRecorded', true)`,
+          })
+          .where(
+            and(
+              eq(tasks.id, taskId),
+              sql`COALESCE((${tasks.payload}->>'connectorRunOutcomeRecorded')::boolean, false) = false`,
+            ),
+          )
+          .returning({ id: tasks.id });
+
+        if (!claimed) {
+          const [existing] = await tx.select().from(t).where(eq(t.id, runId));
+          return existing ?? null;
+        }
+      }
+
+      const failedItems = outcome?.failedItems ?? 0;
+      const skippedItems = outcome?.skippedItems ?? 0;
+      const [result] = await tx
+        .update(t)
+        .set({
+          completedBatches: sql`${t.completedBatches} + 1`,
+          itemErrors: sql`${t.itemErrors} + ${failedItems}`,
+          itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${skippedItems}`,
+          ...(outcome?.error
+            ? { error: sql`COALESCE(${t.error}, ${outcome.error})` }
+            : {}),
+          // A time-budgeted run is already terminal `partial`, but its queued
+          // embedding tasks still own their counters. Preserve that status
+          // while draining; only an actively-running full run can finalize.
+          status: sql`CASE
+            WHEN ${t.status} = 'partial' THEN ${t.status}
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} + ${failedItems} > 0 THEN 'completed_with_errors'
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
+            ELSE ${t.status}
+          END`,
+          completedAt: sql`CASE
+            WHEN ${t.status} = 'partial' THEN ${t.completedAt}
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW()
+            ELSE ${t.completedAt}
+          END`,
+        })
+        // Partial runs continue accepting their already-enqueued batch outcomes.
+        // Other terminal states are fenced out so orphaned work cannot mutate or
+        // resurrect a superseded/failed run.
+        .where(and(eq(t.id, runId), inArray(t.status, ["running", "partial"])))
+        .returning();
+      return result ?? null;
+    });
   }
 
   /**
@@ -401,8 +490,9 @@ class ConnectorRunModel {
   }
 
   /**
-   * Stop every live run of a connector: mark it `superseded` and bump the
-   * fencing epoch. Called from the connector delete path.
+   * Stop a connector's live runs: mark them `superseded` and bump the fencing
+   * epoch. Called when the connector they were computed against is gone (the
+   * delete path) or has changed underneath them (the update path).
    *
    * Under the old hard delete this happened implicitly — `connector_runs` has
    * `ON DELETE CASCADE`, so the run row vanished, the worker's next
@@ -414,12 +504,15 @@ class ConnectorRunModel {
    * and the epoch bump additionally no-ops the run's fenced writes
    * (`updateIfOwned`, `setCheckpointIfRunActive`).
    *
-   * Covers both run families (content and permission) — the filter is the
-   * `running` status, not `runType`.
+   * `runType` narrows to one family; omitted, both (content and permission)
+   * are stopped — the filter is then the `running` status alone.
    */
-  static async supersedeRunningForConnector(
-    connectorId: string,
-  ): Promise<number> {
+  static async supersedeRunningForConnector(params: {
+    connectorId: string;
+    /** Shown on the run row, so the UI says why the run stopped. */
+    reason: string;
+    runType?: ConnectorRunType;
+  }): Promise<number> {
     const t = schema.connectorRunsTable;
     const rows = await db
       .update(t)
@@ -427,9 +520,15 @@ class ConnectorRunModel {
         status: "superseded",
         completedAt: new Date(),
         leaseEpoch: sql`${t.leaseEpoch} + 1`,
-        error: "Sync stopped: the connector was deleted.",
+        error: params.reason,
       })
-      .where(and(eq(t.connectorId, connectorId), eq(t.status, "running")))
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          eq(t.status, "running"),
+          ...(params.runType ? [eq(t.runType, params.runType)] : []),
+        ),
+      )
       .returning({ id: t.id });
 
     return rows.length;

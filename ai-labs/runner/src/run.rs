@@ -458,13 +458,13 @@ struct SharedLaneSetup {
     resolved: ResolvedModel,
 }
 
-/// One lane's agents for an env: the shared lane agent every task defaults to, plus a dedicated
-/// agent per task that overrides the system prompt (`[agent]` in task.toml) — the override must not
-/// leak into the other tasks' agent.
+/// One lane's agents for an env: a dedicated agent per task, each carrying a rollout-unique session
+/// line in its system prompt (see [`rollout_prompt`]) so no two rollouts share a provider-cacheable
+/// prompt prefix, and so a task-level prompt override (`[agent]` in task.toml) cannot leak into the
+/// other tasks' agents.
 struct LaneAgents {
-    agent_id: String,
     /// task id -> that task's dedicated agent.
-    task_agents: HashMap<String, String>,
+    task_agents: HashMap<String, TaskAgent>,
     submit_tool: String,
     /// The built-in Advisor agent this lane's agents delegate to; set only for an advised lane.
     /// Deliberately not part of `all_ids` — the advisor is a delegation target, not a lane agent,
@@ -472,12 +472,17 @@ struct LaneAgents {
     advisor_agent_id: Option<String>,
 }
 
+/// A rollout's agent and the system prompt actually installed on it (session line included), the
+/// single source for what the rollout records as its prompt.
+struct TaskAgent {
+    id: String,
+    system_prompt: String,
+}
+
 impl LaneAgents {
-    /// Every agent id, lane agent first — the registration set for the env's MCPs.
+    /// Every agent id — the registration set for the env's MCPs.
     fn all_ids(&self) -> Vec<String> {
-        std::iter::once(self.agent_id.clone())
-            .chain(self.task_agents.values().cloned())
-            .collect()
+        self.task_agents.values().map(|a| a.id.clone()).collect()
     }
 }
 
@@ -1014,10 +1019,11 @@ async fn resolve_lanes(
     Ok(resolved)
 }
 
-/// Create the lane's shared agent plus a dedicated agent per task that overrides the system prompt,
-/// give all of them the same tool surface, and — for an advised lane — point the backend's built-in
-/// Advisor at the advisor model and delegate every lane agent to it. `tasks` is the run's selection
-/// for this env (post `--task` filter), so no agent is created for a task that won't run.
+/// Create a dedicated agent per task, give all of them the same tool surface, and — for an advised
+/// lane — point the backend's built-in Advisor at the advisor model and delegate every lane agent to
+/// it. `tasks` is the run's selection for this env (post `--task` filter), so no agent is created
+/// for a task that won't run. Agents are created here, before `setup_agent_tools`, so its single
+/// batched MCP registration covers them all (per-agent registration would install duplicate copies).
 async fn setup_lane_agent(
     client: &EvalClient,
     env: &EnvConfig,
@@ -1027,30 +1033,21 @@ async fn setup_lane_agent(
     team_id: &str,
     advisor_resolved: Option<&ResolvedModel>,
 ) -> Result<LaneAgents, RunError> {
-    let agent_id = ensure_agent(
-        client,
-        &format!("{}-{}", env.agent_name, lane.slug()),
-        &env.agent_system_prompt,
-        env.platform.tool_exposure_mode,
-        team_id,
-    )
-    .await?;
     let mut task_agents = HashMap::new();
     for task in tasks {
-        if let Some(prompt) = &task.agent_system_prompt {
-            let task_agent_id = ensure_agent(
-                client,
-                &format!("{}-{}-{}", env.agent_name, task.id, lane.slug()),
-                prompt,
-                env.platform.tool_exposure_mode,
-                team_id,
-            )
-            .await?;
-            task_agents.insert(task.id.clone(), task_agent_id);
-        }
+        let base = task.agent_system_prompt.as_deref().unwrap_or(&env.agent_system_prompt);
+        let system_prompt = rollout_prompt(base);
+        let id = ensure_agent(
+            client,
+            &format!("{}-{}-{}", env.agent_name, task.id, lane.slug()),
+            &system_prompt,
+            env.platform.tool_exposure_mode,
+            team_id,
+        )
+        .await?;
+        task_agents.insert(task.id.clone(), TaskAgent { id, system_prompt });
     }
     let mut agents = LaneAgents {
-        agent_id,
         task_agents,
         submit_tool: String::new(),
         advisor_agent_id: None,
@@ -1107,6 +1104,22 @@ fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<
         .ok_or_else(|| {
             RunError::Client(ContractError(format!("{what}: API response missing non-empty string `id`")).into())
         })
+}
+
+/// Prefix a rollout agent's system prompt with a unique session line. Lanes on the same model share
+/// a provider key, so without it a rollout warm-starts on a prefix another rollout (or the sibling
+/// lane) cached, billing its context at the cache-read discount and skewing per-lane cost. The line
+/// is constant within the rollout, so turn-to-turn caching inside its conversations still works.
+/// An empty base (most envs set none) still gets the line: the platform composes the agent prompt as
+/// the leading section of its assembled system prompt, so the line prepends and displaces nothing.
+/// The Advisor's platform-owned prompt is left alone — advisor spend is a rounding error next to the
+/// executor's.
+fn rollout_prompt(base: &str) -> String {
+    let nonce = &uuid::Uuid::new_v4().simple().to_string()[..12];
+    if base.trim().is_empty() {
+        return format!("Session: {nonce}");
+    }
+    format!("Session: {nonce}\n\n{base}")
 }
 
 async fn ensure_agent(
@@ -1317,18 +1330,50 @@ async fn run_lane(
     for task in tasks {
         let rollout = rollout_label(&task, &lane);
         progress.set_message(format!("{} {}", rollout, task.id));
-        let agent_id = agents.task_agents.get(&task.id).unwrap_or(&agents.agent_id);
-        let system_prompt = task.agent_system_prompt.as_deref().unwrap_or(&env.agent_system_prompt);
+        // Setup created one agent per selected task; a miss is a broken invariant, reported per
+        // rollout rather than panicking mid-lane.
+        let Some(agent) = agents.task_agents.get(&task.id) else {
+            results.push(RunResult {
+                env_id: env.id.clone(),
+                task_id: task.id.clone(),
+                lane: lane.name.clone(),
+                provider: lane.provider.as_str().to_string(),
+                model: lane.model.clone(),
+                outcome: Outcome::AgentError,
+                finish_reason: None,
+                tool_call_count: 0,
+                turn_count: 0,
+                total_tokens: None,
+                prompt_tokens: None,
+                completion_tokens: None,
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                price_model: None,
+                cost: RunCost::NoSpend,
+                agent_error: Some(format!(
+                    "no agent was set up for task {:?} in lane {:?}",
+                    task.id, lane.name
+                )),
+                stage_count: task.stages.len(),
+                format_attempts: 0,
+                artifact_dir: None,
+                advisor_consult_count: None,
+                advisor_total_tokens: None,
+                advisor_cost_usd: None,
+            });
+            progress.inc(1);
+            continue;
+        };
         let result = run_one(
             client.clone(),
             mcp.clone(),
             &agents.submit_tool,
             &root_run_dir,
             &env.id,
-            system_prompt,
+            &agent.system_prompt,
             env.platform.tool_exposure_mode,
             &lane,
-            agent_id,
+            &agent.id,
             agents.advisor_agent_id.as_deref(),
             &task,
             &resolved,
@@ -3000,6 +3045,27 @@ mod tests {
 
     fn files_payload(json: serde_json::Value) -> HashMap<String, serde_json::Value> {
         serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn test_rollout_prompt_prepends_a_unique_session_line() {
+        let a = rollout_prompt("be helpful");
+        let b = rollout_prompt("be helpful");
+        assert!(a.ends_with("\n\nbe helpful"), "{a:?}");
+        assert!(a.starts_with("Session: "), "{a:?}");
+        // Distinct rollouts must never share a cacheable prefix.
+        assert_ne!(a, b);
+        assert_eq!(a.lines().next().unwrap().len(), "Session: ".len() + 12);
+    }
+
+    #[test]
+    fn test_rollout_prompt_empty_base_is_just_the_session_line() {
+        // Most envs set no agent prompt; the session line alone must still be installed so those
+        // rollouts get cache isolation too.
+        let p = rollout_prompt("");
+        assert!(p.starts_with("Session: "), "{p:?}");
+        assert_eq!(p.lines().count(), 1);
+        assert_eq!(rollout_prompt("  \n").lines().count(), 1);
     }
 
     #[test]

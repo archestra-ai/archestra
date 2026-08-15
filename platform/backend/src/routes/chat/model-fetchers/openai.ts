@@ -7,7 +7,7 @@ import { openAiCodexTokenManager } from "@/services/openai-codex-token";
 import type { OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
-import type { ModelInfo } from "./types";
+import type { ModelFetchOptions, ModelInfo } from "./types";
 
 export function mapOpenAiModelToModelInfo(
   model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
@@ -58,6 +58,7 @@ export async function fetchOpenAiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
+  opts?: ModelFetchOptions,
 ): Promise<ModelInfo[]> {
   // "ChatGPT subscription" (Codex) auth mode: the credential is an encoded
   // ChatGPT OAuth credential, and the Codex backend exposes no /models endpoint.
@@ -67,8 +68,13 @@ export async function fetchOpenAiModels(
   if (codexCredential) {
     // Throws (401) when the refresh token is rejected, so key creation surfaces
     // a real "reconnect your ChatGPT account" error instead of an empty list.
+    // The row id (when the key already exists) lets the manager persist a
+    // rotated refresh token instead of discarding it — OpenAI invalidates the
+    // predecessor, so a discarded rotation leaves the stored token dead.
     await openAiCodexTokenManager.getAccessToken({
       refreshToken: codexCredential.refreshToken,
+      providerApiKeyId: opts?.providerApiKeyId,
+      accountId: codexCredential.accountId,
     });
     return OPENAI_CODEX_MODELS.map((model) => ({
       id: model.id,

@@ -1,4 +1,5 @@
 import {
+  QUOTE_CITATION_INSTRUCTION,
   TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
@@ -18,6 +19,7 @@ import {
   TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import config from "@/config";
 import {
   buildUserAccessControlList,
   checkAutoSyncPermissionSyncSupported,
@@ -29,11 +31,17 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
+import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
   deleteConnector,
   deleteKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
+import {
+  mfilesAuthMethodGateViolation,
+  mfilesConnectorGateViolation,
+} from "@/knowledge-base/mfiles-gates";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -179,6 +187,12 @@ const ConnectorAgentAssignmentSchema = z
 const QueryKnowledgeSourcesOutputSchema = z.object({
   results: z.array(z.unknown()).describe("Retrieved knowledge results."),
   totalChunks: z.number().describe("The number of result chunks returned."),
+  citationInstruction: z
+    .string()
+    .optional()
+    .describe(
+      "How to cite these results: back each claim with a verbatim quote tagged with the source chunk's ref.",
+    ),
 });
 
 const KnowledgeBaseOutputItemSchema = z.object({
@@ -671,9 +685,19 @@ async function handleQueryKnowledgeSources(params: {
       limit: 10,
     });
 
+    // The quote-citation instruction rides on the result (not the always-on
+    // tool description) so it reaches the model exactly when there are chunks to
+    // quote, and only when the answer surface can actually be verified. Gated on
+    // the same flag as the verification pass — disabling the feature must also
+    // stop asking the model to quote, not just skip the check. Omitted for an
+    // empty result — there is nothing to quote.
     const output = {
       results,
       totalChunks: results.length,
+      ...(config.kb.quoteVerificationEnabled &&
+        results.length > 0 && {
+          citationInstruction: QUOTE_CITATION_INSTRUCTION,
+        }),
     };
     return structuredSuccessResult(output, JSON.stringify(output));
   } catch (error) {
@@ -869,6 +893,17 @@ async function handleCreateKnowledgeConnector(params: {
       }
     }
 
+    // Same M-Files beta gates as the REST create route — this tool is a second
+    // shipped creation path, so a gate skipped here is no gate at all.
+    const mfilesViolation =
+      mfilesConnectorGateViolation(args.connector_type) ??
+      mfilesAuthMethodGateViolation({
+        nextConfig: { type: args.connector_type, ...args.config },
+      });
+    if (mfilesViolation) {
+      return errorResult(mfilesViolation);
+    }
+
     // Environment isolation: a connector created through a gateway belongs to the
     // gateway's environment, so the creator can actually use it afterwards.
     const agentEnvironmentId = await AgentModel.findEnvironmentId(
@@ -887,6 +922,9 @@ async function handleCreateKnowledgeConnector(params: {
         environmentId: agentEnvironmentId,
       }),
     );
+    // Same lifecycle rule as the REST create route: a Perforce connector that
+    // syncs permissions gets its shim now, not on its first pass.
+    await reconcileP4ShimForConnector(connector.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
@@ -1085,6 +1123,16 @@ async function handleUpdateKnowledgeConnector(params: {
         }
       }
     }
+    // Same Application Account gate as the REST update route, grandfathering a
+    // connector that already uses the method.
+    const mfilesAuthViolation = mfilesAuthMethodGateViolation({
+      nextConfig: updates.config,
+      existingConfig: existingConnector.config,
+    });
+    if (mfilesAuthViolation) {
+      return errorResult(mfilesAuthViolation);
+    }
+
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,
       updates,
@@ -1107,6 +1155,24 @@ async function handleUpdateKnowledgeConnector(params: {
         args.id,
       );
     }
+    const nextEnabled = updates.enabled ?? existingConnector.enabled;
+    if (
+      existingConnector.visibility === "auto-sync-permissions" &&
+      (updates.config !== undefined ||
+        nextVisibility !== "auto-sync-permissions" ||
+        nextEnabled !== existingConnector.enabled)
+    ) {
+      // Mirrors the REST update route: a pass computed against the settings
+      // this update replaced must not finish against them.
+      await supersedePermissionSyncAfterSettingsChange({
+        connectorId: args.id,
+        visibility: nextVisibility,
+        enabled: nextEnabled,
+      });
+    }
+    // ...and the same shim lifecycle: this row decides whether a Perforce
+    // permission-sync pod exists, whatever wrote it.
+    await reconcileP4ShimForConnector(args.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector updated successfully.\n\n${JSON.stringify(connector, null, 2)}`,

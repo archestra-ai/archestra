@@ -1,0 +1,196 @@
+name: Build M-Files VAF Add On
+
+# Builds archestra-m-files-vaf-add-on.mfappx with the official M-Files
+# VAF packaging (MSBuild target from the MFiles.ProjectTemplates project
+# shape; assemblies from the MIT-licensed MFiles.VAF NuGet package — no
+# M-Files installation involved) and publishes it on the add-on's own
+# release track so the connector form can offer a direct download.
+#
+# Why an own release track: this repository's releases are immutable — once
+# published, a release's assets are frozen (uploading returns HTTP 422), so
+# the package cannot be attached to platform releases, which release-please
+# publishes before this workflow could ever build. Instead, a push to main
+# that changes the add-on publishes a `m-files-vaf-add-on-v<version>` release
+# (created as a draft, assets uploaded, then published — drafts stay mutable
+# under immutability). The backend discovers the package by scanning recent
+# releases for the asset name, so every installation — including platform
+# versions released before the add-on's first release — resolves the newest
+# published package with no configuration. Add-on releases publish with
+# --latest=false so `releases/latest` keeps pointing at the platform.
+#
+# The release tag derives from <Version> in Archestra.MFiles.VAFAddOn.csproj,
+# and tags are immutable too — so every change to the add-on's sources needs
+# a version bump. The pull-request build enforces that: it fails when the
+# add-on's sources changed but the version is already released. Without the
+# bump the main build would skip publishing and the change would silently
+# never reach users.
+#
+# The Windows runner is expensive, so every automatic trigger is filtered to
+# the add-on's own sources: a pull request that touches them builds (a broken
+# add-on can then never reach main), and so does a push to main (which keeps a
+# successful main run available for deployments that point
+# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main` — the backend
+# resolves the package from the newest successful run of THIS workflow on that
+# branch). Documentation-only edits under the add-on directory are excluded;
+# they cannot change the package.
+#
+# To build a branch whose add-on sources are unchanged — testing a connector
+# change against a proxied CI package on a dev stack, say — dispatch it
+# explicitly: `gh workflow run build-m-files-vaf-add-on.yml --ref <branch>`.
+# Dispatching on `main` also re-attempts the release publish, which is
+# idempotent — the recovery command when a publish attempt failed.
+#
+# A run's `.mfappx` is downloadable from its Artifacts (zip-wrapped — GitHub
+# always archives artifacts; only release assets carry the raw file), and
+# artifacts expire on the repository's retention schedule, so a long stretch
+# with no add-on change eventually leaves the source-ref override with nothing
+# to resolve; it then falls back to building from source, and a dispatch
+# refreshes it. Released deployments do not depend on any of this: they take
+# the package from the add-on release published below.
+
+# The two path lists are duplicated on purpose: GitHub Actions does not
+# support YAML anchors, so they must be kept in sync by hand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: build-m-files-vaf-add-on-${{ github.ref }}
+  # Superseded pull-request builds are wasted; a main run may be mid-publish
+  # and finishes instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-m-files-vaf-add-on:
+    name: Build M-Files VAF Add On
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build package
+        id: build
+        shell: pwsh
+        run: |
+          dotnet build integrations/m-files-vaf-add-on/Archestra.MFiles.VAFAddOn.csproj -c Release
+          $versioned = Get-Item integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on-*.mfappx
+          if (-not $versioned) { throw "No .mfappx produced by the build" }
+          if ($versioned.Name -notmatch '^archestra-m-files-vaf-add-on-(.+)\.mfappx$') {
+            throw "Unexpected package name: $($versioned.Name)"
+          }
+          $version = $Matches[1]
+          # Stable-name copy: the backend and the installer reference the
+          # package by the version-independent asset name.
+          $stable = "integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on.mfappx"
+          Copy-Item $versioned.FullName $stable
+          "STABLE_PACKAGE_PATH=$stable" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # Fail the PR while its add-on source changes reuse an already-released
+      # version — see the version-bump contract in the header comment.
+      - name: Require a version bump for released versions
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          git fetch --depth=1 origin $env:BASE_SHA
+          $changed = git diff --name-only $env:BASE_SHA HEAD -- 'integrations/m-files-vaf-add-on' |
+            Where-Object { $_ -notmatch '\.md$' }
+          if (-not $changed) {
+            Write-Host "No add-on source changes; version guard not applicable."
+            exit 0
+          }
+          $tag = "m-files-vaf-add-on-v$($env:VERSION)"
+          gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --silent 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "::error::v$($env:VERSION) is already released as $tag, and releases are immutable. Bump <Version> in Archestra.MFiles.VAFAddOn.csproj so this change ships."
+            exit 1
+          }
+          Write-Host "v$($env:VERSION) is unreleased; version guard passed."
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m-files-vaf-add-on
+          # The versioned and stable-named files are byte-identical, so the
+          # artifact carries just the stable name — the one the installer and
+          # docs reference — instead of a confusing duplicate.
+          path: ${{ env.STABLE_PACKAGE_PATH }}
+          if-no-files-found: error
+
+  publish-add-on-release:
+    name: Publish add-on release
+    needs: build-m-files-vaf-add-on
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create and publish the add-on release
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: m-files-vaf-add-on
+
+      - name: Create and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-m-files-vaf-add-on.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="m-files-vaf-add-on-v${VERSION}"
+          stable="archestra-m-files-vaf-add-on.mfappx"
+          versioned="archestra-m-files-vaf-add-on-${VERSION}.mfappx"
+
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --silent 2>/dev/null; then
+            echo "::notice::${tag} is already published (releases are immutable); nothing to do."
+            exit 0
+          fi
+
+          # A draft left behind by an interrupted earlier attempt would pile
+          # up as clutter — replace it.
+          gh release list --repo "${GITHUB_REPOSITORY}" --json tagName,isDraft \
+            --jq ".[] | select(.isDraft and .tagName == \"${tag}\") | .tagName" |
+            while read -r draft; do
+              gh release delete "${draft}" --repo "${GITHUB_REPOSITORY}" --yes
+            done
+
+          cp "${stable}" "${versioned}"
+          checksum=$(sha256sum "${stable}" | cut -d' ' -f1)
+          notes="$(printf 'Archestra M-Files VAF Add On v%s, built from %s.\n\nSHA-256 (`%s` and `%s` are identical): `%s`\n\nInstall and upgrade: see the M-Files connector form in the platform, or the M-Files section of docs/pages/platform-knowledge.md.' \
+            "${VERSION}" "${GITHUB_SHA}" "${stable}" "${versioned}" "${checksum}")"
+
+          # Draft first: assets can only be attached before publishing on a
+          # repository with immutable releases. --latest=false keeps
+          # releases/latest pointing at the platform.
+          gh release create "${tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "M-Files VAF Add On v${VERSION}" \
+            --notes "${notes}" \
+            --draft
+          gh release upload "${tag}" "${stable}" "${versioned}" --repo "${GITHUB_REPOSITORY}"
+          gh release edit "${tag}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest=false

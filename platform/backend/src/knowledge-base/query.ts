@@ -1,5 +1,10 @@
-import { addNomicTaskPrefix, type TextSearchLanguage } from "@archestra/shared";
+import {
+  addNomicTaskPrefix,
+  buildChunkRef,
+  type TextSearchLanguage,
+} from "@archestra/shared";
 import config from "@/config";
+import { isDbStatementTimeoutError } from "@/database/retry";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
@@ -9,6 +14,7 @@ import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
   EmbeddingDimensionMismatchError,
+  KnowledgeBaseSearchTimeoutError,
   normalizeEmbeddingError,
 } from "./errors";
 import {
@@ -28,6 +34,13 @@ interface ChunkResult {
   score: number;
   chunkIndex: number;
   metadata: Record<string, unknown> | null;
+  /**
+   * Stable, model-visible citation anchor (`documentId#chunkIndex`). The model
+   * is asked to tag verbatim quotes with it, and quote verification matches a
+   * quote back against the chunk it names. Derived, not stored — no schema
+   * change.
+   */
+  ref: string;
   citation: {
     title: string;
     sourceUrl: string | null;
@@ -107,10 +120,30 @@ class QueryService {
       ),
     );
 
+    // Search-lane degradation: a lane cut by the statement timeout was dropped
+    // (logged + metered in searchSingleQuery) and the rest merged. Only when
+    // EVERY lane of every expanded query timed out is there genuinely nothing
+    // to serve — surface that as an actionable error rather than an empty
+    // result a caller would read as "no matching documents".
+    const lanesAttempted = perQueryResults.reduce(
+      (n, r) => n + r.lanesAttempted,
+      0,
+    );
+    const lanesTimedOut = perQueryResults.reduce(
+      (n, r) => n + r.lanesTimedOut,
+      0,
+    );
+    if (lanesAttempted > 0 && lanesTimedOut === lanesAttempted) {
+      throw new KnowledgeBaseSearchTimeoutError(
+        config.kb.searchStatementTimeoutMillis ||
+          config.database.statementTimeoutMillis,
+      );
+    }
+
     const weights = expandedQueries.map((eq) => eq.weight);
 
     const merged = reciprocalRankFusion<VectorSearchResult>({
-      rankings: perQueryResults,
+      rankings: perQueryResults.map((r) => r.rows),
       idExtractor: (row) => row.id,
       weights,
       k: 50,
@@ -217,7 +250,7 @@ class QueryService {
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
     searchLanguages: TextSearchLanguage[];
-  }): Promise<VectorSearchResult[]> {
+  }): Promise<SingleQuerySearchResult> {
     const {
       queryText,
       embeddingConfig,
@@ -261,6 +294,7 @@ class QueryService {
             baseUrl: embeddingConfig.baseUrl,
             dimensions: embeddingConfig.dimensions,
             provider: embeddingConfig.provider,
+            purpose: "search_query",
           }),
         buildInteraction: (
           response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
@@ -286,46 +320,56 @@ class QueryService {
         { queryLength: queryText.length },
         "[QueryService] Embedding API returned no embedding for query",
       );
-      return [];
+      return { rows: [], lanesAttempted: 0, lanesTimedOut: 0 };
     }
     const queryEmbedding = embeddingResponse.data[0].embedding;
 
-    const fullTextPromise = hybridEnabled
-      ? KbChunkModel.fullTextSearch({
+    // Each lane is cut individually by the search statement timeout (`null` =
+    // timed out): dropping one lane degrades the merge instead of failing the
+    // whole query, and the caller escalates only when every lane is gone.
+    const [vectorRows, fullTextRows] = await Promise.all([
+      runSearchLane("vector", () =>
+        KbChunkModel.vectorSearch({
           connectorIds,
-          queryText,
-          languages: searchLanguages,
+          queryEmbedding,
+          dimensions: embeddingConfig.dimensions,
           limit,
           userAcl,
           bypassAcl,
           environmentId,
-        })
-      : Promise.resolve([] as VectorSearchResult[]);
-
-    const [vectorRows, fullTextRows] = await Promise.all([
-      KbChunkModel.vectorSearch({
-        connectorIds,
-        queryEmbedding,
-        dimensions: embeddingConfig.dimensions,
-        limit,
-        userAcl,
-        bypassAcl,
-        environmentId,
-      }),
-      fullTextPromise,
+        }),
+      ),
+      hybridEnabled
+        ? runSearchLane("keyword", () =>
+            KbChunkModel.fullTextSearch({
+              connectorIds,
+              queryText,
+              languages: searchLanguages,
+              limit,
+              userAcl,
+              bypassAcl,
+              environmentId,
+            }),
+          )
+        : Promise.resolve<VectorSearchResult[] | null>([]),
     ]);
+
+    const lanesAttempted = hybridEnabled ? 2 : 1;
+    const lanesTimedOut =
+      (vectorRows === null ? 1 : 0) +
+      (hybridEnabled && fullTextRows === null ? 1 : 0);
 
     logger.info(
       {
         type,
-        vectorCount: vectorRows.length,
-        fullTextCount: fullTextRows.length,
+        vectorCount: vectorRows?.length ?? "timed_out",
+        fullTextCount: fullTextRows?.length ?? "timed_out",
       },
       "[QueryService] Expanded query search results",
     );
 
     if (!hybridEnabled) {
-      return vectorRows;
+      return { rows: vectorRows ?? [], lanesAttempted, lanesTimedOut };
     }
 
     // Inner RRF: for keyword queries, favor BM25 (full-text)
@@ -333,13 +377,13 @@ class QueryService {
       type === "keyword" ? [1.0, KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT] : undefined;
 
     const fused = reciprocalRankFusion<VectorSearchResult>({
-      rankings: [vectorRows, fullTextRows],
+      rankings: [vectorRows ?? [], fullTextRows ?? []],
       idExtractor: (row) => row.id,
       k: 60,
       weights: innerWeights,
     });
 
-    return fused.slice(0, limit);
+    return { rows: fused.slice(0, limit), lanesAttempted, lanesTimedOut };
   }
 
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {
@@ -348,6 +392,7 @@ class QueryService {
       score: row.score,
       chunkIndex: row.chunkIndex,
       metadata: row.metadata,
+      ref: buildChunkRef(row.documentId, row.chunkIndex),
       citation: {
         title: row.title,
         sourceUrl: row.sourceUrl,
@@ -360,6 +405,36 @@ class QueryService {
 }
 
 export const queryService = new QueryService();
+
+interface SingleQuerySearchResult {
+  rows: VectorSearchResult[];
+  /** Search statements actually issued: vector always, keyword when hybrid. */
+  lanesAttempted: number;
+  /** Of those, how many the database statement timeout cut. */
+  lanesTimedOut: number;
+}
+
+/**
+ * Run one search lane, absorbing a statement-timeout cancellation into `null`
+ * (logged + metered) so the caller can merge the surviving lanes. Every other
+ * failure still throws — only the timeout is a planned degradation.
+ */
+async function runSearchLane(
+  lane: "vector" | "keyword",
+  run: () => Promise<VectorSearchResult[]>,
+): Promise<VectorSearchResult[] | null> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isDbStatementTimeoutError(error)) throw error;
+    metrics.rag.reportSearchLaneTimeout(lane);
+    logger.warn(
+      { lane },
+      "[QueryService] Search lane hit the statement timeout; dropping it and merging the remaining lanes",
+    );
+    return null;
+  }
+}
 
 /**
  * Decide whether an empty search result reflects a dimension mismatch rather than

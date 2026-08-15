@@ -60,34 +60,44 @@ async function discoverOAuthResourceMetadata(
   serverUrl: string,
   overrides?: OAuthDiscoveryOverrides,
 ) {
-  try {
-    // MCP SDK uses "path-aware discovery": /.well-known/{type}{pathname}
-    // For https://huggingface.co/mcp -> https://huggingface.co/.well-known/oauth-protected-resource/mcp
-    const url = new URL(serverUrl);
-    const pathname = url.pathname.endsWith("/")
-      ? url.pathname.slice(0, -1)
-      : url.pathname;
-    const wellKnownUrl =
-      overrides?.resourceMetadataUrl ||
-      `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
+  // MCP SDK uses "path-aware discovery": /.well-known/{type}{pathname}
+  // For https://huggingface.co/mcp -> https://huggingface.co/.well-known/oauth-protected-resource/mcp
+  // Like the SDK, fall back to the root well-known document for servers that
+  // publish their metadata only at /.well-known/oauth-protected-resource.
+  const url = new URL(serverUrl);
+  const pathname = url.pathname.endsWith("/")
+    ? url.pathname.slice(0, -1)
+    : url.pathname;
+  const rootWellKnownUrl = `${url.origin}/.well-known/oauth-protected-resource`;
+  const wellKnownUrls = overrides?.resourceMetadataUrl
+    ? [overrides.resourceMetadataUrl]
+    : [...new Set([`${rootWellKnownUrl}${pathname}`, rootWellKnownUrl])];
 
-    const response = await fetch(wellKnownUrl, {
-      headers: {
-        "MCP-Protocol-Version": "2025-06-18",
-        Accept: "application/json",
-      },
-    });
+  let lastError: unknown;
+  for (const wellKnownUrl of wellKnownUrls) {
+    try {
+      const response = await fetch(wellKnownUrl, {
+        headers: {
+          "MCP-Protocol-Version": "2025-06-18",
+          Accept: "application/json",
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch resource metadata: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch resource metadata: ${response.status}`,
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error;
     }
-
-    return await response.json();
-  } catch (error) {
-    throw new Error(
-      `Resource metadata discovery failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
   }
+
+  throw new Error(
+    `Resource metadata discovery failed: ${lastError instanceof Error ? lastError.message : "Unknown error"}`,
+  );
 }
 
 /**

@@ -44,7 +44,21 @@ import {
   buildContainerToken,
   buildGroupToken,
 } from "@/knowledge-base/acl-tokens";
-import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
+import {
+  resolveConnectorCredentials,
+  resolveConnectorCredentialVersion,
+} from "@/knowledge-base/connector-credentials";
+import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
+import { extractErrorMessage } from "@/knowledge-base/connectors/base-connector";
+import {
+  buildGoogleDriveAuthorizationUrl,
+  exchangeGoogleDriveAuthorizationCode,
+  getGoogleDriveOAuthClient,
+  isGoogleDriveOAuthConfigured,
+  resolveGoogleDriveOAuthReturnTo,
+  verifyGoogleDriveOAuthState,
+} from "@/knowledge-base/connectors/gdrive/gdrive-oauth";
+import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
@@ -53,6 +67,10 @@ import {
   restoreConnector,
   restoreKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
+import {
+  mfilesAuthMethodGateViolation,
+  mfilesConnectorGateViolation,
+} from "@/knowledge-base/mfiles-gates";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
@@ -63,6 +81,7 @@ import {
   GithubAppConfigModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
@@ -70,8 +89,12 @@ import {
   MemberModel,
   TaskModel,
 } from "@/models";
+import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
 import { secretManager } from "@/secrets-manager";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -754,10 +777,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
 
+      const environmentId = await resolveNewConnectorEnvironmentId({
+        userId: user.id,
+        organizationId,
+        requested: body.environmentId,
+      });
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
       });
 
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
@@ -792,6 +820,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       // SPDX-SnippetEnd
+
+      const mfilesViolation =
+        mfilesConnectorGateViolation(body.connectorType) ??
+        mfilesAuthMethodGateViolation({ nextConfig: body.config });
+      if (mfilesViolation) {
+        throw new ApiError(403, mfilesViolation);
+      }
 
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
@@ -829,6 +864,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.config.githubUrl = appConfigRef.githubUrl;
       }
 
+      // A Google Drive connector in individual mode is authorized through
+      // Google after it exists — there is nothing to paste, and the refresh
+      // token arrives on the OAuth callback.
+      const awaitsGoogleDriveOAuth =
+        body.config.type === "gdrive" && body.config.authMode === "oauth";
+
       let secretId: string | null = null;
       if (usesGithubAppConfig || !requiresCredentials) {
         if (body.credentials) {
@@ -839,6 +880,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : "Web Crawler connectors must not include inline credentials",
           );
         }
+      } else if (awaitsGoogleDriveOAuth) {
+        if (body.credentials) {
+          throw new ApiError(
+            400,
+            "Google Drive connectors in individual mode are authorized through Google, not with a pasted credential",
+          );
+        }
+        const oauthClient = getGoogleDriveOAuthClient();
+        if (!oauthClient) {
+          throw new ApiError(
+            400,
+            "This deployment has no Google OAuth client configured. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET.",
+          );
+        }
+        // The secret exists from the start, holding only the client the
+        // connector will be authorized against; the callback adds the token.
+        const secret = await secretManager().createSecret(
+          { apiToken: "", googleOAuth: { clientId: oauthClient.clientId } },
+          `connector-${body.name}`,
+        );
+        secretId = secret.id;
       } else {
         if (!body.credentials) {
           throw new ApiError(
@@ -863,7 +925,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectorType: body.connectorType,
         config: body.config,
         secretId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
         schedule: body.schedule,
         ftsLanguage: body.ftsLanguage,
         permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
@@ -883,6 +945,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(404, "Knowledge base not found");
           }
         }
+      }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A Perforce connector created to sync permissions gets its shim now
+      // rather than on its first pass, so the pod is scheduled and its image
+      // pulled before anything needs it.
+      await reconcileP4ShimForConnector(connector.id);
+      // SPDX-SnippetEnd
+
+      // A connector still waiting on its Google authorization has no
+      // credential to sync with, so the first run would only produce a
+      // failure to explain something the UI already says. The OAuth callback
+      // enqueues it the moment there is a token.
+      if (awaitsGoogleDriveOAuth) {
+        return reply.send(connector);
       }
 
       // Auto-trigger initial sync. "queued" (not "running"): the worker
@@ -1104,6 +1183,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           environmentId: body.environmentId,
         });
+      }
+
+      const mfilesAuthViolation = mfilesAuthMethodGateViolation({
+        nextConfig: body.config,
+        existingConfig: connector.config,
+      });
+      if (mfilesAuthViolation) {
+        throw new ApiError(403, mfilesAuthViolation);
       }
 
       // resolve the connector's auth shape after this update so credential
@@ -1329,6 +1416,38 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Last, so the replacement pass reads a connector whose ACL epoch has
+      // already been bumped — enqueued before that, its own writes would be
+      // fenced out by the bump it raced.
+      const nextEnabled = updateData.enabled ?? connector.enabled;
+      if (
+        connector.visibility === "auto-sync-permissions" &&
+        (updateData.config !== undefined ||
+          body.credentials !== undefined ||
+          nextVisibility !== "auto-sync-permissions" ||
+          nextEnabled !== connector.enabled)
+      ) {
+        // A submitted config counts as changed without a field-by-field
+        // comparison, matching the checkpoint reset above.
+        await supersedePermissionSyncAfterSettingsChange({
+          connectorId: id,
+          visibility: nextVisibility,
+          enabled: nextEnabled,
+        });
+      }
+      // After the supersede, so the pass is stopped before the pod it was
+      // talking to goes away — and unconditional, because the connector row
+      // this update just wrote is the only thing that decides whether a
+      // Perforce shim exists. Every field above can change the answer: the
+      // server or admin user (roll the pod), the credentials (rotate its
+      // token), the visibility or the enabled flag (create it, or remove it
+      // along with its token and its reach into the customer's network).
+      await reconcileP4ShimForConnector(id);
+      // SPDX-SnippetEnd
 
       return reply.send(updated);
     },
@@ -1670,6 +1789,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 /** Upstream group identifier as the source system names it. */
                 groupId: z.string(),
+                /** Human-readable upstream group name, when exposed. */
+                name: z.string().nullable(),
                 /** The exact `group:` ACL token written on documents. */
                 token: z.string(),
                 /** Documents on this connector whose ACL grants the group. */
@@ -1688,7 +1809,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     accountType: z.string().nullable(),
                     /** Org user this member resolves to; null = grant currently resolves to nobody. */
                     user: z
-                      .object({ id: z.string(), name: z.string() })
+                      .object({
+                        id: z.string(),
+                        name: z.string(),
+                        email: z.string(),
+                      })
                       .nullable(),
                     /** How `user` resolved: a manual admin mapping or the email join; null when unresolved. */
                     resolvedVia: z.enum(["override", "email"]).nullable(),
@@ -1716,21 +1841,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const [{ memberships, truncated }, totalMemberships, documentCounts] =
-        await Promise.all([
-          KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
-            connectorId: id,
-            organizationId,
-            limit: MAX_USER_GROUP_MEMBERSHIPS,
-          }),
-          KbExternalUserGroupModel.countByConnector(id),
-          KbDocumentModel.getGroupTokenDocumentCounts(id),
-        ]);
+      const [
+        { memberships, truncated },
+        totalMemberships,
+        documentCounts,
+        groupCatalog,
+      ] = await Promise.all([
+        KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
+          connectorId: id,
+          organizationId,
+          limit: MAX_USER_GROUP_MEMBERSHIPS,
+        }),
+        KbExternalUserGroupModel.countByConnector(id),
+        KbDocumentModel.getGroupTokenDocumentCounts(id),
+        KbExternalGroupModel.findByConnector(id),
+      ]);
 
       const groups = new Map<
         string,
         {
           groupId: string;
+          name: string | null;
           token: string;
           documentCount: number;
           lastSyncedAt: string | null;
@@ -1739,11 +1870,26 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             displayName: string | null;
             email: string | null;
             accountType: string | null;
-            user: { id: string; name: string } | null;
+            user: { id: string; name: string; email: string } | null;
             resolvedVia: "override" | "email" | null;
           }[];
         }
       >();
+
+      for (const catalogGroup of groupCatalog) {
+        const token = buildGroupToken({
+          connectorType: connector.connectorType,
+          groupId: catalogGroup.groupId,
+        });
+        groups.set(token, {
+          groupId: catalogGroup.groupId,
+          name: catalogGroup.name,
+          token,
+          documentCount: 0,
+          lastSyncedAt: catalogGroup.updatedAt.toISOString(),
+          members: [],
+        });
+      }
 
       for (const membership of memberships) {
         const token = buildGroupToken({
@@ -1754,6 +1900,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!group) {
           group = {
             groupId: membership.groupId,
+            name: null,
             token,
             documentCount: 0,
             lastSyncedAt: null,
@@ -1787,6 +1934,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             groupId: token.startsWith(tokenPrefix)
               ? token.slice(tokenPrefix.length)
               : token,
+            name: null,
             token,
             documentCount,
             lastSyncedAt: null,
@@ -1988,17 +2136,214 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Load credentials (resolves github_app_configs references when needed)
-      const credentials = await resolveConnectorCredentials(connector);
+      // Load credentials (resolves github_app_configs references when needed).
+      // A Perforce auto-sync connector reads past the secrets cache: its test
+      // reconciles the permission-sync shim, and a cached password would both
+      // mis-report the test and provision the pod with a retired credential.
+      const credentials = await resolveConnectorCredentials(connector, {
+        uncached:
+          connector.connectorType === "perforce" &&
+          connector.visibility === "auto-sync-permissions",
+      });
 
       // Get the connector implementation and test
       const connectorImpl = getConnector(connector.connectorType);
       const result = await connectorImpl.testConnection({
         config: connector.config as Record<string, unknown>,
         credentials,
+        identity: {
+          connectorId: connector.id,
+          organizationId: connector.organizationId,
+          environmentId: connector.environmentId,
+          secretId: connector.secretId,
+          credentialVersion: await resolveConnectorCredentialVersion(
+            connector.secretId,
+          ),
+        },
       });
 
       return reply.send(result);
+    },
+  );
+
+  // ===== Google Drive individual (OAuth) connection =====
+
+  fastify.post(
+    "/api/connectors/:id/gdrive/oauth/start",
+    {
+      schema: {
+        operationId: RouteId.StartGoogleDriveConnectorOAuth,
+        description:
+          "Begin the Google authorization-code flow for a Google Drive " +
+          "connector in individual mode. Returns the URL to send the browser " +
+          "to; the connector being authorized travels in a signed state " +
+          "parameter, because Google matches the redirect URI exactly.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        body: z.object({
+          /** Where to land once Google is done. Confined to this deployment. */
+          returnTo: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ authorizationUrl: z.string() }),
+        ),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (
+        connector.config.type !== "gdrive" ||
+        connector.config.authMode !== "oauth"
+      ) {
+        throw new ApiError(
+          400,
+          "This connector does not use individual Google account authorization",
+        );
+      }
+      if (!isGoogleDriveOAuthConfigured()) {
+        throw new ApiError(
+          400,
+          "This deployment has no Google OAuth client configured. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET.",
+        );
+      }
+
+      return reply.send({
+        authorizationUrl: buildGoogleDriveAuthorizationUrl({
+          connectorId: connector.id,
+          userId: user.id,
+          organizationId,
+          returnTo: resolveGoogleDriveOAuthReturnTo(body.returnTo),
+        }),
+      });
+    },
+  );
+
+  fastify.get(
+    GOOGLE_DRIVE_OAUTH_CALLBACK_PATH,
+    {
+      schema: {
+        operationId: RouteId.CompleteGoogleDriveConnectorOAuth,
+        description:
+          "Where Google returns the browser after an individual Google Drive " +
+          "authorization. Requires the session of the person who started the " +
+          "flow: the signed state proves only that this deployment issued a " +
+          "flow, so on its own it would let one person's authorization be " +
+          "redeemed onto another person's connector.",
+        tags: ["Connectors"],
+        querystring: z.object({
+          code: z.string().optional(),
+          state: z.string().optional(),
+          error: z.string().optional(),
+        }),
+        // no `response` schema: every outcome is a redirect back into the app,
+        // so the person authorizing sees the connector rather than raw JSON.
+      },
+    },
+    async ({ query, organizationId, user }, reply) => {
+      const state = query.state
+        ? verifyGoogleDriveOAuthState(query.state)
+        : null;
+
+      // With no valid state there is nowhere trustworthy to return to, so
+      // fall back to the knowledge page rather than honouring a raw parameter.
+      const returnTo = state
+        ? resolveGoogleDriveOAuthReturnTo(state.returnTo)
+        : resolveGoogleDriveOAuthReturnTo(undefined);
+
+      const failed = (message: string) =>
+        reply.redirect(appendQuery(returnTo, { gdriveOauthError: message }));
+
+      if (query.error) {
+        // The person declined, or Google refused the request outright.
+        return failed(
+          query.error === "access_denied"
+            ? "Google authorization was cancelled."
+            : `Google refused the authorization: ${query.error}`,
+        );
+      }
+      if (!state || !query.code) {
+        return failed(
+          "That Google authorization link is no longer valid. Start the connection again.",
+        );
+      }
+
+      // The state travels through Google and back, so anyone who can start a
+      // flow can hand its link to somebody else. Redeeming it against the
+      // session that started it is what stops one person's Drive from being
+      // attached to another person's connector.
+      if (state.userId !== user.id || state.organizationId !== organizationId) {
+        logger.warn(
+          {
+            connectorId: state.connectorId,
+            stateUserId: state.userId,
+            sessionUserId: user.id,
+          },
+          "Google Drive OAuth callback presented to a different session than started it",
+        );
+        return failed(
+          "That Google authorization was started by a different account. Start the connection again from this connector.",
+        );
+      }
+
+      let connector: Awaited<ReturnType<typeof findConnectorOrThrow>>;
+      try {
+        connector = await findConnectorOrThrow({
+          id: state.connectorId,
+          organizationId: state.organizationId,
+          userId: state.userId,
+        });
+      } catch {
+        return failed("That connector no longer exists.");
+      }
+
+      if (
+        connector.config.type !== "gdrive" ||
+        connector.config.authMode !== "oauth"
+      ) {
+        return failed(
+          "That connector no longer uses individual Google account authorization.",
+        );
+      }
+
+      try {
+        const { refreshToken, clientId, accountEmail } =
+          await exchangeGoogleDriveAuthorizationCode(query.code);
+
+        await storeGoogleDriveOAuthConnection({
+          connector,
+          refreshToken,
+          clientId,
+          accountEmail,
+        });
+
+        // First sync now that there is finally something to sync with. Create
+        // deliberately skips this for an unconnected connector.
+        await taskQueueService.enqueue({
+          taskType: "connector_sync",
+          payload: { connectorId: connector.id },
+        });
+        await KnowledgeBaseConnectorModel.update(connector.id, {
+          lastSyncStatus: "queued",
+        });
+
+        return reply.redirect(
+          appendQuery(returnTo, {
+            gdriveConnected: accountEmail ?? "the Google account",
+          }),
+        );
+      } catch (error) {
+        const message = extractErrorMessage(error);
+        logger.error(
+          { connectorId: connector.id, error: message },
+          "Google Drive OAuth callback failed",
+        );
+        return failed(message);
+      }
     },
   );
 
@@ -2342,6 +2687,31 @@ async function assertEnvironmentAssignable(params: {
 }
 
 /**
+ * The environment a new connector binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for new
+ * knowledge connectors.
+ */
+async function resolveNewConnectorEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, requested } = params;
+  if (requested !== undefined) return requested;
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource: "knowledgeSource",
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      "knowledgeSource",
+      "deploy-to-restricted",
+    ),
+  });
+}
+
+/**
  * BETA gate for everything auto-sync-permissions: selecting the visibility on
  * create/update and the permission-family endpoints (trigger, coverage,
  * user-groups, member overrides). Off by default; staging enables it
@@ -2389,6 +2759,59 @@ async function findKnowledgeBaseOrThrow(params: {
     throw new ApiError(404, "Knowledge base not found");
   }
   return kg;
+}
+
+/**
+ * Persist a completed Google authorization onto the connector.
+ *
+ * The refresh token joins the connector's own vaulted secret, next to the id
+ * of the client that issued it. The account it belongs to is written to the
+ * config instead — it is a label, not a credential, and the connector page has
+ * to be able to show who is connected without unsealing a secret.
+ */
+async function storeGoogleDriveOAuthConnection(params: {
+  connector: Awaited<ReturnType<typeof findConnectorOrThrow>>;
+  refreshToken: string;
+  clientId: string;
+  accountEmail: string | null;
+}): Promise<void> {
+  const { connector, refreshToken, clientId, accountEmail } = params;
+  const googleOAuth = { clientId, refreshToken };
+
+  let secretId = connector.secretId;
+  if (secretId) {
+    const existing = await secretManager().getSecret(secretId);
+    await secretManager().updateSecret(secretId, {
+      ...((existing?.secret as Record<string, unknown>) ?? {}),
+      googleOAuth,
+    });
+  } else {
+    const secret = await secretManager().createSecret(
+      { apiToken: "", googleOAuth },
+      `connector-${connector.name}`,
+    );
+    secretId = secret.id;
+  }
+
+  await KnowledgeBaseConnectorModel.update(connector.id, {
+    ...(connector.secretId ? {} : { secretId }),
+    ...(connector.config.type === "gdrive"
+      ? {
+          config: {
+            ...connector.config,
+            connectedAccountEmail: accountEmail ?? undefined,
+          },
+        }
+      : {}),
+  });
+}
+
+function appendQuery(url: string, params: Record<string, string>): string {
+  const parsed = new URL(url);
+  for (const [key, value] of Object.entries(params)) {
+    parsed.searchParams.set(key, value);
+  }
+  return parsed.toString();
 }
 
 async function findConnectorOrThrow(params: {

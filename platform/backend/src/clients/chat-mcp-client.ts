@@ -32,7 +32,9 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
+import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -826,9 +828,12 @@ export async function getChatMcpTools({
   blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
+  kbChunksCollector,
   subagentToolStream,
   taskBridge,
   repeatTracker,
+  suppressContentLogging,
+  incognitoAudit,
 }: {
   agentName: string;
   agentId: string;
@@ -870,6 +875,11 @@ export async function getChatMcpTools({
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
   /**
+   * Per-turn sink for the KB chunks `query_knowledge_sources` returns (chat
+   * path only; see kbChunksCollector on ChatToolContext).
+   */
+  kbChunksCollector?: KbChunkForQuoteCheck[];
+  /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface (chat path only). Forwarded into delegation tools so a
    * child run's tool calls — and any deeper descendant's — surface nested under
@@ -885,6 +895,20 @@ export async function getChatMcpTools({
    * fresh internal tracker.
    */
   repeatTracker?: ToolCallRepeatTracker;
+  /**
+   * Incognito conversation: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the incognito flag is
+   * immutable per conversation), so the cached tool context can safely retain
+   * it.
+   */
+  suppressContentLogging?: boolean;
+  /**
+   * Encrypts tool-call logs and execution-claim results under the
+   * conversation key instead of redacting them; absent when the conversation
+   * has no escrow record. Stable per scope key for the same reason
+   * `suppressContentLogging` is — escrow is settled at creation.
+   */
+  incognitoAudit?: IncognitoAuditContext | null;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -1025,10 +1049,13 @@ export async function getChatMcpTools({
       user,
       blockOnApprovalRequired,
       hookRunCollector,
+      kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,
       considerContextUntrusted,
+      suppressContentLogging,
+      incognitoAudit,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,
@@ -1073,12 +1100,18 @@ export async function getChatMcpTools({
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);
 
-        // Convert delegation tools to AI SDK Tool format
-        for (const agentTool of [...agentToolsList, ...skillToolsList]) {
-          aiTools[agentTool.name] = buildAgentDelegationTool({
-            agentTool,
-            ctx: toolContext,
-          });
+        // Convert delegation tools to AI SDK Tool format.
+        // Incognito conversations exclude delegation entirely: a child-agent
+        // run builds its own tool set and would log its tool calls with
+        // content, outside the parent's suppression scope. Disable rather
+        // than leak.
+        if (!toolContext.suppressContentLogging) {
+          for (const agentTool of [...agentToolsList, ...skillToolsList]) {
+            aiTools[agentTool.name] = buildAgentDelegationTool({
+              agentTool,
+              ctx: toolContext,
+            });
+          }
         }
 
         logger.info(

@@ -8,7 +8,9 @@
 import {
   ArchestraInternalErrorCode,
   type BillingMode,
+  BUILT_IN_AGENT_IDS,
   CHAT_API_KEY_ID_HEADER,
+  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -16,8 +18,10 @@ import {
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -33,15 +37,21 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
+  INCOGNITO_KEY_HEADER,
+  parseIncognitoDekHeader,
+} from "@/content-encryption/incognito";
+import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
 } from "@/guardrails/dual-llm-progress-bus";
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  EnvironmentModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -65,11 +75,13 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
+  type InsertInteraction,
   type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
@@ -80,7 +92,8 @@ import {
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
-import { isLoopbackAddress } from "@/utils/network";
+import { isLoopbackRequest } from "@/utils/network";
+import { isUuid } from "@/utils/uuid";
 import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
@@ -105,6 +118,11 @@ import {
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
+import {
+  type IncognitoAuditDisposition,
+  redactIncognitoInteraction,
+  resolveIncognitoAuditContext,
+} from "./utils/incognito-session";
 
 const {
   observability: {
@@ -130,6 +148,24 @@ export interface LLMProxyContext<TRequest> {
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
+  /**
+   * Incognito chat session: span content capture is suppressed and persisted
+   * content is either encrypted or redacted (usage/cost metadata untouched).
+   * True whenever `incognito.kind !== "none"`.
+   */
+  suppressContent: boolean;
+  /**
+   * How this request's persisted audit content must be keyed. `encrypt`
+   * carries the validated conversation key; `redact` is the fail-closed
+   * fallback. Resolved once per request so every write site agrees.
+   */
+  incognito: IncognitoAuditDisposition;
+  /**
+   * Caller environment an advisor consultation bills to, resolved from the
+   * loopback-gated delegation header and re-validated against the executing
+   * agent row. Undefined for every non-advisor request.
+   */
+  delegationBillingEnvironmentId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -346,7 +382,10 @@ export async function handleLLMProxy<
   // credential — the provider auth still comes from the Authorization header.
   // Skipped for internal loopback auth overrides (in-app chat).
   if (passthroughVirtualKeyToken && !authOverride) {
-    await virtualKeyRateLimiter.check(request.ip);
+    await virtualKeyRateLimiter.check({
+      ip: request.ip,
+      credential: passthroughVirtualKeyToken,
+    });
     try {
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
@@ -359,7 +398,10 @@ export async function handleLLMProxy<
       resolvedUser = await UserModel.getById(userId);
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
-        await virtualKeyRateLimiter.recordFailure(request.ip);
+        await virtualKeyRateLimiter.recordFailure({
+          ip: request.ip,
+          credential: passthroughVirtualKeyToken,
+        });
       }
       throw error;
     }
@@ -438,7 +480,7 @@ export async function handleLLMProxy<
   const providerBaseUrlHeaderValue =
     headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
   const isInternalChatForward =
-    isLoopbackAddress(request.ip) &&
+    isLoopbackRequest(request) &&
     typeof chatApiKeyIdHeader === "string" &&
     chatApiKeyIdHeader.length > 0 &&
     typeof providerBaseUrlHeaderValue === "string" &&
@@ -454,6 +496,7 @@ export async function handleLLMProxy<
       tokenValue: rawApiKey,
       expectedProvider: providerName,
       agent: resolvedAgent,
+      requestedModel: requestAdapter.getModel(),
     });
     if (oauthResult) {
       apiKey = oauthResult.apiKey;
@@ -475,7 +518,10 @@ export async function handleLLMProxy<
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
-    await virtualKeyRateLimiter.check(request.ip);
+    await virtualKeyRateLimiter.check({
+      ip: request.ip,
+      credential: rawApiKey,
+    });
     try {
       const virtualResult = await validateVirtualApiKey(
         rawApiKey,
@@ -509,7 +555,10 @@ export async function handleLLMProxy<
         );
       } else {
         if (error instanceof ApiError && error.statusCode === 401) {
-          await virtualKeyRateLimiter.recordFailure(request.ip);
+          await virtualKeyRateLimiter.recordFailure({
+            ip: request.ip,
+            credential: rawApiKey,
+          });
         }
         throw error;
       }
@@ -526,7 +575,7 @@ export async function handleLLMProxy<
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
     const headerPresent =
       typeof headerValue === "string" && headerValue.length > 0;
-    if (isLoopbackAddress(request.ip)) {
+    if (isLoopbackRequest(request)) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
         perKeyChatApiKeyIdFromLoopbackHeader = true;
@@ -537,7 +586,7 @@ export async function handleLLMProxy<
       }
     } else if (headerPresent) {
       logger.warn(
-        { ip: request.ip },
+        { ip: request.socket.remoteAddress },
         `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
       );
     }
@@ -595,7 +644,7 @@ export async function handleLLMProxy<
     apiKey,
     wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    requestIp: request.ip,
+    isLoopbackCaller: isLoopbackRequest(request),
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
   });
@@ -637,10 +686,36 @@ export async function handleLLMProxy<
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId
       ? "passthrough_virtual_key"
-      : isLoopbackAddress(request.ip)
+      : isLoopbackRequest(request)
         ? "internal"
         : "provider_key";
   }
+
+  // Incognito chat sessions: interaction rows keep all usage/cost/session
+  // metadata, but their content-bearing fields are encrypted under the
+  // conversation's browser-held key (or redacted if that cannot be done
+  // safely), and span content capture is suppressed either way. Resolved once
+  // up front (server-derived, fail closed) so the catch below and both stream
+  // handlers agree on it.
+  const incognito = await resolveIncognitoAuditContext({
+    source,
+    // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
+    // from forwarded headers, and this seam must only ever match the
+    // loopback socket the in-app chat actually dials.
+    requestIp: request.socket.remoteAddress,
+    sessionId,
+    userId,
+    dek: readIncognitoDek(request),
+  });
+  // Content never reaches spans or logs for an incognito session, whether it
+  // ends up encrypted or redacted.
+  const suppressContent = incognito.kind !== "none";
+
+  // Advisor consultations bill to the delegating caller's environment (the
+  // advisor's own row is env-less). Resolved once so the limit check and every
+  // interaction write agree on it.
+  const delegationBillingEnvironmentId =
+    await resolveDelegationBillingEnvironment(request, resolvedAgent);
 
   // Check usage limits
   try {
@@ -654,6 +729,7 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        environmentIdOverride: delegationBillingEnvironmentId,
       });
 
     if (limitViolation) {
@@ -748,11 +824,33 @@ export async function handleLLMProxy<
       tools,
     );
 
-    if (optimizedModel) {
+    // A cost-optimization rule names a model, not an endpoint. On providers
+    // whose keys are servers, the credential and base URL were already resolved
+    // for the model the client asked for, so substituting one this endpoint
+    // does not host would send the request somewhere it cannot be answered.
+    // Keeping the baseline model costs an optimization; taking it would cost
+    // the whole call.
+    const optimizedModelServedHere =
+      optimizedModel &&
+      perKeyChatApiKeyId &&
+      providerHasEndpointLocalModels(providerName)
+        ? await endpointServesModel({
+            apiKeyId: perKeyChatApiKeyId,
+            provider: providerName,
+            modelId: optimizedModel,
+          })
+        : true;
+
+    if (optimizedModel && optimizedModelServedHere) {
       requestAdapter.setModel(optimizedModel);
       logger.info(
         { resolvedAgentId, optimizedModel },
         "Optimized model selected",
+      );
+    } else if (optimizedModel) {
+      logger.info(
+        { resolvedAgentId, optimizedModel, baselineModel },
+        "Optimized model is not served by the resolved endpoint, keeping the baseline model",
       );
     } else {
       logger.info(
@@ -1028,7 +1126,7 @@ export async function handleLLMProxy<
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
     const providerBaseUrlHeader =
-      isLoopbackAddress(request.ip) &&
+      isLoopbackRequest(request) &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;
@@ -1098,6 +1196,11 @@ export async function handleLLMProxy<
     const effectiveBaseUrl =
       perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
 
+    assertSubscriptionCredentialForProvider({
+      apiKey,
+      provider: providerName,
+    });
+
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
       providerName === "microsoft-365-copilot"
@@ -1117,10 +1220,11 @@ export async function handleLLMProxy<
     const finalRequest = requestAdapter.toProviderRequest();
 
     // Which called tool names count as available to evaluatePolicies, in the
-    // canonical form tool-call names are compared in. Declared names rather
-    // than `getTools()`, which keeps only schema-carrying custom tools: a
-    // provider built-in the caller declared and executes itself (Anthropic's
-    // bash/text_editor/computer) is absent from that list, so every call to
+    // canonical form tool-call names are compared in. Read from the request
+    // body rather than `getTools()`, which keeps only schema-carrying function
+    // tools: a tool the caller declared and executes itself (Anthropic's
+    // bash/text_editor/computer, OpenAI chat `custom` tools, every non-function
+    // tool on the Responses surface) is absent from that list, so every call to
     // one would be refused.
     //
     // Those names resolve to no `toolsTable` row, so no policy speaks for them
@@ -1129,11 +1233,8 @@ export async function handleLLMProxy<
     // them, and leaves the client — which is the one executing them — as the
     // boundary that governs them.
     const enabledToolNames = new Set(
-      (
-        requestAdapter.getDeclaredToolNames?.() ??
-        requestAdapter.getTools().map((t) => t.name)
-      )
-        .filter(Boolean)
+      utils
+        .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
         .map(canonicalizeToolName),
     );
 
@@ -1169,6 +1270,9 @@ export async function handleLLMProxy<
       toonSkipReason,
       dualLlmAnalyses,
       unsafeContextBoundary,
+      suppressContent,
+      incognito,
+      delegationBillingEnvironmentId,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1217,7 +1321,7 @@ export async function handleLLMProxy<
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
       );
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: resolvedAgent.id,
         externalAgentId,
         executionId,
@@ -1240,7 +1344,12 @@ export async function handleLLMProxy<
         ),
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await persistProxyInteraction(
+        record,
+        incognito,
+        delegationBillingEnvironmentId,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1290,6 +1399,9 @@ async function handleStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
+    incognito,
+    delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1329,7 +1441,7 @@ async function handleStreaming<
     usagelessInteractionRecorded = true;
 
     try {
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: agent.id,
         externalAgentId,
         executionId,
@@ -1350,7 +1462,12 @@ async function handleStreaming<
         baselineModel,
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await persistProxyInteraction(
+        record,
+        incognito,
+        delegationBillingEnvironmentId,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1385,6 +1502,7 @@ async function handleStreaming<
       promptMessages: provider
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
+      suppressContent,
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
@@ -1534,8 +1652,8 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content
-        if (captureContent && state.text) {
+        // Capture streamed completion content (suppressed for incognito chats)
+        if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
           });
@@ -1735,33 +1853,36 @@ async function handleStreaming<
       });
 
       try {
-        await InteractionModel.create(
-          buildInteractionRecord({
-            agent,
-            externalAgentId,
-            authMethod,
-            billingMode,
-            authenticatedApp,
-            executionId,
-            userId,
-            virtualKeyId,
-            passthroughVirtualKeyId,
-            sessionId,
-            sessionSource,
-            source,
-            providerType: provider.interactionType,
-            request: originalRequest,
-            processedRequest: request,
-            response: streamAdapter.toProviderResponse(),
-            actualModel,
-            baselineModel,
-            usage,
-            costs,
-            toonStats,
-            toonSkipReason,
-            dualLlmAnalyses,
-            unsafeContextBoundary,
-          }),
+        const record = buildInteractionRecord({
+          agent,
+          externalAgentId,
+          authMethod,
+          billingMode,
+          authenticatedApp,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: streamAdapter.toProviderResponse(),
+          actualModel,
+          baselineModel,
+          usage,
+          costs,
+          toonStats,
+          toonSkipReason,
+          dualLlmAnalyses,
+          unsafeContextBoundary,
+        });
+        await persistProxyInteraction(
+          record,
+          incognito,
+          delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
         logger.error(
@@ -1808,6 +1929,9 @@ async function handleNonStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
+    incognito,
+    delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1853,6 +1977,7 @@ async function handleNonStreaming<
     promptMessages: provider
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
+    suppressContent,
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
@@ -1958,8 +2083,8 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content
-      if (captureContent) {
+      // Capture completion content (suppressed for incognito chats)
+      if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
@@ -2052,33 +2177,36 @@ async function handleNonStreaming<
         );
       });
 
-      await InteractionModel.create(
-        buildInteractionRecord({
-          agent,
-          externalAgentId,
-          authMethod,
-          billingMode,
-          authenticatedApp,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          providerType: provider.interactionType,
-          request: originalRequest,
-          processedRequest: request,
-          response: refusalResponse,
-          actualModel,
-          baselineModel,
-          usage,
-          costs,
-          toonStats,
-          toonSkipReason,
-          dualLlmAnalyses,
-          unsafeContextBoundary,
-        }),
+      const refusalRecord = buildInteractionRecord({
+        agent,
+        externalAgentId,
+        authMethod,
+        billingMode,
+        authenticatedApp,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        providerType: provider.interactionType,
+        request: originalRequest,
+        processedRequest: request,
+        response: refusalResponse,
+        actualModel,
+        baselineModel,
+        usage,
+        costs,
+        toonStats,
+        toonSkipReason,
+        dualLlmAnalyses,
+        unsafeContextBoundary,
+      });
+      await persistProxyInteraction(
+        refusalRecord,
+        incognito,
+        delegationBillingEnvironmentId,
       );
 
       return reply.send(refusalResponse);
@@ -2126,37 +2254,40 @@ async function handleNonStreaming<
   });
 
   try {
-    await InteractionModel.create(
-      buildInteractionRecord({
-        agent,
-        externalAgentId,
-        authMethod,
-        billingMode,
-        authenticatedApp,
-        executionId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        sessionId,
-        sessionSource,
-        source,
-        providerType: provider.interactionType,
-        request: originalRequest,
-        processedRequest: request,
-        // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
-        // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
-        response:
-          responseAdapter.getLoggedResponse?.() ??
-          responseAdapter.getOriginalResponse(),
-        actualModel,
-        baselineModel,
-        usage,
-        costs,
-        toonStats,
-        toonSkipReason,
-        dualLlmAnalyses,
-        unsafeContextBoundary,
-      }),
+    const record = buildInteractionRecord({
+      agent,
+      externalAgentId,
+      authMethod,
+      billingMode,
+      authenticatedApp,
+      executionId,
+      userId,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      sessionId,
+      sessionSource,
+      source,
+      providerType: provider.interactionType,
+      request: originalRequest,
+      processedRequest: request,
+      // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
+      // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
+      response:
+        responseAdapter.getLoggedResponse?.() ??
+        responseAdapter.getOriginalResponse(),
+      actualModel,
+      baselineModel,
+      usage,
+      costs,
+      toonStats,
+      toonSkipReason,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    });
+    await persistProxyInteraction(
+      record,
+      incognito,
+      delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
     logger.error(
@@ -2233,6 +2364,29 @@ function providerSuppliesServerCredential(providerName: string): boolean {
   return providerName === "gemini" && isVertexAiEnabled();
 }
 
+/**
+ * Whether a resolved endpoint can run a model, for providers whose keys are
+ * servers. Conservative: only a model the catalog places on other endpoints and
+ * not this one counts as unserved. A model nothing has synced — one an operator
+ * has just deployed, say — is left to the endpoint to accept or reject.
+ */
+async function endpointServesModel(params: {
+  apiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
+}): Promise<boolean> {
+  const servingKeyIds =
+    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
+      provider: params.provider,
+      modelId: params.modelId,
+    });
+
+  if (servingKeyIds === null || servingKeyIds.length === 0) {
+    return true;
+  }
+  return servingKeyIds.includes(params.apiKeyId);
+}
+
 function shouldUseKeylessProviderApiKey(params: {
   row: Awaited<ReturnType<typeof LlmProviderApiKeyModel.findById>>;
   providerName: string;
@@ -2285,4 +2439,114 @@ function headerNamePeek(
 function extractDurationStatusCode(error: unknown): string {
   const statusCode = (error as { statusCode?: number } | null)?.statusCode;
   return typeof statusCode === "number" ? String(statusCode) : "0";
+}
+
+/**
+ * The single funnel every proxy interaction write goes through, so all five
+ * sites treat incognito identically.
+ *
+ * - `encrypt`: store the full record, keyed to the conversation's browser-held
+ *   DEK (recoverable offline via that conversation's escrow record).
+ * - `redact`: fail-closed — content is replaced with the redaction marker
+ *   rather than risking a plaintext write or an unrecoverable one.
+ * - `none`: ordinary write; at-rest rules apply.
+ */
+async function persistProxyInteraction(
+  record: InsertInteraction,
+  incognito: IncognitoAuditDisposition,
+  environmentIdOverride?: string,
+): Promise<void> {
+  await InteractionModel.create(
+    incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
+    incognito.kind === "encrypt" ? incognito.audit : null,
+    environmentIdOverride ? { environmentIdOverride } : undefined,
+  );
+}
+
+/**
+ * Resolve the environment an advisor consultation bills to, from
+ * DELEGATION_BILLING_ENVIRONMENT_HEADER. Honored only when all three hold:
+ * the request arrived over the loopback socket (the in-process A2A executor's
+ * path — the raw socket peer, not request.ip, which trustProxy can rewrite
+ * from forwarded headers), the executing agent row is the advisor built-in,
+ * and the id names an environment of that agent's organization. Anything else
+ * ignores the header with a warning: the worst a spoofed value can do is
+ * misattribute advisor spend between one organization's environments.
+ */
+async function resolveDelegationBillingEnvironment(
+  request: FastifyRequest,
+  agent: GatewayAgent,
+): Promise<string | undefined> {
+  const raw =
+    request.headers[DELEGATION_BILLING_ENVIRONMENT_HEADER.toLowerCase()];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return undefined;
+  }
+
+  if (!isLoopbackRequest(request)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring delegation billing environment header from a non-loopback peer",
+    );
+    return undefined;
+  }
+  if (agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring delegation billing environment header on a non-advisor agent",
+    );
+    return undefined;
+  }
+  // The env-id column is a uuid; a non-uuid value would make the lookup's cast
+  // throw and 500 the LLM call (leaking the query), so reject it here — an
+  // unusable header must be ignored, not fatal.
+  if (!isUuid(value)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring malformed delegation billing environment header",
+    );
+    return undefined;
+  }
+  // A lookup failure must not fail the LLM call — the header only refines
+  // billing attribution, so on any error fall back to the agent's own env.
+  let environment: Awaited<
+    ReturnType<typeof EnvironmentModel.findByIdForOrganization>
+  >;
+  try {
+    environment = await EnvironmentModel.findByIdForOrganization(
+      value,
+      agent.organizationId,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId: agent.id },
+      "Ignoring delegation billing environment header after a lookup error",
+    );
+    return undefined;
+  }
+  if (!environment) {
+    logger.warn(
+      { agentId: agent.id, environmentId: value },
+      "Ignoring delegation billing environment header naming an unknown environment",
+    );
+    return undefined;
+  }
+  return environment.id;
+}
+
+/**
+ * Read the incognito conversation key off the request. A malformed header is
+ * treated as absent (the resolver then fails closed to redaction) rather than
+ * failing the LLM call — the proxy's job is to serve the request; losing the
+ * key costs audit fidelity, not the user's turn.
+ */
+function readIncognitoDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[INCOGNITO_KEY_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  try {
+    return parseIncognitoDekHeader(value);
+  } catch {
+    return null;
+  }
 }

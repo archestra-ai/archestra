@@ -107,7 +107,7 @@ export type SetupStepId = "configuration" | "test" | "tools";
 
 export const SETUP_STEPS: Array<{ id: SetupStepId; title: string }> = [
   { id: "configuration", title: "Configuration" },
-  { id: "test", title: "Connect & Verify" },
+  { id: "test", title: "Test Connection" },
   { id: "tools", title: "Tools & Guardrails" },
 ];
 
@@ -329,8 +329,8 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
               <PlugZap />
             </EmptyMedia>
             <EmptyDescription>
-              Connect to verify the server is reachable and discover its tools.
-              You'll be asked for any required credentials.
+              Create a connection to verify the server is reachable and discover
+              its tools.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
@@ -339,19 +339,14 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
                 <Link
                   href={`/mcp/registry?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${item.id}`}
                 >
-                  Connect
+                  Install
                 </Link>
               </Button>
             ) : (
               <Button onClick={startInstall} disabled={isInstalling}>
-                Connect
+                Install
               </Button>
             )}
-            <Button variant="ghost" asChild>
-              <Link href={`/mcp/registry/${item.id}`}>
-                <span>Skip for now</span>
-              </Link>
-            </Button>
           </EmptyContent>
         </Empty>
       ) : status === "success" ? (

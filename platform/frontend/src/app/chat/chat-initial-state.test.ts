@@ -330,6 +330,35 @@ describe("buildCreateConversationInput", () => {
       }),
     ).toBeNull();
   });
+
+  test("carries a thinking effort chosen before the conversation existed", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "uuid-gemini",
+        chatApiKeyId: "key-1",
+        thinkingEffort: "high",
+      }),
+    ).toEqual({
+      agentId: "agent-1",
+      modelId: "uuid-gemini",
+      chatApiKeyId: "key-1",
+      thinkingEffort: "high",
+    });
+  });
+
+  test("carries an unset depth through as null rather than dropping it", () => {
+    // A new chat with no depth chosen has to reach the row that way. Dropping it
+    // would instead rely on the column's own default agreeing.
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "uuid-gemini",
+        chatApiKeyId: "key-1",
+        thinkingEffort: null,
+      }),
+    ).toMatchObject({ thinkingEffort: null });
+  });
 });
 
 describe("shouldResetInitialChatState", () => {

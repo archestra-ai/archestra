@@ -248,6 +248,7 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2 vCPU request, 2Gi memory request, 3Gi memory limit)
+- `archestra.webContainerReservedMemoryMib` - Memory in the web container reserved for the Next.js server instead of the backend's V8 heap (default: 384). The container runs both processes under one limit, so the backend's heap ceiling is a percentage of the limit minus this reservation. Raise it if you run an unusually heavy frontend workload.
 - `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
@@ -717,10 +718,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
   - Helm: set `archestra.publicEndpointsPort` to inject this variable and expose the port on the Service
 
-- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+- **`ARCHESTRA_TRUST_PROXY`** - Controls whether Archestra trusts the `X-Forwarded-*` headers a proxy sets. Set it when Archestra runs behind a TLS-terminating reverse proxy or load balancer (e.g. AWS ALB, nginx, Cloudflare).
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
-  - Example: `ARCHESTRA_TRUST_PROXY=true`
+  - Example: `ARCHESTRA_TRUST_PROXY=35.191.0.0/16,130.211.0.0/22`
+  - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
+  - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
+  - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
+  - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `70MB` (73400320 bytes)
@@ -880,6 +885,12 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
+- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
+  - Default: not set — incognito chats are unavailable. Unsetting it later turns the feature off again.
+  - Escrow is required, not optional: an incognito chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
+  - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
+  - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
+  - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1039,6 +1050,20 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_XAI_BASE_URL`** - Override xAI API base URL.
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the X Premium (SuperGrok) sign-in. Its OIDC discovery document supplies the device and token endpoints.
+  - Default: `https://auth.x.ai`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
+  - Default: `https://accounts.x.ai`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Tested xAI session-protocol version reported to the proxy. Update this deliberately when adopting a newer proxy contract.
+  - Default: `1.0.0`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL`** - OpenAI-compatible inference and model endpoint for X Premium OAuth sessions.
+  - Default: `https://cli-chat-proxy.grok.com/v1`
+  - This is separate from the metered `ARCHESTRA_XAI_BASE_URL` API-key endpoint
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID`** - Public OAuth client id for the X Premium device-code login.
+  - Default: the public Grok CLI client id
+- **`ARCHESTRA_XAI_SUBSCRIPTION_SCOPES`** - Space-separated scopes requested at device-authorization time. Drop `grok-cli:access` if xAI refuses it for your accounts; `offline_access` is required, since it is what yields the refresh token the key stores.
+  - Default: `openid profile email offline_access api:access grok-cli:access`
 
 - **`ARCHESTRA_OPENROUTER_BASE_URL`** - Override OpenRouter API base URL.
   - Default: `https://openrouter.ai/api/v1`
@@ -1309,6 +1334,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- Publishing Agent Skills over the gateway as `skill://` resources is gated by `ARCHESTRA_BETA`, not a flag of its own. It implements the draft MCP Skills extension (SEP-2640). See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) for what a gateway publishes and how to choose it.
 
 ### MCP Servers
 
@@ -1588,6 +1614,14 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS`** - How often the owning worker renews a run's lease.
   - Default: `90` (seconds)
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override for where the Archestra VAF Add On install script gets the add-on.
+  - Default: unset (the script uses the pre-built package of the newest `m-files-vaf-add-on-v*` release)
+  - Set a git ref of `archestra-ai/archestra` (a pushed commit SHA, branch, or tag) to have the script install that ref's CI-built package, or compile from that ref's source when no CI build exists. The special value `local` uses the backend checkout's HEAD commit. Leave unset in production.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token used to fetch the source ref's CI-built add-on package.
+  - Default: unset
+  - GitHub requires authentication for Actions artifact downloads, even on public repositories. Only read when the source-ref override is set; without a token the install script compiles the add-on from source. The backend proxies the package — the token never reaches clients.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
   - Default: `900` (15 minutes)
   - An embedding job that fails permanently leaves its documents stuck. This window is the worst-case wait before the sweep re-embeds them. It bounds recovery from a stalled or failed embedding. Keep it above an embedding job's full retry span, about 8 minutes. Otherwise a slow-but-live job is reset while it still runs, which repeats work. Lower it to recover faster; raise it to be more conservative.
@@ -1595,6 +1629,14 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
+  - Default: `8000`
+  - Tighter than the pool-wide `ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`. A search lane that exceeds it is dropped and the remaining lanes' results are merged. The query fails only when every lane times out. Timed-out lanes are counted in the `rag_search_lane_timeout_total` metric. Set to `0` to inherit the pool-wide timeout.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
+  - Default: `true`
+  - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
   - Default: `512`. Clamped to `128`–`2048`.
@@ -1613,9 +1655,33 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-knowledge#m-files): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing M-Files connectors keep syncing while it is off.
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT`** - Concurrency cap for the runtime-isolated permission-sync worker lane.
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
+
+#### Perforce Permission Sync (p4 Shim)
+
+Permission sync for the [Perforce connector](/docs/platform-knowledge#perforce-helix-core) runs the `p4` CLI in a small in-cluster pod — the p4 shim. It requires the Kubernetes orchestrator. The shim image ships no Perforce software: the `p4` client is proprietary and is never redistributed in Archestra images. The backend downloads the pinned binary when it provisions the pod, verifies its checksum, and pushes it in. Air-gapped installs point the URL variables at an internal mirror and update the checksums to match.
+
+Each connector gets its own shim, so one connector's Perforce credentials never pass through another's pod and its pod can only reach its own server. The shim is created when a connector starts syncing permissions and removed when it stops — deleted, disabled, or switched to another visibility. It runs one replica the whole time, with equal CPU and memory requests and limits, so Kubernetes places it in the Guaranteed quality-of-service class. Editing a connector's server URL, wire address, admin user or credentials replaces the pod and its access token, so nothing from the previous settings survives.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Override for the p4 shim image.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<platform version>`
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64`** - Download URL for the `p4` binary, per architecture.
+  - Default: the Perforce CDN r25.2 builds (`https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4` and `https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4`)
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64`** - Expected SHA-256 of each downloaded binary. A download that does not match is rejected.
+  - Default: the checksums of the r25.2 CDN builds. Update them together with the URL variables.
+
+The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one-google-account) authorizes through a Google OAuth client that belongs to the deployment. Create a **Web application** client in the Google Cloud Console, enable the Google Drive API, and register `<your Archestra URL>/api/connectors/gdrive/oauth/callback` as an authorized redirect URI — the connector form shows the exact string this deployment sends. The service-account modes, domain-wide delegation included, need neither variable.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID`** - Client ID of that OAuth client.
+  - Default: Not set (the mode appears in the connector form but is disabled, naming these variables).
+- **`ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET`** - Client secret of that OAuth client.
+  - Default: Not set.
+  - The secret is read on every token refresh, so rotating it alone needs no reconnect. Changing the client **ID** invalidates existing authorizations — each affected connector reports that and needs reconnecting.
 
 ### Data Retention
 

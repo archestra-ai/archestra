@@ -3,18 +3,26 @@
 import { act, renderHook } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
+import { useFeature } from "@/lib/config/config.query";
 
 vi.mock("next/navigation");
 
+vi.mock("@/lib/config/config.query");
+
 describe("useConversationSearch", () => {
   let originalPlatform: string;
+  let mockRouterPush: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     originalPlatform = navigator.platform;
+    mockRouterPush = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
-      push: vi.fn(),
+      push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
+    // Incognito chats are on by default, matching the shipped default.
+    vi.mocked(useFeature).mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -33,6 +41,7 @@ describe("useConversationSearch", () => {
 
   function dispatchKeydown(options: {
     key: string;
+    code?: string;
     metaKey?: boolean;
     ctrlKey?: boolean;
     shiftKey?: boolean;
@@ -41,6 +50,7 @@ describe("useConversationSearch", () => {
   }) {
     const event = new KeyboardEvent("keydown", {
       key: options.key,
+      code: options.code ?? "",
       metaKey: options.metaKey ?? false,
       ctrlKey: options.ctrlKey ?? false,
       shiftKey: options.shiftKey ?? false,
@@ -188,6 +198,93 @@ describe("useConversationSearch", () => {
     });
 
     expect(result.current.isOpen).toBe(true);
+  });
+
+  it("starts a new incognito chat on Alt+I", () => {
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    act(() => {
+      // macOS turns Option+I into a dead key, so the handler matches on
+      // `code` rather than `key` — dispatch what the browser really sends.
+      dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
+  });
+
+  it("blurs the focused editable while handling Alt+I, then restores focus", async () => {
+    // macOS Option+I is a dead key whose composition Chromium starts even on
+    // a preventDefault'ed keydown — the handler blurs the editable so the
+    // "ˆ" has no target, and the composer must be refocused afterwards.
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    const textarea = document.createElement("textarea");
+    document.body.appendChild(textarea);
+    textarea.focus();
+
+    let activeDuringDispatch: Element | null = null;
+    const observe = () => {
+      activeDuringDispatch = document.activeElement;
+    };
+    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+    try {
+      act(() => {
+        dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+      });
+    } finally {
+      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+    }
+
+    expect(activeDuringDispatch).not.toBe(textarea);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.activeElement).toBe(textarea);
+    textarea.remove();
+  });
+
+  it("does not navigate on Alt+I when the new-chat composer claims the shortcut", () => {
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    // Stand in for the mounted new-chat composer: claim the cancelable
+    // handshake event so the shortcut toggles in place instead of navigating.
+    const claim = (event: Event) => event.preventDefault();
+    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+    try {
+      act(() => {
+        dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+      });
+    } finally {
+      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+    }
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("ignores Alt+I when incognito chats are disabled", () => {
+    vi.mocked(useFeature).mockReturnValue(false);
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    act(() => {
+      dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+    });
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("requires the Alt modifier to start an incognito chat", () => {
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    act(() => {
+      dispatchKeydown({ key: "i", code: "KeyI" });
+    });
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
   it("should allow programmatic control via setIsOpen", () => {

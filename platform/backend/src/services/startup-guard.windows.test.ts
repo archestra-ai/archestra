@@ -112,7 +112,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("function Show-ArchReconfigureOffer");
     expect(script).toContain("function Show-ArchReconfigureHint");
     expect(script).toContain(
-      "To reconfigure your ' + $AppName + ' connection press [C]",
+      "To skip press [Space] · to reconfigure your ' + $AppName + ' connection press [C]",
     );
     expect(script).toContain("AddMilliseconds(1500)");
     expect(script).toContain("Show-ArchReconfigureOffer");
@@ -155,6 +155,20 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     // the self-removal is silent — no trailing explainer after the
     // Disconnected rows
     expect(script).not.toContain("Nothing connected is left to check");
+  });
+
+  test("keeps a skip entry live the whole run: Space in the hint, the retry wait, and between animation frames", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    // the persistent hint names the key
+    expect(script).toContain("To skip press [Space]");
+    // both the retry ladder and the probe frames answer it directly
+    // (Read-ArchKey polls [Console]::KeyAvailable, naturally non-blocking)
+    expect(script).toContain(
+      "if ($key -eq ' ') { $Script:SkipNow = $true; break }",
+    );
+    // skipping bypasses every prompt and launches at once, touching nothing
+    expect(script).toContain("if ($Script:SkipNow) { Exit-ArchGuard }");
+    expect(script).toContain("if ($Script:SkipNow) { break }");
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
@@ -200,7 +214,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
 
   test("renders the Archestra mark for the default brand and its own variants, plain title when genuinely white-labeled", () => {
     const branded = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
-    expect(branded).toContain("▟██▙");
+    expect(branded).toContain("⣾⣿⣿⣿⣿⣷");
     expect(branded).toContain("Secure access to your AI tools");
 
     // an org named "Archestra Staging" is still Archestra's own brand — the
@@ -212,7 +226,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       },
       CLAUDE_CODE_GUARD_CLIENT,
     );
-    expect(variant).toContain("▟██▙");
+    expect(variant).toContain("⣾⣿⣿⣿⣿⣷");
     expect(variant).toContain("'Archestra Staging'");
 
     const whiteLabel = renderStartupGuardPowerShell(
@@ -222,7 +236,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       },
       CLAUDE_CODE_GUARD_CLIENT,
     );
-    expect(whiteLabel).not.toContain("▟██▙");
+    expect(whiteLabel).not.toContain("⣾⣿⣿⣿⣿⣷");
     expect(whiteLabel).toContain("'Acme AI'");
   });
 

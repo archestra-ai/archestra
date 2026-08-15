@@ -111,6 +111,12 @@ spec:
       labels:
         {{- include "archestra-platform.labels" . | nindent 8 }}
         app.kubernetes.io/component: web
+        {{- /*
+          Grants this pod passage through the p4 shim's ingress NetworkPolicy
+          (Perforce knowledge-connector permission sync; see
+          backend/src/k8s/p4-shim-runtime).
+        */}}
+        archestra.io/p4-shim-client: "true"
         {{- with .Values.archestra.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -148,7 +154,7 @@ spec:
             {{- end }}
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
-            {{- include "archestra-platform.nodeMemoryEnv" (dict "resources" .Values.archestra.resources "containerName" .Chart.Name) | nindent 12 }}
+            {{- include "archestra-platform.nodeMemoryEnv" (dict "resources" .Values.archestra.resources "containerName" .Chart.Name "reservedMib" .Values.archestra.webContainerReservedMemoryMib) | nindent 12 }}
             {{- if .Values.archestra.worker.enabled }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"

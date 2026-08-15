@@ -984,7 +984,7 @@ export function InternalMCPCatalog({
                 onCancelInstallation={install.cancelInstallation}
               />
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className={CARD_GRID_CLASS}>
                 {personalItems.map((item) => {
                   const serverInfo = getInstalledServerInfo(item);
                   return (
@@ -1042,7 +1042,7 @@ export function InternalMCPCatalog({
                 onCancelInstallation={install.cancelInstallation}
               />
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className={CARD_GRID_CLASS}>
                 {sharedItems.map((item) => {
                   const serverInfo = getInstalledServerInfo(item);
                   return (
@@ -1234,3 +1234,18 @@ function McpCatalogLabelKeyRow({
     />
   );
 }
+
+/**
+ * Columns are sized from what a card needs, not from viewport breakpoints. The
+ * breakpoints measured the window rather than the space left after the nav, so
+ * `lg:grid-cols-3` kept promising three columns while handing each card ~190px
+ * — far less than its metadata row (scope badge, tool and agent counts,
+ * deployment state, connection avatars) can lay out on one line. Sizing from
+ * the content drops a column at those widths instead of squeezing.
+ *
+ * 19rem: measured against the widest real cards, every one of them fits by
+ * 296px and the worst overflows by 1px at 288px, so this floor clears it with
+ * a little room for the author name to occupy rather than truncate.
+ */
+const CARD_GRID_CLASS =
+  "grid gap-4 grid-cols-[repeat(auto-fill,minmax(19rem,1fr))]";

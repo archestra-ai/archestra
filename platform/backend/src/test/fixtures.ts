@@ -259,7 +259,13 @@ async function makeTeamMember(
  * Auto-creates an organization if not provided.
  */
 async function makeAgent(
-  overrides: Partial<InsertAgent> & { authorId?: string } = {},
+  // `isPersonalGateway` and `accessAllSkills` mirror AgentModel.create's own
+  // signature: real columns create() honours, but not part of InsertAgent.
+  overrides: Partial<InsertAgent> & {
+    authorId?: string;
+    isPersonalGateway?: boolean;
+    accessAllSkills?: boolean;
+  } = {},
 ): Promise<Agent> {
   // Auto-create organization if not provided
   let organizationId = overrides.organizationId;
@@ -858,7 +864,12 @@ async function makeConversation(
   overrides: Partial<
     Pick<
       InsertConversation,
-      "userId" | "organizationId" | "title" | "modelId" | "chatApiKeyId"
+      | "userId"
+      | "organizationId"
+      | "title"
+      | "modelId"
+      | "chatApiKeyId"
+      | "thinkingEffort"
     >
   > = {},
 ) {
@@ -1218,6 +1229,7 @@ async function makeKnowledgeBaseConnector(
       | "schedule"
       | "enabled"
       | "ftsLanguage"
+      | "environmentId"
     >
   > = {},
 ): Promise<KnowledgeBaseConnector> {

@@ -1,6 +1,7 @@
 import {
   isSupportedProvider,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
   SupportedProviders,
 } from "@archestra/shared";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
@@ -10,6 +11,13 @@ export type ModelRouterResolution = {
   provider: SupportedProvider;
   modelId: string;
   requestedModel: string;
+  /**
+   * The wire surfaces the provider published for this model, carried through so
+   * the router can pick between a provider's chat and Responses surfaces the
+   * same way the chat path does. Null for the providers that serve exactly one
+   * surface, which is all of them but GitHub Copilot.
+   */
+  supportedEndpoints: SupportedProviderEndpoint[] | null;
 };
 
 export async function resolveModelRoute(params: {
@@ -101,6 +109,7 @@ function toResolution(
     provider: model.provider,
     modelId: model.modelId,
     requestedModel,
+    supportedEndpoints: model.supportedEndpoints ?? null,
   };
 }
 

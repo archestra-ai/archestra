@@ -8,12 +8,35 @@ import {
 import {
   AzureEmbeddingError,
   BedrockEmbeddingError,
+  BedrockPartialEmbeddingError,
   callEmbedding,
   GeminiEmbeddingError,
+  getEmbeddingClientAcceptedImageMimeTypes,
+  getEmbeddingClientInputModalities,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
   OpenAIEmbeddingError,
 } from "./index";
+
+describe("Gemini multimodal embedding capability", () => {
+  test("enables the stable model with only its embedding image formats", () => {
+    expect(
+      getEmbeddingClientInputModalities("gemini", "gemini-embedding-2"),
+    ).toBeNull();
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes(
+        "gemini",
+        "models/gemini-embedding-2",
+      ),
+    ).toEqual(["image/png", "image/jpeg"]);
+  });
+
+  test("degrades the retired preview model to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("gemini", "gemini-embedding-2-preview"),
+    ).toEqual(["text"]);
+  });
+});
 
 // openai@6 requests base64 embeddings by default and decodes them client-side,
 // so the wire payload must carry Float32Array bytes, not a JSON number array.
@@ -195,6 +218,33 @@ describe("isRetryableEmbeddingError", () => {
     expect(
       isRetryableEmbeddingError(new BedrockEmbeddingError(400, "bad")),
     ).toBe(false);
+  });
+
+  test("does not repeat successful calls from a partial Bedrock fan-out", () => {
+    expect(
+      isRetryableEmbeddingError(
+        new BedrockPartialEmbeddingError(
+          [{ index: 0, embedding: [0.1] }],
+          [{ index: 1, reason: new BedrockEmbeddingError(503, "server") }],
+          1,
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  test("retries a total transient Bedrock fan-out failure", () => {
+    expect(
+      isRetryableEmbeddingError(
+        new BedrockPartialEmbeddingError(
+          [],
+          [
+            { index: 0, reason: new BedrockEmbeddingError(503, "server") },
+            { index: 1, reason: new BedrockEmbeddingError(429, "throttle") },
+          ],
+          0,
+        ),
+      ),
+    ).toBe(true);
   });
 
   test("returns true only for known retryable network error codes", () => {

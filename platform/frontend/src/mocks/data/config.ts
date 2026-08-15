@@ -51,9 +51,20 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
+      chatIncognitoEnabled: false,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      // On in the mock: the connector-dialog tests exercise the M-Files form,
+      // including its Application Account (OAuth) fields.
+      kbMfilesConnectorEnabled: true,
+      kbMfilesOauthEnabled: true,
+      kbGoogleDriveOAuth: {
+        configured: false,
+        redirectUri:
+          "http://localhost:3000/api/connectors/gdrive/oauth/callback",
+      },
+      mcpGatewaySkillsEnabled: false,
       hackathonRecorderEnabled: true,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,

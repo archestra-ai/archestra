@@ -15,7 +15,6 @@ import {
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
   type SupportedProvider,
-  supportsGeminiThoughtSummaries,
   TimeInMs,
   type TitleRejectionReason,
   type TokenUsage,
@@ -79,7 +78,8 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import { withDbTransaction } from "@/database";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
@@ -90,6 +90,10 @@ import {
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
+import {
+  type KbChunkForQuoteCheck,
+  verifyQuotes,
+} from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
@@ -112,7 +116,9 @@ import {
   ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
+import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
+import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
@@ -130,6 +136,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { renderSystemPrompt } from "@/templating";
+import type { ConversationContentKey } from "@/types";
 import {
   ApiError,
   type ChatMessage,
@@ -140,6 +147,7 @@ import {
   SelectConversationCompactionSchema,
   SelectConversationSchema,
   SelectConversationShareWithTargetsSchema,
+  ThinkingEffortSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -153,6 +161,7 @@ import {
 import { estimateMessagesSize } from "@/utils/message-size";
 import { broadcastConversationUpdated } from "@/websocket";
 import { createAbortiveTurnTracker } from "./abortive-turn";
+import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
 import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
@@ -176,6 +185,13 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { buildGeminiProviderOptions } from "./gemini-provider-options";
+import {
+  INCOGNITO_STATIC_TITLE,
+  requireIncognitoKey,
+  resolveIncognitoAccess,
+  resolveIncognitoCreation,
+} from "./incognito";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
@@ -190,6 +206,7 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
+import { buildOpenAiThinkingProviderOptions } from "./openai-provider-options";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -242,10 +259,27 @@ function buildStreamErrorPayload(params: {
   mappedError: ChatErrorResponse;
   conversationId: string;
   slimChatErrorUi: boolean;
+  /**
+   * Incognito conversation: provider error text routinely echoes prompt/model
+   * content, so the persisted row must not hold it in the clear. With an
+   * `incognitoAudit` it is encrypted under the conversation key; without one
+   * the row keeps only the code and retryability with a generic message. The
+   * payload streamed to the client is unaffected (it is not persisted).
+   */
+  redactPersistedError: boolean;
+  incognitoAudit?: IncognitoAuditContext | null;
   /** Log label distinguishing the pre-stream and mid-stream error paths. */
   stage: "before stream starts" | "via stream";
 }): string {
-  const { error, mappedError, conversationId, slimChatErrorUi, stage } = params;
+  const {
+    error,
+    mappedError,
+    conversationId,
+    slimChatErrorUi,
+    redactPersistedError,
+    incognitoAudit,
+    stage,
+  } = params;
   const traceContext = getActiveTraceContext();
   const correlationLogFields = getCorrelationLogFields(traceContext);
   const fullError = { ...mappedError, ...traceContext };
@@ -270,7 +304,11 @@ function buildStreamErrorPayload(params: {
 
   persistConversationChatError({
     conversationId,
-    error: errorForFrontend,
+    error:
+      redactPersistedError && !incognitoAudit
+        ? redactChatErrorForIncognito(errorForFrontend)
+        : errorForFrontend,
+    incognitoAudit,
   });
 
   logger.info(
@@ -302,6 +340,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
           temperature: z.number().min(0).max(2).optional(),
+          // The depth the composer is showing for this turn. Sent with the
+          // message so the turn cannot run at a depth the user has replaced but
+          // whose PATCH has not landed yet; the stored column is the fallback
+          // for callers that don't send one.
+          thinkingEffort: ThinkingEffortSchema.nullable().optional(),
         }),
         // Streaming responses don't have a schema
         response: ErrorResponsesSchema,
@@ -309,7 +352,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const {
-        body: { id: conversationId, messages, trigger, temperature },
+        body: {
+          id: conversationId,
+          messages,
+          trigger,
+          temperature,
+          thinkingEffort: requestedThinkingEffort,
+        },
         user,
         organizationId,
       } = request;
@@ -369,6 +418,39 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Incognito: the browser-held key is required up front (fingerprint
+      // checked, wrong key 409s before any side effect) and captured ONCE
+      // into this request's closure — every persistence call below receives
+      // it explicitly, including the detached onFinish/onError callbacks that
+      // outlive the client connection.
+      const incognitoKeyInfo = conversation.incognito
+        ? ((await ConversationModel.getIncognitoKeyInfo(conversationId)) ?? {
+            id: conversationId,
+            incognito: true,
+            incognitoDekFingerprint: null,
+            hasEscrow: false,
+          })
+        : null;
+      const incognitoKey: ConversationContentKey | null = incognitoKeyInfo
+        ? requireIncognitoKey({ request, conversation: incognitoKeyInfo })
+        : null;
+      // Encrypting the audit trail is only worth doing when an escrow record
+      // exists to open it later — otherwise the rows would be readable by
+      // nobody, which is strictly worse than an honest, uniform gap. Without
+      // one these surfaces deliberately fall back to redaction.
+      const incognitoAudit: IncognitoAuditContext | null =
+        incognitoKey && incognitoKeyInfo?.hasEscrow ? incognitoKey : null;
+      if (conversation.incognito) {
+        if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
+          // Attachment bytes and previews are stored in plaintext
+          // (conversation_attachments, sandbox staging) — not offered.
+          throw new ApiError(
+            400,
+            "Attachments are not available in incognito conversations",
+          );
+        }
+      }
+
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -408,6 +490,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
       // spliced into the assistant message in onFinish.
       const hookRunCollector: CollectedHookRun[] = [];
+      // Verifiable citations (issue #7161): the chunks query_knowledge_sources
+      // returns this turn, captured at tool-execution time (run_tool dispatches
+      // included) and checked against the answer's cited quotes in the UI
+      // stream's onFinish. Absent when the feature is off — the tool layer then
+      // neither asks the model to quote nor captures anything.
+      const kbChunksCollector: KbChunkForQuoteCheck[] | undefined = config.kb
+        .quoteVerificationEnabled
+        ? []
+        : undefined;
       // Surfaces a delegated child agent's tool calls on this conversation: it
       // streams each one live (once a writer is attached) and collects them for
       // splicing into the assistant message in onFinish. One instance is shared
@@ -592,6 +683,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // transcript that ends at a stored `!` message re-executes it — the
         // same "sending a turn runs it" semantics regenerate relies on.
         const sandboxCommand = detectSandboxCommand(messages as ChatMessage[]);
+        if (sandboxCommand && conversation.incognito) {
+          // Sandbox command turns persist command I/O into the sandbox replay
+          // log in plaintext — not offered in incognito conversations.
+          throw new ApiError(
+            400,
+            "Sandbox commands are not available in incognito conversations",
+          );
+        }
         if (sandboxCommand) {
           // Persist the user message before execution (mirrors the LLM path's
           // early persist): the command lands in the sandbox replay log the
@@ -630,12 +729,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   conversationId,
                   requestMessages: messages,
                   finalMessages: messagesToPersist,
+                  conversationKey: incognitoKey,
                 });
               } else {
                 await persistNewMessages(
                   conversationId,
                   messagesToPersist,
                   "onFinish",
+                  incognitoKey,
                 );
               }
             },
@@ -650,6 +751,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 mappedError,
                 conversationId,
                 slimChatErrorUi: sandboxSlimChatErrorUi,
+                redactPersistedError: conversation.incognito,
+                incognitoAudit,
                 stage: "via stream",
               }),
           });
@@ -657,12 +760,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Extract and ingest documents to agent's knowledge base (fire and forget)
         // This runs asynchronously to avoid blocking the chat response
-        extractAndIngestDocuments(messages, agentId).catch((error) => {
-          logger.warn(
-            { error: error instanceof Error ? error.message : String(error) },
-            "[Chat] Background document ingestion failed",
-          );
-        });
+        if (conversation.incognito) {
+          // KB ingestion would copy conversation documents into the agent's
+          // knowledge base in plaintext.
+        } else {
+          extractAndIngestDocuments(messages, agentId).catch((error) => {
+            logger.warn(
+              { error: error instanceof Error ? error.message : String(error) },
+              "[Chat] Background document ingestion failed",
+            );
+          });
+        }
 
         const externalAgentId = agentId;
         const chatMcpElicitation = createChatMcpElicitationBridge({
@@ -793,10 +901,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               openedApp,
               projectFileNames,
               hookRunCollector,
+              kbChunksCollector,
               elicitation: chatMcpElicitation,
               subagentToolStream,
               taskBridge: chatTaskBridge,
               abortSignal: chatAbortController.signal,
+              // Incognito: span content is suppressed and long calls never
+              // detach into durable tasks; tool-call logs and claim results
+              // are encrypted under the conversation key when it can be
+              // recovered from escrow, redacted otherwise.
+              suppressContentLogging: conversation.incognito,
+              incognitoAudit,
             }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
@@ -896,6 +1011,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 conversationId,
                 messages,
                 "earlyUserMsg",
+                incognitoKey,
               );
             } catch (error) {
               logger.warn(
@@ -932,6 +1048,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         conversationId,
                         messages,
                         "onStreamError",
+                        incognitoKey,
                       );
                     } catch (persistError) {
                       logger.error(
@@ -952,6 +1069,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   mappedError: mapProviderError(error, provider),
                   conversationId,
                   slimChatErrorUi,
+                  redactPersistedError: conversation.incognito,
+                  incognitoAudit,
                   stage: "before stream starts",
                 });
               },
@@ -981,6 +1100,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     dualLlmProgressChannel,
+                    // Lets the proxy store this turn's interaction encrypted
+                    // rather than redacted. Only sent when an escrow record
+                    // exists, since without one the row could never be reopened.
+                    incognitoKey: incognitoAudit?.dek ?? null,
                   });
 
                 // Send heartbeat every 5s to prevent connection drops
@@ -1091,6 +1214,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     systemPrompt,
                     abortSignal: chatAbortController.signal,
                     emit: (event) => writer.write(event),
+                    // Incognito: never generate/persist a compaction summary.
+                    disableCompaction: conversation.incognito,
                     anthropicNativeEndpoint,
                   });
 
@@ -1189,6 +1314,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
+                          // A repair prompt carries the same conversation
+                          // content as the turn it repairs.
+                          incognitoKey: incognitoAudit?.dek ?? null,
                         })
                       ).model,
                   }),
@@ -1288,29 +1416,53 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.temperature = temperature;
                 }
 
-                if (isGeminiImageModel) {
+                // A turn may carry its own depth so a pick made mid-conversation
+                // applies to the message it was made for, rather than to
+                // whatever the row says once the write lands.
+                //
+                // Not `??`: null is a turn asking for auto, and coalescing would
+                // send it back to the column instead.
+                const thinkingEffort =
+                  requestedThinkingEffort !== undefined
+                    ? requestedThinkingEffort
+                    : conversation.thinkingEffort;
+
+                const googleProviderOptions = buildGeminiProviderOptions({
+                  provider,
+                  selectedModel,
+                  isGeminiImageModel,
+                  thinkingEffort,
+                });
+                if (googleProviderOptions) {
                   streamTextConfig.providerOptions = {
-                    google: {
-                      responseModalities: ["TEXT", "IMAGE"],
-                    },
+                    ...streamTextConfig.providerOptions,
+                    google: googleProviderOptions,
                   };
                 }
 
-                // Gemini thinking models bill thought tokens either way, but
-                // the API only streams thought summaries (surfaced in the UI
-                // as reasoning parts) when explicitly asked. Only for models
-                // with thinking on by default: includeThoughts on an inactive-
-                // thinking model is a 400.
-                if (
-                  provider === "gemini" &&
-                  !isGeminiImageModel &&
-                  supportsGeminiThoughtSummaries(selectedModel)
-                ) {
+                // Nothing else writes the `anthropic` key, so this may assign
+                // it outright.
+                const anthropicProviderOptions = buildAnthropicProviderOptions({
+                  provider,
+                  selectedModel,
+                  thinkingEffort,
+                });
+                if (anthropicProviderOptions) {
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
-                    google: { thinkingConfig: { includeThoughts: true } },
+                    anthropic: anthropicProviderOptions,
                   };
                 }
+
+                // Spread into whichever `openai` block below applies rather
+                // than assigned here: both build a fresh object, so a third
+                // assignment would drop what they set.
+                const openAiThinkingProviderOptions =
+                  buildOpenAiThinkingProviderOptions({
+                    provider,
+                    selectedModel,
+                    thinkingEffort,
+                  });
 
                 // Responses-routed OpenAI models run with store:false so the
                 // SDK resends the full conversation (with encrypted reasoning)
@@ -1347,6 +1499,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ...(summariesUnsupported
                         ? {}
                         : { reasoningSummary: "auto" }),
+                      ...openAiThinkingProviderOptions,
                     },
                   };
                 }
@@ -1418,7 +1571,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // newer models reject max_tokens outright.
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
-                    openai: { maxCompletionTokens: maxOutputTokens },
+                    openai: {
+                      maxCompletionTokens: maxOutputTokens,
+                      ...openAiThinkingProviderOptions,
+                    },
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
@@ -1481,6 +1637,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               conversationId,
                               messages,
                               "onExecuteError",
+                              incognitoKey,
                             );
                           } catch (persistError) {
                             logger.error(
@@ -1564,6 +1721,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           : mapProviderError(error, provider),
                       conversationId,
                       slimChatErrorUi,
+                      redactPersistedError: conversation.incognito,
+                      incognitoAudit,
                       stage: "via stream",
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
@@ -1577,7 +1736,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     (async () => {
                       logger.error(
                         {
-                          error,
+                          // Incognito: errors routinely echo prompt/tool
+                          // content — keep the app log content-free.
+                          error: conversation.incognito
+                            ? "[redacted: incognito conversation]"
+                            : error,
                           conversationId,
                           agentId,
                           ...getCorrelationLogFields(getActiveTraceContext()),
@@ -1592,6 +1755,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             messages,
                             "onError",
+                            incognitoKey,
                           );
                         } catch (persistError) {
                           // Log persistence error but don't prevent the error response
@@ -1644,12 +1808,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             requestMessages: messages,
                             finalMessages: messagesToPersist,
+                            conversationKey: incognitoKey,
                           });
                         } else {
                           await persistNewMessages(
                             conversationId,
                             messagesToPersist,
                             "onFinish",
+                            incognitoKey,
                           );
                         }
                         messagesPersisted = true;
@@ -1657,6 +1823,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         logger.error(
                           { error, conversationId },
                           "Failed to persist messages during onFinish",
+                        );
+                      }
+                    }
+
+                    // Verifiable citations (issue #7161): check the turn's
+                    // cited quotes against the chunks query_knowledge_sources
+                    // returned (captured at execution time, run_tool dispatches
+                    // included). Runs here — on the final merged result — so
+                    // every step's user-visible text is covered; streamText's
+                    // own onFinish sees only the final step's text. Log-only
+                    // and best-effort: a failure must never disturb the
+                    // finished answer.
+                    if (kbChunksCollector) {
+                      try {
+                        verifyChatCitedQuotes({
+                          chunks: kbChunksCollector,
+                          answerText: extractTurnAnswerText(
+                            finalMessages as unknown as ChatMessage[],
+                          ),
+                          conversationId,
+                          agentId,
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          { error, conversationId },
+                          "KB quote verification failed",
                         );
                       }
                     }
@@ -1729,6 +1921,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               mappedError,
                               conversationId,
                               slimChatErrorUi,
+                              redactPersistedError: conversation.incognito,
+                              incognitoAudit,
                               stage: "via stream",
                             }),
                           };
@@ -1774,6 +1968,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return await sendGatedUiMessageStreamResponse({
+              // Incognito: replay events carry raw stream chunks in
+              // plaintext, so payload persistence is suppressed (reconnect
+              // replay is lost; the run still completes server-side with the
+              // key held in this request's closure).
+              incognitoAudit,
+              // Suppress only when there is nothing to encrypt under: an
+              // incognito run WITH a key now persists its replay payloads
+              // encrypted, so reconnect-after-reload works for it.
+              suppressEventPayloads: conversation.incognito && !incognitoAudit,
               reply,
               stream: uiMessageStream as ReadableStream<UIMessageChunk>,
               runId: activeRun.id,
@@ -1943,7 +2146,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { id } = request.params;
+      const { user, organizationId } = request;
       const conversation = await ConversationModel.findAccessibleById({
         id,
         userId: user.id,
@@ -1955,6 +2160,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
+
+      // Replay payloads of an incognito run are encrypted under the browser
+      // key, so reconnecting needs it presented again. Without it the reader
+      // yields nothing rather than failing the reconnect.
+      const replayKeyInfo = conversation.incognito
+        ? await ConversationModel.getIncognitoKeyInfo(id)
+        : null;
+      const replayIncognitoAudit =
+        replayKeyInfo?.hasEscrow === true
+          ? requireIncognitoKey({
+              request,
+              conversation: replayKeyInfo,
+            })
+          : null;
 
       const activeRun = await ActiveChatRunModel.findReplayableByConversation({
         conversationId: id,
@@ -1970,7 +2189,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: {
           "Content-Encoding": "none",
         },
-        stream: activeChatRunService.createReplayStream(activeRun.id),
+        stream: activeChatRunService.createReplayStream(
+          activeRun.id,
+          replayIncognitoAudit,
+        ),
       });
 
       for (const [key, value] of response.headers.entries()) {
@@ -2047,7 +2269,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        user,
+        organizationId,
+      } = request;
       const conversation = await findReadableConversationById({
         conversationId: id,
         userId: user.id,
@@ -2056,6 +2283,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+
+      // Incognito: the model returned no message content (it cannot — the key
+      // only exists on this request). Decrypt here with the presented key, or
+      // return the locked shape for the tombstone. A wrong key is a 409.
+      if (conversation.incognito) {
+        const keyInfo = await ConversationModel.getIncognitoKeyInfo(id);
+        const access = resolveIncognitoAccess({
+          request,
+          conversation: keyInfo ?? {
+            id,
+            incognito: true,
+            incognitoDekFingerprint: null,
+            hasEscrow: false,
+          },
+        });
+        if (access.state === "unlocked") {
+          // Chat errors are loaded locked-safe by the model (it has no key),
+          // so re-read them here now that one is in hand.
+          const [rows, chatErrors] = await Promise.all([
+            MessageModel.findByConversation(id, access.key),
+            ConversationChatErrorModel.findByConversation(id, access.key),
+          ]);
+          conversation.messages = toConversationApiMessages(
+            rows,
+          ) as typeof conversation.messages;
+          conversation.chatErrors = chatErrors;
+        } else {
+          conversation.messages = [];
+          conversation.contentLocked = true;
+          return reply.send(conversation);
+        }
       }
 
       // Hook-run debug parts are persisted on every turn but only surfaced to
@@ -2289,6 +2548,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!sourceConversation) {
         throw new ApiError(404, "Conversation not found");
       }
+      if (sourceConversation.incognito) {
+        throw new ApiError(400, "Incognito conversations cannot be forked");
+      }
 
       const forked = await forkConversation({
         sourceConversation,
@@ -2373,6 +2635,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           projectId: true,
+          incognito: true,
+          thinkingEffort: true,
         })
           .required({ agentId: true })
           .partial({
@@ -2380,18 +2644,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             projectId: true,
+            incognito: true,
+            thinkingEffort: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (
-      {
-        body: { agentId, title, modelId, chatApiKeyId, projectId },
+    async (request, reply) => {
+      const {
+        body: {
+          agentId,
+          title,
+          modelId,
+          chatApiKeyId,
+          projectId,
+          incognito,
+          thinkingEffort,
+        },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
+      // Incognito chats never belong to a project (project sharing would leak
+      // the conversation's existence and future features could leak content).
+      if (incognito && projectId) {
+        throw new ApiError(
+          400,
+          "Incognito conversations cannot be created in a project",
+        );
+      }
+
       // A chat born in a project belongs to it; the caller must be able to
       // read the project. "No access" reads as 404, like the project routes.
       if (projectId) {
@@ -2456,16 +2737,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
+      // Incognito: the id is generated up front because the key fingerprint
+      // (and any enterprise escrow record, including the Vault-sink write)
+      // is bound to it; the browser's key is fingerprinted, never stored
+      // raw. The title is static — generation would send content to an LLM
+      // and store a derived plaintext title.
+      const incognitoConversationId = incognito ? randomUUID() : null;
+      const incognitoFields = incognitoConversationId
+        ? resolveIncognitoCreation({
+            request,
+            conversationId: incognitoConversationId,
+          })
+        : null;
+
       // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
+          ...(incognitoFields && incognitoConversationId
+            ? {
+                id: incognitoConversationId,
+                ...incognitoFields,
+                // Always static: clients derive draft titles from the first
+                // message text, which must never land in the plaintext title.
+                title: INCOGNITO_STATIC_TITLE,
+              }
+            : { title }),
           userId: user.id,
           organizationId,
           agentId,
-          title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
+          thinkingEffort,
         }),
       );
     },
@@ -2566,6 +2869,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Incognito: the artifact column stores conversation-derived content in
+      // plaintext, so the write is silently dropped (the feature no-ops).
+      if (body.artifact !== undefined) {
+        const incognitoInfo = await ConversationModel.getIncognitoKeyInfo(id);
+        if (incognitoInfo?.incognito) {
+          body.artifact = undefined;
+        }
+      }
+
       // Coerce pinnedAt ISO string to Date for database storage
       const pinnedAtDate =
         body.pinnedAt != null ? new Date(body.pinnedAt) : body.pinnedAt;
@@ -2574,12 +2886,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pinnedAt: pinnedAtDate,
       };
 
-      const conversation = await ConversationModel.update(
-        id,
-        user.id,
-        organizationId,
-        updateData,
+      // A no-op update (e.g. an artifact write dropped for an incognito
+      // conversation) must not reach drizzle's `.set()` with zero defined
+      // values; answer with the current conversation instead.
+      const hasFieldsToSet = Object.values(updateData).some(
+        (value) => value !== undefined,
       );
+      const conversation = hasFieldsToSet
+        ? await ConversationModel.update(
+            id,
+            user.id,
+            organizationId,
+            updateData,
+          )
+        : await ConversationModel.findById({
+            id,
+            userId: user.id,
+            organizationId,
+          });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -2797,6 +3121,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
+      if (conversation.incognito) {
+        // Compaction would persist an LLM-derived summary of the content in
+        // plaintext (conversation_compactions carries no per-conversation key).
+        throw new ApiError(
+          400,
+          "Compaction is not available for incognito conversations",
+        );
+      }
+
       if (!conversation.agentId || !conversation.agent) {
         throw new ApiError(
           400,
@@ -2925,6 +3258,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+      if (conversation.incognito) {
+        // A share grants read access the recipients could never use (they
+        // don't hold the key) and would leak the conversation's existence.
+        throw new ApiError(400, "Incognito conversations cannot be shared");
       }
 
       const teamIds = Array.from(new Set(body.teamIds ?? []));
@@ -3109,6 +3447,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+
+      if (conversation.incognito) {
+        // Title generation sends message content to an LLM and stores a
+        // plaintext derived title; incognito chats keep their static title.
+        return reply.send(conversation);
       }
 
       // Skip if title is already set (unless regenerating). A placeholder title
@@ -3296,15 +3640,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: { conversationId, partIndex, text, deleteSubsequentMessages },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Verify the user has access to the conversation FIRST — the message
       // lookup is scoped to it. Content ids (AI SDK nanoids, used until page
       // reload) are client-supplied and non-unique across conversations, and
@@ -3319,9 +3661,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
+      const editKey = conversation.incognito
+        ? requireIncognitoKey({
+            request,
+            conversation: (await ConversationModel.getIncognitoKeyInfo(
+              conversationId,
+            )) ?? {
+              id: conversationId,
+              incognito: true,
+              incognitoDekFingerprint: null,
+            },
+          })
+        : null;
+
       const message = await MessageModel.findByAnyIdInConversation(
         id,
         conversationId,
+        editKey,
       );
 
       if (!message) {
@@ -3338,6 +3694,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           text,
           deleteSubsequentMessages ?? false,
           tx,
+          editKey,
         );
         await invalidateConversationCompactions(message.conversationId, tx);
       });
@@ -3381,15 +3738,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: { conversationId, feedback },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Verify the user owns the conversation before resolving the message.
       // isOwnedBy, not findById: this endpoint only needs the ownership check,
       // and findById drags every message body along with it.
@@ -3403,11 +3758,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
+      // Incognito rows can only be resolved-by-content-id (and returned)
+      // after decryption with the browser-held key.
+      const feedbackKeyInfo =
+        await ConversationModel.getIncognitoKeyInfo(conversationId);
+      const feedbackKey = feedbackKeyInfo?.incognito
+        ? requireIncognitoKey({ request, conversation: feedbackKeyInfo })
+        : null;
+
       // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
       // conversation — content IDs are client-supplied and not globally unique
       const message = await MessageModel.findByAnyIdInConversation(
         id,
         conversationId,
+        feedbackKey,
       );
 
       if (!message) {
@@ -3424,6 +3788,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updatedMessage = await MessageModel.updateFeedback(
         message.id,
         feedback,
+        feedbackKey,
       );
 
       // The row can vanish between lookup and update (e.g. a concurrent
@@ -3860,9 +4225,15 @@ async function persistRegeneratedTurn(params: {
   conversationId: string;
   requestMessages: unknown[];
   finalMessages: unknown[];
+  /** Incognito conversations: the request-scoped browser-held key. */
+  conversationKey?: ConversationContentKey | null;
 }): Promise<void> {
-  const { conversationId, requestMessages, finalMessages } = params;
-  const existing = await MessageModel.findByConversation(conversationId);
+  const { conversationId, requestMessages, finalMessages, conversationKey } =
+    params;
+  const existing = await MessageModel.findByConversation(
+    conversationId,
+    conversationKey,
+  );
 
   // The user message being regenerated is the last one the client sent.
   // Everything stored below it is the stale turn to replace.
@@ -3891,7 +4262,7 @@ async function persistRegeneratedTurn(params: {
 
   await withDbTransaction(async (tx) => {
     await MessageModel.deleteByIds(staleIds, tx);
-    await MessageModel.bulkCreate(newRows, tx);
+    await MessageModel.bulkCreate(newRows, tx, conversationKey);
   });
 
   logger.info(
@@ -3907,6 +4278,82 @@ function storedMessageIds(row: { id: string; content: unknown }): string[] {
 }
 
 /**
+ * The turn's user-visible answer text: every text part of the assistant
+ * message(s) after the last user message in the finalized thread. Built from
+ * the persisted UI messages rather than streamText's `text`, which is only the
+ * final step's text — a cited paragraph the model emitted before a later tool
+ * step would otherwise never be checked.
+ */
+function extractTurnAnswerText(finalMessages: ChatMessage[]): string {
+  const lastUserIndex = finalMessages.findLastIndex(
+    (message) => message?.role === "user",
+  );
+  return finalMessages
+    .slice(lastUserIndex + 1)
+    .filter((message) => message?.role === "assistant")
+    .flatMap((message) =>
+      (message.parts ?? [])
+        .filter(
+          (part): part is { type: "text"; text: string } =>
+            part?.type === "text" && typeof part.text === "string",
+        )
+        .map((part) => part.text),
+    )
+    .join("\n");
+}
+
+/**
+ * Verifiable citations (issue #7161), the internal-chat half. Checks the
+ * verbatim quotes the model tagged with a chunk ref against the chunks
+ * `query_knowledge_sources` returned this turn (captured at tool-execution
+ * time by chat-tool-builder — direct calls and `run_tool` dispatches alike).
+ * Log-only: a quote found in no returned chunk is a fabrication surfaced to
+ * logs and a metric, a quote behind an unresolvable ref is a mis-citation,
+ * and neither is ever blocked or spliced into the answer. Only this surface
+ * can do this — external MCP clients answer where Archestra cannot see the
+ * text.
+ */
+function verifyChatCitedQuotes(params: {
+  chunks: KbChunkForQuoteCheck[];
+  answerText: string;
+  conversationId: string;
+  agentId: string;
+}): void {
+  const { chunks, answerText, conversationId, agentId } = params;
+
+  // No knowledge was pulled this turn, so there is nothing to verify.
+  if (chunks.length === 0) return;
+
+  const result = verifyQuotes({
+    answerText,
+    chunks,
+  });
+
+  reportQuoteVerification({
+    matched: result.matched,
+    wrongRef: result.wrongRef.length,
+    failed: result.failed.length,
+    unverifiable: result.unverifiable.length,
+    unparseable: result.unparseable ? 1 : 0,
+  });
+
+  if (result.failed.length > 0 || result.wrongRef.length > 0) {
+    logger.warn(
+      {
+        conversationId,
+        agentId,
+        checked: result.checked,
+        failedCount: result.failed.length,
+        failedRefs: result.failed.map((quote) => quote.ref),
+        wrongRefCount: result.wrongRef.length,
+        wrongRefs: result.wrongRef.map((quote) => quote.ref),
+      },
+      "KB quote verification: cited quote(s) not backed by the cited chunk",
+    );
+  }
+}
+
+/**
  * Persists new messages to the database for a conversation.
  * Strips images if browser streaming is enabled and handles empty message parts.
  *
@@ -3919,11 +4366,14 @@ async function persistNewMessages(
   conversationId: string,
   messages: unknown[],
   context: string,
+  conversationKey?: ConversationContentKey | null,
 ): Promise<number> {
   try {
     // Fetch existing messages to classify incoming ones as new or changed
-    const existingMessages =
-      await MessageModel.findByConversation(conversationId);
+    const existingMessages = await MessageModel.findByConversation(
+      conversationId,
+      conversationKey,
+    );
     const uiMessages = messages as ChatMessage[];
     const newMessages = getMessagesNotYetPersisted({
       existingMessages,
@@ -3988,7 +4438,7 @@ async function persistNewMessages(
             createdAt: new Date(now + index),
           }));
 
-          await MessageModel.bulkCreate(messageData);
+          await MessageModel.bulkCreate(messageData, db, conversationKey);
           persistedCount += messagesToStore.length;
 
           logger.info(
@@ -4004,6 +4454,7 @@ async function persistNewMessages(
       await MessageModel.updateContent(
         changedMessage.id,
         changedMessage.content,
+        conversationKey,
       );
     }
 
@@ -4042,13 +4493,17 @@ async function persistNewMessages(
 function persistConversationChatError(params: {
   conversationId: string;
   error: ChatErrorResponse;
+  incognitoAudit?: IncognitoAuditContext | null;
 }) {
   const chatError = getSerializableChatError(params.error);
 
-  void ConversationChatErrorModel.create({
-    conversationId: params.conversationId,
-    error: chatError,
-  }).catch((error) => {
+  void ConversationChatErrorModel.create(
+    {
+      conversationId: params.conversationId,
+      error: chatError,
+    },
+    params.incognitoAudit,
+  ).catch((error) => {
     logger.error(
       { error, conversationId: params.conversationId },
       "Failed to persist chat error event on conversation",
@@ -4062,6 +4517,32 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
   } catch {
     return getMinimalFrontendError(error);
   }
+}
+
+/**
+ * The persisted form of a chat error for an incognito conversation: keep the
+ * structured code, retryability, and trace correlation ids, but drop the
+ * free-text `message` and the provider's `originalError` — both routinely echo
+ * prompt/model content (provider 4xx bodies quote the request).
+ */
+function redactChatErrorForIncognito(
+  error: ChatErrorResponse,
+): ChatErrorResponse {
+  return {
+    code: error.code,
+    message: "Error details are redacted for incognito conversations.",
+    isRetryable: error.isRetryable,
+    ...(error.sessionId ? { sessionId: error.sessionId } : {}),
+    ...(error.traceId ? { traceId: error.traceId } : {}),
+    ...(error.spanId ? { spanId: error.spanId } : {}),
+    ...(error.usageLimitExceeded !== undefined
+      ? { usageLimitExceeded: error.usageLimitExceeded }
+      : {}),
+    ...(error.usageLimitEntityType
+      ? { usageLimitEntityType: error.usageLimitEntityType }
+      : {}),
+    ...(error.authAction ? { authAction: error.authAction } : {}),
+  };
 }
 
 function getMessagesNotYetPersisted(params: {

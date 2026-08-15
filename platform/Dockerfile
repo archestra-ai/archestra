@@ -2,7 +2,7 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.26.4-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648
+ARG GOLANG_IMAGE=golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -34,7 +34,8 @@ RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes
     cd /kind && \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
-    go get golang.org/x/net@v0.55.0 && \
+    # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
+    go get golang.org/x/net@v0.56.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
@@ -49,13 +50,14 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
-    # Versions must satisfy x/net@v0.55.0 requirements: x/sys >= v0.45.0, x/term >= v0.43.0.
-    go get golang.org/x/sys@v0.45.0 && \
-    go get golang.org/x/term@v0.43.0 && \
+    # Versions must satisfy x/net@v0.56.0 requirements: x/sys >= v0.46.0, x/term >= v0.44.0.
+    go get golang.org/x/sys@v0.46.0 && \
+    go get golang.org/x/term@v0.44.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
+    # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for grpc/otel/x/sys
     # transitively pull older x/net and would otherwise override our explicit requirement.
-    go get golang.org/x/net@v0.55.0 && \
+    go get golang.org/x/net@v0.56.0 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -77,6 +79,7 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
     go get github.com/go-git/go-billy/v5@v5.9.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
+    # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # Pinned to 0.56.0 (not 0.55.0) because go-git 5.19.2 requires >= 0.56.0 — asking for
     # anything lower here makes `go get` downgrade go-git back below 5.19.2 to satisfy it,
     # silently reintroducing cve-2026-71556. Do not lower without also lowering go-git.
@@ -84,6 +87,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # Pinned to 0.53.0 for the same go-git 5.19.2 floor reason as x/net above.
     go get golang.org/x/crypto@v0.53.0 && \
+    # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
+    # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
+    # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
+    # an explicit requirement rather than a bump of any single dependency.
+    go get golang.org/x/mod@v0.40.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
@@ -106,7 +114,11 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
     go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
-    go get golang.org/x/net@v0.55.0 && \
+    # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
+    go get golang.org/x/net@v0.56.0 && \
+    # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
+    # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
+    go get golang.org/x/mod@v0.40.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl
@@ -338,7 +350,17 @@ RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
-    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git git-daemon && \
+    #
+    # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
+    # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
+    # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
+    # because postgresql-pgvector depends on postgresql18, so that major lands in the image
+    # alongside 17 and is scanned too. (postgresql18 in fact owns the /usr/bin/postgres symlink,
+    # so it is the major supervisor actually starts.) Same stale-layer hazard as the curl pin: the bare
+    # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
+    # fixed versions and bust the cache.
+    apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \
+        "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
@@ -354,9 +376,10 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.26.4 to fix CVE-2025-68121,
-# the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811), and
-# the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504).
+# these binaries are built from source in go-builder with Go 1.26.6 to fix CVE-2025-68121,
+# the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
+# the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504), and the Go stdlib CRITICAL
+# fixed in 1.26.6 (CVE-2026-39821).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
@@ -388,7 +411,11 @@ RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
-RUN apk add --no-cache supervisor && \
+# CVE-2026-6100 (CRITICAL) plus CVE-2026-15308, CVE-2026-11972, CVE-2026-11940, CVE-2026-4786
+# and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
+# supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
+# before python3 is installed and cannot lift it.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

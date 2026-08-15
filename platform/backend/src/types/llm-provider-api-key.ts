@@ -1,4 +1,7 @@
-import { SupportedProvidersSchema } from "@archestra/shared";
+import {
+  SubscriptionCredentialKindSchema,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -73,12 +76,13 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
     bestModelId: z.string().nullable().optional(),
     isAgentKey: z.boolean().optional(),
     /**
-     * True when the stored credential is an OpenAI "ChatGPT Subscription"
-     * (Codex) credential rather than a raw API key. Computed from the secret
-     * marker server-side (the secret itself is never returned), so the edit form
-     * can open on the matching auth-mode tab.
+     * Which vendor subscription the stored credential encodes, or null for an
+     * ordinary API key. Computed from the secret marker server-side (the secret
+     * itself is never returned), so the edit form can open on the matching
+     * auth-mode tab and the Model Providers page can pair a connected
+     * subscription with its row.
      */
-    isChatgptSubscription: z.boolean().optional(),
+    subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
   });
 
 export type LlmProviderApiKeyWithScopeInfo = z.infer<

@@ -20,6 +20,10 @@ export const RouteId = {
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetAgentSubagentExclusions: "getAgentSubagentExclusions",
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
+  GetAgentSkills: "getAgentSkills",
+  UpdateAgentSkills: "updateAgentSkills",
+  GetAgentSkillExclusions: "getAgentSkillExclusions",
+  UpdateAgentSkillExclusions: "updateAgentSkillExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -323,6 +327,12 @@ export const RouteId = {
     "githubCopilotListModelsWithDefaultAgent",
   GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
 
+  // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
+  // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotResponsesWithDefaultAgent:
+    "githubCopilotResponsesWithDefaultAgent",
+  GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
+
   // GitHub Copilot device-flow sign-in (creates personal provider keys)
   GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
   GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
@@ -345,6 +355,11 @@ export const RouteId = {
   // ChatGPT/Codex subscription as an OpenAI provider credential
   OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
   OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
+
+  // xAI "X Premium (SuperGrok)" device-flow sign-in — connects an X Premium
+  // subscription as an xAI provider credential
+  XaiSubscriptionDeviceAuthStart: "xaiSubscriptionDeviceAuthStart",
+  XaiSubscriptionDeviceAuthPoll: "xaiSubscriptionDeviceAuthPoll",
 
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
@@ -397,6 +412,7 @@ export const RouteId = {
   CreateLlmProviderApiKey: "createLlmProviderApiKey",
   GetLlmProviderApiKey: "getLlmProviderApiKey",
   UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
+  ReconnectLlmProviderApiKey: "reconnectLlmProviderApiKey",
   DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
 
   // User API Key Routes
@@ -501,6 +517,7 @@ export const RouteId = {
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
   GetK8sCapabilities: "getK8sCapabilities",
 
   // GitHub App Configuration Routes
@@ -627,6 +644,8 @@ export const RouteId = {
   DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
+  StartGoogleDriveConnectorOAuth: "startGoogleDriveConnectorOAuth",
+  CompleteGoogleDriveConnectorOAuth: "completeGoogleDriveConnectorOAuth",
 
   // Connector Knowledge Base Assignment Routes
   AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",
@@ -709,6 +728,9 @@ export const RouteId = {
 
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
+  GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
+  GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
+  GetMfilesVafAddOnDistribution: "getMfilesVafAddOnDistribution",
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",

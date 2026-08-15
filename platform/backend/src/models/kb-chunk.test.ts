@@ -375,6 +375,79 @@ describe("KbChunkModel", () => {
       expect(results[0].score).toBeGreaterThan(0);
     });
 
+    test("a multi-term query requires every term (AND semantics)", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "apple banana cherry",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+        {
+          documentId: doc.id,
+          content: "apple date",
+          chunkIndex: 1,
+          acl: ["org:*"],
+        },
+      ]);
+
+      // Only the chunk containing BOTH terms matches — the always-OR rewrite
+      // would have returned both, and its match set is what made the keyword
+      // lane's cost scale with the corpus.
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "apple banana",
+        userAcl: ["org:*"],
+      });
+      expect(results.map((r) => r.chunkIndex)).toEqual([0]);
+    });
+
+    test("falls back to OR matching when no chunk holds every term", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "apple banana cherry",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+        {
+          documentId: doc.id,
+          content: "banana date",
+          chunkIndex: 1,
+          acl: ["org:*"],
+        },
+      ]);
+
+      // "zzzabsent" appears nowhere, so the AND pass matches nothing; the OR
+      // fallback recovers the chunks that hold any of the real terms.
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "banana zzzabsent",
+        userAcl: ["org:*"],
+      });
+      expect(results.map((r) => r.chunkIndex).sort()).toEqual([0, 1]);
+    });
+
     test("returns empty array when connectorIds is empty", async () => {
       const results = await KbChunkModel.fullTextSearch({
         connectorIds: [],

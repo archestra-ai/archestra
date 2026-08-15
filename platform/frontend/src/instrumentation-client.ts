@@ -3,14 +3,18 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import config from "@/lib/config/config";
-import { getFrontendBrowserSentryOptions } from "../sentry.shared";
+import {
+  getFrontendBrowserSentryOptions,
+  shouldEnableFrontendTelemetry,
+} from "../sentry.shared";
 
 const {
   sentry: { dsn, environment },
 } = config;
 
-// Only initialize Sentry if DSN is configured
-if (dsn) {
+const telemetryEnabled = shouldEnableFrontendTelemetry({ dsn, environment });
+
+if (telemetryEnabled) {
   void import("@sentry/nextjs").then((Sentry) => {
     const browserOptions = getFrontendBrowserSentryOptions({
       dsn,
@@ -30,7 +34,7 @@ if (dsn) {
 
 export const onRouterTransitionStart: typeof import("@sentry/nextjs").captureRouterTransitionStart =
   (...args) => {
-    if (!dsn) return;
+    if (!telemetryEnabled) return;
 
     void import("@sentry/nextjs").then(({ captureRouterTransitionStart }) => {
       captureRouterTransitionStart(...args);

@@ -30,11 +30,19 @@ vi.mock("@/auth");
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
-  testProviderApiKey: vi.fn(async (provider, _, baseUrl) => {
-    if (provider === "bedrock" && !baseUrl) {
-      throw new Error("Bedrock base URL not configured");
-    }
-  }),
+  testProviderApiKey: vi.fn(
+    async ({
+      provider,
+      baseUrl,
+    }: {
+      provider: string;
+      baseUrl?: string | null;
+    }) => {
+      if (provider === "bedrock" && !baseUrl) {
+        throw new Error("Bedrock base URL not configured");
+      }
+    },
+  ),
 }));
 
 // Mock secrets-manager to use real DB-backed SecretModel for FK integrity
@@ -44,6 +52,9 @@ vi.mock("@/secrets-manager", async (importOriginal) => {
   return {
     ...actual,
     isByosEnabled: vi.fn().mockReturnValue(false),
+    // The real getSecretValueForLlmProviderApiKey runs on top of this mocked
+    // manager, so getSecret must return the (plaintext) DB row for routes that
+    // inspect the stored credential (PATCH scope checks, reconnect).
     secretManager: vi.fn().mockReturnValue({
       createSecret: vi
         .fn()
@@ -51,6 +62,9 @@ vi.mock("@/secrets-manager", async (importOriginal) => {
           async (secret: Record<string, unknown>, name: string) =>
             SecretModel.create({ name, secret }),
         ),
+      getSecret: vi
+        .fn()
+        .mockImplementation(async (id: string) => SecretModel.findById(id)),
       updateSecret: vi.fn(),
       deleteSecret: vi.fn(),
     }),
@@ -70,6 +84,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockAnthropicWifIsEnabled = vi.mocked(
@@ -214,6 +229,74 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     expect(getBestModelsForApiKeysSpy).toHaveBeenCalledWith([apiKey.id]);
     expect(getBestModelSpy).not.toHaveBeenCalled();
   });
+
+  test("includeKeyId carries subscription metadata for another user's X Premium key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "owner-refresh-token",
+          userId: "owner-x-user-id",
+        }),
+      },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    // The viewer can't list the owner's personal key, but the included agent
+    // key must say it is an X Premium credential so the chat/agent preflight
+    // gates sending behind "connect your own account".
+    expect(includedKey).toMatchObject({
+      isAgentKey: true,
+      subscriptionKind: "x-premium",
+    });
+  });
+
+  test("includeKeyId reports no subscription kind for a plain xAI key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: "xai-plain-console-key" },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "Owner xAI Key",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    expect(includedKey).toMatchObject({ isAgentKey: true });
+    expect(includedKey.subscriptionKind ?? null).toBeNull();
+  });
 });
 
 describe("LLM Provider API Keys CRUD", () => {
@@ -288,10 +371,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(response.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "openai",
-      "sk-openai-inference-url-create-test",
-      "https://runtime.example.com/v1",
-      undefined,
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-create-test",
+        baseUrl: "https://runtime.example.com/v1",
+        extraHeaders: undefined,
+      }),
     );
   });
 
@@ -354,6 +439,40 @@ describe("LLM Provider API Keys CRUD", () => {
     const apiKey = response.json();
     expect(apiKey.id).toBe(createdKey.id);
     expect(apiKey.name).toBe("Get By ID Test Key");
+  });
+
+  test("returns subscription metadata for a single key fetched by ID", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The edit dialog's URL-param path (?edit=<id>) resolves through this
+    // route; without the derived kind an F5 mid-edit would reopen an
+    // X Premium key on the API-key tab with no connected card.
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-get-by-id",
+          userId: "x-user-id",
+        }),
+      },
+    });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: user.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${key.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: key.id,
+      subscriptionKind: "x-premium",
+    });
   });
 
   test("should update an LLM provider API key name", async () => {
@@ -544,10 +663,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "openai",
-      "sk-openai-inference-url-update-test",
-      "https://runtime.example.com/v1",
-      null,
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-update-test",
+        baseUrl: "https://runtime.example.com/v1",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -578,10 +699,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "openai",
-      "sk-openai-base-url-update-test",
-      "https://runtime.example.com/v1",
-      null,
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "sk-openai-base-url-update-test",
+        baseUrl: "https://runtime.example.com/v1",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -613,10 +736,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "openai",
-      "sk-openai-inference-url-clear-test",
-      "https://new-runtime.example.com/v1",
-      null,
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "sk-openai-inference-url-clear-test",
+        baseUrl: "https://new-runtime.example.com/v1",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -647,10 +772,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "openai",
-      "sk-openai-updated-key",
-      "https://runtime.example.com/v1",
-      null,
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "sk-openai-updated-key",
+        baseUrl: "https://runtime.example.com/v1",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -706,10 +833,12 @@ describe("LLM Provider API Keys CRUD", () => {
     );
     // Connectivity was tested without an API key.
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "ollama",
-      "",
-      "http://localhost:11434/v1",
-      undefined,
+      expect.objectContaining({
+        provider: "ollama",
+        apiKey: "",
+        baseUrl: "http://localhost:11434/v1",
+        extraHeaders: undefined,
+      }),
     );
   });
 
@@ -945,10 +1074,12 @@ describe("LLM Provider API Keys CRUD", () => {
       baseUrl: "https://my-resource.openai.azure.com/openai",
     });
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "azure",
-      "",
-      "https://my-resource.openai.azure.com/openai",
-      undefined,
+      expect.objectContaining({
+        provider: "azure",
+        apiKey: "",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+        extraHeaders: undefined,
+      }),
     );
   });
 
@@ -979,10 +1110,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "azure",
-      "",
-      "https://runtime.example.com/openai/v1",
-      null,
+      expect.objectContaining({
+        provider: "azure",
+        apiKey: "",
+        baseUrl: "https://runtime.example.com/openai/v1",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -1007,10 +1140,12 @@ describe("LLM Provider API Keys CRUD", () => {
     });
     // Keyless create must still exercise the WIF token exchange + model listing.
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "anthropic",
-      "",
-      undefined,
-      undefined,
+      expect.objectContaining({
+        provider: "anthropic",
+        apiKey: "",
+        baseUrl: undefined,
+        extraHeaders: undefined,
+      }),
     );
   });
 
@@ -1054,10 +1189,12 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "anthropic",
-      "",
-      "https://api.anthropic.com",
-      null,
+      expect.objectContaining({
+        provider: "anthropic",
+        apiKey: "",
+        baseUrl: "https://api.anthropic.com",
+        extraHeaders: null,
+      }),
     );
   });
 
@@ -1078,16 +1215,20 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(createResponse.statusCode).toBe(200);
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "azure",
-      "",
-      "https://discovery.example.com/openai",
-      undefined,
+      expect.objectContaining({
+        provider: "azure",
+        apiKey: "",
+        baseUrl: "https://discovery.example.com/openai",
+        extraHeaders: undefined,
+      }),
     );
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
-      "azure",
-      "",
-      "https://runtime.example.com/openai/v1",
-      undefined,
+      expect.objectContaining({
+        provider: "azure",
+        apiKey: "",
+        baseUrl: "https://runtime.example.com/openai/v1",
+        extraHeaders: undefined,
+      }),
     );
   });
 
@@ -1496,5 +1637,195 @@ describe("LLM Provider API Keys Access Control", () => {
     });
 
     expect(response.statusCode).toBe(403);
+  });
+});
+
+describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let memberUser: User;
+
+  const storedCredential = encodeOpenAiCodexCredential({
+    refreshToken: "rt-stored-dead",
+    accountId: "acc-1",
+  });
+  const freshCredential = encodeOpenAiCodexCredential({
+    refreshToken: "rt-fresh",
+    accountId: "acc-1",
+  });
+
+  // Deliberately a plain member with NO llmProviderApiKey permissions: the
+  // whole point of the route is that reconnecting your own personal
+  // subscription key is self-service, like connecting it was.
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupMemberApp();
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    memberUser = await makeUser();
+    await makeMember(memberUser.id, organizationId, { role: "member" });
+
+    app = await createApp(organizationId, memberUser);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("rotates the caller's own personal subscription key in place", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "openai", apiKey: freshCredential }),
+    );
+    const { secretManager } = await import("@/secrets-manager");
+    expect(secretManager().updateSecret).toHaveBeenCalledWith(secret.id, {
+      apiKey: freshCredential,
+    });
+  });
+
+  test("also reconnects provider-level subscription keys (GitHub Copilot)", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "gho_old" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: "gho_fresh" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { secretManager } = await import("@/secrets-manager");
+    expect(secretManager().updateSecret).toHaveBeenCalledWith(secret.id, {
+      apiKey: "gho_fresh",
+    });
+  });
+
+  test("404s for another user's personal key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: otherUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("rejects shared keys", async ({ makeSecret, makeLlmProviderApiKey }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-org" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("personal");
+  });
+
+  test("rejects a plain API key value — reconnect is not an edit bypass", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: storedCredential } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: "sk-plain-api-key" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("subscription sign-in");
+  });
+
+  test("rejects when the stored secret is a plain API key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-plain-stored" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("plain API key");
+  });
+
+  test("rejects when the stored secret lives in a read-only BYOS Vault", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({
+      secret: { apiKey: "vault/data/llm#openai" },
+      isByosVault: true,
+    } as never);
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: memberUser.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
+      payload: { apiKey: freshCredential },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("Vault");
   });
 });

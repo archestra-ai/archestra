@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.3.29" # x-release-please-version
+  imageTag: "1.3.36" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -382,6 +382,24 @@ archestra:
     limits:
       memory: "3Gi"
 
+  # Memory inside the web container that is NOT available to the backend's V8
+  # heap, because the same container also runs the Next.js server (and
+  # supervisord) under one memory limit.
+  #
+  # The launcher sizes --max-old-space-size as a percentage of the container's
+  # memory limit. Without this, that percentage is taken over memory the backend
+  # does not solely own, so the heap ceiling it is granted plus the co-located
+  # processes can exceed the limit — and the cgroup kills the container before V8
+  # ever reaches its own ceiling. That turns a diagnosable JS heap OOM into an
+  # opaque SIGKILL, and the stall while it happens fails the probes too.
+  # Subtracting the reservation first restores the intended ordering: V8 reaches
+  # its ceiling, throws, and leaves a stack behind.
+  #
+  # Sized from a measured Next.js server (~150 MiB resident) plus headroom for
+  # growth under load and for supervisord. Only the web container sets this — the
+  # worker and renderer run a single Node process and reserve nothing.
+  webContainerReservedMemoryMib: 384
+
   # Kubernetes probe configuration for the platform and worker containers.
   # See: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
   #
@@ -550,6 +568,15 @@ archestra:
         #       namespace: another-namespace
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
+
+  # Knowledge base configuration
+  knowledgeBase:
+    # Perforce permission sync
+    perforceShim:
+      # Image for the p4 shim pod the backend provisions for Perforce
+      # permission sync. If not set, defaults to
+      # "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<app version>"
+      image: ""
 
   # Background worker configuration
   # Deploys a separate Deployment for processing background jobs from the postgres queue

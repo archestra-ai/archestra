@@ -1157,11 +1157,9 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       expect(response.body).not.toContain('"finish_reason":"tool_calls"');
     });
 
-    // Only the Anthropic adapter names its declared tools; every other one
-    // falls back to getTools(). The fallback is what keeps the availability
-    // check running for those providers, and a regression that yielded an empty
-    // set here would disable filtering rather than fail loudly.
-    test("a provider that cannot name its declared tools falls back to getTools", async () => {
+    // The availability set is read from the request body for every provider,
+    // so the ordinary function-tool shape has to keep working unchanged.
+    test("names the function tools a caller declared", async () => {
       openAiStubOptions.includeToolCalls = true;
       mockEvaluatePolicies.mockResolvedValue(null);
 
@@ -1193,6 +1191,83 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       const enabledToolNames = mockEvaluatePolicies.mock
         .calls[0][4] as Set<string>;
       expect([...enabledToolNames]).toEqual(["get_weather"]);
+    });
+
+    // The regression this guards: a caller declares a tool it executes itself
+    // in a shape getTools() drops (here a freeform `custom` tool — the same
+    // loss that hides Anthropic built-ins and every non-function tool on the
+    // Responses surface). Sourcing availability from that view refused the call
+    // and told the model to stop trying, costing it a capability mid-turn.
+    test("a client-declared tool getTools drops is not refused", async () => {
+      openAiStubOptions.includeToolCalls = true;
+      const { evaluatePolicies } = await vi.importActual<
+        typeof import("@/guardrails/tool-invocation")
+      >("@/guardrails/tool-invocation");
+      mockEvaluatePolicies.mockImplementation((...args) =>
+        evaluatePolicies(...(args as Parameters<typeof evaluatePolicies>)),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+          // The only shape the caller has to declare this in — no `function`
+          // wrapper, so the adapter's tool view cannot see it.
+          tools: [{ type: "custom", custom: { name: "get_weather" } }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["get_weather"]);
+      expect(response.body).not.toContain("are not enabled for this");
+      // The call reaches the caller, so it can actually run the tool.
+      expect(response.body).toContain("get_weather");
+      expect(response.body).toContain('"finish_reason":"tool_calls"');
+    });
+
+    // The other half of the contract: widening what counts as declared must not
+    // hollow out the check. A tool the caller never declared is still refused,
+    // which is what per-conversation tool selection relies on.
+    test("a tool the caller never declared is still refused", async () => {
+      openAiStubOptions.includeToolCalls = true;
+      const { evaluatePolicies } = await vi.importActual<
+        typeof import("@/guardrails/tool-invocation")
+      >("@/guardrails/tool-invocation");
+      mockEvaluatePolicies.mockImplementation((...args) =>
+        evaluatePolicies(...(args as Parameters<typeof evaluatePolicies>)),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+          // The stub calls `get_weather`, which this request never declares.
+          tools: [{ type: "custom", custom: { name: "something_else" } }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["something_else"]);
+      expect(response.body).toContain("are not enabled for this");
+      expect(response.body).not.toContain('"finish_reason":"tool_calls"');
     });
 
     // The refusal sibling above only pins that a refused call is absent, which

@@ -136,16 +136,6 @@ class A2APushNotificationService {
 
 export const a2aPushNotificationService = new A2APushNotificationService();
 
-/**
- * Local development points webhooks at localhost, which the SSRF guard
- * otherwise refuses. Never enabled in production.
- */
-function allowPrivateWebhookHosts(): boolean {
-  return (
-    process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "prod"
-  );
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

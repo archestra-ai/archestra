@@ -35,6 +35,7 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,9 @@ import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
+import { isActionAvailableForConversation } from "@/lib/chat/incognito";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -240,11 +243,16 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
+  notRecommendedForAgents,
   onResetModelOverride,
+  thinkingEffort,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
   sandboxAvailable,
+  incognito = false,
+  onIncognitoChange,
   prefillText,
   onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -281,12 +289,25 @@ const PromptInputContent = ({
     string | null
   >(null);
 
+  // /debug needs the conversation below; fetched early so the incognito gate
+  // can read it too.
+  const { data: conversation } = useConversation(conversationId);
+
+  // Incognito is "active" for the composer both while chatting in an
+  // incognito conversation and while the new-chat toggle is on — either way
+  // the backend will reject attachments and sandbox `!` commands, so their
+  // affordances are hidden (not disabled).
+  const incognitoActive =
+    !isActionAvailableForConversation(conversation, "attachments") ||
+    (incognito && !conversationId);
+  const appName = useAppName();
+
   // Any file type can be attached regardless of model modalities or sandbox:
   // a file the model can't read is still stored and surfaced in the
   // conversation's Files panel (and staged into the sandbox when one is
-  // available), so uploads are gated only by the org-level toggle and the OS
-  // picker is unrestricted.
-  const showFileUploadButton = allowFileUploads;
+  // available), so uploads are gated only by the org-level toggle (and the
+  // incognito block) and the OS picker is unrestricted.
+  const showFileUploadButton = allowFileUploads && !incognitoActive;
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -315,7 +336,6 @@ const PromptInputContent = ({
   // conversation only. Mirrors the server gate (agent-type admin) loosely — the
   // toggle endpoint enforces it for real.
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: conversation } = useConversation(conversationId);
   const toggleHooksDebug = useToggleHooksDebug();
   const agentHooksEnabled = useFeature("agentHooksEnabled") ?? false;
   const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;
@@ -414,8 +434,11 @@ const PromptInputContent = ({
   // Subtle affordance for the `!` convention: shown while the typed text
   // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
   // could run it as a sandbox command instead of sending it to the model.
+  // Hidden for incognito chats, where the backend rejects sandbox commands.
   const isSandboxCommandHintVisible =
-    sandboxAvailable && controller.textInput.value.trimStart().startsWith("!");
+    sandboxAvailable &&
+    !incognitoActive &&
+    controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
   // once a space is entered they have moved on to the prompt body.
@@ -577,9 +600,13 @@ const PromptInputContent = ({
       // a `!`-prefixed message runs directly in the conversation's sandbox —
       // disjoint from the `/`-commands above and the skill commands below,
       // since those require a `/` prefix. The text is sent exactly as typed;
-      // only a metadata marker rides along.
+      // only a metadata marker rides along. Incognito chats never mark the
+      // message (the backend rejects sandbox commands there), so a leading
+      // `!` goes to the model as ordinary text.
       const isSandboxCommand =
-        sandboxAvailable && parseSandboxCommand(trimmed) !== null;
+        sandboxAvailable &&
+        !incognitoActive &&
+        parseSandboxCommand(trimmed) !== null;
 
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
@@ -620,6 +647,7 @@ const PromptInputContent = ({
     [
       canDebug,
       dispatchSubmit,
+      incognitoActive,
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
@@ -878,6 +906,22 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
+      {/* Incognito "drawer": a slim strip tucked against the composer's top
+          edge, carrying the explanation that used to live in the toggle's
+          tooltip. Paired with the dashed composer border below so an
+          incognito chat is unmistakable while composing. */}
+      {incognitoActive && (
+        <div
+          data-testid={E2eTestId.ChatIncognitoNotice}
+          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
+        >
+          <IncognitoIcon className="size-3.5" />
+          <span>
+            Locked chat — encrypted with a key that stays in this browser.{" "}
+            {appName} cannot read it, and it isn't available on other devices.
+          </span>
+        </div>
+      )}
       <PromptInput
         globalDrop
         multiple
@@ -885,6 +929,15 @@ const PromptInputContent = ({
         accept={showFileUploadButton ? undefined : "application/x-empty"}
         maxFileSize={storageByteLimit}
         onError={handleFileError}
+        className={cn(
+          incognitoActive &&
+            // The dashed border replaces the composer's ring outright (both
+            // at once read as two competing outlines). !important because the
+            // ring and focus border are has-[]-variant classes on the
+            // InputGroup that otherwise win on specificity; focus feedback
+            // comes from brightening the dashes instead.
+            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
+        )}
       >
         {/* File attachments display - shown inline above textarea */}
         <PromptInputAttachments className="px-3 pt-2 pb-0">
@@ -930,6 +983,9 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
+            attachmentsDisabledByIncognito={incognitoActive}
+            incognito={incognito}
+            onIncognitoChange={onIncognitoChange}
             sandboxAvailable={sandboxAvailable}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
@@ -940,7 +996,10 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
+            notRecommendedForAgents={notRecommendedForAgents}
             onResetModelOverride={onResetModelOverride}
+            thinkingEffort={thinkingEffort}
+            onThinkingEffortChange={onThinkingEffortChange}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             subscriptionConnectRequired={subscriptionConnectRequired}
             subscriptionProvider={subscriptionProvider}
@@ -1039,10 +1098,15 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
+  notRecommendedForAgents,
   onResetModelOverride,
+  thinkingEffort,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
+  incognito,
+  onIncognitoChange,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1145,10 +1209,15 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
+          notRecommendedForAgents={notRecommendedForAgents}
           onResetModelOverride={onResetModelOverride}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={onThinkingEffortChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
+          incognito={incognito}
+          onIncognitoChange={onIncognitoChange}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
         />

@@ -138,11 +138,16 @@ export interface ChatReplyOptions {
   text: string;
   /** Optional: Reply in thread (if supported) */
   replyInThread?: boolean;
-  /** Optional: Footer text to append (e.g. agent name) */
+  /**
+   * Optional: footer text stamping the reply with the responding agent (e.g.
+   * "🤖 Sales Bot"). Providers render it exactly once, as the last line of the
+   * reply, dropping any copy of it the model wrote itself.
+   */
   footer?: string;
   /**
-   * Optional: an even-more-subtle hint rendered on its own line below the
-   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   * Optional: an even-more-subtle hint rendered on its own line ABOVE the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply),
+   * so the footer stays the reply's last line.
    */
   hint?: string;
   /** Provider-specific conversation reference for reply routing */
@@ -438,8 +443,10 @@ export interface ChatOpsProvider {
 
   /**
    * Get a permalink to a specific message in the provider's web UI.
-   * Used to surface a clickable thread URL in the LLM context so tools
-   * can reference the originating conversation.
+   * Used to surface a clickable URL in the LLM context so tools can reference
+   * the originating message. Callers pass the message that triggered the run,
+   * not its thread root — Slack encodes the thread in a reply's permalink
+   * (`?thread_ts=`), so the reply link identifies both.
    * @param params.channelId - The channel ID containing the message
    * @param params.messageId - The message ID (Slack ts) to link to
    * @returns Permalink URL, or null if unavailable

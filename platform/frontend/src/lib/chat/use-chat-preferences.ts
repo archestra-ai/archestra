@@ -7,7 +7,9 @@ import {
   providerRequiresPerUserCredential,
   type RankedModel,
   resolveModelSelection,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 
 export type { ModelSource };
@@ -284,6 +286,69 @@ export function agentRequiresPerUserConnect(params: {
   return selectedModel?.isConnected !== true;
 }
 
+/** Structural subset of an available-keys row (LlmProviderApiKeyWithScopeInfo). */
+interface AgentSubscriptionCredential {
+  id: string;
+  provider: SupportedProvider;
+  name: string;
+  userId?: string | null;
+  subscriptionKind?: SubscriptionCredentialKind | null;
+}
+
+/**
+ * Whether the agent's pinned credential requires the viewer to connect their
+ * own per-user account, and — if so — whether they already have. Feeds
+ * `agentRequiresPerUserConnect` (which additionally gates on the agent's model
+ * staying selected).
+ */
+export function getAgentSubscriptionConnection(params: {
+  agent:
+    | {
+        llmApiKeyId?: string | null;
+        resolvedLlmProvider?: SupportedProvider;
+        llmProviderRequiresPerUserCredential?: boolean;
+      }
+    | undefined;
+  credentials: AgentSubscriptionCredential[];
+  userId?: string;
+}) {
+  const { agent, credentials, userId } = params;
+  const pinnedCredential = credentials.find(
+    (credential) => credential.id === agent?.llmApiKeyId,
+  );
+  // Which subscription the pinned credential encodes, from the server-derived
+  // metadata (populated for included agent keys too).
+  const pinnedSubscriptionKind = pinnedCredential
+    ? subscriptionKindFromKeyMetadata(pinnedCredential)
+    : null;
+  const requiresConnection = Boolean(
+    agent?.llmProviderRequiresPerUserCredential ||
+      pinnedSubscriptionKind != null,
+  );
+  if (!requiresConnection) {
+    return { requiresConnection: false, isConnected: undefined };
+  }
+
+  const provider = pinnedCredential?.provider ?? agent?.resolvedLlmProvider;
+  // Mirror the send path (resolveProviderApiKey → substituteOwnSubscriptionKey):
+  // a credential-level subscription is only satisfied by the viewer's own
+  // personal key of the SAME kind — a plain xAI console key does not connect an
+  // X Premium agent. Provider-level subscriptions (Copilot) accept any personal
+  // key of the provider, because every key of that provider is per-user.
+  const isConnected = Boolean(
+    userId &&
+      credentials.some(
+        (credential) =>
+          credential.userId === userId &&
+          (pinnedSubscriptionKind != null
+            ? subscriptionKindFromKeyMetadata(credential) ===
+              pinnedSubscriptionKind
+            : credential.provider === provider),
+      ),
+  );
+  return { requiresConnection, isConnected };
+}
+
 /**
  * True when the selected model can't take tools (supportsToolCalling is
  * synced as false, e.g. Microsoft 365 Copilot) while the selected agent
@@ -306,6 +371,42 @@ export function agentToolsUnavailableForModel(params: {
   if (!selectedModelId) return false;
   const model = models.find((m) => m.dbId === selectedModelId);
   return model?.capabilities?.supportsToolCalling === false;
+}
+
+/**
+ * True when the backend's sync judged the selected model a poor fit for agent
+ * work, while the selected agent brings tools. Gated on the agent having tools
+ * for the same reason as {@link agentToolsUnavailableForModel}: the verdict only
+ * matters because the turn is agentic, and such a model doing plain chat needs
+ * no warning.
+ *
+ * Strictly `=== false`: `true` is the column default and cannot distinguish a
+ * model with no evidence from one known to be fine, so only an explicit
+ * negative verdict is surfaced.
+ *
+ * Suppressed when the model already reports no tool calling at all — that is
+ * the stronger, more actionable statement, and two chips side by side in the
+ * composer is noise.
+ */
+export function agentNotRecommendedForModel(params: {
+  /** Structural subset of the agents-API row (AgentLlmConfig). */
+  agent: { accessAllTools: boolean; tools: readonly unknown[] } | undefined;
+  selectedModelId: string | null | undefined;
+  models: Array<{
+    dbId: string;
+    capabilities?: {
+      recommendedForAgents?: boolean | null;
+      supportsToolCalling?: boolean | null;
+    } | null;
+  }>;
+}): boolean {
+  const { agent, selectedModelId, models } = params;
+  if (!agent) return false;
+  if (!agent.accessAllTools && agent.tools.length === 0) return false;
+  if (!selectedModelId) return false;
+  const model = models.find((m) => m.dbId === selectedModelId);
+  if (model?.capabilities?.supportsToolCalling === false) return false;
+  return model?.capabilities?.recommendedForAgents === false;
 }
 
 // ===== Model source =====

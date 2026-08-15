@@ -40,7 +40,8 @@ class JwksValidator {
     token: string;
     issuerUrl: string;
     jwksUrl: string;
-    audience: string | null;
+    /** Accepted `aud` value(s); an array accepts any listed value (jose semantics). */
+    audience: string | string[] | null;
     /**
      * Claim holding the caller's email, taken from the IdP's attribute mapping.
      * IdPs that namespace custom claims (`https://example.com/email`) never

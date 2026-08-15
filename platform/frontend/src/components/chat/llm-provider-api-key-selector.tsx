@@ -1,9 +1,12 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   type ResourceVisibilityScope,
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -18,62 +21,44 @@ import {
 
 type SubscriptionConnectOption = {
   id: string;
+  subscriptionKind: SubscriptionCredentialKind;
   name: string;
-  provider: "openai" | "github-copilot" | "microsoft-365-copilot";
+  provider: (typeof SUBSCRIPTION_CREDENTIALS)[SubscriptionCredentialKind]["provider"];
   scope: "personal";
-  isChatgptSubscription?: boolean;
   connectRequired: true;
   dialogTitle: string;
   dialogDescription: string;
   defaultValues: Partial<LlmProviderApiKeyFormValues>;
 };
 
-const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
-  {
-    id: "connect-subscription-openai",
-    name: CHATGPT_SUBSCRIPTION_LABEL,
-    provider: "openai",
-    scope: "personal",
-    isChatgptSubscription: true,
-    connectRequired: true,
-    dialogTitle: "Sign in with ChatGPT",
-    dialogDescription: "Connect your ChatGPT account to use your subscription",
-    defaultValues: {
-      name: CHATGPT_SUBSCRIPTION_LABEL,
-      provider: "openai",
-      scope: "personal",
-      openaiAuthMethod: "chatgpt-subscription",
-    },
-  },
-  {
-    id: "connect-subscription-github-copilot",
-    name: "GitHub Copilot",
-    provider: "github-copilot",
-    scope: "personal",
-    connectRequired: true,
-    dialogTitle: "Sign in with GitHub Copilot",
-    dialogDescription: "Connect your GitHub Copilot subscription",
-    defaultValues: {
-      name: "GitHub Copilot",
-      provider: "github-copilot",
-      scope: "personal",
-    },
-  },
-  {
-    id: "connect-subscription-microsoft-365-copilot",
-    name: "Microsoft 365 Copilot",
-    provider: "microsoft-365-copilot",
-    scope: "personal",
-    connectRequired: true,
-    dialogTitle: "Sign in with Microsoft 365 Copilot",
-    dialogDescription: "Connect your Microsoft 365 Copilot subscription",
-    defaultValues: {
-      name: "Microsoft 365 Copilot",
-      provider: "microsoft-365-copilot",
-      scope: "personal",
-    },
-  },
-];
+/**
+ * The "Connect subscription" entries offered in the selector, derived from the
+ * shared registry so a new subscription appears here without editing this
+ * component.
+ */
+const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] =
+  SUBSCRIPTION_CREDENTIAL_KINDS.map((kind) => {
+    const { provider, label, marker, connect } = SUBSCRIPTION_CREDENTIALS[kind];
+    return {
+      id: `connect-subscription-${kind}`,
+      subscriptionKind: kind,
+      name: label,
+      provider,
+      scope: "personal" as const,
+      connectRequired: true as const,
+      dialogTitle: connect.signInTitle,
+      dialogDescription: connect.signInDescription,
+      defaultValues: {
+        name: label,
+        provider,
+        scope: "personal" as const,
+        // Credential-level subscriptions share their provider with ordinary
+        // API keys, so the form has to open on the subscription tab.
+        // Provider-level ones have no tabs and ignore this.
+        ...(marker !== null ? { authMethod: "subscription" as const } : {}),
+      },
+    };
+  });
 
 interface LlmProviderApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -173,9 +158,8 @@ export function LlmProviderApiKeySelector({
   // Set when the connect dialog re-authenticates an existing credential
   // (rotating its secret) instead of creating a new one.
   const [reconnectKeyId, setReconnectKeyId] = useState<string | null>(null);
-  const [connectedProviderToSelect, setConnectedProviderToSelect] = useState<
-    SubscriptionConnectOption["provider"] | null
-  >(null);
+  const [connectedKindToSelect, setConnectedKindToSelect] =
+    useState<SubscriptionCredentialKind | null>(null);
   const handledConnectRequestRef = useRef(0);
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -348,15 +332,15 @@ export function LlmProviderApiKeySelector({
   );
 
   useEffect(() => {
-    if (!connectedProviderToSelect) return;
+    if (!connectedKindToSelect) return;
     const connectedKey = availableKeys.find((key) =>
-      subscriptionMatchesProvider(connectedProviderToSelect, key),
+      subscriptionMatchesKind(connectedKindToSelect, key),
     );
     if (!connectedKey) return;
 
     applyKeyChange(connectedKey.id);
-    setConnectedProviderToSelect(null);
-  }, [availableKeys, applyKeyChange, connectedProviderToSelect]);
+    setConnectedKindToSelect(null);
+  }, [availableKeys, applyKeyChange, connectedKindToSelect]);
 
   const handleSelectKey = (keyId: string) => {
     const connectOption = subscriptionOptions.find(
@@ -428,9 +412,14 @@ export function LlmProviderApiKeySelector({
           defaultValues={subscriptionToConnect.defaultValues}
           allowedProviders={[subscriptionToConnect.provider]}
           credentialMode="subscription"
+          requiresExactSubscriptionCredential={Boolean(
+            pinnedSubscriptionOption &&
+              pinnedSubscriptionOption.subscriptionKind ===
+                subscriptionToConnect.subscriptionKind,
+          )}
           reconnectKeyId={reconnectKeyId ?? undefined}
           onSuccess={() =>
-            setConnectedProviderToSelect(subscriptionToConnect.provider)
+            setConnectedKindToSelect(subscriptionToConnect.subscriptionKind)
           }
         />
       )}
@@ -439,10 +428,8 @@ export function LlmProviderApiKeySelector({
 }
 
 function isPersonalSubscription(key: LlmProviderApiKey) {
-  return (
-    isChatgptSubscription(key) ||
-    key.provider === "github-copilot" ||
-    key.provider === "microsoft-365-copilot"
+  return SUBSCRIPTION_CREDENTIAL_KINDS.some((kind) =>
+    subscriptionMatchesKind(kind, key),
   );
 }
 
@@ -450,24 +437,25 @@ function subscriptionMatchesKey(
   option: SubscriptionConnectOption,
   key: LlmProviderApiKey,
 ) {
-  return subscriptionMatchesProvider(option.provider, key);
+  return subscriptionMatchesKind(option.subscriptionKind, key);
 }
 
-function subscriptionMatchesProvider(
-  provider: SubscriptionConnectOption["provider"],
+/**
+ * Whether a stored key IS the given subscription. A provider-level subscription
+ * (no marker) owns its provider outright, so the provider identifies it; a
+ * credential-level one shares its provider with ordinary API keys, so it must
+ * match on the kind the backend read off the stored secret — a plain xAI or
+ * OpenAI API key never matches.
+ */
+function subscriptionMatchesKind(
+  kind: SubscriptionCredentialKind,
   key: LlmProviderApiKey,
 ) {
-  return provider === "openai"
-    ? isChatgptSubscription(key)
-    : key.provider === provider;
-}
-
-function isChatgptSubscription(key: LlmProviderApiKey) {
-  return (
-    key.provider === "openai" &&
-    (key.isChatgptSubscription === true ||
-      key.name.trim().toLowerCase() === "chatgpt subscription")
-  );
+  const { provider, marker } = SUBSCRIPTION_CREDENTIALS[kind];
+  if (key.provider !== provider) return false;
+  if (marker === null) return true;
+  // The metadata helper consumes only the authoritative server-derived kind.
+  return subscriptionKindFromKeyMetadata(key) === kind;
 }
 
 function subscriptionDebug(event: string, data: Record<string, unknown>) {

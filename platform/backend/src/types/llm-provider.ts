@@ -107,17 +107,15 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   /** Get tool results from messages (for trusted data evaluation) */
   getToolResults(): CommonToolResult[];
 
-  /** Get tool definitions (for persistence, hasTools check) */
-  getTools(): CommonMcpToolDefinition[];
-
   /**
-   * Every tool name the caller declared, including provider built-ins that
-   * `getTools()` omits because they carry no input schema (Anthropic's
-   * `bash`/`text_editor`/`computer`). The caller executes those itself, so an
-   * availability check has to count them or every call to one is refused.
-   * Adapters that don't implement it fall back to `getTools()`.
+   * Get tool definitions (for persistence, hasTools check).
+   *
+   * Lossy on purpose: it keeps only the schema-carrying function tools this
+   * provider can describe. Do not use it to decide which tool calls the caller
+   * made available — that comes from `collectDeclaredToolNames`, which reads
+   * the request body and so counts built-ins and other schema-less tools too.
    */
-  getDeclaredToolNames?(): string[];
+  getTools(): CommonMcpToolDefinition[];
 
   /** Check if request has tools */
   hasTools(): boolean;

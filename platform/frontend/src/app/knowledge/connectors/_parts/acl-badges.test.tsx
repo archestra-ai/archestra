@@ -3,10 +3,13 @@
 
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { AclBadges } from "./acl-badges";
+import { WORKSPACE_ROSTER_NOUN } from "./roster-noun";
 
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => (
@@ -25,6 +28,9 @@ describe("AclBadges", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [{ id: "team-1", name: "Platform Team" }],
     } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [{ id: "user-1", name: "Alice", email: "a@example.com" }],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
   });
 
   it("renders an empty ACL as a locked warning", () => {
@@ -55,12 +61,36 @@ describe("AclBadges", () => {
       />,
     );
     expect(screen.getByText("Everyone in org")).toBeInTheDocument();
-    expect(screen.getByText("a@example.com")).toBeInTheDocument();
+    // A user grant that matches an org member reads as that user (a manual
+    // member mapping materializes the mapped user's email here, so it
+    // resolves identically).
+    expect(screen.getByText("a@example.com · Alice")).toBeInTheDocument();
     expect(screen.getByText("+3 more")).toBeInTheDocument();
-    // Hidden entries stay discoverable in the overflow tooltip.
+    // Hidden entries stay discoverable in the overflow tooltip; an email
+    // matching no org member degrades to the raw address.
     expect(screen.getByText("b@example.com")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_engineers")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_admins")).toBeInTheDocument();
+  });
+
+  it("names group grants after the roster row, in the connector's own noun", () => {
+    render(
+      <AclBadges
+        acl={[
+          "group:notion_workspace-members-ws-1",
+          "group:notion_workspace-members-ws-unsynced",
+        ]}
+        groupNamesByToken={
+          new Map([["group:notion_workspace-members-ws-1", "Acme Inc"]])
+        }
+        noun={WORKSPACE_ROSTER_NOUN}
+      />,
+    );
+    expect(screen.getByText("Workspace: Acme Inc")).toBeInTheDocument();
+    // A grant with no roster row yet still shows its group id — never nothing.
+    expect(
+      screen.getByText("Workspace: notion_workspace-members-ws-unsynced"),
+    ).toBeInTheDocument();
   });
 
   it("collapses very large ACLs into +N more with every entry in the tooltip", () => {

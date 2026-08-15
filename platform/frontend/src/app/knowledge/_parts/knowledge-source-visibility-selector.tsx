@@ -135,10 +135,26 @@ export function KnowledgeSourceVisibilitySelector({
       return { ...option, value, disabled, disabledLabel };
     });
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Auto-sync permissions leads the list whenever it is actually selectable —
+  // it is the preferred visibility for sources that can mirror upstream
+  // access. Locked/unsupported it stays in its usual last place.
+  const orderedOptions = [
+    ...options.filter(
+      (option) => option.value === "auto-sync-permissions" && !option.disabled,
+    ),
+    ...options.filter(
+      (option) => option.value !== "auto-sync-permissions" || option.disabled,
+    ),
+  ];
+  // SPDX-SnippetEnd
+
   return (
     <SharedVisibilitySelector
       value={visibility}
-      options={options}
+      options={orderedOptions}
       onValueChange={onVisibilityChange}
     >
       {visibility === "team-scoped" && (

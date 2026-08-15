@@ -1,6 +1,7 @@
 import type {
   SupportedEmbeddingDimension,
   SupportedProvider,
+  SupportedProviderEndpoint,
 } from "@archestra/shared";
 import {
   boolean,
@@ -59,6 +60,18 @@ const modelsTable = pgTable(
 
     /** Whether the model supports function/tool calling */
     supportsToolCalling: boolean("supports_tool_calling"),
+
+    /**
+     * Provider surfaces this model can be invoked through, when the provider
+     * publishes that per model. Null for every provider that serves one wire
+     * format, which is all of them except GitHub Copilot: its Codex and
+     * GPT-5.x models accept only `/responses` while the rest accept only
+     * `/chat/completions`, and both families use bare ids, so the surface has
+     * to be carried on the row to survive to request time.
+     */
+    supportedEndpoints: jsonb("supported_endpoints").$type<
+      SupportedProviderEndpoint[]
+    >(),
 
     /** Price per token for prompt/input (in dollars) */
     promptPricePerToken: numeric("prompt_price_per_token", {

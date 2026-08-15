@@ -1,0 +1,94 @@
+name: Build p4 Shim Docker Image
+
+# The p4 shim image (platform/p4_shim_docker_image) is the in-cluster pod used
+# by Perforce permission sync. It has zero npm dependencies (no lockfiles), so
+# unlike the MCP server base image workflow there is no lockfile-drift job.
+#
+# Reusable via workflow_call (release + dev publishes); also runs a build-only
+# validation (no push) on pull requests that touch the image.
+on:
+  workflow_call:
+    inputs:
+      push_to_gcr:
+        description: "Whether to push the built image to GCR"
+        required: true
+        type: boolean
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+  pull_request:
+    paths:
+      - "platform/p4_shim_docker_image/**"
+      - ".github/workflows/build-p4-shim-docker-image.yml"
+
+permissions: {}
+
+concurrency:
+  group: build-p4-shim-docker-image-${{ inputs.version || github.event.pull_request.number || github.ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # workflow_call path (release-please / deploy-dev): callers always pass a
+  # version, so gate on it — `github.event_name` is the CALLER's event here and
+  # can itself be pull_request (deploy-dev's label trigger).
+  build-p4-shim-image:
+    name: Build p4 Shim Image
+    if: ${{ inputs.version != '' }}
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+      id-token: write # Required for Workload Identity Federation when pushing images.
+    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    with:
+      image_directory: ./platform/p4_shim_docker_image
+      dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+      image_name: p4-shim
+      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      version: ${{ inputs.version }}
+      push_image: ${{ inputs.push_to_gcr }}
+      auth_provider: gar
+      include_latest_tag: true
+      checkout_ref: ${{ inputs.checkout_ref }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # Direct pull_request path: build-only validation, never pushes. A plain
+  # single-arch build (same pattern docker-image-scanning.yml uses for the MCP
+  # server base image) instead of the reusable multi-arch workflow, because
+  # that workflow's jobs request `id-token: write`, which fork PRs are not
+  # allowed and which would fail the run.
+  validate-p4-shim-image:
+    name: Validate p4 Shim Image Build
+    if: ${{ inputs.version == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build p4 shim image
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform/p4_shim_docker_image
+          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+          platforms: linux/amd64
+          push: "false"
+          load: "true"
+          tags: p4-shim:${{ github.sha }}
+          # Read-only: the publish paths own cache export for this image.
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64

@@ -50,7 +50,10 @@ import {
 } from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import {
   ApiError,
   type App,
@@ -478,10 +481,15 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: user.id,
         resourceTeamIds: teamIds,
       });
+      const environmentId = await resolveNewAppEnvironmentId({
+        userId: user.id,
+        organizationId,
+        requested: body.environmentId,
+      });
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
       });
       const { html, seededFromTemplate } = await resolveCreateAppHtml({
         html: body.html,
@@ -522,7 +530,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await createAppBacking({
           app: created,
           scope,
-          environmentId: body.environmentId ?? null,
+          environmentId,
           userId: user.id,
           organizationId,
           teamIds,
@@ -1495,6 +1503,30 @@ async function assertEnvironmentAssignable(params: {
     environmentId,
     organizationId,
     canDeployToRestricted: hasAppDeploy,
+  });
+}
+
+/**
+ * The environment a new app binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for new apps.
+ */
+async function resolveNewAppEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, requested } = params;
+  if (requested !== undefined) return requested;
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource: "app",
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      "app",
+      "deploy-to-restricted",
+    ),
   });
 }
 

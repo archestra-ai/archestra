@@ -456,7 +456,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
             report.turns,
             report.tool_calls,
             report.subagents_spawned,
-            report.total_tokens,
+            report.usage.total_tokens,
         ),
     );
     Ok(())

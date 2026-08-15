@@ -122,6 +122,35 @@ describe("fetchOllamaModels", () => {
     expect(model.capabilities?.embeddingDimensions).toBeUndefined();
   });
 
+  test("reads the total parameter count from the GGUF metadata", async () => {
+    listBody = { data: [{ id: "llama3" }] };
+    showByModel.llama3 = {
+      body: {
+        capabilities: ["completion", "tools"],
+        model_info: {
+          "general.parameter_count": 8_030_261_248,
+          "llama.context_length": 8192,
+          // Architecture-scoped counts must not be mistaken for the total.
+          "llama.block_count": 32,
+        },
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.parameterCount).toBe(8_030_261_248);
+  });
+
+  test("leaves the parameter count null when the GGUF metadata omits it", async () => {
+    listBody = { data: [{ id: "llama3" }] };
+    showByModel.llama3 = {
+      body: {
+        capabilities: ["completion"],
+        model_info: { "llama.context_length": 8192 },
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.parameterCount).toBeNull();
+  });
+
   test("classifies a generative model as non-embedding (null) and reads context length", async () => {
     listBody = { data: [{ id: "llama3" }] };
     showByModel.llama3 = {

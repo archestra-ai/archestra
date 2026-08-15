@@ -13,11 +13,14 @@ import type { AclEntry, InsertKbContainerAcl } from "@/types";
  * (local join, no upstream call) to expand a user's base tokens into the
  * `container:` tokens they can read.
  *
- * Writes are NOT epoch-fenced, unlike document/chunk ACL writes: container
- * rows grant nothing by themselves — access always flows through the
- * epoch-fenced `container:` tokens on documents — so a row raced by a
- * visibility switch is inert (and cleaned up by the switch path's
- * `deleteByConnector`).
+ * Writes carry a run fence. A container row is not inert: `container:` tokens
+ * on documents are fenced against a *visibility* switch, but which principals
+ * a token expands for is decided here, by `findContainerTokensForUser`
+ * matching a user's base tokens against `acl`. So a writer whose run was
+ * reclaimed — a worker resuming from a freeze, or one superseded by a settings
+ * edit — can restore a revoked principal's read access to every document
+ * holding that container's token, without touching a single document row.
+ * `fence` makes those writes no-ops.
  */
 class KbContainerAclModel {
   /**
@@ -34,24 +37,76 @@ class KbContainerAclModel {
     return result.rowCount ?? 0;
   }
 
-  static async upsertMany(rows: InsertKbContainerAcl[]): Promise<void> {
-    if (rows.length === 0) return;
+  /**
+   * @param fence The run these rows belong to. The write is skipped unless
+   *   that run is still `running` at the given lease epoch, so a pass whose
+   *   lease was reclaimed cannot write an audience it computed before it lost
+   *   ownership. Omitted only by callers that are not a permission pass.
+   * @returns whether the rows were written.
+   */
+  static async upsertMany(
+    rows: InsertKbContainerAcl[],
+    fence?: { runId: string; epoch: number },
+  ): Promise<boolean> {
+    if (rows.length === 0) return true;
 
-    await db
-      .insert(schema.kbContainerAclsTable)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: [
-          schema.kbContainerAclsTable.connectorId,
-          schema.kbContainerAclsTable.containerKey,
-        ],
-        set: {
-          stale: false,
-          acl: sql`excluded.acl`,
-          fingerprint: sql`excluded.fingerprint`,
-          updatedAt: new Date(),
-        },
-      });
+    if (!fence) {
+      await db
+        .insert(schema.kbContainerAclsTable)
+        .values(rows)
+        .onConflictDoUpdate({
+          target: [
+            schema.kbContainerAclsTable.connectorId,
+            schema.kbContainerAclsTable.containerKey,
+          ],
+          set: {
+            stale: false,
+            acl: sql`excluded.acl`,
+            fingerprint: sql`excluded.fingerprint`,
+            updatedAt: new Date(),
+          },
+        });
+      return true;
+    }
+
+    // One statement, not a transaction around a read: the full enumeration
+    // writes containers one at a time, so a BEGIN/SELECT/INSERT/COMMIT per
+    // container would triple the round trips on the write-hot path. `EXISTS`
+    // is evaluated in the same statement's snapshot, which is exactly the
+    // atomicity the fence needs — if the run is no longer ours, the SELECT
+    // feeding the INSERT yields no rows and nothing is written.
+    const values = sql.join(
+      rows.map(
+        (row) =>
+          sql`(${row.organizationId}, ${row.connectorId}::uuid, ${row.containerKey}, ${JSON.stringify(row.acl ?? [])}::jsonb, ${row.fingerprint ?? null})`,
+      ),
+      sql`, `,
+    );
+    const result = await db.execute(sql`
+      INSERT INTO kb_container_acls
+        (organization_id, connector_id, container_key, acl, fingerprint, stale, updated_at)
+      SELECT v.organization_id, v.connector_id, v.container_key, v.acl, v.fingerprint, false, now()
+      FROM (VALUES ${values})
+        AS v(organization_id, connector_id, container_key, acl, fingerprint)
+      WHERE EXISTS (
+        SELECT 1 FROM connector_runs
+        WHERE id = ${fence.runId}::uuid
+          AND status = 'running'
+          AND lease_epoch = ${fence.epoch}
+      )
+      ON CONFLICT (connector_id, container_key) DO UPDATE SET
+        stale = false,
+        acl = excluded.acl,
+        fingerprint = excluded.fingerprint,
+        updated_at = now()
+      RETURNING id
+    `);
+    // Counted from RETURNING rather than a driver's rowCount, which is not
+    // reported uniformly across the drivers this runs on. Zero rows can only
+    // mean the fence rejected the write: `rows` is non-empty and every conflict
+    // is an UPDATE, which still returns.
+    const written = Array.isArray(result) ? result : (result.rows ?? []);
+    return written.length > 0;
   }
 
   /**

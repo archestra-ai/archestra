@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { ConnectorSyncBatch } from "@/types";
+import type { ConnectorSyncBatch, PermissionSnapshotYield } from "@/types";
 import { SalesforceConnector } from "./salesforce-connector";
 
 // ===== jsforce mock (class-based, matching Linear connector test pattern) =====
@@ -7,6 +7,8 @@ import { SalesforceConnector } from "./salesforce-connector";
 const mockLogin = vi.fn();
 const mockQuery = vi.fn();
 const mockQueryMore = vi.fn();
+const mockMetadataRead = vi.fn();
+const mockDeleted = vi.fn();
 
 vi.mock("jsforce", () => {
   class MockConnection {
@@ -14,6 +16,8 @@ vi.mock("jsforce", () => {
     login = mockLogin;
     query = mockQuery;
     queryMore = mockQueryMore;
+    metadata = { read: mockMetadataRead };
+    deleted = mockDeleted;
   }
   return { Connection: MockConnection };
 });
@@ -22,6 +26,8 @@ afterEach(() => {
   mockLogin.mockReset();
   mockQuery.mockReset();
   mockQueryMore.mockReset();
+  mockMetadataRead.mockReset();
+  mockDeleted.mockReset();
 });
 
 const CREDS = { email: "test@example.com", apiToken: "pass+token" };
@@ -698,6 +704,525 @@ describe("SalesforceConnector", () => {
       expect(soql).toContain("Title");
       expect(soql).toContain("Summary");
       expect(soql).toContain("ArticleNumber");
+    });
+  });
+
+  // ----- permission sync -----
+
+  describe("permission sync", () => {
+    type ContainerYield = Extract<
+      PermissionSnapshotYield,
+      { kind: "container" }
+    >;
+    type DocumentYield = Extract<PermissionSnapshotYield, { kind: "document" }>;
+
+    const permConfig = { type: "salesforce", objects: ["Account"] };
+
+    function collectSnapshot(
+      gen: AsyncGenerator<PermissionSnapshotYield> | undefined,
+    ) {
+      const containers = new Map<string, ContainerYield>();
+      const documents: DocumentYield[] = [];
+      return (async () => {
+        for await (const item of gen ??
+          ((async function* () {})() as AsyncGenerator<PermissionSnapshotYield>)) {
+          if (item.kind === "container")
+            containers.set(item.containerKey, item);
+          else documents.push(item);
+        }
+        return { containers, documents };
+      })();
+    }
+
+    function readBack(sourceIds: string[], objectName = "Account") {
+      return vi.fn(async () => ({
+        documents: sourceIds.map((id) => ({
+          sourceId: `salesforce:${objectName}:${id}`,
+          metadata: { objectName },
+        })),
+        nextAfterId: null,
+      }));
+    }
+
+    function syncParams(overrides?: {
+      config?: Record<string, unknown>;
+      sourceIds?: string[];
+      objectName?: string;
+    }) {
+      return {
+        config: overrides?.config ?? permConfig,
+        credentials: CREDS,
+        cursor: null,
+        readIngestedDocuments: readBack(
+          overrides?.sourceIds ?? ["001A"],
+          overrides?.objectName ?? "Account",
+        ),
+      };
+    }
+
+    /** SOQL router: match on FROM/WHERE content. */
+    function stubSoql(routes: Array<{ match: string; records: unknown[] }>) {
+      mockQuery.mockImplementation((soql: string) => {
+        const route = routes.find((r) => soql.includes(r.match));
+        if (!route) throw new Error(`No route for SOQL: ${soql}`);
+        return Promise.resolve({ done: true, records: route.records });
+      });
+    }
+
+    test("supportsPermissionSync is true", () => {
+      expect(new SalesforceConnector().supportsPermissionSync).toBe(true);
+    });
+
+    test("public OWD (Read) → isPublic container, documents assign top-level", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "Read" });
+      stubSoql([]); // no SOQL expected on the public path
+
+      const { containers, documents } = await collectSnapshot(
+        c.syncPermissionSnapshot(syncParams()),
+      );
+
+      expect(containers.get("sobject:Account")?.permissions).toEqual({
+        isPublic: true,
+      });
+      expect(documents).toEqual([
+        {
+          kind: "document",
+          sourceId: "salesforce:Account:001A",
+          containerKey: "sobject:Account",
+          cursor: "sobject:Account",
+        },
+      ]);
+    });
+
+    test("private OWD → per-record nested containers with owner + share audience", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "Private" });
+      stubSoql([
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001A", OwnerId: "005OWNER" }],
+        },
+        {
+          match: "FROM AccountShare",
+          records: [
+            {
+              ParentId: "001A",
+              UserOrGroupId: "005SHARED",
+              RowCause: "Manual",
+            },
+            {
+              ParentId: "001A",
+              UserOrGroupId: "00GGROUP",
+              RowCause: "Rule",
+            },
+            // Owner row cause must not duplicate the owner grant.
+            {
+              ParentId: "001A",
+              UserOrGroupId: "005OWNER",
+              RowCause: "Owner",
+            },
+          ],
+        },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005OWNER", Email: "Owner@Example.com", IsActive: true },
+            { Id: "005SHARED", Email: "shared@example.com", IsActive: true },
+          ],
+        },
+      ]);
+
+      const { containers, documents } = await collectSnapshot(
+        c.syncPermissionSnapshot(syncParams()),
+      );
+
+      const nested = containers.get("sobject:Account/record:001A");
+      expect(nested?.permissions).toEqual({
+        isPublic: false,
+        users: ["owner@example.com", "shared@example.com"],
+        groups: ["00GGROUP"],
+      });
+      expect(documents[0]?.containerKey).toBe("sobject:Account/record:001A");
+    });
+
+    test("metadata read failure treats the object as Private (safe direction)", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockRejectedValue(new Error("INVALID_TYPE"));
+      stubSoql([
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001A", OwnerId: "005OWNER" }],
+        },
+        { match: "FROM AccountShare", records: [] },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005OWNER", Email: "owner@example.com", IsActive: true },
+          ],
+        },
+      ]);
+
+      const { containers } = await collectSnapshot(
+        c.syncPermissionSnapshot(syncParams()),
+      );
+
+      expect(containers.get("sobject:Account")?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(
+        containers.get("sobject:Account/record:001A")?.permissions.users,
+      ).toEqual(["owner@example.com"]);
+    });
+
+    test("unqueryable share table degrades the object to owner-only (fail-closed)", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "Private" });
+      mockQuery.mockImplementation((soql: string) => {
+        if (soql.includes("FROM AccountShare")) {
+          return Promise.reject(new Error("INVALID_ENTITY"));
+        }
+        if (soql.includes("FROM Account WHERE Id IN")) {
+          return Promise.resolve({
+            done: true,
+            records: [{ Id: "001A", OwnerId: "005OWNER" }],
+          });
+        }
+        if (soql.includes("FROM User WHERE Id IN")) {
+          return Promise.resolve({
+            done: true,
+            records: [
+              { Id: "005OWNER", Email: "owner@example.com", IsActive: true },
+            ],
+          });
+        }
+        return Promise.reject(new Error(`No route: ${soql}`));
+      });
+
+      const { containers } = await collectSnapshot(
+        c.syncPermissionSnapshot(syncParams()),
+      );
+
+      expect(
+        containers.get("sobject:Account/record:001A")?.permissions,
+      ).toEqual({
+        isPublic: false,
+        users: ["owner@example.com"],
+        groups: [],
+      });
+    });
+
+    test("queue-owned records grant the owning group (00G owner)", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "Private" });
+      stubSoql([
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001A", OwnerId: "00GQUEUE" }],
+        },
+        { match: "FROM AccountShare", records: [] },
+      ]);
+
+      const { containers } = await collectSnapshot(
+        c.syncPermissionSnapshot(syncParams()),
+      );
+
+      expect(
+        containers.get("sobject:Account/record:001A")?.permissions.groups,
+      ).toEqual(["00GQUEUE"]);
+    });
+
+    test("Contact inherits its parent Account's audience; orphan contact is owner-only", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockImplementation((_type: string, name: string) =>
+        Promise.resolve({
+          sharingModel: name === "Contact" ? "ControlledByParent" : "Private",
+        }),
+      );
+      stubSoql([
+        {
+          match: "FROM Contact WHERE Id IN",
+          records: [
+            { Id: "003A", AccountId: "001P", OwnerId: "005C" },
+            { Id: "003B", AccountId: null, OwnerId: "005C" },
+          ],
+        },
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001P", OwnerId: "005P" }],
+        },
+        {
+          match: "FROM AccountShare",
+          records: [
+            { ParentId: "001P", UserOrGroupId: "005TEAM", RowCause: "Team" },
+          ],
+        },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005P", Email: "p@example.com", IsActive: true },
+            { Id: "005TEAM", Email: "team@example.com", IsActive: true },
+            { Id: "005C", Email: "c@example.com", IsActive: true },
+          ],
+        },
+      ]);
+
+      const { containers } = await collectSnapshot(
+        c.syncPermissionSnapshot(
+          syncParams({
+            config: { type: "salesforce", objects: ["Contact"] },
+            sourceIds: ["003A", "003B"],
+            objectName: "Contact",
+          }),
+        ),
+      );
+
+      expect(
+        containers.get("sobject:Contact/record:003A")?.permissions,
+      ).toEqual({
+        isPublic: false,
+        users: ["p@example.com", "team@example.com"],
+        groups: [],
+      });
+      expect(
+        containers.get("sobject:Contact/record:003B")?.permissions.users,
+      ).toEqual(["c@example.com"]);
+    });
+
+    test("syncGroups: recursive expansion, inactive users dropped, byte-matching group ids", async () => {
+      const c = new SalesforceConnector();
+      stubSoql([
+        {
+          match: "FROM GroupMember",
+          records: [
+            { GroupId: "00G1", UserOrGroupId: "00G2" },
+            { GroupId: "00G1", UserOrGroupId: "005A" },
+            { GroupId: "00G2", UserOrGroupId: "005B" },
+            { GroupId: "00G2", UserOrGroupId: "005INACTIVE" },
+          ],
+        },
+        {
+          match: "FROM Group",
+          records: [
+            { Id: "00G1", Name: "Outer", Type: "Regular" },
+            { Id: "00G2", Name: "Inner", Type: "Regular" },
+          ],
+        },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005A", Email: "a@example.com", IsActive: true },
+            { Id: "005B", Email: "b@example.com", IsActive: true },
+            { Id: "005INACTIVE", Email: "gone@example.com", IsActive: false },
+          ],
+        },
+      ]);
+
+      const yields = [];
+      for await (const item of c.syncGroups(syncParams()) ?? []) {
+        yields.push(item);
+      }
+
+      const outer = yields.find((y) => y.groupId === "00G1");
+      const inner = yields.find((y) => y.groupId === "00G2");
+      expect(outer?.members.map((m) => m.email).sort()).toEqual([
+        "a@example.com",
+        "b@example.com",
+        null,
+      ]);
+      expect(inner?.members.map((m) => m.email).sort()).toEqual([
+        "b@example.com",
+        null,
+      ]);
+    });
+
+    test("syncGroups: direct grant-holders roster under direct-grants (owners + user share grantees; hidden emails stay visible)", async () => {
+      const c = new SalesforceConnector();
+      stubSoql([
+        { match: "FROM Group", records: [] },
+        { match: "FROM GroupMember", records: [] },
+        {
+          match: "FROM Account GROUP BY OwnerId",
+          records: [{ OwnerId: "005OWNER" }, { OwnerId: "00GQUEUE" }],
+        },
+        {
+          match: "FROM AccountShare GROUP BY UserOrGroupId",
+          records: [
+            { UserOrGroupId: "005SHAREE", RowCause: "Manual" },
+            // Guest and Owner causes never roster.
+            { UserOrGroupId: "005GUEST", RowCause: "GuestRule" },
+            { UserOrGroupId: "005OWNROW", RowCause: "Owner" },
+            { UserOrGroupId: "00GGRP", RowCause: "Manual" },
+          ],
+        },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005OWNER", Email: "Owner@Example.com", IsActive: true },
+            // No row for 005SHAREE — unresolvable, stays rostered email-less.
+          ],
+        },
+      ]);
+
+      const yields = [];
+      for await (const item of c.syncGroups(syncParams()) ?? []) {
+        yields.push(item);
+      }
+
+      expect(yields).toEqual([
+        {
+          groupId: "direct-grants",
+          members: [
+            {
+              accountId: "005OWNER",
+              displayName: null,
+              email: "owner@example.com",
+            },
+            { accountId: "005SHAREE", displayName: null, email: null },
+          ],
+          cursor: undefined,
+        },
+      ]);
+    });
+
+    test("member override maps a direct grantee whose Salesforce email is hidden", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "Private" });
+      stubSoql([
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001A", OwnerId: "005HIDDEN" }],
+        },
+        {
+          match: "FROM AccountShare",
+          records: [
+            {
+              ParentId: "001A",
+              UserOrGroupId: "005MAPPED",
+              RowCause: "Manual",
+            },
+          ],
+        },
+        // Neither user resolves an email upstream.
+        { match: "FROM User WHERE Id IN", records: [] },
+      ]);
+
+      const { containers } = await collectSnapshot(
+        c.syncPermissionSnapshot({
+          ...syncParams(),
+          resolveMappedEmail: (accountId: string) =>
+            accountId === "005MAPPED" ? "Mapped@Corp.Test" : null,
+        }),
+      );
+
+      // The override materializes the share grant; the unmapped owner stays
+      // dropped fail-closed.
+      expect(
+        containers.get("sobject:Account/record:001A")?.permissions.users,
+      ).toEqual(["mapped@corp.test"]);
+    });
+
+    test("probe: first probe requires full reconcile; share delete dirties the object; Account drift dirties Contact", async () => {
+      const c = new SalesforceConnector();
+
+      const first = await c.probePermissionChanges({
+        config: { type: "salesforce", objects: ["Account", "Contact"] },
+        credentials: CREDS,
+        state: null,
+      });
+      expect(first.fullRequired).toBe(true);
+      expect(typeof first.nextState.soqlCursor).toBe("string");
+
+      // Second probe: no record edits, no share edits, one share deletion
+      // on AccountShare → Account dirty, Contact inherited-dirty.
+      mockQuery.mockResolvedValue({ done: true, records: [] });
+      mockDeleted.mockImplementation((obj: string) =>
+        obj === "AccountShare"
+          ? Promise.resolve({ deletedRecords: [{ id: "00rX" }] })
+          : Promise.resolve({ deletedRecords: [] }),
+      );
+
+      const second = await c.probePermissionChanges({
+        config: { type: "salesforce", objects: ["Account", "Contact"] },
+        credentials: CREDS,
+        state: { soqlCursor: new Date().toISOString() },
+      });
+      expect(second.fullRequired).toBe(false);
+      expect(second.dirtyContainerKeys).toEqual([
+        "sobject:Account",
+        "sobject:Contact",
+      ]);
+    });
+
+    test("probe: getDeleted unsupported → the object is always dirty (deletions invisible)", async () => {
+      const c = new SalesforceConnector();
+      mockQuery.mockResolvedValue({ done: true, records: [] });
+      mockDeleted.mockRejectedValue(new Error("UNSUPPORTED"));
+
+      const result = await c.probePermissionChanges({
+        config: { type: "salesforce", objects: ["Account"] },
+        credentials: CREDS,
+        state: { soqlCursor: new Date().toISOString() },
+      });
+      expect(result.dirtyContainerKeys).toEqual(["sobject:Account"]);
+    });
+
+    test("refreshContainerAudiences re-resolves top-level OWD and nested record audiences", async () => {
+      const c = new SalesforceConnector();
+      mockMetadataRead.mockResolvedValue({ sharingModel: "ReadWrite" });
+      stubSoql([
+        {
+          match: "FROM Account WHERE Id IN",
+          records: [{ Id: "001A", OwnerId: "005OWNER" }],
+        },
+        { match: "FROM AccountShare", records: [] },
+        {
+          match: "FROM User WHERE Id IN",
+          records: [
+            { Id: "005OWNER", Email: "owner@example.com", IsActive: true },
+          ],
+        },
+      ]);
+
+      const yields = [];
+      for await (const item of c.refreshContainerAudiences({
+        config: permConfig,
+        credentials: CREDS,
+        containerKeys: [
+          "sobject:Account",
+          "sobject:Account/record:001A",
+          "bogus:key",
+        ],
+      }) ?? []) {
+        yields.push(item);
+      }
+
+      expect(yields).toEqual([
+        {
+          containerKey: "sobject:Account",
+          permissions: { isPublic: true },
+          audienceResolutionFailed: false,
+        },
+        {
+          containerKey: "sobject:Account/record:001A",
+          permissions: {
+            isPublic: false,
+            users: ["owner@example.com"],
+            groups: [],
+          },
+          audienceResolutionFailed: false,
+        },
+      ]);
+    });
+
+    test("scopeKeyForDocument maps objectName metadata to the object container", () => {
+      const c = new SalesforceConnector();
+      expect(c.scopeKeyForDocument({ objectName: "Account" })).toBe(
+        "sobject:Account",
+      );
+      expect(c.scopeKeyForDocument({})).toBeNull();
     });
   });
 });

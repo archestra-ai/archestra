@@ -6,6 +6,8 @@ import {
   formatApprovalToolArgs,
   isLlmProviderAuthError,
   Semaphore,
+  stripAgentFooterChrome,
+  stripDuplicateAgentFooter,
 } from "./utils";
 
 describe("buildAgentFooter", () => {
@@ -17,6 +19,121 @@ describe("buildAgentFooter", () => {
     expect(buildAgentFooter("Sales Bot", "invalid x-api-key")).toBe(
       "🤖 Sales Bot · invalid x-api-key",
     );
+  });
+});
+
+describe("stripDuplicateAgentFooter", () => {
+  const footer = buildAgentFooter("Sales Bot");
+
+  test("drops a footer the model wrote itself so ours is the only one", () => {
+    expect(
+      stripDuplicateAgentFooter("Here you go.\n\n🤖 Sales Bot", footer),
+    ).toBe("Here you go.");
+  });
+
+  test("drops repeats, so a reply can never carry two branding lines", () => {
+    expect(
+      stripDuplicateAgentFooter(
+        "Here you go.\n\n🤖 Sales Bot\n\n🤖 Sales Bot",
+        footer,
+      ),
+    ).toBe("Here you go.");
+  });
+
+  test("drops the markdown rule the echo sits under", () => {
+    expect(
+      stripDuplicateAgentFooter("Here you go.\n\n---\n\n🤖 Sales Bot", footer),
+    ).toBe("Here you go.");
+  });
+
+  test("drops an echo wrapped in markdown emphasis", () => {
+    expect(
+      stripDuplicateAgentFooter("Here you go.\n\n_🤖 Sales Bot_", footer),
+    ).toBe("Here you go.");
+    expect(
+      stripDuplicateAgentFooter("Here you go.\n\n**🤖 Sales Bot**", footer),
+    ).toBe("Here you go.");
+  });
+
+  test("drops an echo of an error footer, detail and all", () => {
+    const errorFooter = buildAgentFooter("Sales Bot", "invalid x-api-key");
+    expect(
+      stripDuplicateAgentFooter(
+        `Something broke.\n\n${errorFooter}`,
+        errorFooter,
+      ),
+    ).toBe("Something broke.");
+  });
+
+  test("drops a bare identity echo even when ours carries error detail", () => {
+    expect(
+      stripDuplicateAgentFooter(
+        "Something broke.\n\n🤖 Sales Bot",
+        buildAgentFooter("Sales Bot", "upstream exploded"),
+      ),
+    ).toBe("Something broke.");
+  });
+
+  test("leaves a reply that never signed off untouched", () => {
+    expect(stripDuplicateAgentFooter("Here you go.", footer)).toBe(
+      "Here you go.",
+    );
+  });
+
+  test("keeps content that merely mentions the glyph or another agent", () => {
+    // Only an exact duplicate of the footer being appended is chrome — this
+    // runs on user-visible text, where a false positive eats the answer.
+    for (const text of [
+      "Bots I know:\n\n🤖 Sales Bot handles quotes.",
+      "Here you go.\n\n🤖 Support Bot",
+      "Here you go.\n\n🤖 Sales Bot\n\nOne more thing.",
+    ]) {
+      expect(stripDuplicateAgentFooter(text, footer)).toBe(text);
+    }
+  });
+});
+
+describe("stripAgentFooterChrome", () => {
+  test("strips the footer from a Slack bot turn", () => {
+    expect(stripAgentFooterChrome("Here you go.\n\n🤖 Sales Bot")).toBe(
+      "Here you go.",
+    );
+  });
+
+  test("strips the footer and its rule from an MS Teams bot turn", () => {
+    expect(stripAgentFooterChrome("Here you go.\n\n---\n\n🤖 Sales Bot")).toBe(
+      "Here you go.",
+    );
+  });
+
+  test("strips every footer, so a doubled reply stops teaching the pattern", () => {
+    // The self-reinforcing case: replaying one surviving footer is what makes
+    // the next turn sign off the same way.
+    expect(
+      stripAgentFooterChrome("Here you go.\n\n🤖 Sales Bot\n\n🤖 Sales Bot"),
+    ).toBe("Here you go.");
+  });
+
+  test("strips a footer followed by trailing whitespace", () => {
+    expect(stripAgentFooterChrome("Here you go.\n\n🤖 Sales Bot\n")).toBe(
+      "Here you go.",
+    );
+  });
+
+  test("strips an error footer whose detail spilled onto more lines", () => {
+    expect(
+      stripAgentFooterChrome(
+        "Sorry, I encountered an error.\n\n🤖 Sales Bot · Error: boom\n  at handler()",
+      ),
+    ).toBe("Sorry, I encountered an error.");
+  });
+
+  test("strips a turn that is nothing but the footer", () => {
+    expect(stripAgentFooterChrome("🤖 Sales Bot")).toBe("");
+  });
+
+  test("leaves a bot turn without chrome untouched", () => {
+    expect(stripAgentFooterChrome("Here you go.")).toBe("Here you go.");
   });
 });
 

@@ -38,7 +38,15 @@ vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/environment.query", () => ({
   useEnvironments: vi.fn(() => ({
-    data: { environments: [], defaultAssignedCatalogCount: 0 },
+    data: {
+      environments: [],
+      defaultAssignedCatalogCount: 0,
+      resourceDefaults: {},
+    },
+  })),
+  useDefaultEnvironmentIdForResource: vi.fn(() => ({
+    environmentId: null,
+    isResolved: true,
   })),
 }));
 
@@ -86,8 +94,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   EnvironmentVariablesFormField: () => (
     <div data-testid="environment-variables-form-field" />
   ),
-  EnvFromSection: () => <div data-testid="env-from-section" />,
-  SecretFilesSection: () => <div data-testid="secret-files-section" />,
 }));
 
 vi.mock("@/components/visibility-selector", () => ({

@@ -170,6 +170,16 @@ tests:
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
 
+  - it: worker sets ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE env var when perforceShim image is configured
+    set:
+      archestra.knowledgeBase.perforceShim.image: "my-registry/p4-shim:v1.0.0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+            value: "my-registry/p4-shim:v1.0.0"
+
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:
       archestra.diagnostics.enabled: true
@@ -180,6 +190,17 @@ tests:
           content:
             name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
             value: "1"
+
+  # The worker runs a single Node process, so it owns its whole memory limit and
+  # must keep the unreserved old-space ceiling. Reserving here would shrink its
+  # heap to pay for a frontend it does not run.
+  - it: worker does not reserve memory for a co-located frontend
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
 
   - it: worker supports overriding the wait-for-postgres image
     set:

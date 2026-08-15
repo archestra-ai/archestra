@@ -44,6 +44,7 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseFrontendBaseUrl,
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
   parseHackathonRecorderMaxFinalCutMs,
@@ -393,6 +394,31 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(getRumOtlpAuthHeaders()).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+    );
+  });
+});
+
+describe("parseFrontendBaseUrl", () => {
+  test("defaults to localhost when unset or blank", () => {
+    expect(parseFrontendBaseUrl(undefined)).toBe("http://localhost:3000");
+    expect(parseFrontendBaseUrl("   ")).toBe("http://localhost:3000");
+  });
+
+  test("returns a clean URL unchanged", () => {
+    expect(parseFrontendBaseUrl("https://app.example.com")).toBe(
+      "https://app.example.com",
+    );
+  });
+
+  test("strips trailing slashes so the OAuth issuer identifier stays slash-free", () => {
+    // A slashed value would disagree with the RFC 9207 `iss` parameter
+    // (better-auth strips the slash) and break URL-building call sites that
+    // append their own paths.
+    expect(parseFrontendBaseUrl("https://app.example.com/")).toBe(
+      "https://app.example.com",
+    );
+    expect(parseFrontendBaseUrl(" https://app.example.com// ")).toBe(
+      "https://app.example.com",
     );
   });
 });

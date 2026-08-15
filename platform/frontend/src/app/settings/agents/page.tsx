@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  getDocsUrl,
-  providerRequiresPerUserCredential,
-} from "@archestra/shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
@@ -36,6 +32,7 @@ import {
   useAppsHackathonOffered,
 } from "@/lib/app-session-recording/apps-hackathon";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -217,9 +214,7 @@ export default function AgentSettingsPage() {
     [availableKeys, selectedApiKeyId],
   );
   const selectedApiKeyIsSubscription =
-    selectedApiKey !== null &&
-    (selectedApiKey.isChatgptSubscription === true ||
-      providerRequiresPerUserCredential(selectedApiKey.provider));
+    selectedApiKey !== null && isPersonalSubscription(selectedApiKey);
   const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
 
   const handleAgentChange = useCallback((value: string) => {

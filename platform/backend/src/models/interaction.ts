@@ -8,6 +8,7 @@ import {
   DynamicInteraction,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
+  TimeInMs,
 } from "@archestra/shared";
 import {
   and,
@@ -25,11 +26,13 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import {
-  decryptInteractionRow,
-  encryptInteractionInsert,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
-} from "@/content-encryption/rows.ee";
+  decryptInteractionContent,
+  encryptInteractionContent,
+  readInteractionRow,
+} from "@/content-encryption/audit-rows";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -42,6 +45,7 @@ import type {
   Interaction,
   InteractionAuthMethod,
   SessionSummary,
+  SessionUnattributedReason,
   SortingQuery,
   UserInfo,
 } from "@/types";
@@ -57,6 +61,24 @@ import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
+
+/**
+ * How long a session total stays reusable across pages of the same filter set.
+ * Long enough to cover a client paging through the whole result, short enough
+ * that a total on screen is never meaningfully behind the table.
+ */
+const SESSION_TOTAL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+
+/**
+ * Session totals keyed by filter set (see getSessions). Per-pod and in-process
+ * on purpose: the value is cheap to recompute on a miss, so it is not worth a
+ * round-trip to the distributed cache to share it between pods. Bounded well
+ * above the number of distinct filter combinations in flight at once.
+ */
+const sessionTotalCache = new LRUCacheManager<number>({
+  maxSize: 500,
+  defaultTtl: SESSION_TOTAL_CACHE_TTL_MS,
+});
 
 async function findChatErrorsForSessionId(sessionId: string | null) {
   if (!sessionId || !isUuid(sessionId)) {
@@ -332,15 +354,37 @@ class InteractionModel {
     return result !== undefined;
   }
 
-  static async create(data: InsertInteraction) {
+  /**
+   * @param auditContext when present, this interaction belongs to an incognito
+   * conversation: its content columns are encrypted under that conversation's
+   * browser-held key and the row is stamped with the discriminator, instead of
+   * being encrypted under the server key (or left plaintext).
+   */
+  static async create(
+    data: InsertInteraction,
+    auditContext?: IncognitoAuditContext | null,
+    opts?: {
+      /**
+       * Environment to stamp instead of the executing agent's own. The proxy
+       * supplies it for advisor consultations (loopback-verified), which bill
+       * to the delegating caller's environment because the advisor's row is
+       * org-wide and env-less.
+       */
+      environmentIdOverride?: string;
+    },
+  ) {
+    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
-    // value. Only profile-less system interactions may set it explicitly.
-    const environmentId = data.profileId
-      ? await AgentModel.findEnvironmentId(data.profileId)
-      : (data.environmentId ?? null);
+    // value. Only profile-less system interactions may set it explicitly, and
+    // only the proxy's verified advisor-delegation path may override it.
+    const environmentId =
+      opts?.environmentIdOverride ??
+      (data.profileId
+        ? await AgentModel.findEnvironmentId(data.profileId)
+        : (data.environmentId ?? null));
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
@@ -354,26 +398,26 @@ class InteractionModel {
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
     // whole conversation on every row (no-op for all other interactions, and
     // disabled entirely under content encryption — see isEligible).
-    const { values, tip } =
-      await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Incognito rows are excluded outright. Today they could not qualify anyway
+    // (isEligible demands a Claude session source, and these are chat sources),
+    // but relying on that coincidence would be fragile: a delta chain mixes rows
+    // across requests and only the request that created a row carries its key,
+    // so a chain spanning keys could not be reconstructed by any reader.
+    const { values, tip } = audit
+      ? { values: sanitized, tip: null }
+      : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
       // Monotonic v7 id: created_at ties happen under load, and the delta
       // manager's "most recent interaction" lookup breaks ties with the id.
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      .values({ id: uuidv7(), ...encryptInteractionInsert(values) })
-      // SPDX-SnippetEnd
+      .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes.
-    decryptInteractionRow(interaction);
-    // SPDX-SnippetEnd
+    // callers never see envelopes. Safe for incognito rows too: this caller
+    // supplied the very key that just encrypted them.
+    decryptInteractionContent(interaction, audit);
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);
@@ -605,7 +649,7 @@ class InteractionModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    decryptInteractionRow(interaction);
+    readInteractionRow(interaction);
     // SPDX-SnippetEnd
 
     // Check access control for non-agent admins
@@ -1181,6 +1225,28 @@ class InteractionModel {
     // Cast id to text since session_id is VARCHAR and id is UUID
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
 
+    // The session total is the same for every page of one filter set, but the
+    // count it needs scans `interactions` — the largest, write-hot table — so
+    // paying it per page made a client walking the pages re-run a full scan on
+    // every request (the dominant cost of this endpoint, and enough on its own
+    // to push the query into statement timeout as the table grows). Compute it
+    // for the first page of a sweep and reuse it for the rest; a total that
+    // trails new rows by at most SESSION_TOTAL_CACHE_TTL_MS is the intended
+    // trade, since it only sizes the pager.
+    const sessionTotalCacheKey = JSON.stringify([
+      requestingUserId ?? null,
+      isAgentAdmin ?? false,
+      filters?.profileId ?? null,
+      filters?.userId ?? null,
+      filters?.source ?? null,
+      filters?.client ?? null,
+      filters?.externalAgentId ?? null,
+      filters?.sessionId ?? null,
+      filters?.startDate?.toISOString() ?? null,
+      filters?.endDate?.toISOString() ?? null,
+    ]);
+    const cachedTotal = sessionTotalCache.get(sessionTotalCacheKey);
+
     // PHASE 1: Get sessions with lightweight aggregations (no ARRAY_AGG on large JSON)
     // This is the fast path - simple aggregations on indexed columns
     const [sessionsData, [{ total }]] = await Promise.all([
@@ -1249,6 +1315,12 @@ class InteractionModel {
           userNames: sql<
             string[]
           >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
+          // Ids alongside names: two members can share a display name, which
+          // collapses them into a single entry above and leaves consumers
+          // matching on an ambiguous string. Ids identify the actual users.
+          userIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
         })
@@ -1284,13 +1356,19 @@ class InteractionModel {
       // filters only touch interactions columns, and joining on the
       // conversations PK can't change the count, so on large tables it only
       // pushed this query into statement timeout.
-      db
-        .select({
-          total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
-        })
-        .from(schema.interactionsTable)
-        .where(whereClause),
+      cachedTotal !== undefined
+        ? [{ total: cachedTotal }]
+        : db
+            .select({
+              total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
+            })
+            .from(schema.interactionsTable)
+            .where(whereClause),
     ]);
+
+    if (cachedTotal === undefined) {
+      sessionTotalCache.set(sessionTotalCacheKey, Number(total));
+    }
 
     // PHASE 2: Batch fetch "last interaction" info for all sessions
     // This is much faster than ARRAY_AGG because:
@@ -1316,6 +1394,8 @@ class InteractionModel {
       const externalAgentIds = s.externalAgentIds
         ? s.externalAgentIds.split(",").filter(Boolean)
         : [];
+      const authMethods = parseInteractionAuthMethods(s.authMethods);
+      const userIds = s.userIds ?? [];
 
       const sessionKey = s.sessionId ?? s.interactionId;
       const lastInteraction = sessionKey
@@ -1354,9 +1434,11 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
-        authMethods: parseInteractionAuthMethods(s.authMethods),
+        authMethods,
         authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ?? [],
+        userIds,
+        unattributedReason: deriveUnattributedReason(userIds, authMethods),
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
         conversationTitle: s.conversationTitle,
@@ -1440,18 +1522,30 @@ class InteractionModel {
       response: unknown;
       type: string;
       created_at: Date;
+      // Selected so readInteractionRow can tell an incognito row from an
+      // ordinary one; without it the guard cannot fire and a DEK envelope
+      // would be handed to the server-key decryptor.
+      incognito_conversation_id: string | null;
     }>(sql`
+      -- id DESC tiebreak: turns within one session commonly land on the same
+      -- millisecond, and created_at alone leaves their order undefined — which
+      -- let an earlier turn be picked as the session's latest, showing a stale
+      -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
+      -- insertion order (the same tiebreak the write path already uses to
+      -- resolve a delta parent).
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
+          incognito_conversation_id,
+          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
-      SELECT id, session_id, thread_id, request, response, type, created_at
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             incognito_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
-      ORDER BY session_id, created_at DESC
+      ORDER BY session_id, created_at DESC, id DESC
     `);
 
     // SPDX-SnippetBegin
@@ -1460,7 +1554,7 @@ class InteractionModel {
     // Raw-SQL rows bypass the model select paths — decrypt before the JS
     // content scanning below.
     for (const row of interactionsResult.rows) {
-      decryptInteractionRow(row);
+      readInteractionRow(row);
     }
     // SPDX-SnippetEnd
 
@@ -1493,7 +1587,18 @@ class InteractionModel {
       groupedBySession.set(key, existing);
     }
 
-    // For each session, find the last "main" interaction and title
+    // For each session, find the last "main" interaction and title. Selection
+    // is pure, so it runs for every session first and the chosen tips are
+    // reconstructed in one batch below — reconstructing inside this loop issued
+    // a recursive ancestor query per session, i.e. one per row on the page.
+    const selectedPerSession = new Map<
+      string,
+      {
+        lastMainInteraction: (typeof interactions)[0] | null;
+        claudeCodeTitle: string | null | undefined;
+      }
+    >();
+
     for (const [sessionKey, sessionInteractions] of groupedBySession) {
       let lastMainInteraction: (typeof interactions)[0] | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
@@ -1558,27 +1663,44 @@ class InteractionModel {
       }
 
       if (lastMainInteraction || claudeCodeTitle) {
-        // Reconstruct the chosen tip's full request from deltas (no-op for
-        // legacy/non-delta rows). Only one tip per session is reconstructed.
-        let tipRequest: unknown = lastMainInteraction?.request ?? null;
-        if (lastMainInteraction && lastMainInteraction.threadId !== null) {
-          const full = await InteractionDeltaManager.reconstructRow({
-            id: lastMainInteraction.id,
-            threadId: lastMainInteraction.threadId,
-            request: lastMainInteraction.request,
-            processedRequest: null,
-          });
-          tipRequest = full.request;
-        }
-
-        result.set(sessionKey, {
-          lastUserMessagePreview: lastMainInteraction
-            ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
-            : null,
-          lastInteractionType: lastMainInteraction?.type ?? null,
-          claudeCodeTitle: claudeCodeTitle ?? null,
+        selectedPerSession.set(sessionKey, {
+          lastMainInteraction,
+          claudeCodeTitle,
         });
       }
+    }
+
+    // Reconstruct every chosen tip's full request from deltas in one pass (a
+    // no-op for legacy/non-delta rows, which reconstructMany returns as-is).
+    // Still at most one tip per session, now in a single ancestor query.
+    const reconstructed = await InteractionDeltaManager.reconstructMany(
+      [...selectedPerSession.values()]
+        .map(({ lastMainInteraction }) => lastMainInteraction)
+        .filter((tip): tip is (typeof interactions)[0] => tip !== null)
+        .map((tip) => ({
+          id: tip.id,
+          threadId: tip.threadId,
+          request: tip.request,
+          processedRequest: null,
+        })),
+    );
+
+    for (const [
+      sessionKey,
+      { lastMainInteraction, claudeCodeTitle },
+    ] of selectedPerSession) {
+      const tipRequest = lastMainInteraction
+        ? (reconstructed.get(lastMainInteraction.id)?.request ??
+          lastMainInteraction.request)
+        : null;
+
+      result.set(sessionKey, {
+        lastUserMessagePreview: lastMainInteraction
+          ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+          : null,
+        lastInteractionType: lastMainInteraction?.type ?? null,
+        claudeCodeTitle: claudeCodeTitle ?? null,
+      });
     }
 
     return result;
@@ -1630,7 +1752,7 @@ function reconstructInteractionRequests(
   // Decrypt in place BEFORE delta folding — every list read path funnels
   // through here, and callers keep using the same row objects afterwards.
   for (const row of rows) {
-    decryptInteractionRow(row);
+    readInteractionRow(row);
   }
   // SPDX-SnippetEnd
   return InteractionDeltaManager.reconstructMany(rows);
@@ -1691,6 +1813,37 @@ function buildLastUserMessagePreview(
   } catch {
     return null;
   }
+}
+
+/**
+ * Explain an unattributed session from the credentials its interactions used.
+ *
+ * Returns null when the session has users. Ordering matters: a session can mix
+ * auth methods, and the most specific explanation wins over `unknown`.
+ */
+function deriveUnattributedReason(
+  userIds: string[],
+  authMethods: InteractionAuthMethod[],
+): SessionUnattributedReason | null {
+  if (userIds.length > 0) {
+    return null;
+  }
+  const methods = new Set(authMethods);
+  // A virtual key that reached here is org-scoped by definition: a personal
+  // one sets the interaction's user, which would have populated userIds.
+  if (methods.has("virtual_key")) {
+    return "shared_virtual_key";
+  }
+  if (methods.has("provider_key")) {
+    return "provider_key";
+  }
+  if (methods.has("oauth_client_credentials")) {
+    return "client_credentials";
+  }
+  if (methods.has("internal")) {
+    return "internal";
+  }
+  return "unknown";
 }
 
 function parseInteractionAuthMethods(

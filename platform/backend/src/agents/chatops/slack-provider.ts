@@ -63,6 +63,7 @@ import {
   formatApprovalToolArgs,
   isSlackDmChannel,
   Semaphore,
+  stripDuplicateAgentFooter,
 } from "./utils";
 
 /**
@@ -439,6 +440,14 @@ class SlackProvider implements ChatOpsProvider {
       throw new Error("SlackProvider not initialized");
     }
 
+    // The model sometimes signs off with the branding footer itself, having
+    // seen it on earlier bot replies replayed as thread history. Drop that echo
+    // before anything else so the reply renders exactly one footer — and before
+    // chunking, so an echo can't survive inside a chunk's markdown block.
+    const body = options.footer
+      ? stripDuplicateAgentFooter(options.text, options.footer)
+      : options.text;
+
     // Slack expands `markdown` blocks server-side into Block Kit primitives
     // (one per heading, table, list, code block, paragraph) and rejects any
     // chat.postMessage whose expanded blocks[] exceeds 50. splitSlackMarkdownText
@@ -446,15 +455,20 @@ class SlackProvider implements ChatOpsProvider {
     // we post one message per chunk and thread the follow-ups so the user sees
     // the full reply. Non-final messages reserve their footer slot for a
     // "continued in a message below" hint.
-    const chunks = splitSlackMarkdownText(options.text);
+    const chunks = splitSlackMarkdownText(body);
 
     let firstTs = "";
     for (let i = 0; i < chunks.length; i++) {
       const isFinal = i === chunks.length - 1;
       const chunkText = chunks[i];
 
+      // Slack rejects an empty `markdown` block, so a chunk left blank (a reply
+      // that was nothing but an echoed footer) contributes no body block and
+      // renders as the footer alone.
       // biome-ignore lint/suspicious/noExplicitAny: Block Kit types are complex; shape is correct
-      const blocks: any[] = [{ type: "markdown", text: chunkText }];
+      const blocks: any[] = chunkText.trim()
+        ? [{ type: "markdown", text: chunkText }]
+        : [];
 
       if (!isFinal) {
         blocks.push({
@@ -487,9 +501,15 @@ class SlackProvider implements ChatOpsProvider {
         }
       }
 
+      // Nothing to say and nothing to stamp — skip the post rather than send
+      // Slack an empty payload.
+      if (blocks.length === 0) continue;
+
       const fallbackText = truncateFallbackText(
         isFinal && options.footer
-          ? `${chunkText}\n\n${options.footer}`
+          ? [chunkText, options.footer]
+              .filter((part) => part.trim())
+              .join("\n\n")
           : chunkText,
       );
 

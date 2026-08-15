@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-13
+lastUpdated: 2026-08-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -182,39 +182,49 @@ Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permis
 
 Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
 
-Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
+Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
-| Connector    | Auto-sync permissions         |
-| ------------ | ----------------------------- |
-| Confluence   | Supported                     |
-| GitHub       | Supported                     |
-| Jira         | Supported                     |
-| M-Files      | Supported with the VAF Add On |
-| Google Drive | Supported                     |
-| OneDrive     | Supported                     |
-| Salesforce   | Supported                     |
-| SharePoint   | Supported                     |
-| Asana        | Not supported                 |
-| Dropbox      | Not supported                 |
-| GitLab       | Not supported                 |
-| Linear       | Not supported                 |
-| Notion       | Not supported                 |
-| Outline      | Not supported                 |
-| Perforce     | Not supported                 |
-| ServiceNow   | Not supported                 |
-| Web Crawler  | Not supported                 |
+| Connector    | Auto-sync permissions                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| Asana        | Supported                                                                                                 |
+| Confluence   | Supported                                                                                                 |
+| Dropbox      | Supported                                                                                                 |
+| GitHub       | Supported                                                                                                 |
+| GitLab       | Supported                                                                                                 |
+| Jira         | Supported                                                                                                 |
+| Linear       | Supported                                                                                                 |
+| M-Files      | Supported with the VAF Add On                                                                             |
+| Google Drive | Supported                                                                                                 |
+| Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
+| OneDrive     | Supported                                                                                                 |
+| Outline      | Supported                                                                                                 |
+| Perforce     | Supported with the Kubernetes orchestrator ([details](#perforce-helix-core))                              |
+| Salesforce   | Supported                                                                                                 |
+| ServiceNow   | Supported ([details](#servicenow-auto-sync-permissions))                                                  |
+| SharePoint   | Supported                                                                                                 |
+| Web Crawler  | Not supported                                                                                             |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 
 - **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
 - **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
+- **GitLab** only exposes an email the user has made **public on their profile**. An instance admin token also reads private emails; a regular token does not.
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
+- **Linear** returns member emails to any workspace API key. No extra credential is needed.
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
+- **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
+- **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
+- **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
+- **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
+- **ServiceNow** reads user emails from the `sys_user` table with the same credential the connector uses. A user whose email field is empty stays unresolvable.
+- **Perforce** reads each account's `Email` field from its user spec, through the connector's admin user. Accounts without one stay unresolvable. See [Perforce](#perforce-helix-core).
 
-**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
+**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
 **Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
+
+**Editing a connector.** Saving new settings or credentials stops the permission sync running against the old ones — that run ends as **Superseded**. A replacement run starts straight away, so you don't wait for the next scheduled one.
 
 #### Atlassian Organization Admin API Key
 
@@ -303,7 +313,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 Sync issues and merge request discussions from GitLab.
 
-**Indexed:** issues, merge requests, and their comments from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
+**Indexed:** issues, merge requests, their comments, and (optionally) Markdown files from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
 
 **Authentication:** a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/).
 
@@ -314,7 +324,12 @@ Sync issues and merge request discussions from GitLab.
 | Project IDs            | Comma-separated specific project IDs to sync (optional -- leave blank to sync all) |
 | Include Issues         | Toggle to sync issues and their comments (default: on)                             |
 | Include Merge Requests | Toggle to sync merge requests and their comments (default: on)                     |
+| Include Markdown Files | Toggle to sync `.md` and `.mdx` files from the repository (default: off)           |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
+
+**Auto-sync permissions.** Each project is one permission scope. Its audience is the project's members with the **Reporter** role or higher — direct members, members inherited from ancestor groups, and members of invited groups, each at their effective access level. Guests are excluded: GitLab does not let them read code or confidential issues, so including them would over-share. **Public** and **internal** projects are readable by everyone in your Archestra organization.
+
+Each sync snapshots one member roster per project, shown in the connector's **Users** and **Groups** tabs as `<project path> members`. A member whose email is hidden upstream stays unresolvable — assign them to an Archestra user from the Users tab, or ask them to set a public email on their GitLab profile.
 
 ### Asana
 
@@ -330,13 +345,37 @@ Sync tasks and discussions from Asana projects.
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
 
+**Auto-sync permissions.** Each project is one permission scope. A project shared with the whole workspace grants every workspace member — guests excluded. Any other project grants its explicit members: users directly, teams through their team rosters. A task in several projects is readable through any of them; its scope is the union of those audiences. Task collaborators are granted individually on their tasks.
+
+Each permission sync also snapshots workspace members and team rosters — the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Users added to a project directly — guests included — appear there too, under the synthetic **Direct project members** group. Limited-access team members get only the projects they are explicitly added to. Guests get only explicit project and task grants.
+
+Permission reads run as the token's user. A project or roster the token cannot read stays fail-closed — use a token from a user who can see every synced project. A task removed from every synced project is hidden until a sync sees it again.
+
 ### ServiceNow
 
 Sync ITSM records from a ServiceNow instance.
 
-**Indexed:** incidents, change requests, change tasks, problems, and business applications. Incidents are enabled by default; the rest are opt-in.
+**Indexed:** incidents, change requests, change tasks, problems, business applications, and published knowledge articles. Incidents are enabled by default; the rest are opt-in.
 
 **Authentication:** basic auth (username + password) or an OAuth bearer token. For basic auth, put the username in the Email field and the password in the API Token field. For OAuth, leave Email empty and put the bearer token in the API Token field.
+
+**Required roles.** Use a dedicated service account ("Web service access only" is fine). The account needs roles that can read every synced table:
+
+| Role | Grants read on |
+| --- | --- |
+| `itil` | Incidents, changes, change tasks, problems, and business applications |
+| `knowledge` | Knowledge articles |
+| `user_criteria_admin`, `user_admin` | User criteria definitions and the user, group, and role tables auto-sync reads |
+
+The Can Read / Cannot Read criteria mappings (`kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`) have no role-based read access out of the box — built-in roles such as `knowledge_admin` do not open them. Auto-sync permissions needs explicit access control lists (ACLs) on both tables.
+
+Creating ACLs requires the `security_admin` role. ServiceNow grants it by elevation for the current session, and hides the **New** button on the ACL list until you elevate: open the profile menu, select **Elevate role**, and check **security_admin**. Then:
+
+1. Go to **System Security → Access Control (ACL)** and select **New**. Set Type `record`, Operation `read`, and Name `kb_uc_can_read_mtom` with the field left as `--None--`. Under **Requires role**, add a role the service account holds. Submit.
+2. Create a second ACL for the same table with the field set to `*`, which grants read on its fields.
+3. Repeat both ACLs for `kb_uc_cannot_read_mtom`.
+
+An account without the right roles fails in one of two ways, depending on the instance's ACLs: the sync errors with HTTP 403 "Insufficient rights to query records", or ServiceNow silently filters the rows and the sync succeeds with nothing ingested. Test the account directly before connecting: `curl -u '<user>:<password>' 'https://<instance>.service-now.com/api/now/table/incident?sysparm_limit=1'` should return a record, not an error and not an empty result.
 
 | Field                         | Description                                                                                                                   |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -346,9 +385,32 @@ Sync ITSM records from a ServiceNow instance.
 | Include Change Tasks          | Sync change tasks from the `change_task` table (default: off)                                                                 |
 | Include Problems              | Sync problems from the `problem` table (default: off)                                                                         |
 | Include Business Applications | Sync business applications from the `cmdb_ci_business_app` CMDB table (default: off)                                          |
+| Include Knowledge Articles    | Sync published knowledge articles from the `kb_knowledge` table (default: off)                                                |
+| Role audiences                | Per-table ServiceNow role names for auto-sync permissions — see below (optional)                                              |
 | States                        | Comma-separated state values to filter by (e.g. `1, 2`). Applies to incidents, changes, change tasks, and problems (optional) |
 | Assignment Groups             | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional)                     |
 | Batch Size                    | Records per batch (default: 50)                                                                                               |
+
+#### ServiceNow Auto-Sync Permissions
+
+ServiceNow decides record access with ACL rules, and those rules cannot be read through its REST API. For ITSM records and business applications, the connector grants each record to its participants instead: assignment group members plus the referenced users — the caller, the opener, and the assignee. That never grants wider than ServiceNow itself, but a user who could read a record upstream through roles or custom ACLs may not see it here. To widen a table's audience, add role names under **Role audiences** (`itil`, for example) — every holder of those roles may then read every synced record of that table, including business applications.
+
+Knowledge articles follow ServiceNow's own permission model: **Can Read** and **Cannot Read** user criteria at knowledge-base and article level. The connector expands each criteria to its users, groups, roles, companies, departments, and locations. Script-based (advanced) criteria cannot be evaluated over the API: on an allow path they grant nobody; on a deny path the affected knowledge base or article is hidden from everyone. A knowledge base without criteria follows the instance's `glide.knowman.block_access_with_no_user_criteria` property — open to your whole Archestra organization when `false`, hidden when `true` or unreadable.
+
+**Required access.** The connector account needs read access to these tables:
+
+| Tables | Used for |
+| --- | --- |
+| `incident`, `change_request`, `change_task`, `problem`, `cmdb_ci_business_app`, `kb_knowledge` | Content sync of the enabled entities. Reading the ITSM tables needs the `itil` role on most instances |
+| `sys_user`, `sys_user_group`, `sys_user_grmember`, `sys_user_has_role` | Resolving participants, group rosters, and role audiences to user emails |
+| `user_criteria`, `kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`, `sys_properties` | Knowledge-article audiences |
+| `core_company`, `cmn_department`, `cmn_location` | Expanding criteria that reference them |
+
+The [Required roles](#servicenow) section above covers these, including the explicit ACLs the criteria mapping tables need.
+
+**Misconfiguration behaves silently.** ServiceNow filters out rows an account cannot read instead of returning an error. An under-privileged account therefore looks like missing data: content sync ingests nothing from a table it cannot read, and a permission table it cannot read makes the affected audiences fail closed — the documents exist but nobody can retrieve them. Each permission sync run reports how many audiences it could not read, so check the run details when documents seem to be missing or hidden. Knowledge bases in the HR Service Delivery scope (`sn_hr_core`) additionally need the `sn_hr_core.content_reader` role; without it their criteria read as empty and the articles fail closed.
+
+Users granted directly on records appear in the connector's **Users** tab under the synthetic `direct-grants` group. A user whose `sys_user` email is empty stays unresolvable; assign such an account manually from the Users tab.
 
 ### Notion
 
@@ -356,12 +418,29 @@ Sync pages and databases from a Notion workspace.
 
 **Indexed:** pages from a Notion workspace.
 
-**Authentication:** a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your workspace and share the relevant pages or databases with it.
+**Authentication:** an internal integration secret from the [Notion Developer portal](https://app.notion.com/developers/connections). New secrets start with `ntn_`; older `secret_` tokens keep working. Create an internal integration in your workspace and share the relevant pages or databases with it.
 
 | Field        | Description                                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
 | Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
+
+#### Notion Auto-Sync Permissions
+
+Support is *Limited*. Notion's API does not say who can see a page — there is no sharing endpoint, and teamspaces are not exposed. Archestra cannot mirror per-page access, so every synced page shares one workspace-wide audience:
+
+- A synced page is visible to every workspace member whose Notion email matches an Archestra user's email.
+- Each permission sync refreshes the member roster from Notion's users API. The connector page shows a **Workspaces** tab in place of Groups, with one row per connector: the workspace, named as it is in Notion.
+- Guests are never in Notion's member listing, so a guest never gains access through Archestra.
+- Member emails need the integration capability **"read user information including email addresses"** (integration settings, **Capabilities** tab). A member without a readable email stays unresolvable (fail-closed) until you assign them from the Users tab.
+
+A page that is private or teamspace-restricted in Notion, but shared with the integration, becomes readable by every workspace member through Archestra. Set up the integration's access with that in mind:
+
+- Share only workspace-appropriate content with the integration — a company wiki teamspace, for example.
+- Do not share private pages or restricted teamspaces with the integration.
+- For content that must reach a narrower audience, use a separate connector with **Team-scoped** visibility.
+
+This is still stricter than an org-wide connector: access stops at the workspace member roster instead of your whole Archestra organization, and it updates as members join and leave.
 
 ### SharePoint
 
@@ -506,14 +585,20 @@ The connector sees only what someone has shared with the service account's email
 
 Sync text and source files from a Dropbox account or team folder.
 
-**Indexed:** text-based files from a Dropbox account or team folder. Supported extensions: `.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`.
+**Indexed:** files from a Dropbox account or team folder — text and source files (`.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`), documents (`.pdf`, `.docx`, `.pptx`, `.xlsx` — every sheet of a workbook, not just the first), and images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) when the configured embedding model accepts image input. Files the connector cannot extract are reported as skipped on the run.
 
-**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission.
+**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission. Auto-sync permissions also needs `sharing.read`. The token can be a member token or a Dropbox Business team token. With a team token, the connector acts as the admin who generated it. On a Business team with a team space, the connector syncs from the team root automatically — the team space and the member folder are both visible.
 
 | Field      | Description                                                                                              |
 | ---------- | -------------------------------------------------------------------------------------------------------- |
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
+
+**Auto-sync permissions.** Each shared folder is one permission scope — a file belongs to its nearest containing shared folder. Files outside every shared folder are visible only to the token's account. Shared-folder members resolve to their emails directly; pending invitees are excluded until they accept. A file shared with extra people directly carries those people as additional grants. A file shared directly with a group does not carry that group — only shared-folder group grants are mirrored.
+
+Grants to Dropbox groups carry the group's identity. Reading a group's member roster is a Business team API. Dropbox serves it only to team access tokens — a member token cannot read it, whatever scopes the app holds. To expand groups, give the connector a team access token as its one Access Token. In the [App Console](https://www.dropbox.com/developers/apps), add the `groups.read` and `members.read` team scopes next to the app's files and sharing scopes. Then generate a new access token as a team admin — an app with team scopes issues team tokens. The connector detects the team token and syncs content as the admin who generated it. Granted groups — including the automatic "Everyone at ..." team group — then expand to their active members. With a member token, granted groups appear in the **Groups** tab with no members; assign their users manually from the **Users** tab. Direct grantees appear there too, under the synthetic `direct-grants` group.
+
+Shared links are not reflected. A file shared only by link stays visible to the audiences above, nobody more.
 
 ### Linear
 
@@ -534,6 +619,10 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
+**Auto-sync permissions.** Linear's access unit is the team. Issues and cycles get their team's audience: a public team admits every workspace member, a private team only its listed members. Guests get access only through teams they were invited to. A project's audience is the members of its teams plus the users listed on the project. Each sync also snapshots every team's roster, so the connector's **Users** and **Groups** tabs show each member with their assignment status. Suspended accounts belong to no audience.
+
+The API key sees what its owner can see. A private team the owner does not belong to syncs no content and grants no access. Use a key from an owner whose access matches what you want indexed.
+
 ### Outline
 
 Sync published documents from an [Outline](https://www.getoutline.com/) workspace.
@@ -547,6 +636,14 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL).    |
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
+
+**Auto-sync permissions.** Each collection is one permission scope. A collection's audience is its individual members, its granted groups, and — when the collection has workspace-wide default access — every active workspace member except guests. Guests only see collections they are explicitly added to, directly or through a group.
+
+Each permission sync also snapshots group member rosters, so the connector's **Users** and **Groups** tabs show every member with their assignment status. Members granted a collection individually appear there too, under the synthetic `direct-grants` group. Workspace-wide default access appears as a group named after your workspace, holding every active non-guest member.
+
+Published share links are the only public surface. A published document share maps that document — and its child documents, when the share includes them — to everyone in your Archestra organization. A published collection share does the same for the whole collection.
+
+A collection whose permissions cannot be read hides its documents from everyone until a later sync reads them. Documents an Outline user can only reach through a direct per-document share (not a public link) are not carried over; they stay limited to the collection's audience.
 
 ### Salesforce
 
@@ -631,6 +728,30 @@ Each depot path and extension combination is listed in its own REST API request.
 | Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
+#### Permission Sync
+
+The connector supports [auto-sync permissions](#auto-sync-permissions). The REST API cannot read the protections table, so permission sync runs the `p4` CLI in a dedicated in-cluster pod — the p4 shim. This requires the Kubernetes orchestrator. The shim pod is isolated: it accepts connections only from platform pods and connects out only to the Perforce server. For `ssl:` targets the server's certificate fingerprint is trusted on first use, like `p4 trust`. The image contains no Perforce software; the backend downloads the pinned `p4` binary when it provisions the pod — see [Deployment](/docs/platform-deployment#perforce-permission-sync-p4-shim) for the image and binary-source variables (air-gapped installs point them at an internal mirror).
+
+Choosing the auto-sync-permissions visibility adds three fields to the form:
+
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Admin Username     | The Perforce user permission sync authenticates as                                |
+| Admin Password     | That account's password                                                            |
+| P4 Port            | Wire-protocol address of the server, when that is not the Server URL's host        |
+
+The admin user needs `super` access — or `admin` with the `dm.protects.allow.admin=1` configurable — to read the full protections table (`p4 protects -a`), group definitions, and the user list.
+
+Leave P4 Port empty on a normal server. The P4 web server runs inside the Perforce server, so Archestra dials the Server URL's host on port 1666 and works out the transport by trying plain and SSL. Fill the field in only when something else serves the REST API — an ingress in front of the web server, for example.
+
+Test Connection checks the whole path. It reaches the server over the wire address, signs the admin user in, and reads the protections table, so a wrong address or an under-privileged account shows up here rather than at the first permission sync.
+
+Permission sync runs in a pod of its own, one per connector. The pod exists while the connector syncs permissions and is removed when it stops — when you delete the connector, disable it, or change its visibility. Changing the server, the admin user or any credential replaces the pod, so a revoked credential stops working straight away.
+
+A document's audience is the set of users whose effective read access to its depot path the protections table grants, walked with the exclusion lines honored. Access is evaluated as from an unnamed host, so host-restricted lines don't participate. Audiences are always individual users — granting through a group still resolves to its members, because an exclusion line can carve a member out of a granted group.
+
+Users are matched to Archestra accounts by the `Email` field of their Perforce user spec. A user without a resolvable email is dropped from audiences (fail-closed); assign such accounts to Archestra users from the connector's Users tab.
 
 ### M-Files
 

@@ -550,6 +550,97 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * The key whose endpoint actually serves `modelDbId`, for providers where a
+   * key IS a server (`providerHasEndpointLocalModels`).
+   *
+   * `getCurrentApiKey` ranks keys by ownership — conversation pin, agent pin,
+   * personal, team, org — which is the right order for a credential but says
+   * nothing about which server hosts a given model. With several self-hosted
+   * endpoints registered under one provider (the normal way to host more than
+   * one model, since `vllm serve` runs one model per process), that ranking
+   * routes every model to whichever key happened to win, and the sibling
+   * server answers "the model does not exist". This picks among the keys that
+   * do serve the model, applying the same ownership order within that set.
+   *
+   * Only keys the caller may already use are considered — a model link is not
+   * an access grant. `agentLlmApiKeyId` is admitted for the same reason
+   * `getCurrentApiKey` admits it: permission flows through agent access.
+   * Returns null when no such key exists, leaving the caller's own resolution
+   * in place.
+   */
+  static async findKeyServingModel({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+    modelDbId,
+    agentLlmApiKeyId,
+  }: {
+    organizationId: string;
+    userId?: string;
+    userTeamIds: string[];
+    provider: SupportedProvider;
+    modelDbId: string;
+    agentLlmApiKeyId?: string | null;
+  }): Promise<LlmProviderApiKey | null> {
+    const candidates = await db
+      .select({ apiKey: schema.llmProviderApiKeysTable })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.llmProviderApiKeyModelsTable.apiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeyModelsTable.modelId, modelDbId),
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, provider),
+          or(
+            sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
+            inArray(
+              schema.llmProviderApiKeysTable.provider,
+              getProvidersWithOptionalApiKey({
+                azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+              }),
+            ),
+          ),
+        ),
+      )
+      .orderBy(
+        desc(schema.llmProviderApiKeysTable.isPrimary),
+        asc(schema.llmProviderApiKeysTable.createdAt),
+      );
+
+    // Without an acting user there is no personal or team membership to read,
+    // so only org-wide keys are reachable — the same set `resolveProviderApiKey`
+    // falls back to in its user-less branch.
+    const usable = candidates
+      .map(({ apiKey }) => apiKey)
+      .filter(
+        (apiKey) =>
+          (agentLlmApiKeyId != null && apiKey.id === agentLlmApiKeyId) ||
+          (userId === undefined
+            ? apiKey.scope === "org"
+            : LlmProviderApiKeyModel.userHasAccessToKey(
+                apiKey,
+                userId,
+                userTeamIds,
+              )),
+      );
+
+    const scopeRank: Record<string, number> = { personal: 0, team: 1, org: 2 };
+    return (
+      usable.sort(
+        (a, b) => (scopeRank[a.scope] ?? 3) - (scopeRank[b.scope] ?? 3),
+      )[0] ?? null
+    );
+  }
+
+  /**
    * The acting user's own personal key for a given subscription, together with
    * its decrypted credential (prefer isPrimary, then oldest). Subscription
    * credentials are per-user, so when resolution lands on someone else's

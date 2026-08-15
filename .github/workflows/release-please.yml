@@ -25,6 +25,11 @@ on:
         required: false
         default: true
         type: boolean
+      publish_p4_shim_image:
+        description: "Publish the p4 shim image"
+        required: false
+        default: true
+        type: boolean
       publish_platform_image:
         description: "Publish the platform image to Docker Hub"
         required: false
@@ -204,6 +209,25 @@ jobs:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+  build-and-push-p4-shim-docker-image:
+    name: Build and push p4 Shim Docker image
+    # The backend defaults the Perforce permission-sync shim pod to
+    # p4-shim:<appVersion>, so the image ships with every platform release.
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_p4_shim_image) }}
+    uses: ./.github/workflows/build-p4-shim-docker-image.yml
+    needs:
+      - release-please
+    permissions:
+      contents: read # Required to invoke the reusable image build workflow.
+      id-token: write # Required for Workload Identity Federation.
+    with:
+      push_to_gcr: true
+      version: ${{ needs.release-please.outputs.platform_version }}
+      checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
     # The sandbox base ships with every platform release: the engine pulls it as
@@ -273,12 +297,13 @@ jobs:
   publish-github-release:
     name: Publish GitHub Release
     # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
-    # (MCP server image, sandbox base image, platform Docker image, Helm chart) are published.
-    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
+    # (MCP server image, p4 shim image, sandbox base image, platform Docker image, Helm chart) are published.
+    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-p4-shim-docker-image.result == 'success' || needs.build-and-push-p4-shim-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
     runs-on: ubuntu-latest
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
+      - build-and-push-p4-shim-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
@@ -337,6 +362,7 @@ jobs:
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
+      - build-and-push-p4-shim-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
@@ -352,6 +378,7 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.platform_version }}
           RP_RESULT: ${{ needs.release-please.result }}
           MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
+          P4_SHIM_RESULT: ${{ needs.build-and-push-p4-shim-docker-image.result }}
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
           HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
@@ -366,6 +393,7 @@ jobs:
           • release-please: \`${RP_RESULT}\`
           • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
           • MCP server image: \`${MCP_RESULT}\`
+          • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`

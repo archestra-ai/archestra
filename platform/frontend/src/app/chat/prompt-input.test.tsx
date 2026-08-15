@@ -856,7 +856,7 @@ describe("ArchestraPromptInput", () => {
       // The drawer carries the copy that used to live in the toggle tooltip.
       const notice = screen.getByTestId(E2eTestId.ChatIncognitoNotice);
       expect(notice).toHaveTextContent(
-        /Incognito chat — encrypted with a key that stays in this browser/,
+        /Locked chat — encrypted with a key that stays in this browser/,
       );
 
       // Attach affordance stays visible but disabled, with the reason on hover.
@@ -872,7 +872,7 @@ describe("ArchestraPromptInput", () => {
           .getAllByTestId("tooltip-content")
           .some((tooltip) =>
             tooltip.textContent?.includes(
-              "Attachments are stored unencrypted, so incognito chats can't use them",
+              "Attachments are stored unencrypted, so locked chats can't use them",
             ),
           ),
       ).toBe(true);
@@ -931,7 +931,7 @@ describe("ArchestraPromptInput", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Incognito chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "Locked chat" }));
       expect(onIncognitoChange).toHaveBeenCalledWith(true);
 
       // The long explanation moved to the drawer; the hover stays succinct —
@@ -940,7 +940,7 @@ describe("ArchestraPromptInput", () => {
         screen
           .getAllByTestId("tooltip-content")
           .some((tooltip) =>
-            tooltip.textContent?.trim().startsWith("Incognito chat"),
+            tooltip.textContent?.trim().startsWith("Locked chat"),
           ),
       ).toBe(true);
     });

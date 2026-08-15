@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.36](https://github.com/archestra-ai/archestra/compare/platform-v1.3.35...platform-v1.3.36) (2026-08-13)
+
+
+### Features
+
+* **connect:** add a Space skip key to the CLI startup guard ([#7247](https://github.com/archestra-ai/archestra/issues/7247)) ([b7917ad](https://github.com/archestra-ai/archestra/commit/b7917ad0b269705cc54bb38900766019a937c233))
+* **knowledge-base:** permission auto-sync for the OneDrive connector ([#7253](https://github.com/archestra-ai/archestra/issues/7253)) ([71f1448](https://github.com/archestra-ai/archestra/commit/71f14482d9ddab26536ab9a4437f727c6059816d))
+* **knowledge:** versioned add-on download and consolidated M-Files docs ([#7248](https://github.com/archestra-ai/archestra/issues/7248)) ([052d2f8](https://github.com/archestra-ai/archestra/commit/052d2f86d276f8e33c268743395946442590f895))
+
+
+### Bug Fixes
+
+* **knowledge:** tidy connector status timestamps and configure-dialog title spacing ([#7249](https://github.com/archestra-ai/archestra/issues/7249)) ([777a5ce](https://github.com/archestra-ai/archestra/commit/777a5cebdb85eef55a769b0eb10a256ca70be68f))
+* **mfiles:** publish the VAF Add On on its own release track ([#7244](https://github.com/archestra-ai/archestra/issues/7244)) ([8e551c6](https://github.com/archestra-ai/archestra/commit/8e551c6909d97f105cdd93b99c1da10f297d79c3))
+* **oauth:** fall back to root protected resource metadata during discovery ([#7246](https://github.com/archestra-ai/archestra/issues/7246)) ([f698527](https://github.com/archestra-ai/archestra/commit/f698527761739b561176af1e9006077ab76c35fc))
+* **oauth:** serve a slash-free issuer so authorization responses pass RFC 9207 ([#7250](https://github.com/archestra-ai/archestra/issues/7250)) ([d47740a](https://github.com/archestra-ai/archestra/commit/d47740a457178650649b8dbf97add5cf2d996d34))
+
 ## [1.3.35](https://github.com/archestra-ai/archestra/compare/platform-v1.3.34...platform-v1.3.35) (2026-08-13)
 
 

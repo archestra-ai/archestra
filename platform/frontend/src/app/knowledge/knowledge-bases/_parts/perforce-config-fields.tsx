@@ -1,6 +1,8 @@
 "use client";
 
+import { DocsPage } from "@archestra/shared";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   FormControl,
   FormDescription,
@@ -10,6 +12,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput } from "@/components/ui/secret-input";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { joinIfArray } from "./transform-config-array-fields";
 
 export function PerforceConfigFields({
@@ -66,3 +70,141 @@ export function PerforceConfigFields({
     </div>
   );
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Fields permission sync needs, rendered by the create/edit dialogs only when
+ * the Auto-sync permissions visibility is selected. The admin password rides
+ * in the shared `adminApiKey` credential field (the same slot the Atlassian
+ * connectors use for their org-admin key), so a blank value on edit keeps the
+ * stored password.
+ */
+export function PerforcePermissionSyncFields({
+  form,
+  mode,
+}: {
+  // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
+  form: UseFormReturn<any>;
+  mode: "create" | "edit";
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Permission sync</p>
+        <p className="text-muted-foreground text-sm">
+          Mirrors each document&apos;s access from Perforce, using an
+          administrative account.{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(
+              DocsPage.PlatformKnowledge,
+              "permission-sync",
+            )}
+            className="text-sm"
+          >
+            Learn more
+          </ExternalDocsLink>
+        </p>
+      </div>
+      <FormField
+        control={form.control}
+        name="config.adminUsername"
+        rules={{ required: "Admin username is required for permission sync" }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Admin Username</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="p4admin"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                {...field}
+                value={(field.value as string) ?? ""}
+              />
+            </FormControl>
+            <FormDescription>
+              The Perforce user permission sync authenticates as.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="adminApiKey"
+        rules={
+          mode === "create"
+            ? { required: "Admin password is required for permission sync" }
+            : undefined
+        }
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Admin Password</FormLabel>
+            <FormControl>
+              <SecretInput
+                placeholder={
+                  mode === "create"
+                    ? "Password of the Perforce admin user"
+                    : "Leave empty to keep existing password"
+                }
+                {...field}
+              />
+            </FormControl>
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep the existing password.
+              </FormDescription>
+            )}
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="config.p4Port"
+        rules={{
+          pattern: {
+            value: /^(ssl:)?[A-Za-z0-9_.[\]-]+:\d{1,5}$/,
+            message: 'P4 port must look like "host:1666" or "ssl:host:1666"',
+          },
+        }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>P4 Port</FormLabel>
+            <FormControl>
+              <Input
+                placeholder={p4PortPlaceholder(form.watch("config.serverUrl"))}
+                {...field}
+                value={(field.value as string) ?? ""}
+              />
+            </FormControl>
+            <FormDescription>
+              Leave empty unless the Perforce server's wire address is not the
+              host in the Server URL.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+}
+
+/**
+ * Show the operator the address that will be used when the field is left
+ * empty, so the derivation is visible rather than implied.
+ */
+function p4PortPlaceholder(serverUrl: unknown): string {
+  if (typeof serverUrl === "string" && serverUrl) {
+    try {
+      const { hostname } = new URL(serverUrl);
+      if (hostname) return `${hostname}:1666 (derived from Server URL)`;
+    } catch {
+      // Half-typed URL — fall through to the generic example.
+    }
+  }
+  return "perforce.example.com:1666";
+}
+// SPDX-SnippetEnd

@@ -188,6 +188,33 @@ class ConnectorRunModel {
     return run ? { outcome: "claimed", run } : { outcome: "busy" };
   }
 
+  /**
+   * Whether this exact run is still `running` at this lease epoch — the
+   * ownership test, without renewing anything.
+   *
+   * Separate from `renewLease` because a reader wants the answer without
+   * extending a lease it may not deserve, and separate from the fenced write
+   * helpers because some callers act on the answer rather than writing rows.
+   */
+  static async isOwnedRun(params: {
+    runId: string;
+    epoch: number;
+  }): Promise<boolean> {
+    const t = schema.connectorRunsTable;
+    const [row] = await db
+      .select({ id: t.id })
+      .from(t)
+      .where(
+        and(
+          eq(t.id, params.runId),
+          eq(t.status, "running"),
+          eq(t.leaseEpoch, params.epoch),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
   /** Whether a run of the given family is currently `running` for the connector. */
   static async hasRunningRun(params: {
     connectorId: string;
@@ -463,8 +490,9 @@ class ConnectorRunModel {
   }
 
   /**
-   * Stop every live run of a connector: mark it `superseded` and bump the
-   * fencing epoch. Called from the connector delete path.
+   * Stop a connector's live runs: mark them `superseded` and bump the fencing
+   * epoch. Called when the connector they were computed against is gone (the
+   * delete path) or has changed underneath them (the update path).
    *
    * Under the old hard delete this happened implicitly — `connector_runs` has
    * `ON DELETE CASCADE`, so the run row vanished, the worker's next
@@ -476,12 +504,15 @@ class ConnectorRunModel {
    * and the epoch bump additionally no-ops the run's fenced writes
    * (`updateIfOwned`, `setCheckpointIfRunActive`).
    *
-   * Covers both run families (content and permission) — the filter is the
-   * `running` status, not `runType`.
+   * `runType` narrows to one family; omitted, both (content and permission)
+   * are stopped — the filter is then the `running` status alone.
    */
-  static async supersedeRunningForConnector(
-    connectorId: string,
-  ): Promise<number> {
+  static async supersedeRunningForConnector(params: {
+    connectorId: string;
+    /** Shown on the run row, so the UI says why the run stopped. */
+    reason: string;
+    runType?: ConnectorRunType;
+  }): Promise<number> {
     const t = schema.connectorRunsTable;
     const rows = await db
       .update(t)
@@ -489,9 +520,15 @@ class ConnectorRunModel {
         status: "superseded",
         completedAt: new Date(),
         leaseEpoch: sql`${t.leaseEpoch} + 1`,
-        error: "Sync stopped: the connector was deleted.",
+        error: params.reason,
       })
-      .where(and(eq(t.connectorId, connectorId), eq(t.status, "running")))
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          eq(t.status, "running"),
+          ...(params.runType ? [eq(t.runType, params.runType)] : []),
+        ),
+      )
       .returning({ id: t.id });
 
     return rows.length;

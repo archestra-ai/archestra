@@ -13,6 +13,7 @@ const { getConnector } = vi.hoisted(() => ({ getConnector: vi.fn() }));
 vi.mock("@/knowledge-base/connectors/registry", () => ({ getConnector }));
 vi.mock("@/knowledge-base/connector-credentials", () => ({
   resolveConnectorCredentials: vi.fn().mockResolvedValue({}),
+  resolveConnectorCredentialVersion: vi.fn().mockResolvedValue(""),
 }));
 vi.mock("@/cache-manager");
 

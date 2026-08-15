@@ -43,10 +43,21 @@ export class DbSecretsManager implements ISecretManager {
     return await this.deleteSecret(secid);
   }
 
-  async getSecret(secid: string): Promise<SelectSecret | null> {
-    const cachedSecret = this.secretsCache.get(secid);
-    if (cachedSecret) {
-      return cachedSecret;
+  /**
+   * The cache is process-local and refreshed only on the replica that handled
+   * the write, so a rotation elsewhere stays invisible here for up to its TTL.
+   * `skipCache` is for callers that cannot tolerate that window; the fresh row
+   * still populates the cache, so the refresh benefits every later reader.
+   */
+  async getSecret(
+    secid: string,
+    options?: { skipCache?: boolean },
+  ): Promise<SelectSecret | null> {
+    if (!options?.skipCache) {
+      const cachedSecret = this.secretsCache.get(secid);
+      if (cachedSecret) {
+        return cachedSecret;
+      }
     }
 
     const secret = await SecretModel.findById(secid);

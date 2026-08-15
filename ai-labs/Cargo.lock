@@ -121,7 +121,7 @@ version = "0.1.0"
 dependencies = [
  "archestra-bench-core",
  "axum",
- "base64",
+ "base64 0.23.1",
  "bytes",
  "chrono",
  "futures",
@@ -155,11 +155,11 @@ checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
 
 [[package]]
 name = "askama"
-version = "0.14.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f75363874b771be265f4ffe307ca705ef6f3baa19011c149da8674a87f1b75c4"
+checksum = "f1bf825125edd887a019d0a3a837dcc5499a68b0d034cc3eb594070c3e18addc"
 dependencies = [
- "askama_derive",
+ "askama_macros",
  "itoa",
  "percent-encoding",
  "serde",
@@ -168,12 +168,13 @@ dependencies = [
 
 [[package]]
 name = "askama_derive"
-version = "0.14.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "129397200fe83088e8a68407a8e2b1f826cf0086b21ccdb866a722c8bcd3a94f"
+checksum = "e1c7065972a130eafa84215f21352ae15b4a7393da48c1f5e103904490736738"
 dependencies = [
  "askama_parser",
  "basic-toml",
+ "glob",
  "memchr",
  "proc-macro2",
  "quote",
@@ -184,15 +185,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "askama_parser"
-version = "0.14.0"
+name = "askama_macros"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6ab5630b3d5eaf232620167977f95eb51f3432fc76852328774afbd242d4358"
+checksum = "0e23b1d2c4bd39a41971f6124cef4cc6fd0540913ecb90919b69ab3bbe44ae1a"
 dependencies = [
- "memchr",
+ "askama_derive",
+]
+
+[[package]]
+name = "askama_parser"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7db09fde9143e7ac4513358fb32ee32847125b63b18ea715afd487956da715da"
+dependencies = [
+ "rustc-hash",
  "serde",
  "serde_derive",
- "winnow 0.7.15",
+ "unicode-ident",
+ "winnow",
 ]
 
 [[package]]
@@ -319,6 +330,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "basic-toml"
@@ -1257,7 +1274,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -1536,7 +1553,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "161c33c3ec738cfea3288c5c53dfcdb32fd4fc2954de86ea06f71b5a1a40bfcd"
 dependencies = [
  "ahash",
- "base64",
+ "base64 0.22.1",
  "bytecount",
  "email_address",
  "fancy-regex",
@@ -1690,7 +1707,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04ea120876e39cfe028a8bd47f81df9f1326ae651440f064eefe29370d1c4ec6"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "chrono",
  "dirs",
  "eyre",
@@ -1971,7 +1988,7 @@ version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08808e3c483c46e999108051c78334f473d5adb59d78bb80a1268c7e6aa6c514"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "byteorder",
  "bytes",
  "fallible-iterator",
@@ -2292,7 +2309,7 @@ version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-core",
@@ -2326,7 +2343,7 @@ version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "cookie",
  "cookie_store",
@@ -2375,7 +2392,7 @@ checksum = "35f5520515ae8f6851adcbc6fde9eea8e96f657418c062e16c82cd81cce44e8e"
 dependencies = [
  "as-any",
  "async-stream",
- "base64",
+ "base64 0.22.1",
  "bytes",
  "eventsource-stream",
  "fastrand",
@@ -2435,7 +2452,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14db48ee17a9ba61810ab1a9c1beb7d06d8136ae39ac25a1137f10d357af01af"
 dependencies = [
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "futures",
@@ -3173,7 +3190,7 @@ dependencies = [
  "toml_datetime",
  "toml_parser",
  "toml_writer",
- "winnow 1.0.3",
+ "winnow",
 ]
 
 [[package]]
@@ -3194,7 +3211,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
- "winnow 1.0.3",
+ "winnow",
 ]
 
 [[package]]
@@ -3203,7 +3220,7 @@ version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2abe9b86193656635d2411dc43050282ca48aa31c2451210f4202550afb7526"
 dependencies = [
- "winnow 1.0.3",
+ "winnow",
 ]
 
 [[package]]
@@ -4054,15 +4071,6 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
-
-[[package]]
-name = "winnow"
-version = "0.7.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "winnow"

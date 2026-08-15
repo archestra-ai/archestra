@@ -677,6 +677,7 @@ async function tryCreateInContextCompaction(params: {
       provider: params.provider,
       conversationId: params.conversationId,
       agentLlmApiKeyId: params.agentLlmApiKeyId,
+      modelName: params.selectedModel,
     });
     const apiKey = fallbackLlm?.apiKey;
     const baseUrl = fallbackLlm?.baseUrl ?? null;

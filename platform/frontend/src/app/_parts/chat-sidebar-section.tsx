@@ -418,7 +418,7 @@ export function ChatSidebarSection({
                       <TooltipTrigger asChild>
                         <IncognitoIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
-                      <TooltipContent side="top">Incognito chat</TooltipContent>
+                      <TooltipContent side="top">Locked chat</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}

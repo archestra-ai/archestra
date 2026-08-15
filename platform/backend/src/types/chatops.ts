@@ -138,11 +138,16 @@ export interface ChatReplyOptions {
   text: string;
   /** Optional: Reply in thread (if supported) */
   replyInThread?: boolean;
-  /** Optional: Footer text to append (e.g. agent name) */
+  /**
+   * Optional: footer text stamping the reply with the responding agent (e.g.
+   * "🤖 Sales Bot"). Providers render it exactly once, as the last line of the
+   * reply, dropping any copy of it the model wrote itself.
+   */
   footer?: string;
   /**
-   * Optional: an even-more-subtle hint rendered on its own line below the
-   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   * Optional: an even-more-subtle hint rendered on its own line ABOVE the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply),
+   * so the footer stays the reply's last line.
    */
   hint?: string;
   /** Provider-specific conversation reference for reply routing */

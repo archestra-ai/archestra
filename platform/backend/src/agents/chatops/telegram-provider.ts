@@ -25,7 +25,11 @@ import {
   CHATOPS_ATTACHMENT_LIMITS,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "./constants";
-import { errorMessage, formatApprovalToolArgs } from "./utils";
+import {
+  errorMessage,
+  formatApprovalToolArgs,
+  stripDuplicateAgentFooter,
+} from "./utils";
 
 /**
  * Telegram chatops provider.
@@ -212,7 +216,11 @@ class TelegramProvider implements ChatOpsProvider {
 
   async sendReply(options: ChatReplyOptions): Promise<string> {
     const { originalMessage } = options;
-    let text = options.text;
+    // Drop a branding footer the model wrote itself, so appending ours can
+    // never render the line twice.
+    let text = options.footer
+      ? stripDuplicateAgentFooter(options.text, options.footer)
+      : options.text;
     if (options.hint) text += `\n\n${options.hint}`;
     if (options.footer) text += `\n\n${options.footer}`;
 

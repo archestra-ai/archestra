@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectorSyncBatch } from "@/types";
+import type {
+  ConnectorSyncBatch,
+  GroupMembershipYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+} from "@/types";
 import { OutlineConnector } from "./outline-connector";
 
 const OUTLINE_URL = "https://app.getoutline.com";
@@ -971,6 +976,873 @@ describe("OutlineConnector", () => {
           // consume
         }
       }).rejects.toThrow(/Outline API error 500/);
+    });
+  });
+
+  // ===== Permission sync =====
+
+  type ContainerYield = Extract<PermissionSnapshotYield, { kind: "container" }>;
+  type DocumentYield = Extract<PermissionSnapshotYield, { kind: "document" }>;
+
+  type Route = {
+    method: string;
+    when?: (body: Record<string, unknown>) => boolean;
+    body?: unknown;
+    status?: number;
+  };
+
+  function installRoutes(connector: OutlineConnector, routes: Route[]) {
+    const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+    vi.spyOn(connector as unknown as SpyTarget, "rateLimit").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(
+      connector as unknown as SpyTarget,
+      "fetchWithRetry",
+    ).mockImplementation(async (...args: unknown[]) => {
+      const url = args[0] as string;
+      const init = args[1] as { body?: string };
+      const method = url.slice(url.indexOf("/api/") + "/api/".length);
+      const body = init?.body
+        ? (JSON.parse(init.body) as Record<string, unknown>)
+        : {};
+      calls.push({ method, body });
+      const route = routes.find(
+        (candidate) =>
+          candidate.method === method &&
+          (!candidate.when || candidate.when(body)),
+      );
+      if (!route) {
+        throw new Error(`No route for ${method} ${JSON.stringify(body)}`);
+      }
+      if (route.status && route.status >= 400) {
+        return {
+          ok: false,
+          status: route.status,
+          json: async () => ({}),
+          text: async () => "boom",
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => route.body,
+        text: async () => "",
+      } as unknown as Response;
+    });
+    return calls;
+  }
+
+  const envelope = (data: unknown, nextPath?: string) => ({
+    ok: true,
+    data,
+    pagination: {
+      limit: 100,
+      offset: 0,
+      ...(nextPath ? { nextPath } : {}),
+    },
+  });
+
+  const apiUser = (
+    id: string,
+    email: string | null,
+    opts?: { name?: string; role?: string; isSuspended?: boolean },
+  ) => ({
+    id,
+    name: opts?.name ?? id,
+    email,
+    role: opts?.role ?? "member",
+    isSuspended: opts?.isSuspended ?? false,
+  });
+
+  const authRoute = (team?: { id: string; name: string } | null): Route => ({
+    method: "auth.info",
+    body: {
+      ok: true,
+      data: {
+        user: { id: "user-1", name: "Test User" },
+        ...(team === null
+          ? {}
+          : { team: team ?? { id: "team-1", name: "Test Team" } }),
+      },
+    },
+  });
+
+  const noSharesRoute: Route = { method: "shares.list", body: envelope([]) };
+
+  /**
+   * Outline serializes `email` only where the endpoint asks for it, and the
+   * membership endpoints do not: users nested in `collections.memberships`
+   * and `groups.memberships` arrive email-less however privileged the key
+   * is. Fixtures strip it so the suites exercise the real payload shape.
+   */
+  const withoutEmail = (users: ReturnType<typeof apiUser>[]) =>
+    users.map(({ email: _email, ...rest }) => rest);
+
+  /** `users.list` — the only endpoint that returns emails. */
+  const directoryRoute = (users: ReturnType<typeof apiUser>[]): Route => ({
+    method: "users.list",
+    when: (body) => body.filter === "all",
+    body: envelope(users),
+  });
+
+  /** `users.list` restricted to active members (workspace-default roster). */
+  const activeUsersRoute = (users: ReturnType<typeof apiUser>[]): Route => ({
+    method: "users.list",
+    when: (body) => body.filter === "active",
+    body: envelope(users),
+  });
+
+  const membershipsRoute = (
+    collectionId: string,
+    users: ReturnType<typeof apiUser>[],
+  ): Route => ({
+    method: "collections.memberships",
+    when: (body) => body.id === collectionId,
+    body: envelope({ users: withoutEmail(users), memberships: [] }),
+  });
+
+  const groupMembershipsRoute = (
+    collectionId: string,
+    groups: Array<{ id: string; name?: string }>,
+  ): Route => ({
+    method: "collections.group_memberships",
+    when: (body) => body.id === collectionId,
+    body: envelope({ groups, collectionGroupMemberships: [] }),
+  });
+
+  const collectionInfoRoute = (
+    collectionId: string,
+    permission: "read" | "read_write" | null,
+  ): Route => ({
+    method: "collections.info",
+    when: (body) => body.id === collectionId,
+    body: {
+      ok: true,
+      data: { id: collectionId, name: collectionId, permission },
+    },
+  });
+
+  const ingested = (
+    sourceId: string,
+    collectionId: string,
+    parentDocumentId: string | null = null,
+  ) => ({
+    sourceId,
+    metadata: { collectionId, parentDocumentId, urlId: sourceId.slice(0, 8) },
+  });
+
+  const readBack = (docs: ReturnType<typeof ingested>[]) =>
+    vi.fn(
+      async (args: {
+        metadataFilter?: Record<string, string>;
+        afterId?: string | null;
+        limit: number;
+      }) => {
+        const filtered = args.metadataFilter
+          ? docs.filter((doc) =>
+              Object.entries(
+                args.metadataFilter as Record<string, string>,
+              ).every(
+                ([key, value]) =>
+                  (doc.metadata as Record<string, unknown>)[key] === value,
+              ),
+            )
+          : docs;
+        const sorted = [...filtered].sort((a, b) =>
+          a.sourceId.localeCompare(b.sourceId),
+        );
+        const start = args.afterId
+          ? sorted.findIndex((doc) => doc.sourceId === args.afterId) + 1
+          : 0;
+        const page = sorted.slice(start, start + args.limit);
+        return {
+          documents: page,
+          nextAfterId: page.length ? page[page.length - 1].sourceId : null,
+        };
+      },
+    );
+
+  function snapshotParams(overrides?: {
+    config?: Record<string, unknown>;
+    docs?: ReturnType<typeof ingested>[];
+    cursor?: string | null;
+    scope?: { containerKeys: string[] };
+    resolveMappedEmail?: (externalAccountId: string) => string | null;
+  }): PermissionSyncParams {
+    return {
+      config: overrides?.config ?? { ...baseConfig, collectionIds: ["col-1"] },
+      credentials,
+      cursor: overrides?.cursor ?? null,
+      readIngestedDocuments: readBack(
+        overrides?.docs ?? [
+          ingested("doc-1", "col-1"),
+          ingested("doc-2", "col-1"),
+        ],
+      ),
+      ...(overrides?.scope ? { scope: overrides.scope } : {}),
+      ...(overrides?.resolveMappedEmail
+        ? { resolveMappedEmail: overrides.resolveMappedEmail }
+        : {}),
+    } as unknown as PermissionSyncParams;
+  }
+
+  async function collectSnapshot(gen: AsyncGenerator<PermissionSnapshotYield>) {
+    const order: PermissionSnapshotYield[] = [];
+    const containers = new Map<string, ContainerYield>();
+    const documents: DocumentYield[] = [];
+    for await (const item of gen) {
+      order.push(item);
+      if (item.kind === "container") containers.set(item.containerKey, item);
+      else documents.push(item);
+    }
+    return { order, containers, documents };
+  }
+
+  describe("syncPermissionSnapshot", () => {
+    it("resolves a private collection's audience from memberships and group memberships", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([
+          apiUser("u-1", "Alice@Example.com"),
+          apiUser("u-2", "bob@example.com"),
+          apiUser("u-suspended", "sue@example.com", { isSuspended: true }),
+          apiUser("u-hidden", null),
+        ]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", [
+          apiUser("u-1", "Alice@Example.com"),
+          apiUser("u-2", "bob@example.com"),
+          apiUser("u-suspended", "sue@example.com", { isSuspended: true }),
+          apiUser("u-hidden", null),
+        ]),
+        groupMembershipsRoute("col-1", [{ id: "grp-b" }, { id: "grp-a" }]),
+      ]);
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      const container = containers.get("collection:col-1");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: ["alice@example.com", "bob@example.com"],
+        groups: ["grp-a", "grp-b"],
+      });
+      expect(container?.audienceResolutionFailed).toBe(false);
+      expect(documents.map((doc) => doc.sourceId)).toEqual(["doc-1", "doc-2"]);
+      expect(
+        documents.every((doc) => doc.containerKey === "collection:col-1"),
+      ).toBe(true);
+      expect(documents.every((doc) => doc.cursor === "collection:col-1")).toBe(
+        true,
+      );
+    });
+
+    it("recovers a hidden email through resolveMappedEmail", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([apiUser("u-hidden", null)]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", [apiUser("u-hidden", null)]),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          snapshotParams({
+            resolveMappedEmail: (id) =>
+              id === "u-hidden" ? "Mapped@Example.com" : null,
+          }),
+        ),
+      );
+
+      expect(containers.get("collection:col-1")?.permissions.users).toEqual([
+        "mapped@example.com",
+      ]);
+    });
+
+    it("adds the workspace-scoped default group when the collection grants workspace-wide access", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([]),
+        collectionInfoRoute("col-1", "read"),
+        membershipsRoute("col-1", []),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      expect(containers.get("collection:col-1")?.permissions.groups).toEqual([
+        "workspace-default-team-1",
+      ]);
+    });
+
+    it("fail-closes the whole audience when a membership read fails, still yielding every document", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([]),
+        collectionInfoRoute("col-1", "read"),
+        {
+          method: "collections.memberships",
+          status: 500,
+        },
+        groupMembershipsRoute("col-1", [{ id: "grp-a" }]),
+      ]);
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      const container = containers.get("collection:col-1");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(true);
+      expect(documents.map((doc) => doc.sourceId)).toEqual(["doc-1", "doc-2"]);
+    });
+
+    it("emits an empty-corpus collection as a fail-closed boundary without resolving its audience", async () => {
+      const connector = new OutlineConnector();
+      const calls = installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([]),
+      ]);
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams({ docs: [] })),
+      );
+
+      const container = containers.get("collection:col-1");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(false);
+      expect(documents).toEqual([]);
+      expect(
+        calls.filter((call) => call.method === "collections.info"),
+      ).toEqual([]);
+    });
+
+    it("drains paginated membership listings before building the audience", async () => {
+      const firstPage = Array.from({ length: 100 }, (_, i) =>
+        apiUser(`u-${String(i).padStart(3, "0")}`, `user${i}@example.com`),
+      );
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([...firstPage, apiUser("u-last", "last@example.com")]),
+        collectionInfoRoute("col-1", null),
+        {
+          method: "collections.memberships",
+          when: (body) => body.offset === 0,
+          body: {
+            ok: true,
+            data: { users: withoutEmail(firstPage), memberships: [] },
+            pagination: { limit: 100, offset: 0, nextPath: "/api/next" },
+          },
+        },
+        {
+          method: "collections.memberships",
+          when: (body) => body.offset === 100,
+          body: envelope({
+            users: withoutEmail([apiUser("u-last", "last@example.com")]),
+            memberships: [],
+          }),
+        },
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      expect(
+        containers.get("collection:col-1")?.permissions.users,
+      ).toHaveLength(101);
+    });
+
+    it("marks a collection public when a published collection share exists", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        {
+          method: "shares.list",
+          body: envelope([
+            {
+              id: "s-1",
+              collectionId: "col-1",
+              documentId: null,
+              published: true,
+            },
+            {
+              id: "s-2",
+              collectionId: "col-9",
+              documentId: null,
+              published: false,
+            },
+          ]),
+        },
+        directoryRoute([]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", []),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      expect(containers.get("collection:col-1")?.permissions.isPublic).toBe(
+        true,
+      );
+    });
+
+    it("assigns published documents and their included children to the public nested container", async () => {
+      const docs = [
+        ingested("doc-child", "col-1", "doc-root"),
+        ingested("doc-grandchild", "col-1", "doc-child"),
+        ingested("doc-other", "col-1"),
+        ingested("doc-solo", "col-1"),
+      ];
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        {
+          method: "shares.list",
+          body: envelope([
+            {
+              id: "s-1",
+              documentId: "doc-root",
+              collectionId: null,
+              published: true,
+              includeChildDocuments: true,
+            },
+            {
+              id: "s-2",
+              documentId: "doc-solo",
+              collectionId: null,
+              published: true,
+              includeChildDocuments: false,
+            },
+          ]),
+        },
+        directoryRoute([apiUser("u-1", "alice@example.com")]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", [apiUser("u-1", "alice@example.com")]),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { order, containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams({ docs })),
+      );
+
+      const publicKey = "collection:col-1/public";
+      expect(containers.get(publicKey)?.permissions).toEqual({
+        isPublic: true,
+        users: [],
+        groups: [],
+      });
+      // The nested container is emitted before any document references it.
+      const publicContainerIndex = order.findIndex(
+        (item) => item.kind === "container" && item.containerKey === publicKey,
+      );
+      const firstPublicDocIndex = order.findIndex(
+        (item) => item.kind === "document" && item.containerKey === publicKey,
+      );
+      expect(publicContainerIndex).toBeGreaterThan(-1);
+      expect(publicContainerIndex).toBeLessThan(firstPublicDocIndex);
+
+      const byId = new Map(documents.map((doc) => [doc.sourceId, doc]));
+      expect(byId.get("doc-child")?.containerKey).toBe(publicKey);
+      expect(byId.get("doc-grandchild")?.containerKey).toBe(publicKey);
+      expect(byId.get("doc-solo")?.containerKey).toBe(publicKey);
+      expect(byId.get("doc-other")?.containerKey).toBe("collection:col-1");
+      // Nested yields still carry the TOP-LEVEL cursor.
+      expect(
+        [...containers.values(), ...documents].every(
+          (item) => item.cursor === "collection:col-1",
+        ),
+      ).toBe(true);
+    });
+
+    it("degrades to no public shares when shares.list fails", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        { method: "shares.list", status: 403 },
+        directoryRoute([apiUser("u-1", "alice@example.com")]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", [apiUser("u-1", "alice@example.com")]),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      const container = containers.get("collection:col-1");
+      expect(container?.permissions.isPublic).toBe(false);
+      expect(container?.permissions.users).toEqual(["alice@example.com"]);
+      expect(container?.audienceResolutionFailed).toBe(false);
+    });
+
+    it("enumerates every visible collection sorted when no filter is configured", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([]),
+        {
+          method: "collections.list",
+          body: envelope([{ id: "col-b" }, { id: "col-a" }]),
+        },
+        collectionInfoRoute("col-a", null),
+        collectionInfoRoute("col-b", null),
+        membershipsRoute("col-a", []),
+        membershipsRoute("col-b", []),
+        groupMembershipsRoute("col-a", []),
+        groupMembershipsRoute("col-b", []),
+      ]);
+
+      const { order } = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          snapshotParams({
+            config: baseConfig,
+            docs: [ingested("doc-1", "col-a"), ingested("doc-2", "col-b")],
+          }),
+        ),
+      );
+
+      const containerKeys = order
+        .filter((item) => item.kind === "container")
+        .map((item) => item.containerKey);
+      expect(containerKeys).toEqual(["collection:col-a", "collection:col-b"]);
+    });
+
+    it("skips containers before the cursor and outside the scope", async () => {
+      const config = {
+        ...baseConfig,
+        collectionIds: ["col-a", "col-b", "col-c"],
+      };
+      const docs = [
+        ingested("doc-1", "col-a"),
+        ingested("doc-2", "col-b"),
+        ingested("doc-3", "col-c"),
+      ];
+      const routes: Route[] = [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([]),
+        ...["col-a", "col-b", "col-c"].flatMap((id) => [
+          collectionInfoRoute(id, null),
+          membershipsRoute(id, []),
+          groupMembershipsRoute(id, []),
+        ]),
+      ];
+
+      const cursorConnector = new OutlineConnector();
+      installRoutes(cursorConnector, routes);
+      const cursorRun = await collectSnapshot(
+        cursorConnector.syncPermissionSnapshot(
+          snapshotParams({ config, docs, cursor: "collection:col-b" }),
+        ),
+      );
+      expect([...cursorRun.containers.keys()]).toEqual([
+        "collection:col-b",
+        "collection:col-c",
+      ]);
+
+      const scopeConnector = new OutlineConnector();
+      installRoutes(scopeConnector, routes);
+      const scopedRun = await collectSnapshot(
+        scopeConnector.syncPermissionSnapshot(
+          snapshotParams({
+            config,
+            docs,
+            scope: { containerKeys: ["collection:col-c"] },
+          }),
+        ),
+      );
+      expect([...scopedRun.containers.keys()]).toEqual(["collection:col-c"]);
+    });
+
+    it("grants individually-shared members whose membership payload carries no email", async () => {
+      // Outline nests users in membership responses through a bare
+      // presentUser(), which omits `email` for every caller. Reading the
+      // email off that payload dropped every individual grantee, so a
+      // collection shared with named people resolved to its groups alone.
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([
+          apiUser("u-margaret", "Margaret@example.com"),
+          apiUser("u-mark", "mark@example.com"),
+        ]),
+        collectionInfoRoute("col-1", null),
+        membershipsRoute("col-1", [
+          apiUser("u-margaret", "Margaret@example.com"),
+          apiUser("u-mark", "mark@example.com"),
+        ]),
+        groupMembershipsRoute("col-1", [{ id: "grp-eng" }]),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      expect(containers.get("collection:col-1")?.permissions).toEqual({
+        isPublic: false,
+        users: ["margaret@example.com", "mark@example.com"],
+        groups: ["grp-eng"],
+      });
+    });
+
+    it("honors the directory's suspension state over the membership payload", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        noSharesRoute,
+        directoryRoute([
+          apiUser("u-1", "alice@example.com"),
+          apiUser("u-gone", "gone@example.com", { isSuspended: true }),
+        ]),
+        collectionInfoRoute("col-1", null),
+        // The membership payload predates the suspension and omits the flag.
+        membershipsRoute("col-1", [
+          apiUser("u-1", "alice@example.com"),
+          apiUser("u-gone", "gone@example.com"),
+        ]),
+        groupMembershipsRoute("col-1", []),
+      ]);
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(snapshotParams()),
+      );
+
+      expect(containers.get("collection:col-1")?.permissions.users).toEqual([
+        "alice@example.com",
+      ]);
+    });
+
+    it("fails the pass when auth.info returns no workspace id", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [authRoute(null), noSharesRoute]);
+
+      await expect(
+        collectSnapshot(connector.syncPermissionSnapshot(snapshotParams())),
+      ).rejects.toThrow(/no workspace id/);
+    });
+  });
+
+  describe("syncGroups", () => {
+    it("yields workspace groups, the workspace-default group, and the direct-grants roster", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        directoryRoute([
+          apiUser("u-1", "Alice@Example.com"),
+          apiUser("u-2", "bob@example.com"),
+          apiUser("u-3", "carol@example.com", { role: "viewer" }),
+          apiUser("u-suspended", "sue@example.com", { isSuspended: true }),
+          apiUser("u-guest", "guest@example.com", { role: "guest" }),
+          apiUser("u-hidden", null),
+        ]),
+        {
+          method: "groups.list",
+          body: envelope({
+            groups: [
+              { id: "grp-b", name: "Beta" },
+              { id: "grp-a", name: "Alpha" },
+            ],
+            groupMemberships: [],
+          }),
+        },
+        {
+          method: "groups.memberships",
+          when: (body) => body.id === "grp-a",
+          body: envelope({
+            users: withoutEmail([
+              apiUser("u-2", "bob@example.com"),
+              apiUser("u-1", "Alice@Example.com"),
+              apiUser("u-suspended", "sue@example.com", { isSuspended: true }),
+            ]),
+            groupMemberships: [],
+          }),
+        },
+        {
+          method: "groups.memberships",
+          when: (body) => body.id === "grp-b",
+          body: envelope({ users: [], groupMemberships: [] }),
+        },
+        activeUsersRoute([
+          apiUser("u-1", "alice@example.com"),
+          apiUser("u-3", "carol@example.com", { role: "viewer" }),
+          apiUser("u-guest", "guest@example.com", { role: "guest" }),
+        ]),
+        membershipsRoute("col-1", [
+          apiUser("u-1", "alice@example.com"),
+          apiUser("u-hidden", null),
+        ]),
+      ]);
+
+      const groups: GroupMembershipYield[] = [];
+      for await (const group of connector.syncGroups(snapshotParams())) {
+        groups.push(group);
+      }
+
+      expect(groups.map((group) => group.groupId)).toEqual([
+        "grp-a",
+        "grp-b",
+        "workspace-default-team-1",
+        "direct-grants",
+      ]);
+      const alpha = groups[0];
+      expect(alpha.name).toBe("Alpha");
+      expect(alpha.members.map((member) => member.accountId)).toEqual([
+        "u-1",
+        "u-2",
+      ]);
+      expect(alpha.members[0].email).toBe("alice@example.com");
+
+      const defaults = groups[2];
+      expect(defaults.name).toBe("Test Team default access");
+      expect(defaults.members.map((member) => member.accountId)).toEqual([
+        "u-1",
+        "u-3",
+      ]);
+
+      const direct = groups[3];
+      expect(direct.members.map((member) => member.accountId)).toEqual([
+        "u-1",
+        "u-hidden",
+      ]);
+      expect(direct.members[1].email).toBeNull();
+    });
+
+    it("resolves group and direct-grant roster emails through the directory", async () => {
+      // Without the directory join every roster stored NULL emails, so no
+      // Archestra user could ever match into a group — the group token was
+      // in the ACL but granted nobody.
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        directoryRoute([
+          apiUser("u-eng", "eng@example.com"),
+          apiUser("u-direct", "direct@example.com"),
+        ]),
+        {
+          method: "groups.list",
+          body: envelope({
+            groups: [{ id: "grp-eng", name: "Engineering" }],
+            groupMemberships: [],
+          }),
+        },
+        {
+          method: "groups.memberships",
+          when: (body) => body.id === "grp-eng",
+          body: envelope({
+            users: withoutEmail([apiUser("u-eng", "eng@example.com")]),
+            groupMemberships: [],
+          }),
+        },
+        activeUsersRoute([]),
+        membershipsRoute("col-1", [apiUser("u-direct", "direct@example.com")]),
+      ]);
+
+      const groups: GroupMembershipYield[] = [];
+      for await (const group of connector.syncGroups(snapshotParams())) {
+        groups.push(group);
+      }
+
+      const engineering = groups.find((group) => group.groupId === "grp-eng");
+      expect(engineering?.members[0].email).toBe("eng@example.com");
+      const direct = groups.find((group) => group.groupId === "direct-grants");
+      expect(direct?.members[0].email).toBe("direct@example.com");
+    });
+
+    it("throws instead of yielding a truncated roster when a group read fails", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        directoryRoute([]),
+        {
+          method: "groups.list",
+          body: envelope({
+            groups: [{ id: "grp-a", name: "Alpha" }],
+            groupMemberships: [],
+          }),
+        },
+        { method: "groups.memberships", status: 500 },
+      ]);
+
+      await expect(async () => {
+        for await (const _ of connector.syncGroups(snapshotParams())) {
+          // consume
+        }
+      }).rejects.toThrow(/Outline API error 500/);
+    });
+
+    it("skips a collection whose membership read fails without losing the rest of the direct-grants roster", async () => {
+      const connector = new OutlineConnector();
+      installRoutes(connector, [
+        authRoute(),
+        directoryRoute([apiUser("u-1", "alice@example.com")]),
+        {
+          method: "groups.list",
+          body: envelope({ groups: [], groupMemberships: [] }),
+        },
+        activeUsersRoute([]),
+        {
+          method: "collections.memberships",
+          when: (body) => body.id === "col-a",
+          status: 500,
+        },
+        membershipsRoute("col-b", [apiUser("u-1", "alice@example.com")]),
+      ]);
+
+      const groups: GroupMembershipYield[] = [];
+      for await (const group of connector.syncGroups(
+        snapshotParams({
+          config: { ...baseConfig, collectionIds: ["col-a", "col-b"] },
+        }),
+      )) {
+        groups.push(group);
+      }
+
+      const direct = groups.find((group) => group.groupId === "direct-grants");
+      expect(direct?.members.map((member) => member.accountId)).toEqual([
+        "u-1",
+      ]);
+    });
+  });
+
+  describe("scopeKeyForDocument", () => {
+    it("maps collection metadata to the container key and everything else to null", () => {
+      const connector = new OutlineConnector();
+      expect(connector.scopeKeyForDocument({ collectionId: "col-1" })).toBe(
+        "collection:col-1",
+      );
+      expect(connector.scopeKeyForDocument({ collectionId: null })).toBeNull();
+      expect(connector.scopeKeyForDocument({ collectionId: "" })).toBeNull();
+      expect(connector.scopeKeyForDocument({})).toBeNull();
     });
   });
 });

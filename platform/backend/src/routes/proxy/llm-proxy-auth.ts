@@ -48,6 +48,18 @@ import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 // =========================================================================
 
 /**
+ * The model named in an already-parsed request body, for the credential
+ * resolution that runs before the handler builds its request adapter.
+ *
+ * Untrusted input read defensively: every provider this reaches puts the model
+ * in a top-level `model` string, and anything else resolves as if unspecified.
+ */
+function requestedModelFromBody(request: FastifyRequest): string | null {
+  const model = (request.body as { model?: unknown } | undefined)?.model;
+  return typeof model === "string" && model.length > 0 ? model : null;
+}
+
+/**
  * Resolve the target agent from the request URL or fall back to the default profile.
  */
 export async function resolveAgent(
@@ -322,6 +334,12 @@ export async function validateLlmOAuthAccessToken(params: {
   tokenValue: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  /**
+   * Model named in the request body, when the caller has already parsed it.
+   * Providers whose keys are servers (vLLM, Ollama, …) resolve the endpoint
+   * that hosts this model rather than an arbitrary sibling.
+   */
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
@@ -347,6 +365,7 @@ export async function validateLlmOAuthAccessToken(params: {
       clientId: accessToken.clientId,
       expectedProvider: params.expectedProvider,
       agent: params.agent,
+      requestedModel: params.requestedModel,
     });
   }
 
@@ -443,6 +462,7 @@ export async function attemptJwksAuth(
       organizationId: jwksResult.organizationId,
       userId: jwksResult.userId,
       provider: providerName,
+      modelName: requestedModelFromBody(request),
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
@@ -597,6 +617,7 @@ export async function authenticatePassthroughProxyRequest(params: {
         tokenValue: bearerToken,
         expectedProvider: provider,
         agent,
+        requestedModel: requestedModelFromBody(request),
       })
     ) {
       return;
@@ -809,6 +830,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   clientId: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const member = await MemberModel.getFirstMembershipForUser(params.userId);
   if (!member || member.organizationId !== params.agent.organizationId) {
@@ -845,6 +867,7 @@ async function validateUserLlmOAuthAccessToken(params: {
     organizationId: member.organizationId,
     userId: params.userId,
     provider: params.expectedProvider,
+    modelName: params.requestedModel,
   });
   const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
 

@@ -341,6 +341,7 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
  */
 const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "github",
+  "gitlab",
   "confluence",
   "jira",
   "mfiles",
@@ -348,9 +349,28 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "sharepoint",
   "salesforce",
   "onedrive",
+  "notion",
+  "asana",
+  "dropbox",
+  "linear",
+  "outline",
+  "servicenow",
+  "perforce",
 ]);
 
-export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+export function connectorSupportsAutoSync(
+  type: ConnectorType,
+  /**
+   * Value of the `orchestratorK8sRuntime` feature
+   * (`useFeature("orchestratorK8sRuntime")` in the calling component).
+   * Perforce permission sync runs the p4 client from an in-cluster pod, so
+   * its backend only sets `supportsPermissionSync` when the Kubernetes
+   * orchestrator is configured; without it Perforce must behave exactly like
+   * a non-perm-sync connector.
+   */
+  orchestratorK8sRuntime: boolean,
+): boolean {
+  if (type === "perforce" && !orchestratorK8sRuntime) return false;
   return AUTO_SYNC_CONNECTOR_TYPES.has(type);
 }
 
@@ -403,10 +423,35 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
  */
 export function getPermissionSyncCredentialNote(
   type: ConnectorType,
-): string | null {
+): ReactNode {
   switch (type) {
     case "github":
       return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
+    case "gitlab":
+      return "Auto-sync permissions matches project members by their public GitLab profile email. A non-admin token cannot read a private email, so members without a public profile email are recorded but stay unresolvable.";
+    case "asana":
+      return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
+    case "dropbox":
+      return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
+    case "outline":
+      return "Auto-sync permissions reads collection members, groups, and public share links through this API key. Use a workspace admin's API key: a member key may not see every share link or roster, and anything it cannot see stays unshared.";
+    case "servicenow":
+      return (
+        <>
+          Auto-sync permissions reads ServiceNow permission tables over the
+          Table API. Anything this account cannot read fails closed.{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(
+              DocsPage.PlatformKnowledge,
+              SERVICENOW_AUTO_SYNC_DOC_ANCHOR,
+            )}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      );
     default:
       return null;
   }
@@ -414,6 +459,38 @@ export function getPermissionSyncCredentialNote(
 
 const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
   "atlassian-organization-admin-api-key";
+const SERVICENOW_AUTO_SYNC_DOC_ANCHOR = "servicenow-auto-sync-permissions";
+
+/**
+ * Rendered under the visibility selector on the Notion create/edit forms when
+ * Auto-sync permissions is selected. Notion's public API cannot report who
+ * can see an individual page, so support is deliberately coarse ("Limited"
+ * in the docs): the admin must know the audience model and scope what the
+ * integration can see.
+ */
+export function NotionAutoSyncPermissionsNote() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Notion&apos;s API cannot report who can see each page, so auto-sync makes
+      every synced page visible to all workspace members matched by email, and
+      never to guests. Share only workspace-appropriate teamspaces and pages
+      with the integration, and grant it the &quot;read user information
+      including email addresses&quot; capability.{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledge,
+          NOTION_AUTO_SYNC_DOC_ANCHOR,
+        )}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </p>
+  );
+}
+
+const NOTION_AUTO_SYNC_DOC_ANCHOR = "notion-auto-sync-permissions";
 // SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(
@@ -542,7 +619,7 @@ export function getConnectorCredentialConfig(params: {
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
     {
       servicenow: "Your ServiceNow password",
-      notion: "secret_...",
+      notion: "ntn_...",
       sharepoint: "Your Azure AD client secret",
       gdrive: gdriveUsesOAuth
         ? undefined
@@ -699,8 +776,16 @@ function getApiTokenHelpText(params: {
   if (params.type === "notion") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        Your Notion integration token (starts with <code>secret_</code>). Create
-        one at notion.so/my-integrations.
+        Your Notion internal integration secret (starts with <code>ntn_</code>,
+        older <code>secret_</code> tokens keep working). Create one in the{" "}
+        <ExternalDocsLink
+          href="https://app.notion.com/developers/connections"
+          className="underline"
+          showIcon={false}
+        >
+          Notion Developer portal
+        </ExternalDocsLink>
+        .
       </p>
     );
   }

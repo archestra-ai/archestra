@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
+import { useFeature } from "@/lib/config/config.query";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
@@ -42,8 +43,11 @@ import {
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
+  getPermissionSyncCredentialNote,
+  NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -101,6 +105,8 @@ export function EditConnectorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateConnector = useUpdateConnector();
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
   const [visibility, setVisibility] = useState(connector.visibility);
   const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
 
@@ -166,6 +172,8 @@ export function EditConnectorDialog({
     authMethod,
     authMode,
   });
+  const permissionSyncCredentialNote =
+    getPermissionSyncCredentialNote(connectorType);
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
@@ -332,9 +340,15 @@ export function EditConnectorDialog({
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
-            supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+            supportsAutoSync={connectorSupportsAutoSync(
+              connectorType,
+              orchestratorK8sRuntime,
+            )}
             autoSyncPermissionAction="update"
           />
+
+          {visibility === "auto-sync-permissions" &&
+            connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
 
           <div className="border-t" />
 
@@ -392,6 +406,12 @@ export function EditConnectorDialog({
                     Leave empty to keep existing credentials unchanged.
                   </FormDescription>
                   {apiTokenHelpText}
+                  {visibility === "auto-sync-permissions" &&
+                    permissionSyncCredentialNote && (
+                      <FormDescription>
+                        {permissionSyncCredentialNote}
+                      </FormDescription>
+                    )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -420,6 +440,11 @@ export function EditConnectorDialog({
                   </FormItem>
                 )}
               />
+            )}
+
+          {visibility === "auto-sync-permissions" &&
+            connectorType === "perforce" && (
+              <PerforcePermissionSyncFields form={form} mode="edit" />
             )}
 
           <Collapsible>

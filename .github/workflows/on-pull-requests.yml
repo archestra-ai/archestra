@@ -193,7 +193,14 @@ jobs:
 
   dependency-review:
     name: Dependency Review
-    if: ${{ github.event_name == 'pull_request' }}
+    # Public repos only. The dependency review API is a GitHub Advanced
+    # Security feature on private repositories, so in a private mirror of this
+    # repo (archestra-private, where task-env sessions open their PRs) the
+    # action refuses to run at all — "Dependency review is not supported on
+    # this repository" — and paints a red check that no code change can fix.
+    # Skipping is the honest outcome there: the canonical repo is public and
+    # runs this on the same commits before anything merges.
+    if: ${{ github.event_name == 'pull_request' && !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
@@ -329,6 +336,28 @@ jobs:
       # "could not rename downloaded file".
       - name: Setup Rust
         run: rustup show
+
+      # check:commit runs the Drizzle migration linter, which diffs migrations
+      # against origin/<default branch>. The checkout above is depth-1 with
+      # persist-credentials: false, so that ref is absent AND git holds no
+      # credentials — the linter's own fallback fetch then goes out
+      # unauthenticated. On this repo that happens to work (public repos allow
+      # anonymous fetch); on a private mirror GitHub answers 401, git falls
+      # back to prompting, and the step dies with "could not read Username for
+      # 'https://github.com'" before it can lint anything. Fetching the ref
+      # here with the job token makes the linter's input exist in both cases.
+      # The credential helper is passed with -c so it applies to this one
+      # command only: the token stays in the environment, never reaching argv,
+      # .git/config, or any later step.
+      - name: Fetch base ref for the migration linter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --depth=1 origin \
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
 
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
@@ -472,7 +501,7 @@ jobs:
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: platform/archestra-rs
 
@@ -497,7 +526,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        uses: taiki-e/install-action@91ddec75689c4c78665b598d188dc821c5a43e5c # v2.85.9
         with:
           tool: cargo-deny@0.20.2
 
@@ -530,7 +559,7 @@ jobs:
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: ai-labs
 
@@ -561,8 +590,13 @@ jobs:
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: ubuntu-latest
     # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # sixteenth of that plus setup. 15 minutes means something is hung.
-    timeout-minutes: 15
+    # sixteenth of that plus setup. Sized for the slowest hardware this runs
+    # on rather than this repo's: ubuntu-latest is 4-vCPU/16-GB for public
+    # repos but 2-vCPU/7-GB for private ones, and on the private mirror where
+    # task-env sessions open their PRs the same shard takes ~2x as long (9-14
+    # min observed, against the 15 the public runners never came close to).
+    # Beyond this, something is hung.
+    timeout-minutes: 25
     permissions:
       contents: read
     defaults:
@@ -599,7 +633,7 @@ jobs:
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

@@ -41,7 +41,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
-import { useFeature } from "@/lib/config/config.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import {
   useCreateConnector,
   useStartGoogleDriveOAuth,
@@ -61,8 +62,10 @@ import {
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
   getPermissionSyncCredentialNote,
+  NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -108,6 +111,29 @@ export function CreateConnectorDialog({
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
   const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Auto-sync permissions is the preferred visibility: whenever the feature
+  // is enabled, the chosen type supports it, and this user may select it, a
+  // NEW connector defaults to it (any type in the allowlist, current or
+  // future). The user can still switch to Organization or Teams.
+  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
+  const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
+  const { data: hasAutoSyncCreate } = useHasPermissions({
+    knowledgeSourceAutoSync: ["create"],
+  });
+  const defaultVisibilityFor = (type: ConnectorType): ConnectorVisibility =>
+    autoSyncBeta &&
+    knowledgeBaseEnterprise &&
+    hasAutoSyncCreate &&
+    connectorSupportsAutoSync(type, orchestratorK8sRuntime)
+      ? "auto-sync-permissions"
+      : "org-wide";
+  // SPDX-SnippetEnd
   const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
     (option) =>
       (option.type !== "mfiles" || mfilesEnabled) &&
@@ -136,13 +162,9 @@ export function CreateConnectorDialog({
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
-    // Reset an auto-sync selection when switching to a type that can't support it.
-    if (
-      visibility === "auto-sync-permissions" &&
-      !connectorSupportsAutoSync(type)
-    ) {
-      setVisibility("org-wide");
-    }
+    // Picking a type re-establishes that type's default visibility (which
+    // also clears an auto-sync selection a new type can't support).
+    setVisibility(defaultVisibilityFor(type));
     setStep("configure");
   };
 
@@ -434,9 +456,17 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
-                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  supportsAutoSync={connectorSupportsAutoSync(
+                    connectorType,
+                    orchestratorK8sRuntime,
+                  )}
                   autoSyncPermissionAction="create"
                 />
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "notion" && (
+                    <NotionAutoSyncPermissionsNote />
+                  )}
 
                 <div className="border-t" />
 
@@ -531,6 +561,11 @@ export function CreateConnectorDialog({
                         </FormItem>
                       )}
                     />
+                  )}
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "perforce" && (
+                    <PerforcePermissionSyncFields form={form} mode="create" />
                   )}
 
                 <Collapsible>

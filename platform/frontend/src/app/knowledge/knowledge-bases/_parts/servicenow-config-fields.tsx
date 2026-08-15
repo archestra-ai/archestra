@@ -13,6 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 
+const ROLE_AUDIENCE_TABLES = [
+  { table: "incident", label: "Incidents" },
+  { table: "change_request", label: "Changes" },
+  { table: "change_task", label: "Change Tasks" },
+  { table: "problem", label: "Problems" },
+  { table: "cmdb_ci_business_app", label: "Business Applications" },
+] as const;
+
 interface ServiceNowConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
   form: UseFormReturn<any>;
@@ -153,6 +161,61 @@ export function ServiceNowConfigFields({
           </FormItem>
         )}
       />
+
+      <FormField
+        control={form.control}
+        name={`${prefix}.includeKnowledgeArticles`}
+        render={({ field }) => (
+          <FormItem className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <FormLabel>Include Knowledge Articles</FormLabel>
+              <FormDescription>
+                Sync published knowledge articles from the kb_knowledge table.
+                States and assignment group filters do not apply to this entity.
+              </FormDescription>
+            </div>
+            <FormControl>
+              <Switch
+                checked={field.value ?? false}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="space-y-0.5">
+          <FormLabel>Role audiences (auto-sync permissions)</FormLabel>
+          <FormDescription>
+            Only used with auto-sync permissions. Comma-separated ServiceNow
+            role names (e.g. itil) whose holders may read every synced record of
+            that table. Without roles, a record is visible only to its
+            participants: assignment group members, the caller, the opener, and
+            the assignee.
+          </FormDescription>
+        </div>
+        {ROLE_AUDIENCE_TABLES.map(({ table, label }) => (
+          <FormField
+            key={table}
+            control={form.control}
+            name={`${prefix}.roleAudiences.${table}`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-normal">{label}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="itil"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ))}
+      </div>
 
       <FormField
         control={form.control}

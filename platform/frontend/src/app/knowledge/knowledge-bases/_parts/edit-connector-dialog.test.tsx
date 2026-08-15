@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditConnectorDialog } from "./edit-connector-dialog";
@@ -273,6 +279,117 @@ describe("EditConnectorDialog - Jira admin API key", () => {
   });
 });
 
+describe("EditConnectorDialog - Perforce permission sync", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makePerforceAutoSyncConnector(): ConnectorFixture {
+    return {
+      id: "conn-p4-1",
+      name: "Docs Depot",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "perforce",
+      environmentId: null,
+      config: {
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        p4Port: "ssl:perforce.example.com:1666",
+        adminUsername: "p4admin",
+      },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("shows the permission sync fields with the stored config values", () => {
+    renderDialog(makePerforceAutoSyncConnector());
+
+    expect(screen.getByLabelText(/^P4 Port$/)).toHaveValue(
+      "ssl:perforce.example.com:1666",
+    );
+    expect(screen.getByLabelText(/^Admin Username$/)).toHaveValue("p4admin");
+    // The stored admin password never round-trips into the form.
+    expect(screen.getByLabelText(/^Admin Password$/)).toHaveValue("");
+  });
+
+  it("saves without a P4 port, which the backend derives from the Server URL", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    const connector = makePerforceAutoSyncConnector();
+    delete (connector.config as { p4Port?: string }).p4Port;
+    renderDialog(connector);
+
+    // The derived address is shown as the placeholder so it is not a mystery.
+    expect(screen.getByLabelText(/^P4 Port$/)).toHaveAttribute(
+      "placeholder",
+      "perforce.example.com:1666 (derived from Server URL)",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const [call] = mockMutateAsync.mock.calls;
+    expect(call[0].body.config).not.toHaveProperty("p4Port");
+    expect(call[0].body.config).toMatchObject({ adminUsername: "p4admin" });
+  });
+
+  it("keeps the stored admin password when the field is left blank", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    renderDialog(makePerforceAutoSyncConnector());
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    // A blank password must not clobber the stored credential.
+    expect(call[0].body).not.toHaveProperty("credentials");
+    expect(call[0].body.config).toMatchObject({
+      type: "perforce",
+      p4Port: "ssl:perforce.example.com:1666",
+      adminUsername: "p4admin",
+    });
+  });
+
+  it("submits a new admin password alone, without the login ticket", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    renderDialog(makePerforceAutoSyncConnector());
+
+    fireEvent.change(screen.getByLabelText(/^Admin Password$/), {
+      target: { value: "new-admin-password" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    // The backend merges submitted fields over the stored secret, so the
+    // admin password must survive an empty token field instead of being
+    // dropped.
+    expect(call[0].body.credentials).toEqual({
+      adminApiKey: "new-admin-password",
+    });
+  });
+});
+
 describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -330,5 +447,84 @@ describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
 
     const [call] = mockMutateAsync.mock.calls;
     expect(call[0].body.permissionSyncIntervalSeconds).toBe(3600);
+  });
+});
+
+describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makeNotionConnector(
+    visibility: ConnectorFixture["visibility"],
+  ): ConnectorFixture {
+    return {
+      id: "conn-notion-1",
+      name: "Company Notion",
+      description: "",
+      visibility,
+      teamIds: [],
+      connectorType: "notion",
+      environmentId: null,
+      config: { type: "notion" },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("shows the workspace-audience note with a Learn more link for auto-sync Notion", () => {
+    renderDialog(makeNotionConnector("auto-sync-permissions"));
+
+    const note = screen.getByText(
+      /every synced page visible to all workspace members/,
+    );
+    expect(note).toBeInTheDocument();
+    // The recommendation sentence and the docs link ride in the same note.
+    expect(note).toHaveTextContent(/Share only workspace-appropriate/);
+    // The generic connector-docs link is also a "Learn more"; the note's own
+    // link is the one pointing at the auto-sync section anchor.
+    expect(
+      within(note).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("#notion-auto-sync-permissions"),
+    );
+  });
+
+  it("hides the note for a Notion connector without auto-sync visibility", () => {
+    renderDialog(makeNotionConnector("org-wide"));
+    expect(
+      screen.queryByText(/every synced page visible to all workspace members/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show the Notion note on other auto-sync connector types", () => {
+    renderDialog({
+      id: "conn-gh-2",
+      name: "Engineering GitHub",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "github",
+      environmentId: null,
+      config: {
+        type: "github",
+        githubUrl: "https://api.github.com",
+        owner: "test-org",
+        authMethod: "pat",
+      },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture);
+    expect(
+      screen.queryByText(/every synced page visible to all workspace members/),
+    ).not.toBeInTheDocument();
   });
 });

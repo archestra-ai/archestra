@@ -93,6 +93,36 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   /**
+   * Where a provider-facing model id is served, for providers whose keys are
+   * endpoints. Answers with the linked key ids, or null when the model is not
+   * in the catalog at all.
+   *
+   * The distinction matters to callers deciding whether an endpoint can run a
+   * model: an empty array is "synced and served nowhere", while null is "never
+   * seen" — for instance a model an operator has just deployed. Only the first
+   * justifies treating the endpoint as unable to serve it.
+   */
+  static async findApiKeyIdsServingModelId(params: {
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<string[] | null> {
+    const model = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.modelId,
+    );
+    if (!model) {
+      return null;
+    }
+
+    const rows = await db
+      .select({ apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .where(eq(schema.llmProviderApiKeyModelsTable.modelId, model.id));
+
+    return rows.map((row) => row.apiKeyId);
+  }
+
+  /**
    * Sync models for an API key.
    * This replaces the set of model links with the new set (stale links are
    * deleted, current ones updated in place). Also detects and marks the

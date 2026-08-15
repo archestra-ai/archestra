@@ -683,6 +683,27 @@ tests:
           content:
             name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 
+  - it: should set ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE env var when perforceShim image is configured
+    documentIndex: 1
+    set:
+      archestra.knowledgeBase.perforceShim.image: "my-registry/p4-shim:v1.0.0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+            value: "my-registry/p4-shim:v1.0.0"
+
+  - it: should not set ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE env var when perforceShim image is empty
+    documentIndex: 1
+    set:
+      archestra.knowledgeBase.perforceShim.image: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+
   - it: should set MCP server resource env vars when mcpServerResources is configured
     documentIndex: 1
     set:

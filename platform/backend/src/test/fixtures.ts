@@ -1229,6 +1229,7 @@ async function makeKnowledgeBaseConnector(
       | "schedule"
       | "enabled"
       | "ftsLanguage"
+      | "environmentId"
     >
   > = {},
 ): Promise<KnowledgeBaseConnector> {

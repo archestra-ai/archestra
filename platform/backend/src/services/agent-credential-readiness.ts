@@ -22,8 +22,9 @@ import type { AgentCredentialReadiness, ReadinessAgent } from "@/types/agent";
  * static pin regardless of who is calling, so treating those servers as
  * per-caller would refuse people whose tool calls would have worked.
  *
- * Agents left on `allow` are skipped entirely, so the default configuration
- * costs no extra queries.
+ * Agents left on `allow` are filtered out before any lookup runs, so the
+ * default configuration does no work here beyond the single row read that
+ * establishes the behavior.
  */
 export async function getAgentCredentialReadiness(params: {
   agents: ReadinessAgent[];
@@ -101,6 +102,11 @@ export async function getAgentCredentialReadiness(params: {
       if (isCredentialLess(catalog)) continue;
 
       const assignment = assignmentByToolId.get(tool.id);
+      // Enterprise-managed pods fetch their own credentials from the identity
+      // provider, so no caller can be missing one. This stays true even when
+      // the catalog has no install left for the pod to run on: that case fails
+      // at call time exactly as it did before this setting existed, which is a
+      // far better outcome than refusing a caller whose tools would have run.
       if (assignment?.credentialResolutionMode === "enterprise_managed") {
         continue;
       }

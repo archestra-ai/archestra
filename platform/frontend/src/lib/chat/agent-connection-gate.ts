@@ -5,8 +5,8 @@ type AgentCredentialReadiness =
 
 export type AgentConnectionGate =
   | { kind: "ok" }
-  | { kind: "warn"; serverNames: string[] }
-  | { kind: "block"; serverNames: string[] };
+  | { kind: "warn"; serverNames: string[]; catalogIds: string[] }
+  | { kind: "block"; serverNames: string[]; catalogIds: string[] };
 
 /**
  * Turns one readiness row into what the UI should do about it. The backend only
@@ -21,10 +21,13 @@ export function resolveAgentConnectionGate(
   const serverNames = entry.missingConnections.map(
     (connection) => connection.catalogName,
   );
+  const catalogIds = entry.missingConnections.map(
+    (connection) => connection.catalogId,
+  );
 
   return entry.missingCredentialBehavior === "block"
-    ? { kind: "block", serverNames }
-    : { kind: "warn", serverNames };
+    ? { kind: "block", serverNames, catalogIds }
+    : { kind: "warn", serverNames, catalogIds };
 }
 
 /** "Notion", "Notion and Jira", "Notion, Jira and GitHub". */

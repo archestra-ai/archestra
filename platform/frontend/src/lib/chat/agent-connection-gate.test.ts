@@ -38,6 +38,7 @@ describe("resolveAgentConnectionGate", () => {
     expect(resolveAgentConnectionGate(readiness())).toEqual({
       kind: "warn",
       serverNames: ["Acme Docs"],
+      catalogIds: ["cat-1"],
     });
   });
 
@@ -46,7 +47,11 @@ describe("resolveAgentConnectionGate", () => {
       resolveAgentConnectionGate(
         readiness({ missingCredentialBehavior: "block" }),
       ),
-    ).toEqual({ kind: "block", serverNames: ["Acme Docs"] });
+    ).toEqual({
+      kind: "block",
+      serverNames: ["Acme Docs"],
+      catalogIds: ["cat-1"],
+    });
   });
 });
 

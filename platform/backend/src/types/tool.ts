@@ -102,7 +102,7 @@ export const ToolFilterSchema = z.object({
   origin: z
     .string()
     .optional()
-    .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
+    .describe("Can be 'llm-proxy', 'agent', 'app', or a catalogId"),
   observedByUserId: z
     .string()
     .optional()

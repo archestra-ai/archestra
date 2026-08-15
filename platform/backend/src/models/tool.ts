@@ -3562,7 +3562,8 @@ class ToolModel {
   /**
    * Find all tools with their profile assignments.
    * Returns one entry per tool (grouped by tool), with all assignments embedded.
-   * Only returns tools that have at least one assignment.
+   * Tools with no assignment are included — proxy-observed tools never have one
+   * (they are discovered from traffic, not assigned) and still need a policy row.
    */
   static async findAllWithAssignments(params: {
     pagination?: { limit?: number; offset?: number };
@@ -3595,7 +3596,31 @@ class ToolModel {
       );
     }
 
-    // Filter by origin ("llm-proxy", "agent", or a catalogId)
+    // A delegation tool outlives the agent it delegates to: agents are
+    // soft-deleted, so the FK's ON DELETE CASCADE never fires and the
+    // `agent__<name>` row stays behind. Such a tool can never be called (the
+    // gateway resolves delegation targets with the same notDeleted filter), so
+    // keep it out of the listing instead of showing policy rows for an agent
+    // that no longer exists. Query-time, not a cleanup on delete: restoring the
+    // agent brings its delegation tool back with it.
+    toolWhereConditions.push(
+      or(
+        isNull(schema.toolsTable.delegateToAgentId),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.agentsTable)
+            .where(
+              and(
+                eq(schema.agentsTable.id, schema.toolsTable.delegateToAgentId),
+                notDeleted(schema.agentsTable),
+              ),
+            ),
+        ),
+      ) ?? isNull(schema.toolsTable.delegateToAgentId),
+    );
+
+    // Filter by origin ("llm-proxy", "agent", "app", or a catalogId)
     if (filters?.origin) {
       if (filters.origin === "llm-proxy") {
         // LLM Proxy tools: shared proxy tools with agentId=NULL, catalogId=NULL, no delegation
@@ -3606,6 +3631,26 @@ class ToolModel {
         // Agent delegation tools have a non-null delegateToAgentId
         toolWhereConditions.push(
           isNotNull(schema.toolsTable.delegateToAgentId),
+        );
+      } else if (filters.origin === "app") {
+        // App launch tools: catalog-backed like any MCP tool, but their catalog
+        // is an app backing (serverType "app"), so they group under one source
+        // rather than one entry per app.
+        toolWhereConditions.push(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.internalMcpCatalogTable)
+              .where(
+                and(
+                  eq(
+                    schema.internalMcpCatalogTable.id,
+                    schema.toolsTable.catalogId,
+                  ),
+                  eq(schema.internalMcpCatalogTable.serverType, "app"),
+                ),
+              ),
+          ),
         );
       } else {
         // MCP tools have a catalogId
@@ -3716,10 +3761,27 @@ class ToolModel {
         )
       : eq(schema.agentToolsTable.toolId, schema.toolsTable.id);
 
+    // An agent_tools row survives its agent's soft delete, so counting the raw
+    // rows reports assignments the embedded `assignments` array (which inner-
+    // joins live agents) never lists — a row reading "1 assignment" that expands
+    // to "Not assigned to agent or MCP gateway". Count only live agents so both
+    // agree.
+    const assignmentToLiveAgent = exists(
+      db
+        .select({ one: sql`1` })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+            notDeleted(schema.agentsTable),
+          ),
+        ),
+    );
+
     // Count subquery for assignment count (with access control)
     const assignmentCountSubquery = sql<number>`(
       SELECT COUNT(*) FROM ${schema.agentToolsTable}
-      WHERE ${assignmentConditions}
+      WHERE ${and(assignmentConditions, assignmentToLiveAgent)}
     )`;
 
     // Determine the ORDER BY clause based on sorting params

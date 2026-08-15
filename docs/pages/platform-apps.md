@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,7 +48,7 @@ Two settings in **Settings → Chat** govern how new apps start. Both are off by
 
 **New apps are disabled by default** creates every new app disabled. The app stays author-only and invisible to agents until you enable it in App settings.
 
-**New apps are locked by default** creates every new app [locked](#locking-an-app). No agent can edit it until a user unlocks it.
+**New apps are locked by default** creates every new app [locked](#locking-an-app). The chat that created the app can finish building it, so a new app never arrives frozen as an empty shell. Every other chat is refused from the first moment. Locking or unlocking the app yourself ends that one exception.
 
 ## Labels
 

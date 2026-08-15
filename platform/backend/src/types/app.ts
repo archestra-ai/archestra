@@ -243,6 +243,15 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   environmentId: z.string().uuid().nullable(),
   labels: z.array(AgentLabelWithDetailsSchema),
 });
+
+/**
+ * The app as REST hands it out. `lockGraceSessionKey` is internal bookkeeping
+ * for the authoring gate — an opaque execution key no API consumer acts on —
+ * so it is dropped here rather than published in every app payload.
+ */
+export const PublicAppSchema = SelectAppSchema.omit({
+  lockGraceSessionKey: true,
+});
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {

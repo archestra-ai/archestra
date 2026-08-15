@@ -18,8 +18,10 @@ import {
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -49,6 +51,7 @@ import {
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -821,11 +824,33 @@ export async function handleLLMProxy<
       tools,
     );
 
-    if (optimizedModel) {
+    // A cost-optimization rule names a model, not an endpoint. On providers
+    // whose keys are servers, the credential and base URL were already resolved
+    // for the model the client asked for, so substituting one this endpoint
+    // does not host would send the request somewhere it cannot be answered.
+    // Keeping the baseline model costs an optimization; taking it would cost
+    // the whole call.
+    const optimizedModelServedHere =
+      optimizedModel &&
+      perKeyChatApiKeyId &&
+      providerHasEndpointLocalModels(providerName)
+        ? await endpointServesModel({
+            apiKeyId: perKeyChatApiKeyId,
+            provider: providerName,
+            modelId: optimizedModel,
+          })
+        : true;
+
+    if (optimizedModel && optimizedModelServedHere) {
       requestAdapter.setModel(optimizedModel);
       logger.info(
         { resolvedAgentId, optimizedModel },
         "Optimized model selected",
+      );
+    } else if (optimizedModel) {
+      logger.info(
+        { resolvedAgentId, optimizedModel, baselineModel },
+        "Optimized model is not served by the resolved endpoint, keeping the baseline model",
       );
     } else {
       logger.info(
@@ -2337,6 +2362,29 @@ function createDownstreamAbortSignal(params: {
  */
 function providerSuppliesServerCredential(providerName: string): boolean {
   return providerName === "gemini" && isVertexAiEnabled();
+}
+
+/**
+ * Whether a resolved endpoint can run a model, for providers whose keys are
+ * servers. Conservative: only a model the catalog places on other endpoints and
+ * not this one counts as unserved. A model nothing has synced — one an operator
+ * has just deployed, say — is left to the endpoint to accept or reject.
+ */
+async function endpointServesModel(params: {
+  apiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
+}): Promise<boolean> {
+  const servingKeyIds =
+    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
+      provider: params.provider,
+      modelId: params.modelId,
+    });
+
+  if (servingKeyIds === null || servingKeyIds.length === 0) {
+    return true;
+  }
+  return servingKeyIds.includes(params.apiKeyId);
 }
 
 function shouldUseKeylessProviderApiKey(params: {

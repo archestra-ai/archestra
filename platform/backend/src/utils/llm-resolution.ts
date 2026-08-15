@@ -369,8 +369,11 @@ export async function resolveAgentLlmOrDefault(params: {
             modelName: configuredLlm.modelName,
           });
     // Landing on another row means another server, whose credential and base
-    // URL describe that server and have to travel together.
+    // URL describe that server and have to travel together. Scoped to the
+    // endpoint-local providers: elsewhere a row is an account, and which base
+    // URL wins is not this change's business.
     const movedToAnotherEndpoint =
+      resolveEndpointByModel &&
       fallbackKey?.chatApiKeyId != null &&
       fallbackKey.chatApiKeyId !== (configuredLlm.chatApiKeyId ?? agentKeyId);
 

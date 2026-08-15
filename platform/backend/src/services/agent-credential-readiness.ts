@@ -82,7 +82,16 @@ export async function getAgentCredentialReadiness(params: {
     ]),
   ];
   const liveServers = await McpServerModel.findByIdsBasic(pinnedServerIds);
-  const liveServerIds = new Set(liveServers.map((server) => server.id));
+  // Keyed by catalog as well as id: the runtime revalidates a pin against the
+  // catalog it is serving, so a pin left pointing at another catalog's install
+  // is no credential at all and has to fall back with the rest.
+  const liveServerCatalogIds = new Map(
+    liveServers.map((server) => [server.id, server.catalogId]),
+  );
+  const isLivePinFor = (
+    serverId: string | null | undefined,
+    catalogId: string,
+  ) => !!serverId && liveServerCatalogIds.get(serverId) === catalogId;
 
   // Catalogs still resolved per caller, per agent — the same catalog can be
   // pinned by one agent and left dynamic by another.
@@ -112,15 +121,11 @@ export async function getAgentCredentialReadiness(params: {
       }
       if (
         assignment?.credentialResolutionMode === "static" &&
-        assignment.mcpServerId &&
-        liveServerIds.has(assignment.mcpServerId)
+        isLivePinFor(assignment.mcpServerId, tool.catalogId)
       ) {
         continue;
       }
-      if (
-        catalog.dynamicConnectionMcpServerId &&
-        liveServerIds.has(catalog.dynamicConnectionMcpServerId)
-      ) {
+      if (isLivePinFor(catalog.dynamicConnectionMcpServerId, tool.catalogId)) {
         continue;
       }
 

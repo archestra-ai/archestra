@@ -1772,19 +1772,28 @@ class McpServerModel {
       await McpServerModel.getAccessibleInstallIds(userId);
     if (accessibleServerIds.length === 0) return new Set();
 
+    // Filtered by catalog in SQL and intersected with the caller's access in
+    // memory, rather than sending every accessible install id as a bind
+    // parameter — the caller's set grows with the organization, while the
+    // catalogs asked about are only the ones an agent actually uses.
+    const accessible = new Set(accessibleServerIds);
     const rows = await db
-      .selectDistinct({ catalogId: schema.mcpServersTable.catalogId })
+      .select({
+        id: schema.mcpServersTable.id,
+        catalogId: schema.mcpServersTable.catalogId,
+      })
       .from(schema.mcpServersTable)
       .where(
         and(
-          inArray(schema.mcpServersTable.id, accessibleServerIds),
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           notDeleted(schema.mcpServersTable),
         ),
       );
 
     return new Set(
-      rows.flatMap((row) => (row.catalogId ? [row.catalogId] : [])),
+      rows.flatMap((row) =>
+        row.catalogId && accessible.has(row.id) ? [row.catalogId] : [],
+      ),
     );
   }
 

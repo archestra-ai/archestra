@@ -300,7 +300,9 @@ export const CreateAppSchema = z.object({
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
-  // Environment binding. null/omitted = org default. Org membership and the
+  // Environment binding. null = the org default environment; omitted defers to
+  // the organization's configured landing environment for new apps (which is
+  // the default environment until an admin sets one). Org membership and the
   // restricted-env permission are enforced in the route via
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),

@@ -86,7 +86,10 @@ import {
 } from "@/models";
 import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
 import { secretManager } from "@/secrets-manager";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -769,10 +772,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
 
+      const environmentId = await resolveNewConnectorEnvironmentId({
+        userId: user.id,
+        organizationId,
+        requested: body.environmentId,
+      });
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
       });
 
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
@@ -912,7 +920,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectorType: body.connectorType,
         config: body.config,
         secretId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
         schedule: body.schedule,
         ftsLanguage: body.ftsLanguage,
         permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
@@ -2613,6 +2621,31 @@ async function assertEnvironmentAssignable(params: {
     environmentId,
     organizationId,
     canDeployToRestricted: hasKnowledgeDeploy,
+  });
+}
+
+/**
+ * The environment a new connector binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for new
+ * knowledge connectors.
+ */
+async function resolveNewConnectorEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, requested } = params;
+  if (requested !== undefined) return requested;
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource: "knowledgeSource",
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      "knowledgeSource",
+      "deploy-to-restricted",
+    ),
   });
 }
 

@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { AppVersionModel, OrganizationModel } from "@/models";
 import EnvironmentModel from "@/models/environment";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -224,6 +225,44 @@ describe("POST /api/apps", () => {
       method: "POST",
       url: "/api/apps",
       payload: { name: "Default Env", scope: "org" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
+  });
+
+  test("an omitted environmentId lands in the org's configured default for apps", async () => {
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Configured Env", scope: "org" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(launch.id);
+  });
+
+  test("an explicit null overrides the configured default for apps", async () => {
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Explicit Default", scope: "org", environmentId: null },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();

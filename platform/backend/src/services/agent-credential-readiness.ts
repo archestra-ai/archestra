@@ -93,9 +93,11 @@ export async function getAgentCredentialReadiness(params: {
     catalogId: string,
   ) => !!serverId && liveServerCatalogIds.get(serverId) === catalogId;
 
-  // Catalogs still resolved per caller, per agent — the same catalog can be
-  // pinned by one agent and left dynamic by another.
+  // Two buckets per agent: catalogs whose answer depends on the caller, and
+  // catalogs no caller can use at all. The same catalog can land differently
+  // for two agents, because the assignment — not the catalog — decides.
   const perCallerCatalogsByAgent = new Map<string, Set<string>>();
+  const unusableCatalogsByAgent = new Map<string, Set<string>>();
   for (const agent of enforcing) {
     const assignmentByToolId = new Map(
       (assignmentsByAgent.get(agent.id) ?? []).map((assignment) => [
@@ -104,6 +106,7 @@ export async function getAgentCredentialReadiness(params: {
       ]),
     );
     const perCaller = new Set<string>();
+    const unusable = new Set<string>();
 
     for (const tool of toolsByAgent.get(agent.id) ?? []) {
       const catalog = catalogs.get(tool.catalogId);
@@ -119,12 +122,20 @@ export async function getAgentCredentialReadiness(params: {
       if (assignment?.credentialResolutionMode === "enterprise_managed") {
         continue;
       }
-      if (
-        assignment?.credentialResolutionMode === "static" &&
-        isLivePinFor(assignment.mcpServerId, tool.catalogId)
-      ) {
-        continue;
+
+      if (assignment?.credentialResolutionMode === "static") {
+        if (isLivePinFor(assignment.mcpServerId, tool.catalogId)) continue;
+        // A static pin is only abandoned — and re-resolved per caller — once it
+        // is cleared. While it still names a server that is gone, the runtime
+        // hands the call that dead id no matter who is asking, so the caller's
+        // own connections cannot rescue it and reporting it as theirs to fix
+        // would be wrong.
+        if (assignment.mcpServerId) {
+          unusable.add(tool.catalogId);
+          continue;
+        }
       }
+
       if (isLivePinFor(catalog.dynamicConnectionMcpServerId, tool.catalogId)) {
         continue;
       }
@@ -133,6 +144,7 @@ export async function getAgentCredentialReadiness(params: {
     }
 
     perCallerCatalogsByAgent.set(agent.id, perCaller);
+    unusableCatalogsByAgent.set(agent.id, unusable);
   }
 
   const connectedCatalogIds =
@@ -148,8 +160,14 @@ export async function getAgentCredentialReadiness(params: {
   return enforcing.map((agent) => ({
     agentId: agent.id,
     missingCredentialBehavior: agent.missingCredentialBehavior,
-    missingConnections: [...(perCallerCatalogsByAgent.get(agent.id) ?? [])]
-      .filter((catalogId) => !connectedCatalogIds.has(catalogId))
+    missingConnections: [
+      ...new Set([
+        ...(unusableCatalogsByAgent.get(agent.id) ?? []),
+        ...[...(perCallerCatalogsByAgent.get(agent.id) ?? [])].filter(
+          (catalogId) => !connectedCatalogIds.has(catalogId),
+        ),
+      ]),
+    ]
       .map((catalogId) => ({
         catalogId,
         catalogName: catalogs.get(catalogId)?.name ?? "Unknown server",

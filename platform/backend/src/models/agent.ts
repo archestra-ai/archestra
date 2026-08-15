@@ -650,6 +650,12 @@ class AgentModel {
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
+      /**
+       * Keep only agents that enforce a missing-credential behavior. The
+       * readiness pre-flight has nothing to say about the rest, and this keeps
+       * it from loading an organization's whole agent roster to discard it.
+       */
+      onlyEnforcingMissingCredentials?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -679,6 +685,12 @@ class AgentModel {
     // Filter by agentType if specified (single type, backwards compatible)
     else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    if (options?.onlyEnforcingMissingCredentials) {
+      whereConditions.push(
+        ne(schema.agentsTable.missingCredentialBehavior, "allow"),
+      );
     }
 
     // Exclude built-in agents when explicitly requested or when user is not an admin

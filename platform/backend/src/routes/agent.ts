@@ -387,7 +387,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agents = await AgentModel.findAll(
         user.id,
         checker.isAdmin("agent"),
-        { agentTypes: ["agent"], excludeBuiltIn: true },
+        {
+          agentTypes: ["agent"],
+          excludeBuiltIn: true,
+          onlyEnforcingMissingCredentials: true,
+        },
       );
 
       return reply.send(

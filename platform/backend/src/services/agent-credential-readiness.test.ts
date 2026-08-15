@@ -340,6 +340,65 @@ test("falls back to the caller's own connection when a static pin is gone", asyn
   ]);
 });
 
+test("reports a dead static pin as missing even for a caller with their own connection", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+}) => {
+  // While a static pin still names a server that is gone, the runtime hands the
+  // call that dead id rather than re-resolving, so it fails for everyone. The
+  // caller's own install of the same catalog keeps the tool visible but cannot
+  // rescue the call, so this must not read as connected.
+  const caller = await makeUser();
+  const author = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+
+  const deadPin = await makeMcpServer({
+    catalogId: catalog.id,
+    ownerId: author.id,
+    scope: "personal",
+    deletedAt: new Date(),
+  });
+  await makeAgentTool(agent.id, tool.id, {
+    mcpServerId: deadPin.id,
+    credentialResolutionMode: "static",
+  });
+
+  // The caller's own live install of the same catalog — a sibling that keeps
+  // the tool on the agent's surface.
+  const ownInstall = await makeMcpServer({
+    catalogId: catalog.id,
+    ownerId: caller.id,
+    scope: "personal",
+  });
+  await McpServerUserModel.assignUserToMcpServer(ownInstall.id, caller.id);
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([
+    { catalogId: catalog.id, catalogName: "Acme Docs" },
+  ]);
+});
+
 test("treats enterprise-managed credentials as connected for everyone", async ({
   makeUser,
   makeAgent,
@@ -372,6 +431,106 @@ test("treats enterprise-managed credentials as connected for everyone", async ({
   });
 
   expect(readiness.missingConnections).toEqual([]);
+});
+
+test("counts a team install as connected for a member of that team", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+  makeOrganization,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  const caller = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(agent.id, tool.id, {
+    credentialResolutionMode: "dynamic",
+  });
+
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, caller.id, { name: "Platform" });
+  await makeTeamMember(team.id, caller.id);
+  await makeMcpServer({
+    catalogId: catalog.id,
+    teamId: team.id,
+    scope: "team",
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([]);
+});
+
+test("keeps each agent's missing connections to itself", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+}) => {
+  // Two agents over two catalogs, one of which the caller can reach. Their
+  // results are computed in one pass, so a leak between them would show here.
+  const caller = await makeUser();
+  const reachable = await makeInternalMcpCatalog({ name: "Reachable" });
+  const unreachable = await makeInternalMcpCatalog({ name: "Unreachable" });
+
+  const install = await makeMcpServer({
+    catalogId: reachable.id,
+    ownerId: caller.id,
+    scope: "personal",
+  });
+  await McpServerUserModel.assignUserToMcpServer(install.id, caller.id);
+
+  const makeAgentFor = async (catalogId: string) => {
+    const agent = await makeAgent({
+      agentType: "agent",
+      scope: "org",
+      missingCredentialBehavior: "warn",
+      accessAllTools: false,
+    });
+    const tool = await makeTool({ catalogId });
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    return agent;
+  };
+  const connectedAgent = await makeAgentFor(reachable.id);
+  const missingAgent = await makeAgentFor(unreachable.id);
+
+  const readiness = await getAgentCredentialReadiness({
+    agents: [connectedAgent, missingAgent].map((agent) => ({
+      id: agent.id,
+      missingCredentialBehavior: "warn" as const,
+      accessAllTools: false,
+    })),
+    userId: caller.id,
+  });
+
+  const byAgent = new Map(readiness.map((row) => [row.agentId, row]));
+  expect(byAgent.get(connectedAgent.id)?.missingConnections).toEqual([]);
+  expect(
+    byAgent.get(missingAgent.id)?.missingConnections.map((c) => c.catalogName),
+  ).toEqual(["Unreachable"]);
 });
 
 test("lets the turn through when the agent only warns", async ({

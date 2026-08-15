@@ -1,3 +1,4 @@
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerUserModel from "@/models/mcp-server-user";
 import {
   assertCallerMayStartTurn,
@@ -431,6 +432,100 @@ test("treats enterprise-managed credentials as connected for everyone", async ({
   });
 
   expect(readiness.missingConnections).toEqual([]);
+});
+
+test("treats a catalog's default connection as connected for everyone", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+}) => {
+  const caller = await makeUser();
+  const author = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(agent.id, tool.id, {
+    credentialResolutionMode: "dynamic",
+  });
+
+  // The catalog pins one connection every caller shares, owned by someone else.
+  const shared = await makeMcpServer({
+    catalogId: catalog.id,
+    ownerId: author.id,
+    scope: "personal",
+  });
+  await InternalMcpCatalogModel.update(catalog.id, {
+    dynamicConnectionMcpServerId: shared.id,
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([]);
+});
+
+test("ignores a catalog default connection pinned to another catalog's install", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+}) => {
+  // The runtime revalidates the pin against the catalog it is serving, so a pin
+  // left pointing elsewhere is no credential and the caller needs their own.
+  const caller = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const otherCatalog = await makeInternalMcpCatalog({ name: "Ledger" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(agent.id, tool.id, {
+    credentialResolutionMode: "dynamic",
+  });
+
+  const strayInstall = await makeMcpServer({
+    catalogId: otherCatalog.id,
+    scope: "org",
+  });
+  await InternalMcpCatalogModel.update(catalog.id, {
+    dynamicConnectionMcpServerId: strayInstall.id,
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([
+    { catalogId: catalog.id, catalogName: "Acme Docs" },
+  ]);
 });
 
 test("counts a team install as connected for a member of that team", async ({

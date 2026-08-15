@@ -78,6 +78,7 @@ import {
   errorMessage,
   isLlmProviderAuthError,
   isSlackDmChannel,
+  stripAgentFooterChrome,
 } from "./utils";
 
 /**
@@ -1205,7 +1206,11 @@ export class ChatOpsManager {
       );
 
       const contextMessages = history.map((msg) => {
-        const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
+        // A bot turn is replayed without the chrome the platform stamped onto
+        // it — a footer left in here is a footer the model learns to write.
+        const text = msg.isFromBot
+          ? stripAgentFooterChrome(msg.text)
+          : msg.text;
         const sender = msg.isFromBot
           ? `You (${archestraMcpBranding.appName})`
           : msg.senderName;
@@ -2535,17 +2540,6 @@ function isTransientProviderError(error: unknown): error is ProviderError {
     error.chatErrorResponse.isRetryable &&
     CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
   );
-}
-
-/**
- * Strip bot footer from message text to avoid the LLM repeating it.
- * Handles the "🤖 AgentName" footer in markdown (Teams) and plain text (Slack) formats.
- */
-function stripBotFooter(text: string): string {
-  return text
-    .replace(/\n\n---\n+🤖 .+$/i, "")
-    .replace(/\n🤖 .+$/, "")
-    .trim();
 }
 
 /**

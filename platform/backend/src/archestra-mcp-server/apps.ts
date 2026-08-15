@@ -470,7 +470,7 @@ const registry = defineArchestraTools([
         "Authentication required to create an app.",
       );
       if ("error" in auth) return auth.error;
-      const { userId, organizationId } = auth;
+      const { userId, organizationId, sessionKey } = auth;
 
       const scope = args.scope ?? "personal";
       // Team scope needs explicit team assignment, which these chat tools can't
@@ -562,6 +562,12 @@ const registry = defineArchestraTools([
             templateId: DEFAULT_APP_TEMPLATE_ID,
             enabled: lifecycleDefaults.enabled,
             locked: lifecycleDefaults.locked,
+            // Born locked by the org default: this conversation still has to
+            // build the app it just scaffolded, so the lock spares it (and it
+            // alone) until someone sets the lock deliberately.
+            lockGraceSessionKey: lifecycleDefaults.locked
+              ? (sessionKey ?? null)
+              : null,
           },
           payload,
         });
@@ -650,7 +656,9 @@ const registry = defineArchestraTools([
       }
       if (lifecycleDefaults.locked) {
         lifecycleNotes.push(
-          "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
+          sessionKey
+            ? "This organization creates new apps locked: the app shows as Locked and every other conversation is refused, but this one may finish building it — keep going with edit_app/set_app_tools as usual, and do not unlock anything. Once you hand the app over, changing it later takes a user unlocking it in App settings."
+            : "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
         );
       }
       const lifecycleNote =
@@ -683,12 +691,7 @@ const registry = defineArchestraTools([
       );
       if ("error" in auth) return auth.error;
       const { userId, organizationId } = auth;
-      const gate = await loadApp({
-        userId,
-        organizationId,
-        appId: args.appId,
-        modify: true,
-      });
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
@@ -1510,12 +1513,7 @@ const registry = defineArchestraTools([
           "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
         );
       }
-      const gate = await loadApp({
-        userId,
-        organizationId,
-        appId: args.appId,
-        modify: true,
-      });
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
@@ -1731,7 +1729,19 @@ export const tools = registry.tools;
 // between them, keeping the narrow → guard → load → authorize order. Both return
 // a ready error result on failure.
 
-type AuthedCaller = { userId: string; organizationId: string };
+type AuthedCaller = {
+  userId: string;
+  organizationId: string;
+  /**
+   * The authoring session this call belongs to — the conversation in UI chat,
+   * the execution key in a headless run, undefined where neither exists (an
+   * external MCP client on the gateway). Carried alongside the caller's ids
+   * because an app's creation-time lock grace is granted to a session, not to
+   * a person: it rides every `loadApp` spread so no authoring tool can forget
+   * to present it.
+   */
+  sessionKey: string | undefined;
+};
 
 /** Narrow the caller to userId + organizationId, or a ready auth-required error. */
 function requireAuthed(
@@ -1741,7 +1751,22 @@ function requireAuthed(
   if (!context.userId || !context.organizationId) {
     return { error: errorResult(authMessage) };
   }
-  return { userId: context.userId, organizationId: context.organizationId };
+  return {
+    userId: context.userId,
+    organizationId: context.organizationId,
+    sessionKey: authoringSessionKey(context),
+  };
+}
+
+/**
+ * The key identifying the session an app tool call is made from, for the
+ * creation-time lock grace (`apps.lock_grace_session_key`). `isolationKey` is
+ * the conversation id in UI chat and a per-execution id in headless runs, so
+ * one value covers both; it is stored as an opaque key and never read back as
+ * a conversation reference.
+ */
+function authoringSessionKey(context: ArchestraContext): string | undefined {
+  return context.isolationKey ?? context.conversationId;
 }
 
 /**
@@ -1834,6 +1859,12 @@ async function loadApp(params: {
   userId: string;
   organizationId: string;
   appId: string;
+  /**
+   * The calling session, from {@link requireAuthed}. Consulted only by the
+   * lock check, to recognize the session an app was created from when the
+   * organization's new-app default is what locked it.
+   */
+  sessionKey?: string;
   modify?: boolean;
   /** set_app_lock's own escape: the unlock call must reach a locked app. */
   allowLocked?: boolean;
@@ -1873,7 +1904,16 @@ async function loadApp(params: {
         return { error: errorResult(error.message) };
       throw error;
     }
-    if (app.locked && !params.allowLocked) {
+    // The session an app was created from keeps its build rights over a lock
+    // the organization's new-app default applied — otherwise that default
+    // refuses the very agent that just scaffolded the app, stranding it as an
+    // empty shell nobody asked to freeze (T-1089). The grace covers this one
+    // session; every other session sees the lock from the app's first moment,
+    // and any deliberate lock clears it.
+    const graced =
+      params.sessionKey !== undefined &&
+      app.lockGraceSessionKey === params.sessionKey;
+    if (app.locked && !params.allowLocked && !graced) {
       return {
         error: errorResult(
           `App "${escapeAppNameForModelText(app.name)}" is locked. Locked apps refuse every modification — edits, spec, tools, and deletion — until unlocked. Do not retry this call or route the change through another tool; this is the app lock. If, and only if, the user directly asked you to change or unlock this app, unlock it first with set_app_lock (locked: false); never unlock on your own initiative.`,

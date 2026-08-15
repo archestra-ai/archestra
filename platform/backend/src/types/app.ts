@@ -108,7 +108,9 @@ export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
  * `source`. `executionModel` and `cspOrigin` are the machine-readable trust
  * disclosure (mcp-apps.md FR-29): owned apps run as the viewer under the
  * platform-pinned CSP; external apps run server-scoped under the server's own
- * declared CSP. `GET /api/apps/:appId` still returns {@link SelectAppSchema}.
+ * declared CSP. `GET /api/apps/:appId` still returns the whole app — the
+ * REST-facing {@link PublicAppSchema}, which is {@link SelectAppSchema} minus
+ * the columns that are internal bookkeeping rather than part of the contract.
  */
 const AppListItemBaseSchema = z.object({
   name: z.string(),
@@ -242,6 +244,15 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   scope: AppScopeSchema,
   environmentId: z.string().uuid().nullable(),
   labels: z.array(AgentLabelWithDetailsSchema),
+});
+
+/**
+ * The app as REST hands it out. `lockGraceSessionKey` is internal bookkeeping
+ * for the authoring gate — an opaque execution key no API consumer acts on —
+ * so it is dropped here rather than published in every app payload.
+ */
+export const PublicAppSchema = SelectAppSchema.omit({
+  lockGraceSessionKey: true,
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.

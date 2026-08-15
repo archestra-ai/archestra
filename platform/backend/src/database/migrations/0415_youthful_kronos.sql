@@ -1,0 +1,1 @@
+ALTER TABLE "apps" ADD COLUMN "lock_grace_session_key" text;

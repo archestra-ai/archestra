@@ -430,8 +430,9 @@ export default function AgentSettingsPage() {
         description={
           <>
             Create every new app locked: immutable to agents until a user
-            unlocks it, in App settings or by asking an agent directly. Existing
-            apps are unaffected.{" "}
+            unlocks it, in App settings or by asking an agent directly. The chat
+            it was created in can finish building it first, so a new app is not
+            frozen as an empty shell. Existing apps are unaffected.{" "}
             <ExternalDocsLink
               href={getDocsUrl(DocsPage.PlatformApps, "locking-an-app")}
               className="text-primary hover:underline"

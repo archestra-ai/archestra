@@ -61,6 +61,7 @@ const uiTestMatch = [
   "**/skill-share.spec.ts",
   "**/skill-version-history.spec.ts",
   "**/static-credentials-management.spec.ts",
+  "**/tool-guardrails.spec.ts",
   "**/users-role-filter.spec.ts",
 ];
 

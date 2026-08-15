@@ -170,6 +170,16 @@ tests:
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
 
+  - it: worker sets ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE env var when perforceShim image is configured
+    set:
+      archestra.knowledgeBase.perforceShim.image: "my-registry/p4-shim:v1.0.0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+            value: "my-registry/p4-shim:v1.0.0"
+
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:
       archestra.diagnostics.enabled: true

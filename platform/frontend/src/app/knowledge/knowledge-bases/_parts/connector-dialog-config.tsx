@@ -354,9 +354,23 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "dropbox",
   "linear",
   "outline",
+  "servicenow",
+  "perforce",
 ]);
 
-export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+export function connectorSupportsAutoSync(
+  type: ConnectorType,
+  /**
+   * Value of the `orchestratorK8sRuntime` feature
+   * (`useFeature("orchestratorK8sRuntime")` in the calling component).
+   * Perforce permission sync runs the p4 client from an in-cluster pod, so
+   * its backend only sets `supportsPermissionSync` when the Kubernetes
+   * orchestrator is configured; without it Perforce must behave exactly like
+   * a non-perm-sync connector.
+   */
+  orchestratorK8sRuntime: boolean,
+): boolean {
+  if (type === "perforce" && !orchestratorK8sRuntime) return false;
   return AUTO_SYNC_CONNECTOR_TYPES.has(type);
 }
 
@@ -409,7 +423,7 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
  */
 export function getPermissionSyncCredentialNote(
   type: ConnectorType,
-): string | null {
+): ReactNode {
   switch (type) {
     case "github":
       return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
@@ -421,6 +435,23 @@ export function getPermissionSyncCredentialNote(
       return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
     case "outline":
       return "Auto-sync permissions reads collection members, groups, and public share links through this API key. Use a workspace admin's API key: a member key may not see every share link or roster, and anything it cannot see stays unshared.";
+    case "servicenow":
+      return (
+        <>
+          Auto-sync permissions reads ServiceNow permission tables over the
+          Table API. Anything this account cannot read fails closed.{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(
+              DocsPage.PlatformKnowledge,
+              SERVICENOW_AUTO_SYNC_DOC_ANCHOR,
+            )}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      );
     default:
       return null;
   }
@@ -428,6 +459,7 @@ export function getPermissionSyncCredentialNote(
 
 const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
   "atlassian-organization-admin-api-key";
+const SERVICENOW_AUTO_SYNC_DOC_ANCHOR = "servicenow-auto-sync-permissions";
 
 /**
  * Rendered under the visibility selector on the Notion create/edit forms when

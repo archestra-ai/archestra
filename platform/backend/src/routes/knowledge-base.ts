@@ -44,7 +44,11 @@ import {
   buildContainerToken,
   buildGroupToken,
 } from "@/knowledge-base/acl-tokens";
-import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
+import {
+  resolveConnectorCredentials,
+  resolveConnectorCredentialVersion,
+} from "@/knowledge-base/connector-credentials";
+import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
 import { extractErrorMessage } from "@/knowledge-base/connectors/base-connector";
 import {
   buildGoogleDriveAuthorizationUrl,
@@ -54,6 +58,7 @@ import {
   resolveGoogleDriveOAuthReturnTo,
   verifyGoogleDriveOAuthState,
 } from "@/knowledge-base/connectors/gdrive/gdrive-oauth";
+import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
@@ -934,6 +939,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A Perforce connector created to sync permissions gets its shim now
+      // rather than on its first pass, so the pod is scheduled and its image
+      // pulled before anything needs it.
+      await reconcileP4ShimForConnector(connector.id);
+      // SPDX-SnippetEnd
+
       // A connector still waiting on its Google authorization has no
       // credential to sync with, so the first run would only produce a
       // failure to explain something the UI already says. The OAuth callback
@@ -1394,6 +1408,38 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Last, so the replacement pass reads a connector whose ACL epoch has
+      // already been bumped — enqueued before that, its own writes would be
+      // fenced out by the bump it raced.
+      const nextEnabled = updateData.enabled ?? connector.enabled;
+      if (
+        connector.visibility === "auto-sync-permissions" &&
+        (updateData.config !== undefined ||
+          body.credentials !== undefined ||
+          nextVisibility !== "auto-sync-permissions" ||
+          nextEnabled !== connector.enabled)
+      ) {
+        // A submitted config counts as changed without a field-by-field
+        // comparison, matching the checkpoint reset above.
+        await supersedePermissionSyncAfterSettingsChange({
+          connectorId: id,
+          visibility: nextVisibility,
+          enabled: nextEnabled,
+        });
+      }
+      // After the supersede, so the pass is stopped before the pod it was
+      // talking to goes away — and unconditional, because the connector row
+      // this update just wrote is the only thing that decides whether a
+      // Perforce shim exists. Every field above can change the answer: the
+      // server or admin user (roll the pod), the credentials (rotate its
+      // token), the visibility or the enabled flag (create it, or remove it
+      // along with its token and its reach into the customer's network).
+      await reconcileP4ShimForConnector(id);
+      // SPDX-SnippetEnd
 
       return reply.send(updated);
     },
@@ -2082,14 +2128,30 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Load credentials (resolves github_app_configs references when needed)
-      const credentials = await resolveConnectorCredentials(connector);
+      // Load credentials (resolves github_app_configs references when needed).
+      // A Perforce auto-sync connector reads past the secrets cache: its test
+      // reconciles the permission-sync shim, and a cached password would both
+      // mis-report the test and provision the pod with a retired credential.
+      const credentials = await resolveConnectorCredentials(connector, {
+        uncached:
+          connector.connectorType === "perforce" &&
+          connector.visibility === "auto-sync-permissions",
+      });
 
       // Get the connector implementation and test
       const connectorImpl = getConnector(connector.connectorType);
       const result = await connectorImpl.testConnection({
         config: connector.config as Record<string, unknown>,
         credentials,
+        identity: {
+          connectorId: connector.id,
+          organizationId: connector.organizationId,
+          environmentId: connector.environmentId,
+          secretId: connector.secretId,
+          credentialVersion: await resolveConnectorCredentialVersion(
+            connector.secretId,
+          ),
+        },
       });
 
       return reply.send(result);

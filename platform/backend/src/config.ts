@@ -2797,6 +2797,37 @@ const config = {
     // Intentionally undocumented while the method is being validated.
     mfilesOauthEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
+    /**
+     * The p4 shim: the in-cluster pod that executes allowlisted Perforce CLI
+     * commands for Perforce permission sync (k8s/p4-shim-runtime). The image
+     * contains no Perforce software; the backend downloads the pinned `p4`
+     * binary from `p4Binary.<arch>.url`, verifies its sha256, and pushes it to
+     * the pod at provision time. Air-gapped installs point the URL at an
+     * internal mirror (the checksum must then match that mirror's binary).
+     */
+    perforceShim: {
+      image:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
+        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:${appVersion}`,
+      p4Binary: {
+        x64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64 ||
+            "ba4b931bd37a1fd073785c3194a608906934f62b52d407178121a8184bee8ae6",
+        },
+        arm64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64 ||
+            "a67bcae67dd810fdc099525289457ab6af6f647f6e3aceadc0260f42d19cbc93",
+        },
+      },
+    },
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     /**

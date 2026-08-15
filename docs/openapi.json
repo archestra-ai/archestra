@@ -220909,6 +220909,9 @@
                                       "includeBusinessApps": {
                                         "type": "boolean"
                                       },
+                                      "includeKnowledgeArticles": {
+                                        "type": "boolean"
+                                      },
                                       "states": {
                                         "type": "array",
                                         "items": {
@@ -220919,6 +220922,15 @@
                                         "type": "array",
                                         "items": {
                                           "type": "string"
+                                        }
+                                      },
+                                      "roleAudiences": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
                                         }
                                       },
                                       "batchSize": {
@@ -221388,6 +221400,15 @@
                                           "type": "string",
                                           "pattern": "^\\.?[A-Za-z0-9_-]+$"
                                         }
+                                      },
+                                      "p4Port": {
+                                        "type": "string",
+                                        "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                                      },
+                                      "adminUsername": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 256
                                       }
                                     },
                                     "required": [
@@ -222320,6 +222341,9 @@
                           "includeBusinessApps": {
                             "type": "boolean"
                           },
+                          "includeKnowledgeArticles": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -222330,6 +222354,15 @@
                             "type": "array",
                             "items": {
                               "type": "string"
+                            }
+                          },
+                          "roleAudiences": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "batchSize": {
@@ -222796,6 +222829,15 @@
                               "type": "string",
                               "pattern": "^\\.?[A-Za-z0-9_-]+$"
                             }
+                          },
+                          "p4Port": {
+                            "type": "string",
+                            "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                          },
+                          "adminUsername": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
                           }
                         },
                         "required": [
@@ -223355,6 +223397,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -223365,6 +223410,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {
@@ -223834,6 +223888,15 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                            },
+                            "adminUsername": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
                             }
                           },
                           "required": [
@@ -224704,6 +224767,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -224714,6 +224780,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {
@@ -225183,6 +225258,15 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                            },
+                            "adminUsername": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
                             }
                           },
                           "required": [
@@ -225935,6 +226019,9 @@
                           "includeBusinessApps": {
                             "type": "boolean"
                           },
+                          "includeKnowledgeArticles": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -225945,6 +226032,15 @@
                             "type": "array",
                             "items": {
                               "type": "string"
+                            }
+                          },
+                          "roleAudiences": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "batchSize": {
@@ -226411,6 +226507,15 @@
                               "type": "string",
                               "pattern": "^\\.?[A-Za-z0-9_-]+$"
                             }
+                          },
+                          "p4Port": {
+                            "type": "string",
+                            "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                          },
+                          "adminUsername": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
                           }
                         },
                         "required": [
@@ -226968,6 +227073,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -226978,6 +227086,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {
@@ -227447,6 +227564,15 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "pattern": "^(ssl:)?[A-Za-z0-9_.[\\]-]+:\\d{1,5}$"
+                            },
+                            "adminUsername": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
                             }
                           },
                           "required": [

@@ -56149,8 +56149,12 @@ export type GetConnectorsResponses = {
                 includeChangeRequests?: boolean;
                 includeProblems?: boolean;
                 includeBusinessApps?: boolean;
+                includeKnowledgeArticles?: boolean;
                 states?: Array<string>;
                 assignmentGroups?: Array<string>;
+                roleAudiences?: {
+                    [key: string]: Array<string>;
+                };
                 batchSize?: number;
                 syncDataForLastMonths?: number;
             } | {
@@ -56240,6 +56244,8 @@ export type GetConnectorsResponses = {
                 depotPaths: Array<string>;
                 excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
+                p4Port?: string;
+                adminUsername?: string;
             } | {
                 type: 'mfiles';
                 baseUrl: unknown;
@@ -56351,8 +56357,12 @@ export type CreateConnectorData = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -56442,6 +56452,8 @@ export type CreateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: string;
@@ -56611,8 +56623,12 @@ export type CreateConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -56702,6 +56718,8 @@ export type CreateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;
@@ -56961,8 +56979,12 @@ export type GetConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -57052,6 +57074,8 @@ export type GetConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;
@@ -57147,8 +57171,12 @@ export type UpdateConnectorData = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -57238,6 +57266,8 @@ export type UpdateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: string;
@@ -57408,8 +57438,12 @@ export type UpdateConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -57499,6 +57533,8 @@ export type UpdateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;

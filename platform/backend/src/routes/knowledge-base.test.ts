@@ -1652,6 +1652,59 @@ describe("knowledge base routes", () => {
       expect(rows[0]?.count).toBe(1);
     });
 
+    test("editing an auto-sync connector stops the pass computed against its old settings", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Edited Auto-Sync Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        visibility: "auto-sync-permissions",
+      });
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        runType: "permission",
+        status: "running",
+        startedAt: new Date(),
+        leaseOwner: "worker-1",
+        leaseEpoch: 0,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "moved-org",
+            authMethod: "pat",
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      // That pass holds the previous settings for its whole duration; left
+      // running it would keep reading from the old source and, for a connector
+      // that provisions its own runtime, roll that runtime back onto them.
+      expect((await ConnectorRunModel.findById(run.id))?.status).toBe(
+        "superseded",
+      );
+      // ...and the replacement pass reconciles the new settings, so the corpus
+      // is not left half-reconciled behind a fail-closed ACL.
+      expect(
+        await TaskModel.hasPendingOrProcessing("permission_sync", connector.id),
+      ).toBe(true);
+    });
+
     test("rejects switching to auto-sync-permissions for a member without the dedicated permission", async ({
       makeMember,
     }) => {

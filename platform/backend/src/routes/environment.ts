@@ -48,7 +48,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.put(
+  fastify.patch(
     "/api/environments/defaults",
     {
       schema: {

@@ -125506,7 +125506,7 @@
       }
     },
     "/api/environments/defaults": {
-      "put": {
+      "patch": {
         "operationId": "updateEnvironmentResourceDefaults",
         "tags": [
           "Organization"

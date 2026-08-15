@@ -3102,7 +3102,7 @@ export const createEnvironment = <ThrowOnError extends boolean = false>(options:
  *
  * `environment:update`: Modify deployment environments, including the org default environment
  */
-export const updateEnvironmentResourceDefaults = <ThrowOnError extends boolean = false>(options: Options<UpdateEnvironmentResourceDefaultsData, ThrowOnError>) => (options.client ?? client).put<UpdateEnvironmentResourceDefaultsResponses, UpdateEnvironmentResourceDefaultsErrors, ThrowOnError>({
+export const updateEnvironmentResourceDefaults = <ThrowOnError extends boolean = false>(options: Options<UpdateEnvironmentResourceDefaultsData, ThrowOnError>) => (options.client ?? client).patch<UpdateEnvironmentResourceDefaultsResponses, UpdateEnvironmentResourceDefaultsErrors, ThrowOnError>({
     url: '/api/environments/defaults',
     ...options,
     headers: {

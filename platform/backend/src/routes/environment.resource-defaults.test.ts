@@ -104,7 +104,7 @@ describe("environment resource defaults", () => {
     const launch = await createEnvironment(app, "Launch");
 
     const updated = await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: explore.id, app: launch.id },
     });
@@ -130,14 +130,14 @@ describe("environment resource defaults", () => {
 
     const explore = await createEnvironment(app, "Explore");
     await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: explore.id, agent: explore.id },
     });
 
     // Only `agent` is named, so `mcpRegistry` keeps its value.
     const partial = await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { agent: null },
     });
@@ -156,7 +156,7 @@ describe("environment resource defaults", () => {
 
     const explore = await createEnvironment(app, "Explore");
     await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: explore.id },
     });
@@ -186,7 +186,7 @@ describe("environment resource defaults", () => {
 
     app = await buildApp(await makeUser(), (await makeOrganization()).id);
     const response = await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: foreign.id },
     });
@@ -210,7 +210,7 @@ describe("environment resource defaults", () => {
     app = await buildApp(await makeUser(), (await makeOrganization()).id);
 
     const response = await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: null },
     });
@@ -228,7 +228,7 @@ describe("environment resource defaults", () => {
 
     const explore = await createEnvironment(app, "Explore");
     await app.inject({
-      method: "PUT",
+      method: "PATCH",
       url: "/api/environments/defaults",
       payload: { mcpRegistry: explore.id },
     });

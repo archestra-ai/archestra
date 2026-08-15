@@ -412,22 +412,22 @@ test.describe("Chat thinking block layout", () => {
     // A live block is expanded while it streams, so this is the state the
     // overflow shows up in. Wait for the widest content — the long code line —
     // to be on screen before measuring.
-    await expect(page.getByText("reconcileEverything").first()).toBeVisible({
-      timeout: 90_000,
-    });
+    const thinkingCodeLine = page.getByText("reconcileEverything").first();
+    await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
 
-    // And again once the block has settled and the reader reopens it.
+    // And again once the block has settled and the reader reopens it. Wait for
+    // the block's own auto-collapse rather than racing it: clicking the trigger
+    // while it is still open would close the block instead of reopening it.
     await expect(
       page.getByText("The helper reconciles every knob in one call.").first(),
     ).toBeVisible({ timeout: 90_000 });
+    await expect(thinkingCodeLine).toBeHidden({ timeout: 30_000 });
     await page
-      .getByText(/Thought for \d+ seconds?/)
+      .getByText(/Thought for/)
       .first()
       .click();
-    await expect(page.getByText("reconcileEverything").first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(thinkingCodeLine).toBeVisible({ timeout: 10_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
   });
 });

@@ -14,6 +14,7 @@ import {
 } from "./kb-interaction";
 import { resolveRerankerConfig } from "./kb-llm-client";
 import { callNativeRerank } from "./native-rerank";
+import { RERANKER_OUTPUT_CONTRACT } from "./reranker-prompt";
 
 async function rerank(params: {
   queryText: string;
@@ -155,20 +156,6 @@ ${RERANKER_OUTPUT_CONTRACT}`;
 }
 
 export default rerank;
-
-/**
- * Spells out the response shape in the prompt itself.
- *
- * `generateObject` puts the schema in `response_format`, never in the prompt,
- * so a provider client that can't send a JSON schema (or an endpoint that
- * ignores one) leaves the model with no description of the object at all. It
- * then answers in whatever shape it likes and the reply fails validation. Both
- * the reranker and the settings probe that verifies it state the contract, so
- * verifying a model proves the same thing reranking will ask of it.
- */
-export const RERANKER_OUTPUT_CONTRACT =
-  'Respond with only a JSON object of the form {"scores":[{"index":0,"score":7}]}, ' +
-  "with one entry per passage — no prose, no markdown code fences.";
 
 // ===== Internal helpers =====
 

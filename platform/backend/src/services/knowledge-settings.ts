@@ -9,7 +9,7 @@ import {
   callNativeRerank,
   isNativeRerankModel,
 } from "@/knowledge-base/native-rerank";
-import { RERANKER_OUTPUT_CONTRACT } from "@/knowledge-base/reranker";
+import { RERANKER_OUTPUT_CONTRACT } from "@/knowledge-base/reranker-prompt";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel } from "@/models";
 import { repairStructuredOutputText } from "@/utils/structured-output-repair";

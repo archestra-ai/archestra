@@ -355,7 +355,8 @@ RUN apk --no-cache upgrade && \
     # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
     # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
     # because postgresql-pgvector depends on postgresql18, so that major lands in the image
-    # alongside the 17 we actually run. Same stale-layer hazard as the curl pin above: the bare
+    # alongside 17 and is scanned too. (postgresql18 in fact owns the /usr/bin/postgres symlink,
+    # so it is the major supervisor actually starts.) Same stale-layer hazard as the curl pin: the bare
     # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
     # fixed versions and bust the cache.
     apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \

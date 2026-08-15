@@ -569,8 +569,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         } catch (error) {
           logger.warn(
-            { err: error, appId: app.id },
-            "Failed to seed chat conversation for newly created app",
+            { err: error, appId: app.id, conversationId },
+            "Failed to open the newly created app in chat",
           );
         }
       }

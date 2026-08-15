@@ -29,7 +29,7 @@ export const APP_ORIGIN_FILTER_VALUE = "app";
  * which correctly returned nothing for them.
  */
 export type ToolSource =
-  | { kind: "app"; appName: string | undefined; icon: string | null }
+  | { kind: "app"; appName: string }
   | { kind: "mcp"; catalogItem: InternalMcpCatalogItem | undefined }
   | { kind: "agent"; agentName: string }
   | { kind: "observed" };
@@ -43,11 +43,7 @@ export function getToolSource(
       (item) => item.id === tool.catalogId,
     );
     if (catalogItem && isAppCatalogItem(catalogItem)) {
-      return {
-        kind: "app",
-        appName: catalogItem.name,
-        icon: catalogItem.icon ?? null,
-      };
+      return { kind: "app", appName: catalogItem.name };
     }
     return { kind: "mcp", catalogItem };
   }

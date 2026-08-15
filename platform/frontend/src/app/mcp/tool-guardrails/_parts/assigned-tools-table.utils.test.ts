@@ -80,7 +80,7 @@ describe("getToolSource", () => {
         { catalogId: "catalog-app", name: "task_tracker-abcd1234__open" },
         [makeCatalogItem({ id: "catalog-1" }), appCatalogItem],
       ),
-    ).toEqual({ kind: "app", appName: "Task Tracker", icon: null });
+    ).toEqual({ kind: "app", appName: "Task Tracker" });
   });
 
   it("labels a catalog tool with its MCP server", () => {

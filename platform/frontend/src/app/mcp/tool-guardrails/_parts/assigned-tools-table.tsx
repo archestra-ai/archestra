@@ -487,7 +487,7 @@ export function AssignedToolsTable({
                       >
                         <AppWindow className="h-3.5 w-3.5 shrink-0" />
                         <span className="min-w-0 truncate">
-                          {source.appName ?? APP_TOOL_SOURCE_LABEL}
+                          {source.appName || APP_TOOL_SOURCE_LABEL}
                         </span>
                       </Badge>
                     </TooltipTrigger>

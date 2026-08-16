@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.39](https://github.com/archestra-ai/archestra/compare/platform-v1.3.38...platform-v1.3.39) (2026-08-16)
+
+
+### Bug Fixes
+
+* **apps:** let the creating session build an app the new-app default disabled ([#7305](https://github.com/archestra-ai/archestra/issues/7305)) ([f6775e3](https://github.com/archestra-ai/archestra/commit/f6775e32244df5b53b513807f7f99101aa2726b0))
+* **chat:** gate the stalled-response warning on nothing having rendered ([#7295](https://github.com/archestra-ai/archestra/issues/7295)) ([3f944be](https://github.com/archestra-ai/archestra/commit/3f944beca6181db230b52ae4e55801fde7f2cb15))
+* **guardrails:** tell same-named agent delegation tools apart ([#7304](https://github.com/archestra-ai/archestra/issues/7304)) ([77b49e6](https://github.com/archestra-ai/archestra/commit/77b49e63b420d475ad740f1348b6dc89bb4f5adf))
+* **integration-tests:** serve SSR mocks over HTTP so the MCP registry specs stop failing in unison ([#7303](https://github.com/archestra-ai/archestra/issues/7303)) ([4f7a0ae](https://github.com/archestra-ai/archestra/commit/4f7a0aeaf9aa041b04bded69b1ff9cc728fd493f))
+* **llm-providers:** make the key dialog's endpoint field say what it means and sit where it belongs ([#7302](https://github.com/archestra-ai/archestra/issues/7302)) ([a1f5ee5](https://github.com/archestra-ai/archestra/commit/a1f5ee5f9824f42f31e4a170f5c6959707453f62))
+
+
+### Documentation
+
+* **agents:** add Telegram to the invocation paths and rename incognito chats to locked chats ([#7300](https://github.com/archestra-ai/archestra/issues/7300)) ([48754a5](https://github.com/archestra-ai/archestra/commit/48754a5b29b95633b837689cacac5027cf9d89b2))
+
+
+### Code Refactoring
+
+* **chat:** rename incognito to locked chat across code, files and schema ([#7301](https://github.com/archestra-ai/archestra/issues/7301)) ([da695f2](https://github.com/archestra-ai/archestra/commit/da695f28d8624c3921fbe20f0e37cc2a8ff3a194))
+
 ## [1.3.38](https://github.com/archestra-ai/archestra/compare/platform-v1.3.37...platform-v1.3.38) (2026-08-16)
 
 

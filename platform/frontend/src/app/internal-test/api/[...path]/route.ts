@@ -11,7 +11,6 @@
 // production deployment cannot serve fixtures from here.
 
 import { isApiRequest } from "@/mocks/match";
-import { resolveMockResponse } from "@/mocks/resolve";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +24,11 @@ async function handle(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
+  // Returning before the import below keeps `msw` — a devDependency, and the
+  // whole fixture tree with it — out of production bundles.
   if (!ENABLED) return new Response("Not found", { status: 404 });
 
+  const { resolveMockResponse } = await import("@/mocks/resolve");
   const { path } = await context.params;
   const incoming = new URL(request.url);
   // Handlers are registered against backend-relative paths, so strip the

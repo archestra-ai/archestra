@@ -12,8 +12,6 @@
 // this list right after `worker.start()` and replays each descriptor via
 // `worker.use(...)`, so a single POST covers both runtimes.
 
-import { addOverrideHandler, clearOverrideHandlers } from "@/mocks/resolve";
-
 export const dynamic = "force-dynamic";
 
 type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
@@ -49,9 +47,12 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const [msw, { buildHandler }] = await Promise.all([
+  // Imported lazily, past the ENABLED gate, so `msw` — a devDependency —
+  // stays out of production bundles.
+  const [msw, { buildHandler }, { addOverrideHandler }] = await Promise.all([
     import("msw"),
     import("@/mocks/build-handler"),
+    import("@/mocks/resolve"),
   ]);
 
   // Built once and kept, rather than rebuilt per request: a `once: true`
@@ -72,6 +73,7 @@ export async function GET(): Promise<Response> {
 
 export async function DELETE(): Promise<Response> {
   if (!ENABLED) return notFound();
+  const { clearOverrideHandlers } = await import("@/mocks/resolve");
   clearOverrideHandlers();
   globalThis.__archestraMswOverrides = [];
   globalThis.__archestraUnhandledRequests = [];

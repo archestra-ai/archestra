@@ -1,5 +1,11 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { AppVersionModel, OrganizationModel } from "@/models";
+import {
+  AgentModel,
+  AppVersionModel,
+  ConversationModel,
+  MemberModel,
+  OrganizationModel,
+} from "@/models";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -364,6 +370,181 @@ describe("POST /api/apps", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(restricted.id);
+  });
+});
+
+// The Apps page creates a blank app and hands it straight to a chat agent to
+// build (`openInChat`). The app has to land in that agent's environment, or the
+// agent discovers tools it cannot then assign to the app it is building — the
+// same binding `scaffold_app` makes for an app created from chat.
+describe("POST /api/apps — the environment of the agent that builds it", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+  let launch: Awaited<ReturnType<typeof EnvironmentModel.create>>;
+  let builderAgentId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    launch = await EnvironmentModel.create({ organizationId, name: "launch" });
+    // An `openInChat` create binds the conversation to the caller's default
+    // chat agent — the agent that will build the app.
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      environmentId: launch.id,
+    });
+    builderAgentId = agent.id;
+    await MemberModel.setDefaultAgent(user.id, organizationId, agent.id);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("an openInChat create lands in the building agent's environment", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Built In Chat", openInChat: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(launch.id);
+  });
+
+  test("the app and the conversation that builds it agree on the agent", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Same Agent", openInChat: true },
+    });
+
+    const { environmentId, conversationId } = response.json();
+    expect(conversationId).toBeTruthy();
+    const conversation = await ConversationModel.findById({
+      id: conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(conversation?.agentId).toBe(builderAgentId);
+    expect(environmentId).toBe(
+      await AgentModel.findEnvironmentId(builderAgentId),
+    );
+  });
+
+  test("the building agent's environment outranks the org's configured default for apps", async () => {
+    const explore = await EnvironmentModel.create({
+      organizationId,
+      name: "explore",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: explore.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Configured Loses", openInChat: true },
+    });
+
+    expect(response.json().environmentId).toBe(launch.id);
+  });
+
+  test("an explicit environmentId still wins over the building agent's", async () => {
+    const explore = await EnvironmentModel.create({
+      organizationId,
+      name: "explore",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Explicit",
+        openInChat: true,
+        environmentId: explore.id,
+      },
+    });
+
+    expect(response.json().environmentId).toBe(explore.id);
+  });
+
+  test("an explicit null still means the Default environment", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Explicit Default",
+        openInChat: true,
+        environmentId: null,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
+  });
+
+  test("a create that does not open in chat has no building agent to follow", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "No Chat" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
+  });
+
+  test("a restricted agent environment the caller may not deploy to falls back instead of failing", async ({
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const restricted = await EnvironmentModel.create({
+      organizationId,
+      name: "restricted-launch",
+      restricted: true,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      environmentId: restricted.id,
+    });
+    await MemberModel.setDefaultAgent(member.id, organizationId, agent.id);
+    user = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Restricted Builder",
+        scope: "personal",
+        openInChat: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
   });
 });
 

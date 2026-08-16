@@ -58,8 +58,8 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
@@ -158,11 +158,11 @@ import {
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
-import {
-  generateIncognitoKey,
-  isActionAvailableForConversation,
-} from "@/lib/chat/incognito";
 import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
+import {
+  generateLockedChatKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/locked-chat";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -484,21 +484,21 @@ export function ChatPageContent({
     routeConversationId,
   });
 
-  // Whether the NEXT chat created from the new-chat composer is incognito.
+  // Whether the NEXT chat created from the new-chat composer is a locked chat.
   // Only meaningful pre-conversation; reset after a successful create so a
   // later new chat never inherits it silently.
-  const [isIncognitoDraft, setIsIncognitoDraft] = useState(false);
+  const [isLockedChatDraft, setIsLockedChatDraft] = useState(false);
 
-  // `?incognito=1` (command palette entry / Alt+I) arms the composer toggle.
+  // `?locked-chat=1` (command palette entry / Alt+I) arms the composer toggle.
   // One-shot, same posture as user_prompt and skillId: the param is stripped
   // once applied, so a reload can't silently re-arm it and a second Alt+I is a
   // real navigation rather than a no-op push of an identical URL.
-  const urlIncognitoDraft = searchParams.get("incognito") === "1";
+  const urlLockedChatDraft = searchParams.get("lockedChat") === "1";
   useEffect(() => {
-    if (!urlIncognitoDraft) return;
-    setIsIncognitoDraft(true);
-    clearIncognitoQueryParam({ pathname, router, searchParams });
-  }, [urlIncognitoDraft, pathname, router, searchParams]);
+    if (!urlLockedChatDraft) return;
+    setIsLockedChatDraft(true);
+    clearLockedChatQueryParam({ pathname, router, searchParams });
+  }, [urlLockedChatDraft, pathname, router, searchParams]);
 
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
@@ -720,7 +720,7 @@ export function ChatPageContent({
     !!conversationId &&
     !!conversation &&
     conversation.userId === session?.user.id &&
-    // Incognito conversations cannot be shared (the backend rejects it).
+    // Locked chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
   useConversationShare(canManageShare ? conversationId : undefined);
 
@@ -2447,18 +2447,18 @@ export function ChatPageContent({
         return false;
       }
 
-      // Incognito: the conversation DEK is generated here, in the browser,
+      // LockedChat: the conversation DEK is generated here, in the browser,
       // BEFORE the create request. It rides along as a header; the mutation's
       // onSuccess stores it under the fresh conversation id before any
       // navigation or stream start reads it.
-      const incognitoKey = isIncognitoDraft ? generateIncognitoKey() : null;
+      const lockedChatKey = isLockedChatDraft ? generateLockedChatKey() : null;
 
       createConversationMutation.mutate(
-        incognitoKey ? { ...input, incognito: true, incognitoKey } : input,
+        lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
         {
           onSuccess: (newConversation) => {
             if (newConversation) {
-              setIsIncognitoDraft(false);
+              setIsLockedChatDraft(false);
               // A recording started from scratch (before this chat had an id)
               // becomes this conversation's recording now that its id exists,
               // so the timer and buffered capture carry across the transition.
@@ -2482,7 +2482,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
-      isIncognitoDraft,
+      isLockedChatDraft,
       initialThinkingEffort,
       createConversationMutation,
       searchParams,
@@ -2995,7 +2995,7 @@ export function ChatPageContent({
     );
   }
 
-  // Incognito tombstone: the conversation exists and the viewer may see it,
+  // LockedChat tombstone: the conversation exists and the viewer may see it,
   // but this browser holds no (valid) encryption key, so the server returned
   // the locked view. Deliberately its own branch — this is not a 404, the
   // chat is real but undecryptable here.
@@ -3004,7 +3004,7 @@ export function ChatPageContent({
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="w-full max-w-xl">
           <CardHeader className="justify-items-center text-center gap-3 pt-8">
-            <IncognitoIcon className="mx-auto block size-14" />
+            <LockedChatIcon className="mx-auto block size-14" />
             <CardTitle className="text-xl">
               This chat can&apos;t be unlocked
             </CardTitle>
@@ -3248,7 +3248,7 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          {/* Forking is rejected for incognito chats, so the
+                          {/* Forking is rejected for locked chats, so the
                               affordance is hidden rather than left to fail. */}
                           {isActionAvailableForConversation(
                             conversation,
@@ -3574,8 +3574,8 @@ export function ChatPageContent({
                                     }
                                     selectorAgentId={initialAgentId}
                                     onAgentChange={handleInitialAgentChange}
-                                    incognito={isIncognitoDraft}
-                                    onIncognitoChange={setIsIncognitoDraft}
+                                    lockedChat={isLockedChatDraft}
+                                    onLockedChatChange={setIsLockedChatDraft}
                                     modelSource={initialModelSource}
                                     onResetModelOverride={
                                       handleResetModelOverride
@@ -3748,15 +3748,15 @@ function clearUserPromptQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
-// `incognito` arms the composer toggle once (command palette / Alt+I) and is
+// `locked-chat` arms the composer toggle once (command palette / Alt+I) and is
 // then dropped, same one-shot posture as user_prompt and skillId.
-function clearIncognitoQueryParam(params: {
+function clearLockedChatQueryParam(params: {
   pathname: string;
   router: ReturnType<typeof useRouter>;
   searchParams: URLSearchParams;
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
-  nextSearchParams.delete("incognito");
+  nextSearchParams.delete("lockedChat");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

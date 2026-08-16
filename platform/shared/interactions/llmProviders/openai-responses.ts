@@ -1,4 +1,4 @@
-import type { WithoutIncognitoUnavailable } from "../../incognito-content";
+import type { WithoutLockedChatUnavailable } from "../../locked-chat-content";
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
@@ -26,7 +26,7 @@ type OpenAiResponsesInteractionRecord = Omit<
   "request" | "response"
 > & {
   request: Extract<OpenAiResponsesArm["request"], { model: string }>;
-  response: WithoutIncognitoUnavailable<
+  response: WithoutLockedChatUnavailable<
     Exclude<OpenAiResponsesArm["response"], { error: string }>
   >;
 };

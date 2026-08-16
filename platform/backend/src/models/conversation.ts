@@ -36,7 +36,7 @@ import ProjectShareModel from "./project-share";
 class ConversationModel {
   /**
    * `id` may be supplied by the caller when row fields must be derived from
-   * it before insert (incognito key fingerprints are bound to the id).
+   * it before insert (locked-chat key fingerprints are bound to the id).
    */
   static async create(
     data: InsertConversation & { id?: string },
@@ -245,11 +245,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        // Incognito rows are encrypted under a browser-held key the server
+        // LockedChat rows are encrypted under a browser-held key the server
         // does not have: skip them entirely so the list carries no message
         // content (not even ciphertext) and the server-key decrypt is never
         // attempted (it would throw on the foreign envelope).
-        if (row.conversation.incognito) {
+        if (row.conversation.lockedChat) {
           continue;
         }
         if (row?.message) {
@@ -426,10 +426,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // Incognito rows are ciphertext under a browser-held key: the route
+      // LockedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.incognito) {
+      if (firstRow.conversation.lockedChat) {
         break;
       }
       if (row.message) {
@@ -454,40 +454,40 @@ class ConversationModel {
   }
 
   /**
-   * Incognito key bookkeeping for a conversation the caller has already
+   * LockedChat key bookkeeping for a conversation the caller has already
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
    * deliberately absent from API response shapes).
    *
    * `hasEscrow` gates whether this conversation's audit trail may be encrypted
    * rather than redacted. It is exact: the wrapped key lives on the row.
    */
-  static async getIncognitoKeyInfo(id: string): Promise<{
+  static async getLockedChatKeyInfo(id: string): Promise<{
     id: string;
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
         id: schema.conversationsTable.id,
-        incognito: schema.conversationsTable.incognito,
-        incognitoDekFingerprint:
-          schema.conversationsTable.incognitoDekFingerprint,
-        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+        lockedChat: schema.conversationsTable.lockedChat,
+        lockedChatDekFingerprint:
+          schema.conversationsTable.lockedChatDekFingerprint,
+        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
     if (!row) return null;
     return {
       id: row.id,
-      incognito: row.incognito,
-      incognitoDekFingerprint: row.incognitoDekFingerprint,
-      hasEscrow: row.incognitoEscrow !== null,
+      lockedChat: row.lockedChat,
+      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
+      hasEscrow: row.lockedChatEscrow !== null,
     };
   }
 
   /**
-   * Incognito bookkeeping for a conversation, scoped to its owner. Used by the
+   * LockedChat bookkeeping for a conversation, scoped to its owner. Used by the
    * LLM proxy to decide how a chat-loopback session's audit content must be
    * stored; the owner check keeps a spoofed session id from suppressing (or
    * re-keying) someone else's audit trail.
@@ -496,20 +496,20 @@ class ConversationModel {
    * `userId`. `hasEscrow` is exact: the wrapped key lives on the row, so its
    * presence is read directly rather than inferred.
    */
-  static async getIncognitoAuditInfoOwnedBy(params: {
+  static async getLockedChatAuditInfoOwnedBy(params: {
     id: string;
     userId: string;
   }): Promise<{
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
-        incognito: schema.conversationsTable.incognito,
-        incognitoDekFingerprint:
-          schema.conversationsTable.incognitoDekFingerprint,
-        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+        lockedChat: schema.conversationsTable.lockedChat,
+        lockedChatDekFingerprint:
+          schema.conversationsTable.lockedChatDekFingerprint,
+        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(
@@ -522,9 +522,9 @@ class ConversationModel {
       .limit(1);
     if (!row) return null;
     return {
-      incognito: row.incognito,
-      incognitoDekFingerprint: row.incognitoDekFingerprint,
-      hasEscrow: row.incognitoEscrow !== null,
+      lockedChat: row.lockedChat,
+      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
+      hasEscrow: row.lockedChatEscrow !== null,
     };
   }
 
@@ -726,10 +726,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // Incognito rows are ciphertext under a browser-held key: the route
+      // LockedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.incognito) {
+      if (firstRow.conversation.lockedChat) {
         break;
       }
       if (row.message) {
@@ -1201,7 +1201,7 @@ function isConversationUnread(conversation: {
 
 /**
  * Assemble the API-facing message list from already-decrypted message rows.
- * Used by the incognito GET path, which loads and decrypts rows itself (the
+ * Used by the locked-chat GET path, which loads and decrypts rows itself (the
  * model cannot: the key only exists on the request). Applies the same
  * filtering/metadata rules as the standard conversation reads above.
  */

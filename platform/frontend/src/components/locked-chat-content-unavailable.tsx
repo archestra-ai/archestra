@@ -1,17 +1,17 @@
 "use client";
 
 import {
-  type IncognitoLockedContent,
-  type IncognitoRedactedContent,
-  isIncognitoLockedContent,
+  isLockedChatSealedContent,
+  type LockedChatRedactedContent,
+  type LockedChatSealedContent,
 } from "@archestra/shared";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { cn } from "@/lib/utils";
 
-type UnavailableContent = IncognitoLockedContent | IncognitoRedactedContent;
+type UnavailableContent = LockedChatSealedContent | LockedChatRedactedContent;
 
 /**
- * What the logs pages show in place of an incognito conversation's audit
+ * What the logs pages show in place of a locked chat's audit
  * content. The two states are deliberately worded differently: locked content
  * still exists (encrypted, with an escrow copy of the key), redacted content
  * never made it to disk.
@@ -19,14 +19,14 @@ type UnavailableContent = IncognitoLockedContent | IncognitoRedactedContent;
  * Locked content really is recoverable: the wrapped key sits on the
  * conversation row, so its presence is verifiable rather than assumed.
  */
-export function IncognitoContentUnavailable({
+export function LockedChatContentUnavailable({
   value,
   className,
 }: {
   value: UnavailableContent;
   className?: string;
 }) {
-  const locked = isIncognitoLockedContent(value);
+  const locked = isLockedChatSealedContent(value);
 
   return (
     <div
@@ -35,7 +35,7 @@ export function IncognitoContentUnavailable({
         className,
       )}
     >
-      <IncognitoIcon className="mt-0.5 size-5" />
+      <LockedChatIcon className="mt-0.5 size-5" />
       <div className="space-y-1">
         <p className="text-sm font-medium">
           {locked ? "Encrypted locked-chat content" : "Content not stored"}
@@ -51,16 +51,16 @@ export function IncognitoContentUnavailable({
 }
 
 /** The same two states, for table cells where the full panel does not fit. */
-export function IncognitoContentUnavailableLabel({
+export function LockedChatContentUnavailableLabel({
   value,
 }: {
   value: UnavailableContent;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-      <IncognitoIcon className="size-3.5" />
+      <LockedChatIcon className="size-3.5" />
       <span>
-        {isIncognitoLockedContent(value) ? "Encrypted" : "Not stored"}
+        {isLockedChatSealedContent(value) ? "Encrypted" : "Not stored"}
       </span>
     </span>
   );

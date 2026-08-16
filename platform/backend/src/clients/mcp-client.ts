@@ -4,8 +4,8 @@ import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
   getArchestraAppResourceUri,
-  INCOGNITO_REDACTED_MARKER,
   LINKED_IDP_SSO_MODE,
+  LOCKED_CHAT_REDACTED_MARKER,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -38,7 +38,7 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -328,29 +328,29 @@ interface ExecuteToolCallForOwnerOptions {
    */
   availableTool?: CatalogTool;
   /**
-   * Incognito chat conversation: the persisted mcp_tool_calls row keeps the
+   * Locked chat conversation: the persisted mcp_tool_calls row keeps the
    * tool name but never stores plaintext arguments or result content.
    */
   suppressContentLogging?: boolean;
   /**
-   * Present only for an incognito conversation that has an escrow record: the
+   * Present only for a locked chat that has an escrow record: the
    * row's content is encrypted under the conversation key instead of being
    * thrown away. Without it a suppressed call falls back to redaction.
    */
-  incognitoAudit?: IncognitoAuditContext | null;
+  lockedChatAudit?: LockedChatAuditContext | null;
 }
 
 /**
  * How one call's persisted `mcp_tool_calls` row must handle content, resolved
  * once from the caller's options and threaded down every persist path.
- * `undefined` means "not an incognito call, store normally".
+ * `undefined` means "not a locked-chat call, store normally".
  *
  * Deliberately a parameter rather than a call-id-keyed registry: ids come from
  * the model, and a collision between two conversations would encrypt one's
  * content under the other's key — unreadable by either escrow record.
  */
 type ToolCallContentDisposition =
-  | { kind: "encrypt"; audit: IncognitoAuditContext }
+  | { kind: "encrypt"; audit: LockedChatAuditContext }
   | { kind: "redact" };
 
 class McpClient {
@@ -485,7 +485,7 @@ class McpClient {
     // Decided once here and handed to every path that persists a row (success,
     // error, retry, cancellation), so a concurrent call on another
     // conversation can never influence how this one's content is stored.
-    const incognitoContent = resolveContentDisposition(options);
+    const lockedChatContent = resolveContentDisposition(options);
 
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
@@ -505,7 +505,7 @@ class McpClient {
       toolCall,
       owner,
       options?.availableTool,
-      incognitoContent,
+      lockedChatContent,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -569,7 +569,7 @@ class McpClient {
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
-        incognitoContent,
+        lockedChatContent,
       });
     }
 
@@ -581,7 +581,7 @@ class McpClient {
         tokenAuth,
         catalogItem,
         authInfo,
-        incognitoContent,
+        lockedChatContent,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -601,7 +601,7 @@ class McpClient {
           "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
         mcpServerName,
         authInfo,
-        incognitoContent,
+        lockedChatContent,
       });
     }
     // A catalog-level enterprise-managed config is authoritative: assignments
@@ -636,7 +636,7 @@ class McpClient {
         mcpServerName,
         authInfo,
         structuredError: authError,
-        incognitoContent,
+        lockedChatContent,
       });
     }
 
@@ -644,7 +644,7 @@ class McpClient {
       targetMcpServerId: targetMcpServerId,
       toolCall,
       owner,
-      incognitoContent,
+      lockedChatContent,
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
@@ -735,7 +735,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
-            incognitoContent,
+            lockedChatContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -819,7 +819,7 @@ class McpClient {
             isError: false,
             _meta: { resourceUri },
             authInfo,
-            incognitoContent,
+            lockedChatContent,
             structuredContent: {
               contents: result.contents as unknown,
             },
@@ -872,7 +872,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
-            incognitoContent,
+            lockedChatContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -900,7 +900,7 @@ class McpClient {
             mcpServerName,
             authInfo,
             structuredError: authError,
-            incognitoContent,
+            lockedChatContent,
           });
         }
 
@@ -913,7 +913,7 @@ class McpClient {
           isError: !!result.isError,
           _meta: result._meta,
           authInfo,
-          incognitoContent,
+          lockedChatContent,
           structuredContent: result.structuredContent as
             | Record<string, unknown>
             | undefined,
@@ -942,7 +942,7 @@ class McpClient {
             toolCall,
             toolResult: this.buildCancelledResult(toolCall, authInfo),
             authInfo,
-            incognitoContent,
+            lockedChatContent,
           });
           throw error;
         }
@@ -1067,7 +1067,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
-            incognitoContent,
+            lockedChatContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -1136,7 +1136,7 @@ class McpClient {
                 mcpServerName,
                 authInfo,
                 structuredError: assignmentError,
-                incognitoContent,
+                lockedChatContent,
               });
             }
             const authError = await this.buildExpiredAuthMessage({
@@ -1153,7 +1153,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              incognitoContent,
+              lockedChatContent,
             });
           }
           // No server resolved → "auth required" message with install link
@@ -1169,7 +1169,7 @@ class McpClient {
             mcpServerName,
             authInfo,
             structuredError: authError,
-            incognitoContent,
+            lockedChatContent,
           });
         }
 
@@ -1179,7 +1179,7 @@ class McpClient {
           error: errorMessage,
           mcpServerName,
           authInfo,
-          incognitoContent,
+          lockedChatContent,
         });
       }
     };
@@ -1467,7 +1467,7 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     availableTool?: CatalogTool,
-    incognitoContent?: ToolCallContentDisposition,
+    lockedChatContent?: ToolCallContentDisposition,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1578,7 +1578,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1609,7 +1609,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1645,7 +1645,7 @@ class McpClient {
           owner,
           error: "Tool is missing catalogId",
           mcpServerName: tool.catalogName || "unknown",
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1659,7 +1659,7 @@ class McpClient {
           owner,
           error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
           mcpServerName: tool.catalogName || "unknown",
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1673,12 +1673,12 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
-    incognitoContent,
+    lockedChatContent,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
   }): Promise<
     | {
         secrets: Record<string, unknown>;
@@ -1701,7 +1701,7 @@ class McpClient {
           owner,
           error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           mcpServerName: "unknown",
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1764,14 +1764,14 @@ class McpClient {
     owner,
     catalogItem,
     authInfo,
-    incognitoContent,
+    lockedChatContent,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -1837,7 +1837,7 @@ class McpClient {
             mcpServerName: fallbackName,
             authInfo,
             structuredError: reconnectError,
-            incognitoContent,
+            lockedChatContent,
           }),
         };
       }
@@ -1889,7 +1889,7 @@ class McpClient {
               "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             mcpServerName: fallbackName,
             authInfo,
-            incognitoContent,
+            lockedChatContent,
           }),
         };
       }
@@ -1912,7 +1912,7 @@ class McpClient {
             "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           mcpServerName: fallbackName,
           authInfo,
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -1925,7 +1925,7 @@ class McpClient {
             "Dynamic team credential is enabled but tool has no catalogId.",
           mcpServerName: fallbackName,
           authInfo,
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -2003,7 +2003,7 @@ class McpClient {
             "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           mcpServerName: fallbackName,
           authInfo,
-          incognitoContent,
+          lockedChatContent,
         }),
       };
     }
@@ -2065,7 +2065,7 @@ class McpClient {
         mcpServerName: fallbackName,
         authInfo,
         structuredError: authError,
-        incognitoContent,
+        lockedChatContent,
       }),
     };
   }
@@ -2599,7 +2599,7 @@ class McpClient {
     mcpServerName?: string;
     authInfo?: ToolCallAuthInfo;
     structuredError?: McpToolError;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2608,7 +2608,7 @@ class McpClient {
       mcpServerName = "unknown",
       authInfo,
       structuredError,
-      incognitoContent,
+      lockedChatContent,
     } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
@@ -2636,7 +2636,7 @@ class McpClient {
       toolCall,
       toolResult: errorResult,
       authInfo,
-      incognitoContent,
+      lockedChatContent,
     });
     return errorResult;
   }
@@ -2653,7 +2653,7 @@ class McpClient {
     _meta?: Record<string, unknown>;
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2664,7 +2664,7 @@ class McpClient {
       _meta,
       authInfo,
       structuredContent,
-      incognitoContent,
+      lockedChatContent,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -2695,7 +2695,7 @@ class McpClient {
       toolCall,
       toolResult,
       authInfo,
-      incognitoContent,
+      lockedChatContent,
     });
     return toolResult;
   }
@@ -2719,7 +2719,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -2739,7 +2739,7 @@ class McpClient {
       toolCatalogId,
       toolCatalogName,
       executeRetry,
-      incognitoContent,
+      lockedChatContent,
     } = params;
 
     logger.info(
@@ -2844,7 +2844,7 @@ class McpClient {
           error: authError.message,
           mcpServerName,
           structuredError: authError,
-          incognitoContent,
+          lockedChatContent,
         });
       }
 
@@ -2853,7 +2853,7 @@ class McpClient {
         owner,
         error: retryErrorMsg,
         mcpServerName,
-        incognitoContent,
+        lockedChatContent,
       });
     }
   }
@@ -3339,7 +3339,7 @@ class McpClient {
     toolCall: CommonToolCall;
     toolResult: CommonToolResult;
     authInfo?: ToolCallAuthInfo;
-    incognitoContent?: ToolCallContentDisposition;
+    lockedChatContent?: ToolCallContentDisposition;
   }): Promise<void> {
     const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -3348,27 +3348,27 @@ class McpClient {
       return;
     }
 
-    // Incognito chat calls keep the tool name and owner/user metadata on the
+    // Locked chat calls keep the tool name and owner/user metadata on the
     // audit surface either way; what differs is the content. With an audit
     // context the real arguments and result are handed to the model, which
     // encrypts them under the conversation key (never encrypt here — that
     // would nest envelopes). Without one there is no key that could ever open
     // them, so the row is redacted instead.
-    const isIncognito = params.incognitoContent !== undefined;
+    const isLockedChat = params.lockedChatContent !== undefined;
     const audit =
-      params.incognitoContent?.kind === "encrypt"
-        ? params.incognitoContent.audit
+      params.lockedChatContent?.kind === "encrypt"
+        ? params.lockedChatContent.audit
         : null;
-    const suppressContent = isIncognito && audit === null;
+    const suppressContent = isLockedChat && audit === null;
     const storedToolCall: CommonToolCall = suppressContent
       ? {
           id: toolCall.id,
           name: toolCall.name,
-          arguments: INCOGNITO_REDACTED_MARKER,
+          arguments: LOCKED_CHAT_REDACTED_MARKER,
         }
       : toolCall;
     const storedToolResult: unknown = suppressContent
-      ? INCOGNITO_REDACTED_MARKER
+      ? LOCKED_CHAT_REDACTED_MARKER
       : toolResult;
 
     try {
@@ -3397,10 +3397,10 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      // The app log stays content-free for every incognito call, encrypted
+      // The app log stays content-free for every locked-chat call, encrypted
       // rows included: the row is protected at rest, the log line is not.
-      if (isIncognito) {
-        logData.resultContent = "[redacted: incognito]";
+      if (isLockedChat) {
+        logData.resultContent = "[redacted: locked chat]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
@@ -5024,8 +5024,8 @@ function resolveContentDisposition(
   options?: ExecuteToolCallForOwnerOptions,
 ): ToolCallContentDisposition | undefined {
   if (!options?.suppressContentLogging) return undefined;
-  return options.incognitoAudit
-    ? { kind: "encrypt", audit: options.incognitoAudit }
+  return options.lockedChatAudit
+    ? { kind: "encrypt", audit: options.lockedChatAudit }
     : { kind: "redact" };
 }
 

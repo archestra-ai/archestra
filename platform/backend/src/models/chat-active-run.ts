@@ -1,10 +1,10 @@
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import {
-  decryptIncognitoValue,
-  encryptIncognitoValue,
-  type IncognitoAuditContext,
-} from "@/content-encryption/incognito";
+  decryptLockedChatValue,
+  encryptLockedChatValue,
+  type LockedChatAuditContext,
+} from "@/content-encryption/locked-chat";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
@@ -38,7 +38,7 @@ class ActiveChatRunModel {
   }
 
   /**
-   * `incognitoAudit` encrypts the batch under the conversation's browser-held
+   * `lockedChatAudit` encrypts the batch under the conversation's browser-held
    * key. Replay payloads are raw stream chunks, so without a key they cannot
    * be stored at all — and a run whose batches are dropped loses its
    * reconnect-after-reload replay entirely.
@@ -48,20 +48,20 @@ class ActiveChatRunModel {
     seq: number;
     payloads: UIMessageChunk[];
     touchRun?: boolean;
-    incognitoAudit?: IncognitoAuditContext | null;
+    lockedChatAudit?: LockedChatAuditContext | null;
   }): Promise<AppendEventsResult> {
-    const payloads = params.incognitoAudit
-      ? (encryptIncognitoValue(params.payloads, {
-          ...params.incognitoAudit,
+    const payloads = params.lockedChatAudit
+      ? (encryptLockedChatValue(params.payloads, {
+          ...params.lockedChatAudit,
           context: RUN_EVENT_PAYLOADS_CONTEXT,
           // The column holds an array; the envelope replaces it wholesale, so
-          // the cast is the same one every incognito column write makes.
+          // the cast is the same one every locked-chat column write makes.
         }) as unknown as UIMessageChunk[])
       : params.payloads;
 
     if (params.payloads.length === 0) {
       // A due liveness touch must still land even with nothing to append —
-      // an incognito run with no escrow record still flushes empty batches
+      // a locked-chat run with no escrow record still flushes empty batches
       // (its payloads cannot be encrypted, so they are dropped), and without
       // the touch a long silent stream would be reaped as stale.
       if (params.touchRun) {
@@ -178,7 +178,7 @@ class ActiveChatRunModel {
   static async readEventsAfter(params: {
     runId: string;
     seq: number;
-    incognitoAudit?: IncognitoAuditContext | null;
+    lockedChatAudit?: LockedChatAuditContext | null;
   }): Promise<ChatActiveRunEvent[]> {
     const events = await db
       .select()
@@ -192,7 +192,7 @@ class ActiveChatRunModel {
       .orderBy(asc(schema.chatActiveRunEventsTable.seq));
 
     return events.map((event) =>
-      decryptEventPayloads(event, params.incognitoAudit ?? null),
+      decryptEventPayloads(event, params.lockedChatAudit ?? null),
     );
   }
 
@@ -211,7 +211,7 @@ class ActiveChatRunModel {
   static async readStatusAndEventsAfter(params: {
     runId: string;
     seq: number;
-    incognitoAudit?: IncognitoAuditContext | null;
+    lockedChatAudit?: LockedChatAuditContext | null;
   }): Promise<{
     status: ChatActiveRunStatus;
     events: ChatActiveRunEvent[];
@@ -246,7 +246,7 @@ class ActiveChatRunModel {
         .map((row) => row.event)
         .filter((event): event is ChatActiveRunEvent => event !== null)
         .map((event) =>
-          decryptEventPayloads(event, params.incognitoAudit ?? null),
+          decryptEventPayloads(event, params.lockedChatAudit ?? null),
         ),
     };
   }
@@ -371,15 +371,15 @@ const RUN_EVENT_PAYLOADS_CONTEXT = "chat_active_run_events.payloads" as const;
  */
 function decryptEventPayloads(
   event: ChatActiveRunEvent,
-  incognitoAudit: IncognitoAuditContext | null,
+  lockedChatAudit: LockedChatAuditContext | null,
 ): ChatActiveRunEvent {
   if (!isContentEnvelope(event.payloads)) return event;
-  if (incognitoAudit) {
+  if (lockedChatAudit) {
     try {
       return {
         ...event,
-        payloads: decryptIncognitoValue(event.payloads, {
-          ...incognitoAudit,
+        payloads: decryptLockedChatValue(event.payloads, {
+          ...lockedChatAudit,
           context: RUN_EVENT_PAYLOADS_CONTEXT,
         }) as UIMessageChunk[],
       };

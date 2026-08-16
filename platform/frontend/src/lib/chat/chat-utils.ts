@@ -40,7 +40,12 @@ export function conversationStorageKeys(conversationId: string) {
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
     reviewContext: `archestra-chat-review-context-${conversationId}`,
-    incognitoKey: `archestra_incognito_key_${conversationId}`,
+    lockedChatKey: `archestra_locked_chat_key_${conversationId}`,
+    /**
+     * Where the locked-chat key lived before the feature was renamed. Read
+     * (and migrated) on access, never written — see `getLockedChatKey`.
+     */
+    legacyLockedChatKey: `archestra_incognito_key_${conversationId}`,
   };
 }
 

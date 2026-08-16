@@ -1,52 +1,53 @@
 import type { FastifyRequest } from "fastify";
 import {
-  INCOGNITO_KEY_HEADER,
-  incognitoDekFingerprint,
-  incognitoDekMatches,
-  isIncognitoChatEnabled,
-  parseIncognitoDekHeader,
-} from "@/content-encryption/incognito";
-import { wrapIncognitoDek } from "@/content-encryption/incognito-escrow";
+  isLockedChatEnabled,
+  LEGACY_LOCKED_CHAT_KEY_HEADER,
+  LOCKED_CHAT_KEY_HEADER,
+  lockedChatDekFingerprint,
+  lockedChatDekMatches,
+  parseLockedChatDekHeader,
+} from "@/content-encryption/locked-chat";
+import { wrapLockedChatDek } from "@/content-encryption/locked-chat-escrow";
 import {
   ApiError,
   type ConversationContentKey,
-  type IncognitoEscrowBlob,
+  type LockedChatEscrowBlob,
 } from "@/types";
 
 /**
- * Request-side helpers for incognito conversations: header parsing, access
+ * Request-side helpers for locked chats: header parsing, access
  * resolution, and creation bookkeeping. All key material stays request-scoped.
  */
 
-export const INCOGNITO_STATIC_TITLE = "Locked chat";
+export const LOCKED_CHAT_STATIC_TITLE = "Locked chat";
 
 /** Error type surfaced on a present-but-wrong conversation key (409). */
-export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
+export const LOCKED_CHAT_KEY_MISMATCH_TYPE = "locked_chat_key_mismatch";
 
 /**
- * Validate an incognito creation request and produce the row fields: the
+ * Validate a locked-chat creation request and produce the row fields: the
  * caller must present the freshly generated DEK so it can be fingerprinted and
  * escrow-wrapped. Never returns the DEK for storage.
  *
  * The escrow record is mandatory, not optional: the conversation's audit trail
  * is encrypted under this DEK, so without an escrow copy it would be
- * recoverable by nobody. `isIncognitoChatEnabled()` already requires a
+ * recoverable by nobody. `isLockedChatEnabled()` already requires a
  * configured escrow key, so reaching the wrap below means one exists — a
  * failure there is fail-closed and no conversation is created.
  */
-export function resolveIncognitoCreation(params: {
+export function resolveLockedChatCreation(params: {
   request: FastifyRequest;
   conversationId: string;
 }): {
-  incognito: true;
-  incognitoDekFingerprint: string;
-  incognitoEscrow: IncognitoEscrowBlob;
+  lockedChat: true;
+  lockedChatDekFingerprint: string;
+  lockedChatEscrow: LockedChatEscrowBlob;
 } {
-  if (!isIncognitoChatEnabled()) {
+  if (!isLockedChatEnabled()) {
     throw new ApiError(
       403,
       "Locked chats are not enabled on this instance. An operator enables " +
-        "them by configuring ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY, " +
+        "them by configuring ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY, " +
         "which keeps an offline-recoverable copy of each conversation key.",
     );
   }
@@ -54,48 +55,48 @@ export function resolveIncognitoCreation(params: {
   if (!dek) {
     throw new ApiError(
       400,
-      `Incognito conversation creation requires the ${INCOGNITO_KEY_HEADER} header`,
+      `Locked chat creation requires the ${LOCKED_CHAT_KEY_HEADER} header`,
     );
   }
   return {
-    incognito: true,
-    incognitoDekFingerprint: incognitoDekFingerprint(
+    lockedChat: true,
+    lockedChatDekFingerprint: lockedChatDekFingerprint(
       params.conversationId,
       dek,
     ),
-    incognitoEscrow: wrapIncognitoDek(dek),
+    lockedChatEscrow: wrapLockedChatDek(dek),
   };
 }
 
-export type IncognitoAccess =
+export type LockedChatAccess =
   | { state: "plain" }
   | { state: "unlocked"; key: ConversationContentKey }
   | { state: "locked" };
 
 /**
  * Resolve what the current request may see of a conversation's content.
- * Non-incognito conversations are always "plain". For incognito ones:
+ * Non-locked chats are always "plain". For locked-chat ones:
  * a valid key unlocks, an absent key yields the tombstone ("locked"), and a
  * present-but-wrong key is a 409 — the client's stored key does not belong
  * to this conversation, which is distinct from both "missing" and "forbidden".
  */
-export function resolveIncognitoAccess(params: {
+export function resolveLockedChatAccess(params: {
   request: FastifyRequest;
   conversation: {
     id: string;
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
   };
-}): IncognitoAccess {
-  if (!params.conversation.incognito) return { state: "plain" };
+}): LockedChatAccess {
+  if (!params.conversation.lockedChat) return { state: "plain" };
 
   const dek = readDekHeader(params.request);
   if (!dek) return { state: "locked" };
 
-  const storedFingerprint = params.conversation.incognitoDekFingerprint;
+  const storedFingerprint = params.conversation.lockedChatDekFingerprint;
   if (
     !storedFingerprint ||
-    !incognitoDekMatches({
+    !lockedChatDekMatches({
       storedFingerprint,
       conversationId: params.conversation.id,
       dek,
@@ -106,8 +107,8 @@ export function resolveIncognitoAccess(params: {
     // unambiguously a key mismatch.
     throw new ApiError(
       409,
-      "The provided incognito key does not match this conversation",
-      INCOGNITO_KEY_MISMATCH_TYPE,
+      "The provided key does not match this locked chat",
+      LOCKED_CHAT_KEY_MISMATCH_TYPE,
     );
   }
   return {
@@ -117,23 +118,23 @@ export function resolveIncognitoAccess(params: {
 }
 
 /**
- * Like resolveIncognitoAccess but for requests that MUST have the key
+ * Like resolveLockedChatAccess but for requests that MUST have the key
  * (streaming, message edits): "locked" is not an option.
  */
-export function requireIncognitoKey(params: {
+export function requireLockedChatKey(params: {
   request: FastifyRequest;
   conversation: {
     id: string;
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
   };
 }): ConversationContentKey | null {
-  const access = resolveIncognitoAccess(params);
+  const access = resolveLockedChatAccess(params);
   if (access.state === "plain") return null;
   if (access.state === "locked") {
     throw new ApiError(
       400,
-      `This incognito conversation requires the ${INCOGNITO_KEY_HEADER} ` +
+      `This locked chat requires the ${LOCKED_CHAT_KEY_HEADER} ` +
         "header — the key exists only in the browser that created the chat",
     );
   }
@@ -143,14 +144,18 @@ export function requireIncognitoKey(params: {
 // === Internal ===
 
 function readDekHeader(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[INCOGNITO_KEY_HEADER];
+  // The legacy spelling is read only as a fallback, so a browser tab loaded
+  // before the rename keeps working; see LEGACY_LOCKED_CHAT_KEY_HEADER.
+  const raw =
+    request.headers[LOCKED_CHAT_KEY_HEADER] ??
+    request.headers[LEGACY_LOCKED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseIncognitoDekHeader(value);
+    return parseLockedChatDekHeader(value);
   } catch (error) {
     throw new ApiError(
       400,
-      error instanceof Error ? error.message : "invalid incognito key header",
+      error instanceof Error ? error.message : "invalid locked chat key header",
     );
   }
 }

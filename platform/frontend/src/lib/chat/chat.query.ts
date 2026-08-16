@@ -27,10 +27,10 @@ import {
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
 import {
-  INCOGNITO_KEY_HEADER,
-  incognitoRequestHeaders,
-  storeIncognitoKey,
-} from "@/lib/chat/incognito";
+  LOCKED_CHAT_KEY_HEADER,
+  lockedChatRequestHeaders,
+  storeLockedChatKey,
+} from "@/lib/chat/locked-chat";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
@@ -140,13 +140,13 @@ export function useConversation(conversationId?: string) {
     queryFn: () => {
       if (!conversationId) return null;
       // 400/404 are handled gracefully by the UI, so suppress their toast.
-      // For an incognito conversation the stored key rides along; without it
+      // For a locked chat the stored key rides along; without it
       // the server answers 200 with `contentLocked: true` and no messages.
       return callApi(
         () =>
           getChatConversation({
             path: { id: conversationId },
-            headers: incognitoRequestHeaders(conversationId),
+            headers: lockedChatRequestHeaders(conversationId),
           }),
         null,
         {
@@ -378,18 +378,18 @@ export function useCreateConversation() {
       chatApiKeyId,
       title,
       projectId,
-      incognito,
-      incognitoKey,
+      lockedChat,
+      lockedChatKey,
       thinkingEffort,
     }: WithThinkingEffortSetting<
       NonNullable<archestraApiTypes.CreateChatConversationData["body"]>
     > & {
       /**
        * Browser-generated conversation DEK (base64url of 32 random bytes).
-       * Required when `incognito` is set: the server fingerprints and
+       * Required when `locked-chat` is set: the server fingerprints and
        * escrow-wraps it but never stores it.
        */
-      incognitoKey?: string;
+      lockedChatKey?: string;
     }) =>
       callApi(
         () =>
@@ -400,13 +400,13 @@ export function useCreateConversation() {
               chatApiKeyId: chatApiKeyId ?? undefined,
               title,
               projectId: projectId ?? undefined,
-              incognito: incognito || undefined,
+              lockedChat: lockedChat || undefined,
               // The generated body type drops `nullable: true` from enum
               // schemas, so null (auto) has to be re-asserted here.
               thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
             },
-            headers: incognitoKey
-              ? { [INCOGNITO_KEY_HEADER]: incognitoKey }
+            headers: lockedChatKey
+              ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
               : undefined,
           }),
         null,
@@ -416,8 +416,8 @@ export function useCreateConversation() {
       // Persist the DEK under the fresh conversation id FIRST — before any
       // cache writes trigger navigation or the first stream request, both of
       // which must find the key in localStorage.
-      if (variables.incognito && variables.incognitoKey) {
-        storeIncognitoKey(newConversation.id, variables.incognitoKey);
+      if (variables.lockedChat && variables.lockedChatKey) {
+        storeLockedChatKey(newConversation.id, variables.lockedChatKey);
       }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
@@ -710,8 +710,10 @@ export function useDeleteConversation() {
         localStorage.removeItem(keys.rightPanelOpen);
         localStorage.removeItem(keys.rightPanelTab);
         localStorage.removeItem(keys.draft);
-        // An incognito chat's encryption key dies with the conversation.
-        localStorage.removeItem(keys.incognitoKey);
+        // A locked chat's encryption key dies with the conversation. Both
+        // spellings, so a key written before the rename is not left behind.
+        localStorage.removeItem(keys.lockedChatKey);
+        localStorage.removeItem(keys.legacyLockedChatKey);
         // Also drop any docked-review context (localStorage + in-memory map) so
         // a deleted review chat leaves nothing behind.
         clearReviewContext(deletedId);

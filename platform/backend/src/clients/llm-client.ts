@@ -63,7 +63,7 @@ import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
-import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
+import { LOCKED_CHAT_KEY_HEADER } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import { ApiError } from "@/types";
@@ -186,12 +186,12 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   dualLlmProgressChannel?: string;
   /**
-   * Incognito conversation key. Forwarded so the proxy can store this
+   * Locked chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
    * proxy re-validates it against the conversation's stored fingerprint and
    * only honours it on its loopback chat path.
    */
-  incognitoKey?: Buffer | null;
+  lockedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing. Loopback-gated on the
    * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
@@ -213,7 +213,7 @@ export function createLLMModel(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    incognitoKey,
+    lockedChatKey,
     delegationBillingEnvironmentId,
     supportedEndpoints,
   } = params;
@@ -267,8 +267,8 @@ export function createLLMModel(params: {
 
   // Never logged: the header name is on the logging redaction denylist and
   // OTel captures no request headers.
-  if (incognitoKey) {
-    clientHeaders[INCOGNITO_KEY_HEADER] = incognitoKey.toString("base64url");
+  if (lockedChatKey) {
+    clientHeaders[LOCKED_CHAT_KEY_HEADER] = lockedChatKey.toString("base64url");
   }
 
   const headers =
@@ -310,10 +310,10 @@ export async function createLLMModelForAgent(params: {
   /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
   dualLlmProgressChannel?: string;
   /**
-   * Incognito conversation key, forwarded to the proxy so this turn's
+   * Locked chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
    */
-  incognitoKey?: Buffer | null;
+  lockedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing; forwarded as a
    * loopback-gated proxy header. Set only by the A2A executor when the
@@ -446,7 +446,7 @@ export async function createLLMModelForAgent(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    incognitoKey: params.incognitoKey,
+    lockedChatKey: params.lockedChatKey,
     delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
     supportedEndpoints,
   });

@@ -1,7 +1,7 @@
 /**
- * Contract under test — the LLM-proxy side of incognito chats:
+ * Contract under test — the LLM-proxy side of locked chats:
  * - a session is recognised ONLY for the in-app chat's own loopback proxy call
- *   (source "chat" + loopback IP + session id naming an incognito conversation
+ *   (source "chat" + loopback IP + session id naming a locked chat
  *   OWNED by the requesting user); dropping any one signal yields "none"
  * - with a key matching the conversation's fingerprint and an escrow record on
  *   the row, the disposition is "encrypt" and carries that key
@@ -9,28 +9,28 @@
  *   plaintext write: no key, wrong key, no escrow record, lookup failure
  * - only positive lookups are cached; negatives are re-derived every time
  * - a cache entry that is not the expected shape (e.g. written by an older
- *   build) is re-derived rather than coerced into "not incognito"
- * - redactIncognitoInteraction blanks exactly the content-bearing fields and
+ *   build) is re-derived rather than coerced into "not a locked chat"
+ * - redactLockedChatInteraction blanks exactly the content-bearing fields and
  *   preserves every usage/cost/model/session metadata field verbatim
  */
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
-import { incognitoDekFingerprint } from "@/content-encryption/incognito";
+import { lockedChatDekFingerprint } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
-  IncognitoEscrowBlob,
   InsertInteraction,
   InteractionRequest,
   InteractionResponse,
+  LockedChatEscrowBlob,
 } from "@/types";
 import {
-  INCOGNITO_REDACTED_MARKER,
-  redactIncognitoInteraction,
-  resolveIncognitoAuditContext,
-} from "./incognito-session";
+  LOCKED_CHAT_REDACTED_MARKER,
+  redactLockedChatInteraction,
+  resolveLockedChatAuditContext,
+} from "./locked-chat-session";
 
 // Map-backed fake with real cache semantics (auto-reset between tests), so
 // the positive-result caching contract is exercised for real.
@@ -38,16 +38,16 @@ vi.mock("@/cache-manager");
 // Mocked to assert on the fail-closed warning log.
 vi.mock("@/logging");
 
-const ESCROW: IncognitoEscrowBlob = {
+const ESCROW: LockedChatEscrowBlob = {
   v: 1,
   alg: "RSA-OAEP-256",
   escrowKeyFingerprint: "deadbeefdeadbeef",
   wrappedDek: Buffer.alloc(256, 7).toString("base64"),
 };
 
-describe("resolveIncognitoAuditContext", () => {
+describe("resolveLockedChatAuditContext", () => {
   let userId: string;
-  let incognitoConversationId: string;
+  let lockedChatConversationId: string;
   let plainConversationId: string;
   let noEscrowConversationId: string;
   let dek: Buffer;
@@ -62,19 +62,19 @@ describe("resolveIncognitoAuditContext", () => {
     });
     dek = Buffer.alloc(32, 1);
 
-    const incognitoId = randomUUID();
-    const incognito = await ConversationModel.create({
-      id: incognitoId,
+    const lockedChatId = randomUUID();
+    const lockedChat = await ConversationModel.create({
+      id: lockedChatId,
       userId,
       organizationId: organization.id,
       agentId: agent.id,
-      incognito: true,
-      incognitoDekFingerprint: incognitoDekFingerprint(incognitoId, dek),
-      incognitoEscrow: ESCROW,
+      lockedChat: true,
+      lockedChatDekFingerprint: lockedChatDekFingerprint(lockedChatId, dek),
+      lockedChatEscrow: ESCROW,
     });
-    incognitoConversationId = incognito.id;
+    lockedChatConversationId = lockedChat.id;
 
-    // An incognito conversation with no escrow record cannot be written
+    // A locked chat with no escrow record cannot be written
     // encrypted — nothing could ever open it again.
     const noEscrowId = randomUUID();
     const noEscrow = await ConversationModel.create({
@@ -82,8 +82,8 @@ describe("resolveIncognitoAuditContext", () => {
       userId,
       organizationId: organization.id,
       agentId: agent.id,
-      incognito: true,
-      incognitoDekFingerprint: incognitoDekFingerprint(noEscrowId, dek),
+      lockedChat: true,
+      lockedChatDekFingerprint: lockedChatDekFingerprint(noEscrowId, dek),
     });
     noEscrowConversationId = noEscrow.id;
 
@@ -102,15 +102,15 @@ describe("resolveIncognitoAuditContext", () => {
   const chatParams = () => ({
     source: "chat" as const,
     requestIp: "127.0.0.1",
-    sessionId: incognitoConversationId,
+    sessionId: lockedChatConversationId,
     userId,
     dek,
   });
 
-  test("encrypts, carrying the presented key, for the user's own incognito conversation", async () => {
-    await expect(resolveIncognitoAuditContext(chatParams())).resolves.toEqual({
+  test("encrypts, carrying the presented key, for the user's own locked chat", async () => {
+    await expect(resolveLockedChatAuditContext(chatParams())).resolves.toEqual({
       kind: "encrypt",
-      audit: { dek, conversationId: incognitoConversationId },
+      audit: { dek, conversationId: lockedChatConversationId },
     });
   });
 
@@ -118,7 +118,7 @@ describe("resolveIncognitoAuditContext", () => {
     // A repair subrequest carries the same conversation content as the turn it
     // serves, so it belongs under the same key.
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         source: "chat:tool_call_repair",
       }),
@@ -127,13 +127,13 @@ describe("resolveIncognitoAuditContext", () => {
 
   test("redacts when no key is presented — there is nothing to encrypt under", async () => {
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), dek: null }),
+      resolveLockedChatAuditContext({ ...chatParams(), dek: null }),
     ).resolves.toEqual({ kind: "redact" });
   });
 
   test("redacts when the presented key does not match the conversation", async () => {
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         dek: Buffer.alloc(32, 9),
       }),
@@ -142,7 +142,7 @@ describe("resolveIncognitoAuditContext", () => {
 
   test("redacts when the conversation has no escrow record — an unrecoverable write is worse than a gap", async () => {
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         sessionId: noEscrowConversationId,
       }),
@@ -151,10 +151,13 @@ describe("resolveIncognitoAuditContext", () => {
 
   test("none when the source is not the in-app chat", async () => {
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), source: "api" }),
+      resolveLockedChatAuditContext({ ...chatParams(), source: "api" }),
     ).resolves.toEqual({ kind: "none" });
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), source: "model_router" }),
+      resolveLockedChatAuditContext({
+        ...chatParams(),
+        source: "model_router",
+      }),
     ).resolves.toEqual({ kind: "none" });
   });
 
@@ -165,14 +168,14 @@ describe("resolveIncognitoAuditContext", () => {
       "chatops:telegram",
     ] as const) {
       await expect(
-        resolveIncognitoAuditContext({ ...chatParams(), source }),
+        resolveLockedChatAuditContext({ ...chatParams(), source }),
       ).resolves.toEqual({ kind: "none" });
     }
   });
 
   test("none when the request did not arrive over loopback", async () => {
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         requestIp: "203.0.113.7",
       }),
@@ -180,31 +183,31 @@ describe("resolveIncognitoAuditContext", () => {
   });
 
   test("none when the session id is missing, without touching the database", async () => {
-    const lookup = vi.spyOn(ConversationModel, "getIncognitoAuditInfoOwnedBy");
+    const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), sessionId: null }),
+      resolveLockedChatAuditContext({ ...chatParams(), sessionId: null }),
     ).resolves.toEqual({ kind: "none" });
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), sessionId: undefined }),
+      resolveLockedChatAuditContext({ ...chatParams(), sessionId: undefined }),
     ).resolves.toEqual({ kind: "none" });
     expect(lookup).not.toHaveBeenCalled();
   });
 
   test("none when the user id is missing", async () => {
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), userId: undefined }),
+      resolveLockedChatAuditContext({ ...chatParams(), userId: undefined }),
     ).resolves.toEqual({ kind: "none" });
   });
 
   test("none when the user does not own the conversation", async () => {
     await expect(
-      resolveIncognitoAuditContext({ ...chatParams(), userId: randomUUID() }),
+      resolveLockedChatAuditContext({ ...chatParams(), userId: randomUUID() }),
     ).resolves.toEqual({ kind: "none" });
   });
 
-  test("none for a non-incognito conversation", async () => {
+  test("none for a non-locked chat", async () => {
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         sessionId: plainConversationId,
       }),
@@ -214,11 +217,11 @@ describe("resolveIncognitoAuditContext", () => {
   test("fails closed to redact, and logs, when the DB lookup throws", async () => {
     vi.spyOn(
       ConversationModel,
-      "getIncognitoAuditInfoOwnedBy",
+      "getLockedChatAuditInfoOwnedBy",
     ).mockRejectedValue(new Error("connection reset"));
 
     await expect(
-      resolveIncognitoAuditContext({
+      resolveLockedChatAuditContext({
         ...chatParams(),
         sessionId: plainConversationId,
       }),
@@ -230,14 +233,14 @@ describe("resolveIncognitoAuditContext", () => {
   });
 
   test("caches a positive result — the second call never re-queries the model", async () => {
-    const lookup = vi.spyOn(ConversationModel, "getIncognitoAuditInfoOwnedBy");
+    const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
     const setSpy = vi.spyOn(cacheManager, "set");
 
     await expect(
-      resolveIncognitoAuditContext(chatParams()),
+      resolveLockedChatAuditContext(chatParams()),
     ).resolves.toMatchObject({ kind: "encrypt" });
     await expect(
-      resolveIncognitoAuditContext(chatParams()),
+      resolveLockedChatAuditContext(chatParams()),
     ).resolves.toMatchObject({ kind: "encrypt" });
 
     expect(lookup).toHaveBeenCalledTimes(1);
@@ -245,11 +248,11 @@ describe("resolveIncognitoAuditContext", () => {
   });
 
   test("never caches a negative result — each call re-derives it", async () => {
-    const lookup = vi.spyOn(ConversationModel, "getIncognitoAuditInfoOwnedBy");
+    const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
 
     for (let i = 0; i < 2; i++) {
       await expect(
-        resolveIncognitoAuditContext({
+        resolveLockedChatAuditContext({
           ...chatParams(),
           sessionId: plainConversationId,
         }),
@@ -264,20 +267,20 @@ describe("resolveIncognitoAuditContext", () => {
   test("re-derives rather than trusting a cache entry of an unexpected shape", async () => {
     // The cache is Postgres-backed and shared across replicas, so a rolling
     // deploy can hand this build an entry an older one wrote (a bare `true`).
-    // Coercing that to "not incognito" would write the turn in plaintext.
-    const lookup = vi.spyOn(ConversationModel, "getIncognitoAuditInfoOwnedBy");
+    // Coercing that to "not a locked chat" would write the turn in plaintext.
+    const lookup = vi.spyOn(ConversationModel, "getLockedChatAuditInfoOwnedBy");
     vi.spyOn(cacheManager, "get").mockResolvedValueOnce(
       true as unknown as never,
     );
 
     await expect(
-      resolveIncognitoAuditContext(chatParams()),
+      resolveLockedChatAuditContext(chatParams()),
     ).resolves.toMatchObject({ kind: "encrypt" });
     expect(lookup).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("redactIncognitoInteraction", () => {
+describe("redactLockedChatInteraction", () => {
   test("replaces content fields and preserves usage/cost/model/session metadata verbatim", () => {
     const record = {
       profileId: randomUUID(),
@@ -312,13 +315,13 @@ describe("redactIncognitoInteraction", () => {
       } as unknown as InsertInteraction["unsafeContextBoundary"],
     } as InsertInteraction;
 
-    const redacted = redactIncognitoInteraction(record);
+    const redacted = redactLockedChatInteraction(record);
 
     expect(redacted).toEqual({
       ...record,
-      request: INCOGNITO_REDACTED_MARKER,
+      request: LOCKED_CHAT_REDACTED_MARKER,
       processedRequest: null,
-      response: INCOGNITO_REDACTED_MARKER,
+      response: LOCKED_CHAT_REDACTED_MARKER,
       dualLlmAnalyses: null,
       unsafeContextBoundary: null,
     });

@@ -28373,7 +28373,7 @@ export type GetChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28446,7 +28446,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
-        incognito?: boolean;
+        lockedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
@@ -28543,7 +28543,7 @@ export type CreateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28705,7 +28705,7 @@ export type GetDeletedChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28954,7 +28954,7 @@ export type GetChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -29126,7 +29126,7 @@ export type UpdateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -29730,7 +29730,7 @@ export type ForkChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -29983,7 +29983,7 @@ export type RestoreChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -30247,7 +30247,7 @@ export type CompactChatConversationResponses = {
             projectId: string | null;
             origin: 'user' | 'schedule_trigger' | 'app_open';
             titleIsPlaceholder: boolean;
-            incognito: boolean;
+            lockedChat: boolean;
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -30685,7 +30685,7 @@ export type GetSharedConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -30852,7 +30852,7 @@ export type ForkSharedConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -31021,7 +31021,7 @@ export type GenerateChatConversationTitleResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -31190,7 +31190,7 @@ export type UpdateChatMessageResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -33438,7 +33438,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
-            chatIncognitoEnabled: boolean;
+            lockedChatEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
@@ -39155,9 +39155,9 @@ export type GetInteractionsResponses = {
             response: OpenAiChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39356,9 +39356,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39473,9 +39473,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39588,9 +39588,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39703,9 +39703,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39795,9 +39795,9 @@ export type GetInteractionsResponses = {
             response: GeminiGenerateContentResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -39889,9 +39889,9 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -40407,9 +40407,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -40975,9 +40975,9 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41069,9 +41069,9 @@ export type GetInteractionsResponses = {
             response: CerebrasChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41163,9 +41163,9 @@ export type GetInteractionsResponses = {
             response: MistralChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41257,9 +41257,9 @@ export type GetInteractionsResponses = {
             response: PerplexityChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41351,9 +41351,9 @@ export type GetInteractionsResponses = {
             response: GroqChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41445,9 +41445,9 @@ export type GetInteractionsResponses = {
             response: XaiChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41539,9 +41539,9 @@ export type GetInteractionsResponses = {
             response: OpenrouterChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41633,9 +41633,9 @@ export type GetInteractionsResponses = {
             response: VllmChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41725,9 +41725,9 @@ export type GetInteractionsResponses = {
             response: OllamaChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41817,9 +41817,9 @@ export type GetInteractionsResponses = {
             response: OllamaNativeChatResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -41909,9 +41909,9 @@ export type GetInteractionsResponses = {
             response: CohereChatResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -42003,9 +42003,9 @@ export type GetInteractionsResponses = {
             response: ZhipuaiChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -42097,9 +42097,9 @@ export type GetInteractionsResponses = {
             response: DeepSeekChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -42839,9 +42839,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -43581,9 +43581,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -44323,9 +44323,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -44417,9 +44417,9 @@ export type GetInteractionsResponses = {
             response: MinimaxChatCompletionResponse | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -44579,9 +44579,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -44780,9 +44780,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -44981,9 +44981,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -45182,9 +45182,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -45700,9 +45700,9 @@ export type GetInteractionResponses = {
         response: OpenAiChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -45901,9 +45901,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46018,9 +46018,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46133,9 +46133,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46248,9 +46248,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46340,9 +46340,9 @@ export type GetInteractionResponses = {
         response: GeminiGenerateContentResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46434,9 +46434,9 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -46952,9 +46952,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47520,9 +47520,9 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47614,9 +47614,9 @@ export type GetInteractionResponses = {
         response: CerebrasChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47708,9 +47708,9 @@ export type GetInteractionResponses = {
         response: MistralChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47802,9 +47802,9 @@ export type GetInteractionResponses = {
         response: PerplexityChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47896,9 +47896,9 @@ export type GetInteractionResponses = {
         response: GroqChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -47990,9 +47990,9 @@ export type GetInteractionResponses = {
         response: XaiChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48084,9 +48084,9 @@ export type GetInteractionResponses = {
         response: OpenrouterChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48178,9 +48178,9 @@ export type GetInteractionResponses = {
         response: VllmChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48270,9 +48270,9 @@ export type GetInteractionResponses = {
         response: OllamaChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48362,9 +48362,9 @@ export type GetInteractionResponses = {
         response: OllamaNativeChatResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48454,9 +48454,9 @@ export type GetInteractionResponses = {
         response: CohereChatResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48548,9 +48548,9 @@ export type GetInteractionResponses = {
         response: ZhipuaiChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -48642,9 +48642,9 @@ export type GetInteractionResponses = {
         response: DeepSeekChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -49384,9 +49384,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -50126,9 +50126,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -50868,9 +50868,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -50962,9 +50962,9 @@ export type GetInteractionResponses = {
         response: MinimaxChatCompletionResponse | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -51124,9 +51124,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -51325,9 +51325,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -51526,9 +51526,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -51727,9 +51727,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -63914,9 +63914,9 @@ export type GetMcpToolCallsResponses = {
                     [key: string]: unknown;
                 };
             } | {
-                __incognitoLocked: string;
+                __lockedChatSealed: string;
             } | {
-                __redacted: 'incognito';
+                __redacted: 'locked_chat' | 'incognito';
             } | null;
             toolResult: unknown;
             userId: string | null;
@@ -64030,9 +64030,9 @@ export type GetMcpToolCallResponses = {
                 [key: string]: unknown;
             };
         } | {
-            __incognitoLocked: string;
+            __lockedChatSealed: string;
         } | {
-            __redacted: 'incognito';
+            __redacted: 'locked_chat' | 'incognito';
         } | null;
         toolResult: unknown;
         userId: string | null;
@@ -76730,7 +76730,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        incognito: boolean;
+        lockedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;

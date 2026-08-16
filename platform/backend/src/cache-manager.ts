@@ -102,14 +102,14 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
-  /** Positive "this chat session is incognito" lookups for LLM proxy redaction */
+  /** Positive "this chat session is a locked chat" lookups for LLM proxy redaction */
   /**
    * v2: entries changed from a bare `true` to a facts object (fingerprint +
    * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
    * and shared across replicas, so during a rolling deploy new code must not
-   * read an old boolean and mistake it for "not incognito".
+   * read an old boolean and mistake it for "not a locked chat".
    */
-  IncognitoChatSession: "incognito-chat-session-v2",
+  LockedChatSession: "locked-chat-session-v2",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

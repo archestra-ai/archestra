@@ -32,7 +32,7 @@ import {
   encryptInteractionContent,
   readInteractionRow,
 } from "@/content-encryption/audit-rows";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -355,14 +355,14 @@ class InteractionModel {
   }
 
   /**
-   * @param auditContext when present, this interaction belongs to an incognito
+   * @param auditContext when present, this interaction belongs to a locked-chat
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
    */
   static async create(
     data: InsertInteraction,
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
     opts?: {
       /**
        * Environment to stamp instead of the executing agent's own. The proxy
@@ -399,7 +399,7 @@ class InteractionModel {
     // whole conversation on every row (no-op for all other interactions, and
     // disabled entirely under content encryption — see isEligible).
     //
-    // Incognito rows are excluded outright. Today they could not qualify anyway
+    // LockedChat rows are excluded outright. Today they could not qualify anyway
     // (isEligible demands a Claude session source, and these are chat sources),
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
@@ -415,7 +415,7 @@ class InteractionModel {
       .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for incognito rows too: this caller
+    // callers never see envelopes. Safe for locked-chat rows too: this caller
     // supplied the very key that just encrypted them.
     decryptInteractionContent(interaction, audit);
 
@@ -1522,10 +1522,10 @@ class InteractionModel {
       response: unknown;
       type: string;
       created_at: Date;
-      // Selected so readInteractionRow can tell an incognito row from an
+      // Selected so readInteractionRow can tell a locked-chat row from an
       // ordinary one; without it the guard cannot fire and a DEK envelope
       // would be handed to the server-key decryptor.
-      incognito_conversation_id: string | null;
+      locked_chat_conversation_id: string | null;
     }>(sql`
       -- id DESC tiebreak: turns within one session commonly land on the same
       -- millisecond, and created_at alone leaves their order undefined — which
@@ -1536,13 +1536,13 @@ class InteractionModel {
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
-          incognito_conversation_id,
+          locked_chat_conversation_id,
           ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
       SELECT id, session_id, thread_id, request, response, type, created_at,
-             incognito_conversation_id
+             locked_chat_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
       ORDER BY session_id, created_at DESC, id DESC

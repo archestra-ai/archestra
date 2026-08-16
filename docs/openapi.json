@@ -101634,7 +101634,7 @@
                       "titleIsPlaceholder": {
                         "type": "boolean"
                       },
-                      "incognito": {
+                      "lockedChat": {
                         "type": "boolean"
                       },
                       "pinnedAt": {
@@ -101999,7 +101999,7 @@
                       "projectId",
                       "origin",
                       "titleIsPlaceholder",
-                      "incognito",
+                      "lockedChat",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -102293,7 +102293,7 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "incognito": {
+                  "lockedChat": {
                     "type": "boolean"
                   },
                   "thinkingEffort": {
@@ -102454,7 +102454,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -102819,7 +102819,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -103223,7 +103223,7 @@
                       "titleIsPlaceholder": {
                         "type": "boolean"
                       },
-                      "incognito": {
+                      "lockedChat": {
                         "type": "boolean"
                       },
                       "pinnedAt": {
@@ -103588,7 +103588,7 @@
                       "projectId",
                       "origin",
                       "titleIsPlaceholder",
-                      "incognito",
+                      "lockedChat",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -104003,7 +104003,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -104368,7 +104368,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -104832,7 +104832,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -105197,7 +105197,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -107388,7 +107388,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -107753,7 +107753,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -108456,7 +108456,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -108821,7 +108821,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -109589,7 +109589,7 @@
                         "titleIsPlaceholder": {
                           "type": "boolean"
                         },
-                        "incognito": {
+                        "lockedChat": {
                           "type": "boolean"
                         },
                         "pinnedAt": {
@@ -109954,7 +109954,7 @@
                         "projectId",
                         "origin",
                         "titleIsPlaceholder",
-                        "incognito",
+                        "lockedChat",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -111324,7 +111324,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -111692,7 +111692,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -112127,7 +112127,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -112492,7 +112492,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -112922,7 +112922,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -113287,7 +113287,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -113731,7 +113731,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -114096,7 +114096,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -121654,7 +121654,7 @@
                         "chatSecretScanEnabled": {
                           "type": "boolean"
                         },
-                        "chatIncognitoEnabled": {
+                        "lockedChatEnabled": {
                           "type": "boolean"
                         },
                         "agentHooksEnabled": {
@@ -121743,7 +121743,7 @@
                         "mcpSandboxDomain",
                         "maintenanceMode",
                         "chatSecretScanEnabled",
-                        "chatIncognitoEnabled",
+                        "lockedChatEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
@@ -140835,12 +140835,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -140850,6 +140850,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -141865,12 +141866,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -141880,6 +141881,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -142605,12 +142607,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -142620,6 +142622,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -143334,12 +143337,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -143349,6 +143352,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -144063,12 +144067,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -144078,6 +144082,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -144661,12 +144666,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -144676,6 +144681,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -145270,12 +145276,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -145285,6 +145291,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -147839,12 +147846,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -147854,6 +147861,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -151142,12 +151150,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -151157,6 +151165,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -151751,12 +151760,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -151766,6 +151775,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -152360,12 +152370,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -152375,6 +152385,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -152969,12 +152980,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -152984,6 +152995,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -153578,12 +153590,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -153593,6 +153605,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -154187,12 +154200,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -154202,6 +154215,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -154796,12 +154810,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -154811,6 +154825,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -155405,12 +155420,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -155420,6 +155435,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -156003,12 +156019,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -156018,6 +156034,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -156601,12 +156618,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -156616,6 +156633,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -157199,12 +157217,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -157214,6 +157232,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -157808,12 +157827,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -157823,6 +157842,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -158417,12 +158437,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -158432,6 +158452,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -161248,12 +161269,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -161263,6 +161284,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -164074,12 +164096,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -164089,6 +164111,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -166905,12 +166928,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -166920,6 +166943,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -167514,12 +167538,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -167529,6 +167553,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -168359,12 +168384,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -168374,6 +168399,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -169389,12 +169415,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -169404,6 +169430,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -170419,12 +170446,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -170434,6 +170461,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -171440,12 +171468,12 @@
                                       {
                                         "type": "object",
                                         "properties": {
-                                          "__incognitoLocked": {
+                                          "__lockedChatSealed": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "__incognitoLocked"
+                                          "__lockedChatSealed"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -171455,6 +171483,7 @@
                                           "__redacted": {
                                             "type": "string",
                                             "enum": [
+                                              "locked_chat",
                                               "incognito"
                                             ]
                                           }
@@ -173613,12 +173642,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -173628,6 +173657,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -174643,12 +174673,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -174658,6 +174688,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -175383,12 +175414,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -175398,6 +175429,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -176112,12 +176144,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -176127,6 +176159,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -176841,12 +176874,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -176856,6 +176889,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -177439,12 +177473,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -177454,6 +177488,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -178048,12 +178083,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -178063,6 +178098,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -180617,12 +180653,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -180632,6 +180668,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -183920,12 +183957,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -183935,6 +183972,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -184529,12 +184567,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -184544,6 +184582,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -185138,12 +185177,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -185153,6 +185192,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -185747,12 +185787,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -185762,6 +185802,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -186356,12 +186397,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -186371,6 +186412,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -186965,12 +187007,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -186980,6 +187022,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -187574,12 +187617,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -187589,6 +187632,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -188183,12 +188227,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -188198,6 +188242,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -188781,12 +188826,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -188796,6 +188841,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -189379,12 +189425,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -189394,6 +189440,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -189977,12 +190024,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -189992,6 +190039,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -190586,12 +190634,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -190601,6 +190649,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -191195,12 +191244,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -191210,6 +191259,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -194026,12 +194076,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -194041,6 +194091,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -196852,12 +196903,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -196867,6 +196918,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -199683,12 +199735,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -199698,6 +199750,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -200292,12 +200345,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -200307,6 +200360,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -201137,12 +201191,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -201152,6 +201206,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -202167,12 +202222,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -202182,6 +202237,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -203197,12 +203253,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -203212,6 +203268,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -204218,12 +204275,12 @@
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "__incognitoLocked": {
+                                    "__lockedChatSealed": {
                                       "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "__incognitoLocked"
+                                    "__lockedChatSealed"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -204233,6 +204290,7 @@
                                     "__redacted": {
                                       "type": "string",
                                       "enum": [
+                                        "locked_chat",
                                         "incognito"
                                       ]
                                     }
@@ -252261,12 +252319,12 @@
                                   {
                                     "type": "object",
                                     "properties": {
-                                      "__incognitoLocked": {
+                                      "__lockedChatSealed": {
                                         "type": "string"
                                       }
                                     },
                                     "required": [
-                                      "__incognitoLocked"
+                                      "__lockedChatSealed"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -252276,6 +252334,7 @@
                                       "__redacted": {
                                         "type": "string",
                                         "enum": [
+                                          "locked_chat",
                                           "incognito"
                                         ]
                                       }
@@ -252712,12 +252771,12 @@
                             {
                               "type": "object",
                               "properties": {
-                                "__incognitoLocked": {
+                                "__lockedChatSealed": {
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "__incognitoLocked"
+                                "__lockedChatSealed"
                               ],
                               "additionalProperties": false
                             },
@@ -252727,6 +252786,7 @@
                                 "__redacted": {
                                   "type": "string",
                                   "enum": [
+                                    "locked_chat",
                                     "incognito"
                                   ]
                                 }
@@ -299630,7 +299690,7 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
-                    "incognito": {
+                    "lockedChat": {
                       "type": "boolean"
                     },
                     "pinnedAt": {
@@ -299995,7 +300055,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
-                    "incognito",
+                    "lockedChat",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

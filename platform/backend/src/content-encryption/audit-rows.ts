@@ -1,11 +1,11 @@
-import { incognitoLockedContent } from "@archestra/shared";
+import { lockedChatSealedContent } from "@archestra/shared";
 import { isContentEnvelope } from "@/utils/crypto";
 import {
-  decryptIncognitoValue,
-  encryptIncognitoValue,
-  type IncognitoAuditContext,
-  type IncognitoContentContext,
-} from "./incognito";
+  decryptLockedChatValue,
+  encryptLockedChatValue,
+  type LockedChatAuditContext,
+  type LockedChatContentContext,
+} from "./locked-chat";
 import {
   decryptInteractionRow,
   decryptMcpToolCallRow,
@@ -18,8 +18,8 @@ import {
  * The single funnel deciding which key an audit row's content is written
  * under. Exactly one branch runs per row:
  *
- * - with an incognito audit context → the conversation's browser-held DEK,
- *   and the row is stamped with `incognitoConversationId` so readers know not
+ * - with a locked-chat audit context → the conversation's browser-held DEK,
+ *   and the row is stamped with `lockedChatConversationId` so readers know not
  *   to attempt a server-key decrypt and break-glass knows which escrow record
  *   opens it;
  * - without one → the at-rest server key (itself a no-op when content
@@ -32,7 +32,7 @@ import {
 /** Encrypt an interaction insert's content columns, in place. */
 export function encryptInteractionContent<T extends object>(
   values: T,
-  audit: IncognitoAuditContext | null,
+  audit: LockedChatAuditContext | null,
 ): T {
   if (!audit) return encryptInteractionInsert(values);
   return encryptUnderDek(values, INTERACTION_COLUMN_CONTEXTS, audit);
@@ -41,7 +41,7 @@ export function encryptInteractionContent<T extends object>(
 /** Encrypt an MCP tool-call insert's content columns, in place. */
 export function encryptMcpToolCallContent<T extends object>(
   values: T,
-  audit: IncognitoAuditContext | null,
+  audit: LockedChatAuditContext | null,
 ): T {
   if (!audit) return encryptMcpToolCallInsert(values);
   return encryptUnderDek(values, MCP_TOOL_CALL_COLUMN_CONTEXTS, audit);
@@ -50,7 +50,7 @@ export function encryptMcpToolCallContent<T extends object>(
 /**
  * Read-path counterpart for interaction rows: locked-safe.
  *
- * A row belonging to an incognito conversation is keyed to a browser the
+ * A row belonging to a locked chat is keyed to a browser the
  * server does not have, so its content columns are replaced with the locked
  * sentinel rather than decrypted — attempting a server-key decrypt on them
  * throws, and one such row would otherwise 500 an entire logs page. Ordinary
@@ -81,7 +81,7 @@ export function readMcpToolCallRow<T extends object>(row: T): T {
  */
 export function decryptInteractionContent<T extends object>(
   row: T,
-  audit: IncognitoAuditContext | null,
+  audit: LockedChatAuditContext | null,
 ): T {
   if (!audit) return decryptInteractionRow(row);
   return decryptUnderDek(row, INTERACTION_COLUMN_CONTEXTS, audit);
@@ -90,7 +90,7 @@ export function decryptInteractionContent<T extends object>(
 /** Decrypt an MCP tool-call row written under a known audit context. */
 export function decryptMcpToolCallContent<T extends object>(
   row: T,
-  audit: IncognitoAuditContext | null,
+  audit: LockedChatAuditContext | null,
 ): T {
   if (!audit) return decryptMcpToolCallRow(row);
   return decryptUnderDek(row, MCP_TOOL_CALL_COLUMN_CONTEXTS, audit);
@@ -103,7 +103,7 @@ export function decryptMcpToolCallContent<T extends object>(
  * column, mapped to its AAD context. Mirrors the at-rest layer's table so a
  * column's AAD reads identically under either key.
  */
-const INTERACTION_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> = [
+const INTERACTION_COLUMN_CONTEXTS: Array<[string, LockedChatContentContext]> = [
   ["request", "interactions.request"],
   ["processedRequest", "interactions.processed_request"],
   ["processed_request", "interactions.processed_request"],
@@ -114,7 +114,7 @@ const INTERACTION_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> = [
   ["unsafe_context_boundary", "interactions.unsafe_context_boundary"],
 ];
 
-const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> =
+const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, LockedChatContentContext]> =
   [
     ["toolCall", "mcp_tool_calls.tool_call"],
     ["tool_call", "mcp_tool_calls.tool_call"],
@@ -124,25 +124,25 @@ const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> =
 
 function encryptUnderDek<T extends object>(
   values: T,
-  columns: Array<[string, IncognitoContentContext]>,
-  audit: IncognitoAuditContext,
+  columns: Array<[string, LockedChatContentContext]>,
+  audit: LockedChatAuditContext,
 ): T {
   const target = values as Record<string, unknown>;
   for (const [key, context] of columns) {
     if (key in target && target[key] !== null && target[key] !== undefined) {
-      target[key] = encryptIncognitoValue(target[key], { ...audit, context });
+      target[key] = encryptLockedChatValue(target[key], { ...audit, context });
     }
   }
   // Stamped by the funnel, never by callers: a row carrying the discriminator
   // without DEK ciphertext (or vice versa) is unreadable, so the two must be
   // set together in one place — and in one INSERT, never insert-then-update.
-  target.incognitoConversationId = audit.conversationId;
+  target.lockedChatConversationId = audit.conversationId;
   return values;
 }
 
 /**
  * The conversation this row's content is keyed to, or null when it is not an
- * incognito row. Accepts both spellings because raw-SQL reads return
+ * locked-chat row. Accepts both spellings because raw-SQL reads return
  * snake_case while Drizzle selects return camelCase — a read site that fed the
  * wrong one in would silently fall through to a server-key decrypt and throw,
  * so both are checked here rather than at each call site.
@@ -150,7 +150,7 @@ function encryptUnderDek<T extends object>(
 function lockedConversationId(row: object): string | null {
   const target = row as Record<string, unknown>;
   const value =
-    target.incognitoConversationId ?? target.incognito_conversation_id;
+    target.lockedChatConversationId ?? target.locked_chat_conversation_id;
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
@@ -171,7 +171,7 @@ const NULLED_WHEN_LOCKED = new Set([
 
 function applyLockedSentinel<T extends object>(
   row: T,
-  columns: Array<[string, IncognitoContentContext]>,
+  columns: Array<[string, LockedChatContentContext]>,
   conversationId: string,
 ): T {
   const target = row as Record<string, unknown>;
@@ -182,7 +182,7 @@ function applyLockedSentinel<T extends object>(
     if (key in target && isContentEnvelope(target[key])) {
       target[key] = NULLED_WHEN_LOCKED.has(key)
         ? null
-        : incognitoLockedContent(conversationId);
+        : lockedChatSealedContent(conversationId);
     }
   }
   return row;
@@ -190,13 +190,13 @@ function applyLockedSentinel<T extends object>(
 
 function decryptUnderDek<T extends object>(
   row: T,
-  columns: Array<[string, IncognitoContentContext]>,
-  audit: IncognitoAuditContext,
+  columns: Array<[string, LockedChatContentContext]>,
+  audit: LockedChatAuditContext,
 ): T {
   const target = row as Record<string, unknown>;
   for (const [key, context] of columns) {
     if (key in target) {
-      target[key] = decryptIncognitoValue(target[key], { ...audit, context });
+      target[key] = decryptLockedChatValue(target[key], { ...audit, context });
     }
   }
   return row;

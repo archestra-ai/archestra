@@ -96,7 +96,7 @@ export async function buildModelMessages(params: {
   emit: (event: CompactionStreamEvent) => void;
   /**
    * Skip auto-compaction entirely (no summary generated or persisted). Set for
-   * incognito conversations: a compaction summary is derived conversation
+   * locked chats: a compaction summary is derived conversation
    * content and would be stored in plaintext.
    */
   disableCompaction?: boolean;
@@ -128,7 +128,7 @@ export async function buildModelMessages(params: {
   } = params;
 
   let compactionStarted = false;
-  // Incognito conversations skip auto-compaction outright: a summary is
+  // Locked chats skip auto-compaction outright: a summary is
   // derived conversation content, and generating one would both send the
   // history to the summarizer and persist the result in plaintext.
   const compactionResult: ContextCompactionResult = disableCompaction

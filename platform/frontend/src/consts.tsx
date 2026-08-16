@@ -16,25 +16,25 @@ export const SHORTCUT_NEW_CHAT = {
   label: "N",
 } as const;
 
-export const SHORTCUT_NEW_INCOGNITO_CHAT = {
+export const SHORTCUT_NEW_LOCKED_CHAT = {
   code: "KeyI",
   label: "I",
 } as const;
 
 /**
- * New-chat route that opens the composer with the incognito toggle already on
+ * New-chat route that opens the composer with the locked-chat toggle already on
  * (the chat page reads the query param). Nothing is created until the user
  * sends a message, so the URL never carries conversation content or a key.
  */
-export const NEW_INCOGNITO_CHAT_HREF = "/chat?incognito=1";
+export const NEW_LOCKED_CHAT_HREF = "/chat?lockedChat=1";
 
 /**
  * Cancelable window event the Alt+I handler dispatches before navigating to
- * {@link NEW_INCOGNITO_CHAT_HREF}: the new-chat composer, while mounted,
- * claims it (preventDefault) and toggles its incognito draft in place, so the
+ * {@link NEW_LOCKED_CHAT_HREF}: the new-chat composer, while mounted,
+ * claims it (preventDefault) and toggles its locked-chat draft in place, so the
  * shortcut arms AND disarms instead of re-pushing an identical URL.
  */
-export const INCOGNITO_DRAFT_SHORTCUT_EVENT = "incognito-draft-shortcut";
+export const LOCKED_CHAT_DRAFT_SHORTCUT_EVENT = "locked-chat-draft-shortcut";
 
 // Alt-qualified (matching SHORTCUT_NEW_CHAT) so the palette has no bare
 // character-key shortcuts (WCAG 2.1.4) and the keys still work while a search

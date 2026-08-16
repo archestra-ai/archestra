@@ -62,7 +62,7 @@ import {
   isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
-import { incognitoRequestHeaders } from "@/lib/chat/incognito";
+import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -590,12 +590,12 @@ function ChatSessionHook({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       credentials: "include",
-      // Resolved per request (function form) so an incognito conversation's
+      // Resolved per request (function form) so a locked chat's
       // browser-held key — stored just before the session mounts — always
       // rides on the stream POST.
       headers: () => ({
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
-        ...incognitoRequestHeaders(conversationId),
+        ...lockedChatRequestHeaders(conversationId),
       }),
       // Carry the reasoning depth the composer is showing. The server also
       // stores it per conversation, but that write is a separate request the
@@ -618,11 +618,11 @@ function ChatSessionHook({
         },
       }),
       prepareReconnectToStreamRequest: ({ id, headers, credentials }) => {
-        // Merge the incognito key explicitly: the reconnect GET touches the
+        // Merge the locked-chat key explicitly: the reconnect GET touches the
         // conversation's content too and must carry the same header.
         const merged = new Headers(headers);
         for (const [name, value] of Object.entries(
-          incognitoRequestHeaders(id) ?? {},
+          lockedChatRequestHeaders(id) ?? {},
         )) {
           merged.set(name, value);
         }

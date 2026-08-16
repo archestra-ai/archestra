@@ -23,7 +23,7 @@ import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
@@ -75,7 +75,7 @@ import {
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
-import { isActionAvailableForConversation } from "@/lib/chat/incognito";
+import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
@@ -345,7 +345,7 @@ export function ChatSidebarSection({
         hasCreatePermission: canCreateProject === true,
         conversation: conv,
       });
-    // AI title generation is rejected for incognito chats (the server would
+    // AI title generation is rejected for locked chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(
       conv,
@@ -412,11 +412,11 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
-                {conv.incognito && (
+                {conv.lockedChat && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <IncognitoIcon className="h-3.5 w-3.5" />
+                        <LockedChatIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
                       <TooltipContent side="top">Locked chat</TooltipContent>
                     </Tooltip>

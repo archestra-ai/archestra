@@ -553,6 +553,48 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/knowledge-bases/:id/documents",
+    {
+      schema: {
+        description: "List paginated documents in a knowledge base",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.string() }),
+        querystring: z.object({
+          limit: z.coerce.number().optional().default(50),
+          offset: z.coerce.number().optional().default(0),
+          search: z.string().optional(),
+        }),
+      },
+    },
+    async ({ params: { id }, query: { limit, offset, search }, organizationId, user }, reply) => {
+      await findKnowledgeBaseOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const documents = await KbDocumentModel.findByKnowledgeBase({
+        knowledgeBaseId: id,
+        limit,
+        offset,
+        search,
+      });
+
+      return reply.send({
+        documents: documents.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          sourceUrl: doc.sourceUrl,
+          connectorId: doc.connectorId,
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+        })),
+        pagination: calculatePaginationMeta(documents.length, { limit, offset }),
+      });
+    },
+  );
+
   // ===== Standalone Connector Endpoints =====
 
   fastify.get(

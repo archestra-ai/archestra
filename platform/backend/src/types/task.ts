@@ -24,6 +24,8 @@ export const TaskTypeSchema = z.enum([
   "connector_sync",
   "batch_embedding",
   "permission_sync",
+  "doc_review_run",
+  "doc_review_batch",
   "check_due_connectors",
   "check_due_permission_syncs",
   "check_due_schedule_triggers",
@@ -49,6 +51,13 @@ export type BatchEmbeddingPayload = {
 export type PermissionSyncPayload = {
   connectorId: string;
 };
+export type DocReviewRunPayload = {
+  reviewId: string;
+};
+export type DocReviewBatchPayload = {
+  reviewId: string;
+  rowIds: string[];
+};
 export type SkillGithubSyncPayload = {
   skillId: string;
 };
@@ -65,6 +74,7 @@ export type SkillGithubSyncPayload = {
 export const TASK_LANES = {
   content: ["connector_sync", "batch_embedding"],
   permission: ["permission_sync"],
+  review: ["doc_review_run", "doc_review_batch"],
   system: [
     "check_due_connectors",
     "check_due_permission_syncs",

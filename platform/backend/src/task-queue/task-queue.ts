@@ -16,6 +16,7 @@ export class TaskQueueService {
   private laneCounts: Record<TaskLane, number> = {
     content: 0,
     permission: 0,
+    review: 0,
     system: 0,
   };
   private taskLane = new Map<string, TaskLane>();
@@ -291,6 +292,8 @@ export class TaskQueueService {
         return config.kb.taskWorkerMaxConcurrent;
       case "permission":
         return config.kb.permissionSyncWorkerMaxConcurrent;
+      case "review":
+        return config.kb.docReviewWorkerMaxConcurrent;
       case "system":
         return SYSTEM_LANE_MAX_CONCURRENT;
     }

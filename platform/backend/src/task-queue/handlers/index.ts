@@ -16,10 +16,18 @@ import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handle
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, enterprise review feature
+import {
+  handleDocReviewBatch,
+  handleDocReviewRun,
+} from "./doc-review-handler.ee";
+
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);
+  taskQueueService.registerHandler("doc_review_run", handleDocReviewRun);
+  taskQueueService.registerHandler("doc_review_batch", handleDocReviewBatch);
   taskQueueService.registerHandler(
     "check_due_connectors",
     handleCheckDueConnectors,

@@ -2889,6 +2889,10 @@ const config = {
         .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
       1,
     ),
+    docReviewWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_DOC_REVIEW_WORKER_MAX_CONCURRENT,
+      5,
+    ),
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,

@@ -398,9 +398,10 @@ export default function AgentSettingsPage() {
         title="New Apps Are Disabled by Default"
         description={
           <>
-            Create every new app disabled: author-only and invisible to agents
-            until its author enables it in App settings. Existing apps are
-            unaffected.{" "}
+            Create every new app disabled: author-only, invisible to agents and
+            runnable by nobody until its author enables it in App settings. The
+            chat it was created in can finish building it first, so a new app is
+            not stranded as an empty shell. Existing apps are unaffected.{" "}
             <ExternalDocsLink
               href={getDocsUrl(DocsPage.PlatformApps, "defaults-for-new-apps")}
               className="text-primary hover:underline"

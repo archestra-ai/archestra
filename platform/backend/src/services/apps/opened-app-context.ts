@@ -81,6 +81,14 @@ export async function resolveOpenedApp(params: {
   };
   userId: string;
   organizationId: string;
+  /**
+   * The conversation this turn belongs to, matched against the app's
+   * creation-time grace so a chat building an app an organization default
+   * disabled at birth still gets it restated in the system prompt — the
+   * authoring tools answer that conversation, so the prompt must not pretend
+   * the app is not there.
+   */
+  sessionKey?: string;
 }): Promise<OpenedApp | undefined> {
   const { openedApp, userId, organizationId } = params;
 
@@ -93,7 +101,13 @@ export async function resolveOpenedApp(params: {
     });
     // A disabled app must not reach the model at all (T-980) — dropping the
     // injection here matches the chat tools, which report it as not found.
-    if (!app || !app.enabled) return undefined;
+    // Both make the same exception for the session an org default disabled the
+    // app against at birth, so the prompt and the tools agree either way.
+    if (!app) return undefined;
+    const graced =
+      params.sessionKey !== undefined &&
+      app.creationGraceSessionKey === params.sessionKey;
+    if (!app.enabled && !graced) return undefined;
     const name = promptSafe(app.name);
     // A name that sanitizes away leaves nothing to call the app by, so there is
     // no block worth writing.

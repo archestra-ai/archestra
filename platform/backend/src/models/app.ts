@@ -7,6 +7,8 @@ import {
   getTableColumns,
   inArray,
   or,
+  type SQL,
+  sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -56,6 +58,36 @@ function appWithCatalogQuery() {
       schema.internalMcpCatalogTable,
       eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
     );
+}
+
+/**
+ * What `creationGraceSessionKey` becomes when someone sets `locked` or
+ * `enabled` deliberately — the write that ends the window an org default's
+ * creating session was building in.
+ *
+ * Restricting (locking, or disabling) always ends it: a lock or a disable a
+ * person asked for must hold against every session, the app's creator
+ * included. Relaxing ends it too — *unless the other flag still shuts that
+ * session out*, because unlocking an app that is still disabled (or enabling
+ * one still locked) is not the moment to take the build away from the chat
+ * that is halfway through it. Left set, the key costs nothing: the next
+ * deliberate restriction clears it.
+ *
+ * Evaluated in the same UPDATE that flips the flag, so the two are decided
+ * against one consistent row rather than a read the write could race.
+ */
+function settledGrace(
+  change: { locked: boolean } | { enabled: boolean },
+): SQL<string | null> | null {
+  const stillRestricted =
+    "locked" in change
+      ? // Unlocking: the disable default may still be holding the app shut.
+        sql`NOT ${schema.appsTable.enabled}`
+      : // Enabling: the lock default may still be refusing every edit.
+        sql`${schema.appsTable.locked}`;
+  const restricting = "locked" in change ? change.locked : !change.enabled;
+  if (restricting) return null;
+  return sql`CASE WHEN ${stillRestricted} THEN ${schema.appsTable.creationGraceSessionKey} ELSE NULL END`;
 }
 
 function buildOrgFilters(params: {
@@ -477,11 +509,15 @@ class AppModel {
    * catalog, so disable→re-enable is non-destructive (a since-hidden launch
    * tool reappears wherever it was assigned). Returns the updated app, or null if
    * the app is gone/soft-deleted.
+   *
+   * Deliberately setting the state also settles any creation-time grace
+   * (`creationGraceSessionKey`) — see {@link setLocked} for the rule both
+   * setters share.
    */
   static async setEnabled(id: string, enabled: boolean): Promise<App | null> {
     const [row] = await db
       .update(schema.appsTable)
-      .set({ enabled })
+      .set({ enabled, creationGraceSessionKey: settledGrace({ enabled }) })
       .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
       .returning({ id: schema.appsTable.id });
     return row ? await AppModel.findById(id) : null;
@@ -492,34 +528,35 @@ class AppModel {
    * `setEnabled`: locked refuses every agent-driven mutation until unlocked,
    * while viewing and running stay unaffected.
    *
-   * Setting the lock deliberately also ends any creation-time grace
-   * (`lockGraceSessionKey`), on lock and unlock alike: a lock someone asked
-   * for holds against the session that created the app too, and an unlocked
-   * app carries no exception into whatever lock comes next.
+   * Setting the lock deliberately also settles any creation-time grace
+   * (`creationGraceSessionKey`): a lock someone asked for holds against the
+   * session that created the app too, and an app left both unlocked and
+   * enabled carries no exception into whatever lock comes next. See
+   * {@link settledGrace} for the one case a relaxation keeps.
    */
   static async setLocked(id: string, locked: boolean): Promise<App | null> {
     const [row] = await db
       .update(schema.appsTable)
-      .set({ locked, lockGraceSessionKey: null })
+      .set({ locked, creationGraceSessionKey: settledGrace({ locked }) })
       .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
       .returning({ id: schema.appsTable.id });
     return row ? await AppModel.findById(id) : null;
   }
 
   /**
-   * Let one authoring session keep modifying an app its creation locked, for
-   * creation paths that only learn the session after the app row exists (the
-   * Apps page seeds the app's chat conversation once the app is created).
-   * Creation paths that know it upfront pass `lockGraceSessionKey` to
-   * {@link create} instead.
+   * Let one authoring session keep building an app its creation locked or
+   * disabled, for creation paths that only learn the session after the app row
+   * exists (the Apps page seeds the app's chat conversation once the app is
+   * created). Creation paths that know it upfront pass
+   * `creationGraceSessionKey` to {@link create} instead.
    */
-  static async setLockGraceSessionKey(
+  static async setCreationGraceSessionKey(
     id: string,
     sessionKey: string,
   ): Promise<void> {
     await db
       .update(schema.appsTable)
-      .set({ lockGraceSessionKey: sessionKey })
+      .set({ creationGraceSessionKey: sessionKey })
       .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)));
   }
 

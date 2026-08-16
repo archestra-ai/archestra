@@ -90,23 +90,34 @@ const appsTable = softDeletablePgTable(
      */
     locked: boolean("locked").notNull().default(false),
     /**
-     * The one authoring session the `locked` flag above does NOT refuse: the
-     * chat conversation (or headless execution) an app was created from while
-     * the organization's "new apps are locked by default" setting was on.
-     * Without it that setting locks an app against the very agent that just
-     * scaffolded it, so a build cannot get past its empty shell.
+     * The one authoring session the two flags above do NOT shut out: the chat
+     * conversation (or headless execution) an app was created from while an
+     * organization default — "new apps are locked by default", "new apps are
+     * disabled by default", or both — was what locked or disabled it. Without
+     * it those defaults turn on the very agent that just scaffolded the app:
+     * `locked` refuses its edits and `enabled: false` hides the app from it
+     * entirely, so a build cannot get past its empty shell.
      *
      * An opaque per-execution key (`isolationKey ?? conversationId`), never a
      * conversation foreign key — the same value in UI chat, a generated id in
-     * headless runs. Null for every app not born locked, and for one created
-     * where no session identifies the creator (e.g. an external MCP client on
-     * the gateway), which stays locked to everyone from birth.
+     * headless runs. Null for every app born live and unlocked, and for one
+     * created where no session identifies the creator (e.g. an external MCP
+     * client on the gateway), which meets both defaults from birth.
      *
-     * Cleared the moment anyone sets the lock explicitly (App settings or
-     * `set_app_lock`), so a deliberate lock freezes the app for its creating
-     * session too.
+     * Cleared the moment anyone restricts the app deliberately (App settings
+     * or `set_app_lock`): a lock or a disable someone asked for holds against
+     * the creating session too. A deliberate *relaxation* keeps it, so
+     * unlocking an app that is still disabled (or enabling one still locked)
+     * does not strand the build halfway.
+     *
+     * The column is still named `lock_grace_session_key`: it was added for the
+     * lock alone, and renaming a live column is not rollout-safe (old pods
+     * would read a column that no longer exists mid-deploy), which the
+     * migration linter rejects. The property carries the accurate name; a
+     * physical rename would have to go add → backfill → drop across releases,
+     * which this value — an opaque, short-lived build key — does not justify.
      */
-    lockGraceSessionKey: text("lock_grace_session_key"),
+    creationGraceSessionKey: text("lock_grace_session_key"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

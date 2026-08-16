@@ -495,6 +495,17 @@ export function LlmProviderApiKeyForm({
       : providerConfig.name;
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+  /**
+   * Where the Base URL field belongs. For a self-hosted provider the endpoint
+   * *is* the credential — nothing about the key identifies which server it
+   * reaches — so it is a primary field and sits above "Advanced settings" with
+   * the rest of them, whether or not it is strictly required. Everywhere else
+   * the base URL only overrides a working default, which is what advanced
+   * means. Bedrock is deliberately excluded: its primary field is the region,
+   * and the endpoint that region writes stays advanced.
+   */
+  const showBaseUrlUpFront =
+    !isBedrock && (isBaseUrlRequired || isSelfHostedProvider(provider));
 
   // Bedrock's effective region, in the same precedence order the backend's
   // getBedrockRegion applies: this key's own endpoint, then the server-wide
@@ -815,6 +826,82 @@ export function LlmProviderApiKeyForm({
         }
       />
     );
+
+  // Rendered either above "Advanced settings" or inside it, depending on
+  // `showBaseUrlUpFront`, so the field itself is defined once.
+  const baseUrlField = (
+    <div className="space-y-2">
+      <Label htmlFor="llm-provider-api-key-base-url">
+        {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
+        {!isBaseUrlRequired && (
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        )}
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        {isBedrock
+          ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
+          : isVllm
+            ? "The server's OpenAI-compatible API. Every model it lists is added."
+            : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
+      </p>
+      {isVllm && (
+        <p className="text-xs text-muted-foreground">
+          One URL per server. If you run more than one vLLM server, add each as
+          its own vLLM key — every model is routed to the server that hosts it.
+        </p>
+      )}
+      {isSelfHostedProvider(provider) && (
+        <p className="text-xs text-muted-foreground">
+          If this app runs in Docker, <code>localhost</code> points at the
+          container, not your host machine. Use{" "}
+          <code>host.docker.internal</code> instead
+          {dockerBaseUrlExample && (
+            <>
+              {" "}
+              (e.g. <code>{dockerBaseUrlExample}</code>)
+            </>
+          )}
+          .
+        </p>
+      )}
+      <Input
+        id="llm-provider-api-key-base-url"
+        type="url"
+        placeholder={
+          (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
+          providerBaseUrls?.[provider] ||
+          DEFAULT_PROVIDER_BASE_URLS[provider] ||
+          "https://..."
+        }
+        disabled={isPending}
+        {...form.register("baseUrl", {
+          validate: (value) => {
+            if (!value) {
+              if (isBaseUrlRequired) {
+                return "Base URL is required for this provider";
+              }
+              return true;
+            }
+
+            try {
+              const url = new URL(value);
+              if (!["http:", "https:"].includes(url.protocol)) {
+                return "URL must use http or https protocol";
+              }
+              return true;
+            } catch {
+              return "Please enter a valid URL (e.g. https://api.example.com)";
+            }
+          },
+        })}
+      />
+      {form.formState.errors.baseUrl && (
+        <p className="text-xs text-destructive">
+          {form.formState.errors.baseUrl.message}
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
@@ -1345,46 +1432,6 @@ export function LlmProviderApiKeyForm({
           </VisibilitySelector>
         )}
 
-        {progressive && !isSubscriptionFlow && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-auto w-full justify-between px-0 py-2 text-sm"
-            aria-expanded={advancedSettingsOpen}
-            onClick={() => setAdvancedSettingsOpen((open) => !open)}
-          >
-            Advanced settings
-            <ChevronDown
-              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
-            />
-          </Button>
-        )}
-
-        {showAdvancedSettings &&
-          !isSubscriptionFlow &&
-          !hideScopeAndPrimary && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="llm-provider-api-key-is-primary">
-                  Primary key
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {existingPrimaryKey
-                    ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
-                    : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
-                </p>
-              </div>
-              <Switch
-                id="llm-provider-api-key-is-primary"
-                checked={form.watch("isPrimary")}
-                onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked, { shouldDirty: true })
-                }
-                disabled={isPending || Boolean(existingPrimaryKey)}
-              />
-            </div>
-          )}
-
         {/* Region is a primary Bedrock field, not an advanced one: AWS enables
             models per region, so a key is unusable until it points at the right
             one. The endpoint it writes lives under Advanced settings below. */}
@@ -1427,82 +1474,52 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!isSubscriptionFlow && (isBaseUrlRequired || showAdvancedSettings) && (
-          <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-base-url">
-              {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
-              {!isBaseUrlRequired && (
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              )}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {isBedrock
-                ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
-                : isVllm
-                  ? "The server's OpenAI-compatible API. Every model it lists is added."
-                  : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
-            </p>
-            {isVllm && (
-              <p className="text-xs text-muted-foreground">
-                One URL per server. If you run more than one vLLM server, add
-                each as its own vLLM key — every model is routed to the server
-                that hosts it.
-              </p>
-            )}
-            {isSelfHostedProvider(provider) && (
-              <p className="text-xs text-muted-foreground">
-                If this app runs in Docker, <code>localhost</code> points at the
-                container, not your host machine. Use{" "}
-                <code>host.docker.internal</code> instead
-                {dockerBaseUrlExample && (
-                  <>
-                    {" "}
-                    (e.g. <code>{dockerBaseUrlExample}</code>)
-                  </>
-                )}
-                .
-              </p>
-            )}
-            <Input
-              id="llm-provider-api-key-base-url"
-              type="url"
-              placeholder={
-                (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
-                providerBaseUrls?.[provider] ||
-                DEFAULT_PROVIDER_BASE_URLS[provider] ||
-                "https://..."
-              }
-              disabled={isPending}
-              {...form.register("baseUrl", {
-                validate: (value) => {
-                  if (!value) {
-                    if (isBaseUrlRequired) {
-                      return "Base URL is required for this provider";
-                    }
-                    return true;
-                  }
+        {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
 
-                  try {
-                    const url = new URL(value);
-                    if (!["http:", "https:"].includes(url.protocol)) {
-                      return "URL must use http or https protocol";
-                    }
-                    return true;
-                  } catch {
-                    return "Please enter a valid URL (e.g. https://api.example.com)";
-                  }
-                },
-              })}
+        {progressive && !isSubscriptionFlow && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-between px-0 py-2 text-sm"
+            aria-expanded={advancedSettingsOpen}
+            onClick={() => setAdvancedSettingsOpen((open) => !open)}
+          >
+            Advanced settings
+            <ChevronDown
+              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
             />
-            {form.formState.errors.baseUrl && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.baseUrl.message}
-              </p>
-            )}
-          </div>
+          </Button>
         )}
+
+        {showAdvancedSettings &&
+          !isSubscriptionFlow &&
+          !hideScopeAndPrimary && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="llm-provider-api-key-is-primary">
+                  Primary key
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {existingPrimaryKey
+                    ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
+                    : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
+                </p>
+              </div>
+              <Switch
+                id="llm-provider-api-key-is-primary"
+                checked={form.watch("isPrimary")}
+                onCheckedChange={(checked) =>
+                  form.setValue("isPrimary", checked, { shouldDirty: true })
+                }
+                disabled={isPending || Boolean(existingPrimaryKey)}
+              />
+            </div>
+          )}
+
+        {!isSubscriptionFlow &&
+          !showBaseUrlUpFront &&
+          showAdvancedSettings &&
+          baseUrlField}
 
         {!isSubscriptionFlow &&
           showAdvancedSettings &&

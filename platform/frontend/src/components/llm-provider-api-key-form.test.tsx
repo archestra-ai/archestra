@@ -453,17 +453,93 @@ describe("LlmProviderApiKeyForm", () => {
       );
     });
 
-    it("treats a server-wide vLLM endpoint as the default", async () => {
+    it("treats a server-wide vLLM endpoint as an overridable default", async () => {
       vi.mocked(useProviderBaseUrls).mockReturnValue({
         data: { vllm: "http://vllm:8000/v1" },
       } as unknown as ReturnType<typeof useProviderBaseUrls>);
 
       renderForm({ defaults: { provider: "vllm" }, progressive: true });
 
+      // The deployment's endpoint answers "where", so the field stops being
+      // required — but a second vLLM server is added by overriding it per key,
+      // so it stays visible with the inherited URL as its placeholder.
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Base URL").textContent).toContain("optional");
+      expect(
+        screen.getByLabelText(/Base URL/).getAttribute("placeholder"),
+      ).toBe("http://vllm:8000/v1");
+    });
+  });
+
+  describe("Base URL placement", () => {
+    /**
+     * A field rendered after the "Advanced settings" disclosure reads as part
+     * of it. For providers where the endpoint *is* the credential, that hid
+     * the one field the key cannot work without.
+     */
+    function baseUrlPrecedesAdvancedSettings(): boolean {
+      const baseUrl = screen.getByText("Base URL");
+      const advanced = screen.getByRole("button", {
+        name: /Advanced settings/,
+      });
+      return Boolean(
+        baseUrl.compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
+
+    it.each([
+      "vllm",
+      "ollama",
+      "ollama-native",
+      "archestra",
+    ] as const)("shows the endpoint above Advanced settings for %s", async (provider) => {
+      renderForm({ defaults: { provider }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(baseUrlPrecedesAdvancedSettings()).toBe(true);
+    });
+
+    it("keeps the endpoint inside Advanced settings for a cloud provider", async () => {
+      const user = userEvent.setup();
+      renderForm({ defaults: { provider: "openai" }, progressive: true });
+
       await waitFor(() => {
         expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
       });
       expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /Advanced settings/ }),
+      );
+      expect(baseUrlPrecedesAdvancedSettings()).toBe(false);
+    });
+
+    it("puts the Bedrock region above Advanced settings and its endpoint inside", async () => {
+      const user = userEvent.setup();
+      renderForm({ defaults: { provider: "bedrock" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Region")).toBeInTheDocument();
+      });
+      const advanced = screen.getByRole("button", {
+        name: /Advanced settings/,
+      });
+      expect(
+        screen.getByText("Region").compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      expect(screen.queryByText("Custom endpoint")).not.toBeInTheDocument();
+      await user.click(advanced);
+      expect(
+        screen.getByText("Custom endpoint").compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_PRECEDING,
+      ).toBeTruthy();
     });
   });
 

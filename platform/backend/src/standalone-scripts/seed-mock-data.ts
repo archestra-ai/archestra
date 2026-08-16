@@ -16,6 +16,7 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import type { TeamMemberRole } from "@/types/team-role";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
   generateMockAgents,
@@ -119,7 +120,11 @@ async function seedMockData() {
    * (team, user) unique index. Seeding must stay re-runnable, so an existing
    * membership is not an error.
    */
-  const addMember = async (teamId: string, userId: string, role: string) => {
+  const addMember = async (
+    teamId: string,
+    userId: string,
+    role: TeamMemberRole,
+  ) => {
     try {
       await TeamModel.addMember(teamId, userId, role);
     } catch (error) {

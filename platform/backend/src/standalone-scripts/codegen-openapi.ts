@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { initializeDatabase } from "@/database";
 import logger from "@/logging";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import {
@@ -13,9 +14,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function generateOpenApiSpec() {
-  const fastify = createFastifyInstance();
-
   logger.info("📄 Generating OpenAPI specification...");
+
+  // Routes are not purely declarative: some run a query while registering (the
+  // skill marketplace sweeps orphaned repos at boot), so the connection has to
+  // exist before `registerApiRoutes` even though nothing here reads the schema.
+  await initializeDatabase();
+
+  const fastify = createFastifyInstance();
 
   // Note: registerOpenApiSchemas() is called at module load time in server.ts,
   // so we don't need to call it again here

@@ -1,22 +1,22 @@
 import { pathToFileURL } from "node:url";
 import { createClient, defineConfig } from "@hey-api/openapi-ts";
-import {
-  DEFAULT_INTERNAL_API_BASE_URL,
-  MCP_CATALOG_API_BASE_URL,
-} from "../consts";
+import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
 /**
- * During `pnpm codegen` (CODEGEN=true), use the generated docs/openapi.json file
- * which includes all enterprise routes regardless of local .env settings.
- * For manual regeneration, read it off a running dev server on the loopback API.
+ * Always the generated `docs/openapi.json`, never a running server.
+ *
+ * Reading it off the loopback API used to be the fallback when `CODEGEN=true`
+ * was not set, and it produced a subtly wrong client two ways. The spec
+ * declares no `servers`, so generating from a URL makes hey-api infer one from
+ * the address it fetched — baking `baseUrl: 'http://127.0.0.1:9000'` into the
+ * shared client that ships to every deployment. It also omits enterprise routes
+ * whenever the local .env has no license, silently shrinking the client.
+ *
+ * Regenerate the spec first (`pnpm --dir backend codegen:openapi`) if it is
+ * stale; `pnpm codegen` from the root already does that in order.
  */
-const archestraApiInput =
-  process.env.CODEGEN === "true"
-    ? "../../docs/openapi.json"
-    : `${DEFAULT_INTERNAL_API_BASE_URL}/openapi.json`;
-
 const archestraApiConfig = await defineConfig({
-  input: archestraApiInput,
+  input: "../../docs/openapi.json",
   output: {
     path: "./hey-api/clients/api",
     clean: false,

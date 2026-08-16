@@ -4,6 +4,8 @@ import {
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
+import { getTableName, sql } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
@@ -14,6 +16,7 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import { isUniqueConstraintError } from "@/utils/db";
 import {
   generateMockAgents,
   generateMockInteractions,
@@ -30,11 +33,20 @@ async function seedMockData() {
 
   await initializeDatabase();
 
-  // Step 0: Clean existing mock data (in correct order due to foreign keys)
+  // Step 0: Clean existing data.
+  //
+  // One TRUNCATE ... CASCADE rather than a DELETE per table: the per-table loop
+  // ran in schema-export order, which is not a valid FK order, so it failed as
+  // soon as the database held rows the backend creates on boot (deleting
+  // internal_mcp_catalog while an mcp_server still referenced it violates that
+  // table's NOT NULL). CASCADE makes the order irrelevant.
   logger.info("Cleaning existing data...");
-  for (const table of Object.values(schema)) {
-    await db.delete(table);
-  }
+  const tableNames = Object.values(schema)
+    .map((table) => `"${getTableName(table as PgTable)}"`)
+    .join(", ");
+  await db.execute(
+    sql.raw(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`),
+  );
   logger.info("✅ Cleaned existing data");
 
   // Step 1: Create users
@@ -99,30 +111,33 @@ async function seedMockData() {
     createdBy: defaultAdmin.id,
   });
 
-  // Add members to teams
-  await TeamModel.addMember(teamA.id, defaultAdmin.id, ADMIN_ROLE_NAME);
-  await TeamModel.addMember(teamA.id, editorUser.id, MEMBER_ROLE_NAME);
-  await TeamModel.addMember(teamB.id, defaultAdmin.id, ADMIN_ROLE_NAME);
-  await TeamModel.addMember(teamB.id, member1User.id, MEMBER_ROLE_NAME);
-  await TeamModel.addMember(
-    managementTeam.id,
-    defaultAdmin.id,
-    ADMIN_ROLE_NAME,
-  );
-  await TeamModel.addMember(managementTeam.id, admin2User.id, ADMIN_ROLE_NAME);
-  await TeamModel.addMember(marketingTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
-  await TeamModel.addMember(marketingTeam.id, member1User.id, MEMBER_ROLE_NAME);
-  await TeamModel.addMember(marketingTeam.id, member2User.id, MEMBER_ROLE_NAME);
-  await TeamModel.addMember(
-    engineeringTeam.id,
-    defaultAdmin.id,
-    ADMIN_ROLE_NAME,
-  );
-  await TeamModel.addMember(
-    engineeringTeam.id,
-    editorUser.id,
-    MEMBER_ROLE_NAME,
-  );
+  /**
+   * Add members to teams.
+   *
+   * Creating a team now adds its creator as an admin automatically, so every
+   * explicit add for `defaultAdmin` below is a duplicate and trips the
+   * (team, user) unique index. Seeding must stay re-runnable, so an existing
+   * membership is not an error.
+   */
+  const addMember = async (teamId: string, userId: string, role: string) => {
+    try {
+      await TeamModel.addMember(teamId, userId, role);
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+    }
+  };
+
+  await addMember(teamA.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await addMember(teamA.id, editorUser.id, MEMBER_ROLE_NAME);
+  await addMember(teamB.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await addMember(teamB.id, member1User.id, MEMBER_ROLE_NAME);
+  await addMember(managementTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await addMember(managementTeam.id, admin2User.id, ADMIN_ROLE_NAME);
+  await addMember(marketingTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await addMember(marketingTeam.id, member1User.id, MEMBER_ROLE_NAME);
+  await addMember(marketingTeam.id, member2User.id, MEMBER_ROLE_NAME);
+  await addMember(engineeringTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await addMember(engineeringTeam.id, editorUser.id, MEMBER_ROLE_NAME);
 
   logger.info("✅ Created 5 teams with members");
 

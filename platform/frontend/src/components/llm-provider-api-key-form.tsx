@@ -1446,9 +1446,9 @@ export function LlmProviderApiKeyForm({
             </p>
             {isVllm && (
               <p className="text-xs text-muted-foreground">
-                A vLLM server runs one model. To serve more, run more servers
-                and add each one here — a model always goes to the server that
-                hosts it.
+                One URL per server. If you run more than one vLLM server, add
+                each as its own vLLM key — every model is routed to the server
+                that hosts it.
               </p>
             )}
             {isSelfHostedProvider(provider) && (

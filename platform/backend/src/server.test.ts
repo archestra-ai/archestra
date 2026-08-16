@@ -28,7 +28,7 @@ import config from "@/config";
 import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
-import { createFastifyInstance } from "./server";
+import { buildSandboxFrameAncestors, createFastifyInstance } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -891,5 +891,68 @@ describe("health endpoints", () => {
         config.maintenanceMode = originalMaintenanceMode;
       }
     });
+  });
+});
+
+describe("buildSandboxFrameAncestors", () => {
+  test("stays open when the deployment declares no origins", () => {
+    // The published Docker image sets no ARCHESTRA_FRONTEND_URL and no sandbox
+    // domain, so the browser can legitimately reach it on any origin: a
+    // remapped published port, a LAN address, a reverse proxy. Anything but "*"
+    // here has the browser refuse the sandbox iframe outright
+    // (ERR_BLOCKED_BY_RESPONSE), leaving an empty app pane.
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: null,
+        recorderFrameAncestors: [],
+      }),
+    ).toBe("*");
+  });
+
+  test("the recorder cannot restrict an otherwise-open deployment", () => {
+    // The renderer's frame ancestors fall back to a guessed http://localhost:3000
+    // when nothing is configured. Adding that guess to an empty list used to
+    // turn "embeddable anywhere" into "embeddable on loopback:3000 only".
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: null,
+        recorderFrameAncestors: [
+          "http://localhost:3000",
+          "http://127.0.0.1:3000",
+        ],
+      }),
+    ).toBe("*");
+  });
+
+  test("declared origins restrict the policy, and the recorder widens it", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: ["https://archestra.example.com"],
+        sandboxDomain: null,
+        recorderFrameAncestors: ["http://renderer.internal:3000"],
+      }),
+    ).toBe("https://archestra.example.com http://renderer.internal:3000");
+  });
+
+  test("a sandbox domain alone is a declared restriction", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: "mcp.example.com",
+        recorderFrameAncestors: [],
+      }),
+    ).toBe("*.mcp.example.com");
+  });
+
+  test("deduplicates repeated sources", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: ["https://archestra.example.com"],
+        sandboxDomain: null,
+        recorderFrameAncestors: ["https://archestra.example.com"],
+      }),
+    ).toBe("https://archestra.example.com");
   });
 });

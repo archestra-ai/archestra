@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-11
+lastUpdated: 2026-08-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -380,7 +380,15 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
 3. API key can be left blank for most self-hosted deployments
 
+Every model the server lists is added, so one entry covers a server that hosts several models — a router in front of a fleet, for example.
+
 The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environment variable. Per-key base URLs in the UI take precedence.
+
+### Serving Several Models
+
+`vllm serve` runs one model per process. Hosting a second model means running a second server on its own URL.
+
+Add each server as its own vLLM entry. The models from every server appear together under the vLLM provider, and each request goes to the server that hosts the chosen model — so an agent pinned to one server still runs a model that lives on another.
 
 ### Environment Variables
 
@@ -424,6 +432,8 @@ Both transports talk to the same Ollama server. You can add either or both.
 2. Choose a **Transport**: **Native** (the default) or **OpenAI-compatible**
 3. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 4. Leave the API key blank for self-hosted Ollama
+
+Add one entry per Ollama server. Each request goes to the server that has the chosen model pulled.
 
 ### Model Parameters
 

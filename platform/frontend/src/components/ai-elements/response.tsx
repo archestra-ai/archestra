@@ -149,6 +149,13 @@ export const Response = memo(
           // <pre> overflows visibly into it instead of clipping.
           "[&_[data-streamdown='code-block-body']]:overflow-x-auto",
           "[&_[data-streamdown='code-block-body']_pre]:overflow-x-visible",
+          // …but the <pre> is the tinted, padded panel the code sits on, so at
+          // the body's width a long line spilled out of its own background and
+          // was cut against the card edge instead of the panel's. Size the
+          // panel to the code it holds (never narrower than the body) so the
+          // tint and the trailing padding follow the line the whole way.
+          "[&_[data-streamdown='code-block-body']_pre]:w-fit",
+          "[&_[data-streamdown='code-block-body']_pre]:min-w-full",
           // Fix streamdown code blocks - remove padding from code elements inside them
           "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
           // Streamdown mats tables in an opaque bg-sidebar card (and ignores its

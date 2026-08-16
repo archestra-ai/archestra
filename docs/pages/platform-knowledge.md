@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-14
+lastUpdated: 2026-08-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -140,6 +140,8 @@ Pick the model that scores and reorders search results by relevance. Reranking i
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
 
 A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.
+
+A chat reranker scores passages by returning a JSON object, so Archestra asks the endpoint to constrain the model's output to that shape. **Test connection** checks that it does. If the test reports that the model replied without a JSON object, the endpoint is not applying the constraint. Enable structured outputs on it — a self-hosted vLLM server needs this — or choose a model that supports them.
 
 ## Creating a Knowledge Base
 

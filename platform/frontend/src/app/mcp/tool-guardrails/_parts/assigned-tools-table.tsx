@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  AGENT_TOOL_PREFIX,
   type archestraApiTypes,
   ClientFilterSchema,
-  isAgentTool,
   parseFullToolName,
 } from "@archestra/shared";
 import type {
@@ -12,7 +10,15 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { Bot, ChevronDown, ChevronUp, Network, Pencil } from "lucide-react";
+import {
+  AppWindow,
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Network,
+  Pencil,
+  Server,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LoadingSpinner } from "@/components/loading";
@@ -62,10 +68,15 @@ import {
   useToolObservers,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
-import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
 import type { ToolsInitialData } from "../types";
 import {
+  APP_ORIGIN_FILTER_VALUE,
+  APP_TOOL_SOURCE_DESCRIPTION,
+  APP_TOOL_SOURCE_LABEL,
+  getToolSource,
   getVisibleCatalogSources,
+  hasAppCatalogSources,
+  MCP_TOOL_SOURCE_LABEL,
   OBSERVED_TOOL_SOURCE_DESCRIPTION,
   OBSERVED_TOOL_SOURCE_LABEL,
 } from "./assigned-tools-table.utils";
@@ -115,8 +126,11 @@ export function AssignedToolsTable({
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
+  // App backings are catalogs too, and their launch tools are listed here — so
+  // this page needs them to name the source of those rows.
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
+    includeApps: true,
   });
 
   const {
@@ -440,12 +454,13 @@ export function AssignedToolsTable({
       },
       {
         id: "origin",
-        accessorFn: (row) =>
-          isMcpToolByProperties(row)
-            ? "1-mcp"
-            : isAgentTool(row.name)
-              ? "2-agent"
-              : "3-intercepted",
+        // Mirrors the backend's origin ordering (catalog-backed first, then
+        // delegation, then observed); app launch tools are catalog-backed.
+        accessorFn: (row) => {
+          const kind = getToolSource(row, internalMcpCatalogItems).kind;
+          if (kind === "app" || kind === "mcp") return "1-mcp";
+          return kind === "agent" ? "2-agent" : "3-intercepted";
+        },
         size: 180,
         header: ({ column }) => (
           <Button
@@ -458,12 +473,35 @@ export function AssignedToolsTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const catalogItemId = row.original.catalogId;
-          const catalogItem = internalMcpCatalogItems?.find(
-            (item) => item.id === catalogItemId,
-          );
+          const source = getToolSource(row.original, internalMcpCatalogItems);
 
-          if (catalogItem) {
+          if (source.kind === "app") {
+            return (
+              <div className="min-w-0 max-w-full">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="default"
+                        className="bg-sky-600 text-white inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
+                      >
+                        <AppWindow className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 truncate">
+                          {source.appName || APP_TOOL_SOURCE_LABEL}
+                        </span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{APP_TOOL_SOURCE_DESCRIPTION}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            );
+          }
+
+          if (source.kind === "mcp") {
+            const { catalogItem } = source;
             return (
               <div className="min-w-0 max-w-full">
                 <TooltipProvider>
@@ -473,18 +511,22 @@ export function AssignedToolsTable({
                         variant="default"
                         className="bg-indigo-500 text-white inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
                       >
-                        <McpCatalogIcon
-                          icon={catalogItem.icon}
-                          catalogId={catalogItem.id}
-                          size={14}
-                        />
+                        {catalogItem ? (
+                          <McpCatalogIcon
+                            icon={catalogItem.icon}
+                            catalogId={catalogItem.id}
+                            size={14}
+                          />
+                        ) : (
+                          <Server className="h-3.5 w-3.5 shrink-0" />
+                        )}
                         <span className="min-w-0 truncate">
-                          {catalogItem.name}
+                          {catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL}
                         </span>
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{catalogItem.name}</p>
+                      <p>{catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -492,10 +534,7 @@ export function AssignedToolsTable({
             );
           }
 
-          if (isAgentTool(row.original.name)) {
-            const agentName = row.original.name
-              .slice(AGENT_TOOL_PREFIX.length)
-              .replaceAll("_", " ");
+          if (source.kind === "agent") {
             return (
               <TooltipProvider>
                 <Tooltip>
@@ -509,7 +548,7 @@ export function AssignedToolsTable({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Delegates to {agentName} agent</p>
+                    <p>Delegates to {source.agentName} agent</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -713,6 +752,13 @@ export function AssignedToolsTable({
     [internalMcpCatalogItems],
   );
 
+  // One entry per app would bury the MCP servers, so apps get a single grouped
+  // source — offered only where there is an app to filter to.
+  const hasAppSources = useMemo(
+    () => hasAppCatalogSources(internalMcpCatalogItems),
+    [internalMcpCatalogItems],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-4">
@@ -745,6 +791,30 @@ export function AssignedToolsTable({
                 </div>
               ),
             },
+            ...(hasAppSources
+              ? [
+                  {
+                    value: APP_ORIGIN_FILTER_VALUE,
+                    label: APP_TOOL_SOURCE_LABEL,
+                    content: (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AppWindow className="h-4 w-4 shrink-0" />
+                        <span className="truncate">
+                          {APP_TOOL_SOURCE_LABEL}
+                        </span>
+                      </div>
+                    ),
+                    selectedContent: (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AppWindow className="h-4 w-4 shrink-0" />
+                        <span className="truncate">
+                          {APP_TOOL_SOURCE_LABEL}
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
             {
               value: "llm-proxy",
               label: OBSERVED_TOOL_SOURCE_LABEL,

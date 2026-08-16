@@ -106,6 +106,8 @@ export async function importAgentFromPayload(
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
       toolExposureMode: data.agent.toolExposureMode,
+      missingCredentialBehavior:
+        data.agent.missingCredentialBehavior ?? "allow",
       accessAllTools: enableAllToolsAfterImport
         ? false
         : data.agent.accessAllTools,

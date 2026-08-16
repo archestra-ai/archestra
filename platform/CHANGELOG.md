@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.3.38](https://github.com/archestra-ai/archestra/compare/platform-v1.3.37...platform-v1.3.38) (2026-08-16)
+
+
+### Bug Fixes
+
+* **apps:** create an app in the environment of the agent that builds it ([#7293](https://github.com/archestra-ai/archestra/issues/7293)) ([e037129](https://github.com/archestra-ai/archestra/commit/e037129287a9465db8eb0425bde46ca87194c6ff))
+
+## [1.3.37](https://github.com/archestra-ai/archestra/compare/platform-v1.3.36...platform-v1.3.37) (2026-08-15)
+
+
+### Features
+
+* **agents:** choose what happens when a teammate is missing an agent's MCP connection ([#7275](https://github.com/archestra-ai/archestra/issues/7275)) ([99fd6dd](https://github.com/archestra-ai/archestra/commit/99fd6dde08debb7b2a6661cc5c96328a0eba2da2))
+* **chat:** lock icon and locked-chat naming for incognito chats ([#7251](https://github.com/archestra-ai/archestra/issues/7251)) ([4e01fae](https://github.com/archestra-ai/archestra/commit/4e01fae10c074618dfba38b77b3e8575d7727e9d))
+* **environments:** configurable per-resource default environment for new resources ([#7285](https://github.com/archestra-ai/archestra/issues/7285)) ([ac0571d](https://github.com/archestra-ai/archestra/commit/ac0571d7dfc226b599445f5bf11c1826461c9534))
+* **knowledge-base:** permission auto-sync for the Asana connector ([#7269](https://github.com/archestra-ai/archestra/issues/7269)) ([2603bdb](https://github.com/archestra-ai/archestra/commit/2603bdb5e72b135e3aaac86c32510b87067cc57c))
+* **knowledge-base:** permission auto-sync for the Dropbox connector ([#7270](https://github.com/archestra-ai/archestra/issues/7270)) ([e7c5de0](https://github.com/archestra-ai/archestra/commit/e7c5de01e6fdeff7432c6a96d453c0f7fbcc10a3))
+* **knowledge-base:** permission auto-sync for the GitLab connector ([#7256](https://github.com/archestra-ai/archestra/issues/7256)) ([4adf03d](https://github.com/archestra-ai/archestra/commit/4adf03dac15ef8ebaf92ff09cf6617eae90a1d4c))
+* **knowledge-base:** permission auto-sync for the Linear connector ([#7271](https://github.com/archestra-ai/archestra/issues/7271)) ([21d04a2](https://github.com/archestra-ai/archestra/commit/21d04a2daede3dd73b7f2cbbc913468cb01547cc))
+* **knowledge-base:** permission auto-sync for the Outline connector ([#7274](https://github.com/archestra-ai/archestra/issues/7274)) ([d39d5ec](https://github.com/archestra-ai/archestra/commit/d39d5ecf064410ca6f941fbb0a06270bdc12e07d))
+* **knowledge-base:** permission auto-sync for the Perforce connector ([#7279](https://github.com/archestra-ai/archestra/issues/7279)) ([02d7794](https://github.com/archestra-ai/archestra/commit/02d7794dbc22e2aad836d0160476388c4a43739f))
+* **knowledge-base:** permission auto-sync for the ServiceNow connector ([#7277](https://github.com/archestra-ai/archestra/issues/7277)) ([939a1c8](https://github.com/archestra-ai/archestra/commit/939a1c83789bc2eb14050bab1e0dc1d05d7a9794))
+
+
+### Bug Fixes
+
+* **apps:** stop the new-app lock default from refusing the session that just created the app ([#7286](https://github.com/archestra-ai/archestra/issues/7286)) ([acb90a4](https://github.com/archestra-ai/archestra/commit/acb90a439b00c118f6c2206a05647b176a694174))
+* **chat:** keep thinking block content inside the conversation width ([#7288](https://github.com/archestra-ai/archestra/issues/7288)) ([9c5611b](https://github.com/archestra-ai/archestra/commit/9c5611b4603f3f39a6e8350effad59ac4806399b))
+* **chatops:** recognize the agent footer in the spelling providers return ([#7291](https://github.com/archestra-ai/archestra/issues/7291)) ([5ba0086](https://github.com/archestra-ai/archestra/commit/5ba008679c8fc07316eb07b5d0f2c88d63b92eca))
+* **chatops:** stop the agent footer rendering twice when the model echoes it ([#7280](https://github.com/archestra-ai/archestra/issues/7280)) ([4ff4c5a](https://github.com/archestra-ai/archestra/commit/4ff4c5a12dea98ba9293d47ef8675cf600b654fd))
+* **docker:** bump x/net and the MCP base Go toolchain for CVE-2026-46600 ([#7273](https://github.com/archestra-ai/archestra/issues/7273)) ([cf34cf8](https://github.com/archestra-ai/archestra/commit/cf34cf800d6d2b44d2ad7defe7ccd9ca8ef270ec))
+* **docker:** pin golang.org/x/mod to v0.40.0 for CVE-2026-56865 ([#7278](https://github.com/archestra-ai/archestra/issues/7278)) ([cac7ab6](https://github.com/archestra-ai/archestra/commit/cac7ab680a23b6e3448cd3e6fc6d6d695649b29d))
+* **docker:** pin python3 and postgresql to CVE-fixed Alpine versions ([#7281](https://github.com/archestra-ai/archestra/issues/7281)) ([2cc58b7](https://github.com/archestra-ai/archestra/commit/2cc58b799fa9b8e2e0173658405915a8d113a34f))
+* **guardrails:** label app launch tools as Apps and drop rows for deleted agents ([#7289](https://github.com/archestra-ai/archestra/issues/7289)) ([44a9523](https://github.com/archestra-ai/archestra/commit/44a952303c33f3c6af8109c3c364d78f73a8a470))
+* **kb:** verify rerankers that answer with reasoning tokens or fenced JSON ([#7292](https://github.com/archestra-ai/archestra/issues/7292)) ([3ee81ad](https://github.com/archestra-ai/archestra/commit/3ee81ad4be4d52ce4a4bd60ffa0a64d0af96234e))
+* **knowledge-base:** audit member-override mappings in connector snapshots ([#7268](https://github.com/archestra-ai/archestra/issues/7268)) ([be8b76f](https://github.com/archestra-ai/archestra/commit/be8b76f4f90bb5677c0b145ad49dda9454552b45))
+* **knowledge:** stop connector status cells painting over the neighboring column ([#7265](https://github.com/archestra-ai/archestra/issues/7265)) ([ce6e4a3](https://github.com/archestra-ai/archestra/commit/ce6e4a37fca62a5699dec977953e351e2b753161))
+* **llm:** built-in subagents follow the served agent's model, not the org default ([#7287](https://github.com/archestra-ai/archestra/issues/7287)) ([0304046](https://github.com/archestra-ai/archestra/commit/03040463bd0ba57bb804d7dfd0cae93b7b7b594f))
+* **llm:** route each model to the provider endpoint that serves it ([#7284](https://github.com/archestra-ai/archestra/issues/7284)) ([c7e1832](https://github.com/archestra-ai/archestra/commit/c7e18324ab9982bb687a1574966f57aae2cd38c3))
+
+
+### Dependencies
+
+* bump base64 from 0.22.1 to 0.23.1 in /platform/archestra-rs ([#7258](https://github.com/archestra-ai/archestra/issues/7258)) ([695c738](https://github.com/archestra-ai/archestra/commit/695c738a1c272d6891fe4fc1ec7e7d1bbd35ee76))
+* bump dompurify from 3.4.12 to 3.4.13 in /platform ([#7174](https://github.com/archestra-ai/archestra/issues/7174)) ([afda952](https://github.com/archestra-ai/archestra/commit/afda9525615ce633b31d62e3fe4ad09ed41b8058))
+* bump mermaid from 11.15.0 to 11.16.1 in /platform ([#7141](https://github.com/archestra-ai/archestra/issues/7141)) ([17327bb](https://github.com/archestra-ai/archestra/commit/17327bbb26184361f07036f11e449d51d4057774))
+* bump the rust-dependencies group in /platform/archestra-rs with 4 updates ([#7257](https://github.com/archestra-ai/archestra/issues/7257)) ([ace1d5b](https://github.com/archestra-ai/archestra/commit/ace1d5b3b62004913f955a4da45a2b1ad2add54b))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @hono/node-server and @modelcontextprotocol/sdk in /platform/mcp_server_docker_image ([#7241](https://github.com/archestra-ai/archestra/issues/7241)) ([4631d94](https://github.com/archestra-ai/archestra/commit/4631d940ce925b3ae3c48d838d1b424ce38fecdd))
+
 ## [1.3.36](https://github.com/archestra-ai/archestra/compare/platform-v1.3.35...platform-v1.3.36) (2026-08-13)
 
 

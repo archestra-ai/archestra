@@ -53,7 +53,11 @@ import {
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
-import { errorMessage, formatApprovalToolArgs } from "./utils";
+import {
+  errorMessage,
+  formatApprovalToolArgs,
+  stripDuplicateAgentFooter,
+} from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -412,7 +416,12 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    let replyText = options.text;
+    // The model sometimes signs off with the branding footer itself, having
+    // seen it on earlier bot replies replayed as thread history; drop that echo
+    // so the reply renders exactly one footer.
+    let replyText = options.footer
+      ? stripDuplicateAgentFooter(options.text, options.footer)
+      : options.text;
     // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
     // line ABOVE the footer, so the agent footer stays the last line. Italics
     // keep it visually quieter than the footer.

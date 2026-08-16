@@ -491,14 +491,36 @@ class AppModel {
    * Flip an app's locked state. A pure boolean on the app row, like
    * `setEnabled`: locked refuses every agent-driven mutation until unlocked,
    * while viewing and running stay unaffected.
+   *
+   * Setting the lock deliberately also ends any creation-time grace
+   * (`lockGraceSessionKey`), on lock and unlock alike: a lock someone asked
+   * for holds against the session that created the app too, and an unlocked
+   * app carries no exception into whatever lock comes next.
    */
   static async setLocked(id: string, locked: boolean): Promise<App | null> {
     const [row] = await db
       .update(schema.appsTable)
-      .set({ locked })
+      .set({ locked, lockGraceSessionKey: null })
       .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
       .returning({ id: schema.appsTable.id });
     return row ? await AppModel.findById(id) : null;
+  }
+
+  /**
+   * Let one authoring session keep modifying an app its creation locked, for
+   * creation paths that only learn the session after the app row exists (the
+   * Apps page seeds the app's chat conversation once the app is created).
+   * Creation paths that know it upfront pass `lockGraceSessionKey` to
+   * {@link create} instead.
+   */
+  static async setLockGraceSessionKey(
+    id: string,
+    sessionKey: string,
+  ): Promise<void> {
+    await db
+      .update(schema.appsTable)
+      .set({ lockGraceSessionKey: sessionKey })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)));
   }
 
   /**

@@ -1,5 +1,7 @@
 export const ENVIRONMENT_EDIT_PARAM = "edit";
 export const ENVIRONMENT_CREATE_PARAM = "create";
+/** Opens the org-wide "where new resources land" settings dialog. */
+export const ENVIRONMENT_DEFAULTS_PARAM = "resource-defaults";
 // Sentinel `edit` value for the org-level default environment, which is a
 // virtual row (id `"default"`) rather than a real uuid environment.
 export const ENVIRONMENT_DEFAULT_VALUE = "default";
@@ -15,6 +17,7 @@ export function setEnvironmentEditParam(
 ): string {
   const params = new URLSearchParams(currentSearch);
   params.delete(ENVIRONMENT_CREATE_PARAM);
+  params.delete(ENVIRONMENT_DEFAULTS_PARAM);
   params.set(ENVIRONMENT_EDIT_PARAM, id);
   return params.toString();
 }
@@ -26,17 +29,31 @@ export function setEnvironmentEditParam(
 export function setEnvironmentCreateParam(currentSearch: string): string {
   const params = new URLSearchParams(currentSearch);
   params.delete(ENVIRONMENT_EDIT_PARAM);
+  params.delete(ENVIRONMENT_DEFAULTS_PARAM);
   params.set(ENVIRONMENT_CREATE_PARAM, "1");
   return params.toString();
 }
 
 /**
- * Search string with both dialog params removed, preserving other params. Used
+ * Search string with `?resource-defaults` set, preserving other params and
+ * removing the editor params (the dialogs are mutually exclusive).
+ */
+export function setEnvironmentDefaultsParam(currentSearch: string): string {
+  const params = new URLSearchParams(currentSearch);
+  params.delete(ENVIRONMENT_EDIT_PARAM);
+  params.delete(ENVIRONMENT_CREATE_PARAM);
+  params.set(ENVIRONMENT_DEFAULTS_PARAM, "1");
+  return params.toString();
+}
+
+/**
+ * Search string with every dialog param removed, preserving other params. Used
  * when a dialog closes or an unknown `edit` id is ignored.
  */
 export function clearEnvironmentDialogParams(currentSearch: string): string {
   const params = new URLSearchParams(currentSearch);
   params.delete(ENVIRONMENT_EDIT_PARAM);
   params.delete(ENVIRONMENT_CREATE_PARAM);
+  params.delete(ENVIRONMENT_DEFAULTS_PARAM);
   return params.toString();
 }

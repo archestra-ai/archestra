@@ -31,6 +31,7 @@ import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
+import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
@@ -61,6 +62,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  useAgentCredentialReadiness,
   useCreateProfile,
   useInternalAgents,
   useUpdateProfile,
@@ -75,6 +77,11 @@ import {
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  indexReadinessByAgent,
+  listServerNames,
+  resolveAgentConnectionGate,
+} from "@/lib/chat/agent-connection-gate";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -111,6 +118,21 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
+  const { data: credentialReadiness } = useAgentCredentialReadiness();
+  const readinessByAgent = useMemo(
+    () => indexReadinessByAgent(credentialReadiness),
+    [credentialReadiness],
+  );
+  const installOrchestrator = useMcpInstallOrchestrator();
+  // Connecting is per server, so several missing ones are walked one at a time:
+  // each install refreshes readiness, and the row re-offers whatever is left.
+  const connectMissing = useCallback(
+    (catalogIds: string[]) => {
+      const next = catalogIds[0];
+      if (next) installOrchestrator.triggerInstallByCatalogId(next);
+    },
+    [installOrchestrator],
+  );
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
@@ -298,7 +320,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           side="bottom"
           align="start"
           sideOffset={8}
-          className="w-64 p-0 rounded-xl"
+          className="w-80 p-0 rounded-xl"
         >
           <div className="p-2">
             <div className="relative">
@@ -322,83 +344,148 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
                 const canEdit = isAgentAdmin || agent.authorId === userId;
+                const gate = resolveAgentConnectionGate(
+                  readinessByAgent.get(agent.id),
+                );
+                const isBlocked = gate.kind === "block";
                 return (
                   <div
                     key={agent.id}
                     className={cn(
-                      "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent",
+                      "group w-full rounded-lg px-2.5 py-2 transition-colors",
+                      isBlocked ? "opacity-60" : "hover:bg-accent",
                       isSelected && "bg-accent",
                     )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => handleAgentSelect(agent.id)}
-                      className="flex flex-1 items-center gap-2.5 text-left cursor-pointer min-w-0"
-                    >
-                      <div
+                    <div className="flex w-full items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled={isBlocked}
+                        onClick={() => handleAgentSelect(agent.id)}
                         className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                          isSelected
-                            ? "bg-primary/10 ring-1 ring-primary/20"
-                            : "bg-muted",
+                          "flex flex-1 items-center gap-2.5 text-left min-w-0",
+                          isBlocked ? "cursor-not-allowed" : "cursor-pointer",
                         )}
                       >
-                        <AgentIcon icon={agent.icon} size={14} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm font-medium truncate">
-                            {agent.name}
-                          </span>
-                          <AgentBadge
-                            type={agent.scope}
-                            className="text-[10px] px-1.5 py-0 shrink-0"
-                          />
+                        <div
+                          className={cn(
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                            isSelected
+                              ? "bg-primary/10 ring-1 ring-primary/20"
+                              : "bg-muted",
+                          )}
+                        >
+                          <AgentIcon icon={agent.icon} size={14} />
                         </div>
-                        {agent.description && (
-                          <div className="text-[11px] text-muted-foreground truncate">
-                            {agent.description}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm font-medium truncate">
+                              {agent.name}
+                            </span>
+                            <AgentBadge
+                              type={agent.scope}
+                              className="text-[10px] px-1.5 py-0 shrink-0"
+                            />
+                            {/* Greying alone reads as "styled differently"; the
+                              word is what says the row cannot be picked. */}
+                            {isBlocked && (
+                              <span className="shrink-0 rounded bg-muted px-1.5 py-0 text-[10px] text-muted-foreground">
+                                Unavailable
+                              </span>
+                            )}
                           </div>
+                          {agent.description && (
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {agent.description}
+                            </div>
+                          )}
+                          {gate.kind !== "ok" && (
+                            // Wraps to a second line rather than truncating: the
+                            // whole point of the line is the reason, and a
+                            // truncated one hides the server to connect.
+                            <div
+                              className={cn(
+                                "text-[11px] line-clamp-2",
+                                isBlocked
+                                  ? "text-muted-foreground"
+                                  : "text-amber-600 dark:text-amber-500",
+                              )}
+                            >
+                              <span>
+                                {isBlocked
+                                  ? `Needs your connection to ${listServerNames(gate.serverNames)}`
+                                  : `Some tools need ${listServerNames(gate.serverNames)}`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {isSelected && (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
                         )}
-                      </div>
-                      {isSelected && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      </button>
+                      {/* Editing or cloning an agent the user cannot even start
+                        answers a question they did not ask, so the hover action
+                        is withheld while a connection is outstanding. */}
+                      {gate.kind === "ok" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5 text-[11px] hidden group-hover:flex shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (canEdit) {
+                              setOpen(false);
+                              setEditingAgentId(agent.id);
+                            } else {
+                              createProfile.mutate(
+                                {
+                                  name: `Copy ${agent.name}`,
+                                  scope: "personal",
+                                  agentType: "agent",
+                                  description: agent.description,
+                                  systemPrompt: agent.systemPrompt,
+                                  icon: agent.icon,
+                                },
+                                {
+                                  onSuccess: (newAgent) => {
+                                    if (newAgent?.id) {
+                                      onAgentChange(newAgent.id);
+                                      setOpen(false);
+                                      setEditingAgentId(newAgent.id);
+                                    }
+                                  },
+                                },
+                              );
+                            }
+                          }}
+                        >
+                          {canEdit ? "Edit" : "Clone"}
+                        </Button>
                       )}
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 text-[11px] hidden group-hover:flex shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (canEdit) {
-                          setOpen(false);
-                          setEditingAgentId(agent.id);
-                        } else {
-                          createProfile.mutate(
-                            {
-                              name: `Copy ${agent.name}`,
-                              scope: "personal",
-                              agentType: "agent",
-                              description: agent.description,
-                              systemPrompt: agent.systemPrompt,
-                              icon: agent.icon,
-                            },
-                            {
-                              onSuccess: (newAgent) => {
-                                if (newAgent?.id) {
-                                  onAgentChange(newAgent.id);
-                                  setOpen(false);
-                                  setEditingAgentId(newAgent.id);
-                                }
-                              },
-                            },
-                          );
-                        }
-                      }}
-                    >
-                      {canEdit ? "Edit" : "Clone"}
-                    </Button>
+                    </div>
+                    {/* Its own line, aligned with the text column: the one
+                        action that unblocks the row, without stealing the
+                        width the agent's name needs. */}
+                    {gate.kind !== "ok" && (
+                      <div className="mt-1.5 pl-[38px]">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-full justify-center px-2 text-[11px]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpen(false);
+                            connectMissing(gate.catalogIds);
+                          }}
+                        >
+                          <span>
+                            {gate.catalogIds.length === 1
+                              ? `Connect ${gate.serverNames[0]}`
+                              : `Connect ${gate.catalogIds.length} servers`}
+                          </span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -406,6 +493,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Outside the popover on purpose: connecting closes the list, and a
+          dialog mounted inside it would be torn down with it. */}
+      <McpInstallDialogs orchestrator={installOrchestrator} />
 
       <Dialog
         open={!!editingAgentId}

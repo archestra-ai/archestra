@@ -1055,6 +1055,48 @@ const loadArchestraAppBaseCss = (): string | null => {
 const archestraAppBaseCss = loadArchestraAppBaseCss();
 
 /**
+ * Build the `frame-ancestors` source list for the sandbox proxy response.
+ *
+ * Only origins the operator actually declared may restrict this policy —
+ * `ARCHESTRA_FRONTEND_URL` and friends (via `mcpSandbox.allowedOrigins`) and a
+ * configured `ARCHESTRA_MCP_SANDBOX_DOMAIN`. A deployment that declares none of
+ * them is an open one: the sandbox must stay embeddable wherever the platform is
+ * reached, so the policy stays `*`.
+ *
+ * Ancillary features may only WIDEN an already-restricted list, never create
+ * one. The app-recording renderer is the case in point: its frame ancestors fall
+ * back to a guessed `http://localhost:3000` when nothing is configured, and
+ * pushing that guess unconditionally turned the open policy into a loopback-only
+ * one — so a container reached on any other origin (a remapped published port, a
+ * LAN address, a reverse proxy) had every app iframe refused with
+ * `ERR_BLOCKED_BY_RESPONSE` and rendered an empty box.
+ *
+ * @public — exercised by server.test.ts (knip --production ignores tests)
+ */
+export function buildSandboxFrameAncestors(params: {
+  allowedOrigins: readonly string[];
+  sandboxDomain: string | null | undefined;
+  /** Extra ancestors from the offline video renderer; empty when it is off. */
+  recorderFrameAncestors: readonly string[];
+}): string {
+  const declared = [...params.allowedOrigins];
+  if (params.sandboxDomain) {
+    declared.push(`*.${params.sandboxDomain}`);
+  }
+  if (declared.length === 0) return "*";
+
+  // The renderer loads the replay page from this deployment's own frontend,
+  // which then frames the sandbox exactly as a person's browser does. It
+  // normally reaches it at the configured frontend origin, already declared
+  // above; a deployment that points the renderer somewhere internal instead
+  // needs that address named too, or the sandbox refuses to load inside the
+  // render and the replay films an empty app pane.
+  return [...new Set([...declared, ...params.recorderFrameAncestors])].join(
+    " ",
+  );
+}
+
+/**
  * Register the sandbox proxy route on the main Fastify instance.
  *
  * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
@@ -1074,6 +1116,27 @@ const registerSandboxRoute = (
     );
   }
 
+  // frame-ancestors restricts which origins can embed this sandbox iframe.
+  // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
+  // Guest content CSP is handled by the proxy HTML (meta tag injection from
+  // sandbox-resource-ready message). Purely config-derived, so resolve it once.
+  const frameAncestors = buildSandboxFrameAncestors({
+    allowedOrigins: config.mcpSandbox.allowedOrigins,
+    sandboxDomain: config.mcpSandbox.domain,
+    recorderFrameAncestors: config.hackathonRecorder.enabled
+      ? config.hackathonRecorder.renderFrameAncestors
+      : [],
+  });
+  if (frameAncestors !== "*") {
+    // Reaching the platform on any other origin makes the browser refuse the
+    // sandbox iframe outright, and an app then renders as an empty box with no
+    // JS-visible error. Say so at startup so that is a one-line diagnosis.
+    logger.info(
+      { frameAncestors },
+      "MCP App sandbox may only be embedded by these origins (from ARCHESTRA_FRONTEND_URL / ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS / ARCHESTRA_MCP_SANDBOX_DOMAIN)",
+    );
+  }
+
   fastify.get("/_sandbox/mcp-sandbox-proxy.html", async (request, reply) => {
     // When a sandbox domain is configured, validate the Host header matches
     // *.{domain} to prevent the sandbox route from being abused on the main origin.
@@ -1084,26 +1147,6 @@ const registerSandboxRoute = (
       }
     }
 
-    // frame-ancestors restricts which origins can embed this sandbox iframe.
-    // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
-    // Guest content CSP is handled by the proxy HTML (meta tag injection from sandbox-resource-ready message).
-    const frameAncestorsList = [...config.mcpSandbox.allowedOrigins];
-    if (config.mcpSandbox.domain) {
-      frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
-    }
-    // The offline video renderer loads the replay page from this deployment's
-    // own frontend, which then frames the sandbox exactly as a person's browser
-    // does. It normally reaches it at the configured frontend origin, already
-    // listed above; a deployment that points the renderer somewhere internal
-    // instead needs that address named too, or the sandbox refuses to load
-    // inside the render and the replay films an empty app pane.
-    if (config.hackathonRecorder.enabled) {
-      frameAncestorsList.push(...config.hackathonRecorder.renderFrameAncestors);
-    }
-    const frameAncestors =
-      frameAncestorsList.length > 0
-        ? [...new Set(frameAncestorsList)].join(" ")
-        : "*";
     void reply.header(
       "Content-Security-Policy",
       `frame-ancestors ${frameAncestors}`,

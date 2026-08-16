@@ -245,6 +245,135 @@ describe("POST /api/chat slim error payload", () => {
   });
 });
 
+describe("POST /api/chat missing MCP connection enforcement", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  const startTurn = (conversationId: string) =>
+    app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    const organization = await makeOrganization({ name: "Test Org" });
+    organizationId = organization.id;
+
+    mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
+    mockExtractAndIngestDocuments.mockResolvedValue(undefined);
+    mockCompactMessagesForChat.mockImplementation(
+      async ({ messages }: { messages: unknown[] }) => ({
+        messages,
+        status: "skipped",
+        compaction: null,
+        reason: "below_threshold",
+      }),
+    );
+    mockStartActiveChatSpan.mockImplementation(
+      async ({ callback }: { callback: () => Promise<Response> }) => callback(),
+    );
+    mockCreateUIMessageStream.mockImplementation(() => ({
+      tee: () => [
+        new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      ],
+    }));
+    mockCreateUIMessageStreamResponse.mockImplementation(
+      () => new Response("", { status: 200 }),
+    );
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("refuses the turn and names the server for a blocking agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeConversation,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+    const agent = await makeAgent({
+      organizationId,
+      name: "Release Reporter",
+      systemPrompt: "",
+      missingCredentialBehavior: "block",
+      accessAllTools: false,
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
+    });
+
+    const response = await startTurn(conversation.id);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("Acme Docs");
+  });
+
+  test("lets an agent on the default behavior through untouched", async ({
+    makeAgent,
+    makeAgentTool,
+    makeConversation,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+    const agent = await makeAgent({
+      organizationId,
+      name: "Release Reporter",
+      systemPrompt: "",
+      accessAllTools: false,
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
+    });
+
+    const response = await startTurn(conversation.id);
+
+    expect(response.statusCode).toBe(200);
+  });
+});
+
 describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   let app: FastifyInstanceWithZod;
   let user: User;

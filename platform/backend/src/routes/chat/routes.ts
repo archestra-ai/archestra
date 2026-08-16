@@ -125,6 +125,7 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import {
   type OpenedApp,
   resolveOpenedApp,
@@ -417,6 +418,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The agent associated with this conversation has been deleted",
         );
       }
+
+      // A shared agent may be configured to refuse callers who cannot reach one
+      // of the MCP servers its tools come from, rather than letting them find
+      // out mid-turn when such a tool errors. The picker greys these agents out,
+      // but that is advisory — this is the authoritative check, and it runs
+      // before anything is persisted or streamed. Agents left on the default
+      // `allow` behavior short-circuit inside the service with no extra queries.
+      await assertCallerMayStartTurn({
+        agentId: conversation.agentId,
+        userId: user.id,
+      });
 
       // Incognito: the browser-held key is required up front (fingerprint
       // checked, wrong key 409s before any side effect) and captured ONCE
@@ -1209,6 +1221,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     agentId: conversation.agentId,
                     provider,
                     selectedModel,
+                    modelId: conversation.modelId,
                     inputModalities: modelRow?.inputModalities ?? null,
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     systemPrompt,
@@ -3153,6 +3166,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         provider,
         selectedModel,
+        modelId: conversation.modelId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
         messages: normalizedMessages,
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
@@ -3497,8 +3511,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
         organizationId,
       );
+      // Unless an admin pinned a model on the title subagent, title the
+      // conversation with the model the conversation itself runs on — the pair
+      // chat resolution already picked and persisted. Falling straight to the
+      // organization default meant a chat on one self-hosted model was titled
+      // by another, with nothing in the UI to explain it.
+      //
+      // Except on Microsoft 365 Copilot, which cannot run a title generation at
+      // all (see the skip below). Inheriting it would turn a chat that used to
+      // get an organization-default title into one that gets none, so leave
+      // that conversation to the organization default.
+      const conversationModel = conversation.modelId
+        ? await ModelModel.findById(conversation.modelId)
+        : null;
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
+        inheritFrom:
+          conversationModel &&
+          conversationModel.provider !== "microsoft-365-copilot"
+            ? {
+                modelId: conversation.modelId,
+                agentLlmApiKeyId: conversation.agent?.llmApiKeyId ?? null,
+              }
+            : null,
         organizationId,
         userId: user.id,
         conversationId: id,

@@ -89,6 +89,24 @@ const appsTable = softDeletablePgTable(
      * (which controls who can consume the app at all).
      */
     locked: boolean("locked").notNull().default(false),
+    /**
+     * The one authoring session the `locked` flag above does NOT refuse: the
+     * chat conversation (or headless execution) an app was created from while
+     * the organization's "new apps are locked by default" setting was on.
+     * Without it that setting locks an app against the very agent that just
+     * scaffolded it, so a build cannot get past its empty shell.
+     *
+     * An opaque per-execution key (`isolationKey ?? conversationId`), never a
+     * conversation foreign key — the same value in UI chat, a generated id in
+     * headless runs. Null for every app not born locked, and for one created
+     * where no session identifies the creator (e.g. an external MCP client on
+     * the gateway), which stays locked to everyone from birth.
+     *
+     * Cleared the moment anyone sets the lock explicitly (App settings or
+     * `set_app_lock`), so a deliberate lock freezes the app for its creating
+     * session too.
+     */
+    lockGraceSessionKey: text("lock_grace_session_key"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

@@ -366,6 +366,160 @@ test.describe("Chat active run reconnect", () => {
   });
 });
 
+test.describe("Chat thinking block layout", () => {
+  test.setTimeout(120_000);
+
+  // A thinking block renders markdown, so it can hold a code line or a URL that
+  // has no break opportunity to shrink at. Those must scroll inside the block:
+  // if they size the block instead, the conversation itself scrolls sideways.
+  test("keeps a streaming thinking block within the conversation width", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    await expectWireMockReady();
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .or(page.getByRole("button", { name: /claude|gpt|gemini/i }))
+      .first();
+    await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
+    await modelSelectorTrigger.click();
+
+    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    await expect(modelDialog).toBeVisible({ timeout: 5_000 });
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const testMessageId = makeTestMessageId("chat-thinking-overflow-e2e-test");
+    await page
+      .getByTestId(E2eTestId.ChatPromptTextarea)
+      .fill(`Test message ${testMessageId}: think it through.`);
+    await page.keyboard.press("Enter");
+
+    // A live block is expanded while it streams, so this is the state the
+    // overflow shows up in. Wait for the widest content — the long code line —
+    // to be on screen before measuring.
+    const thinkingCodeLine = page.getByText("reconcileEverything").first();
+    await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
+    expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+    // Nothing here should scroll sideways: not the conversation, and not the
+    // block either. The long identifier in the thinking text has to wrap
+    // instead. The code line is the one thing that may still scroll, and it
+    // does so on its own tinted panel — never spilling off the end of it.
+    const streaming = await thinkingLayout(page);
+    expect(streaming.blockOverflow).toBeLessThanOrEqual(1);
+    expect(streaming.proseOverflow).toBeLessThanOrEqual(1);
+    expect(streaming.codePanelOverflow).toBeLessThanOrEqual(1);
+
+    // And again once the block has settled and the reader reopens it. Wait for
+    // the block's own auto-collapse rather than racing it: clicking the trigger
+    // while it is still open would close the block instead of reopening it.
+    await expect(
+      page.getByText("The helper reconciles every knob").first(),
+    ).toBeVisible({ timeout: 90_000 });
+    await expect(thinkingCodeLine).toBeHidden({ timeout: 30_000 });
+    await page
+      .getByText(/Thought for/)
+      .first()
+      .click();
+    await expect(thinkingCodeLine).toBeVisible({ timeout: 10_000 });
+    expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+
+    // Settled, the thinking text reads on the same line length as the answer
+    // below it — both are capped at the same share of the transcript column,
+    // so the block is not a wider column of its own.
+    const settled = await thinkingLayout(page);
+    expect(settled.blockOverflow).toBeLessThanOrEqual(1);
+    expect(settled.proseOverflow).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(settled.proseWidth - settled.answerWidth),
+    ).toBeLessThanOrEqual(2);
+  });
+});
+
+/**
+ * Widest horizontal overflow, in pixels, of the conversation transcript and of
+ * the page itself — the two surfaces a too-wide message part pushes a scrollbar
+ * onto. Content that legitimately scrolls (a code block, a wide table) does so
+ * inside its own container and is not counted here.
+ */
+async function conversationHorizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const log = document.querySelector('[role="log"]');
+    if (!log) {
+      throw new Error("Conversation transcript (role=log) not found");
+    }
+    const candidates = [
+      document.documentElement,
+      log,
+      // use-stick-to-bottom owns the scrolling element inside the transcript.
+      ...log.querySelectorAll(":scope > div"),
+    ];
+    return Math.max(
+      ...candidates.map((element) => element.scrollWidth - element.clientWidth),
+    );
+  });
+}
+
+/**
+ * How the thinking block lays its markdown out: whether the block or its prose
+ * has to scroll sideways to show it, and the line length the prose wraps at
+ * next to the answer's. `answerWidth` is 0 until the answer has rendered.
+ */
+async function thinkingLayout(page: Page): Promise<{
+  blockOverflow: number;
+  proseOverflow: number;
+  codePanelOverflow: number;
+  proseWidth: number;
+  answerWidth: number;
+}> {
+  return page.evaluate(() => {
+    const prose = [...document.querySelectorAll("p")].find((paragraph) =>
+      paragraph.textContent?.startsWith("Let me re-read the helper"),
+    );
+    if (!prose?.parentElement) {
+      throw new Error("Thinking paragraph not rendered");
+    }
+    // The markdown root the thinking text renders into — the element that
+    // would carry the scrollbar if the content could not fit.
+    const block = prose.parentElement;
+    const answer = [...document.querySelectorAll(".is-assistant p")].find(
+      (paragraph) =>
+        paragraph.textContent?.startsWith("The helper reconciles every knob"),
+    );
+    // The tinted panel the code sits on. It may be wider than the block — its
+    // own container scrolls — but never narrower than the code, which would
+    // draw the line off the end of its own background.
+    const codePanel = block.querySelector(
+      "[data-streamdown='code-block-body'] pre",
+    );
+    return {
+      blockOverflow: block.scrollWidth - block.clientWidth,
+      proseOverflow: prose.scrollWidth - prose.clientWidth,
+      codePanelOverflow: codePanel
+        ? codePanel.scrollWidth - codePanel.clientWidth
+        : 0,
+      proseWidth: Math.round(prose.getBoundingClientRect().width),
+      answerWidth: answer
+        ? Math.round(answer.getBoundingClientRect().width)
+        : 0,
+    };
+  });
+}
+
 async function expectWireMockReady() {
   try {
     const response = await fetch(`${WIREMOCK_BASE_URL}/__admin/health`);

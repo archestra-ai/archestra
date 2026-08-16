@@ -13,6 +13,7 @@ import {
   deleteEnvironment,
   listEnvironments,
   updateEnvironment,
+  updateEnvironmentResourceDefaults,
 } from "@/services/environments/environment";
 import {
   ApiError,
@@ -20,8 +21,10 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   EnvironmentListSchema,
+  EnvironmentResourceDefaultsSchema,
   type NetworkPolicy,
   SelectEnvironmentSchema,
+  UpdateEnvironmentResourceDefaultsSchema,
   UpdateEnvironmentSchema,
   UuidIdSchema,
 } from "@/types";
@@ -42,6 +45,25 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId }, reply) => {
       return reply.send(await listEnvironments(organizationId));
+    },
+  );
+
+  fastify.patch(
+    "/api/environments/defaults",
+    {
+      schema: {
+        operationId: RouteId.UpdateEnvironmentResourceDefaults,
+        description:
+          "Configure which environment newly created resources of each kind land in when their creator does not pick one. Omitted kinds are left unchanged; an explicit null resets that kind to the default environment.",
+        tags: ["Organization"],
+        body: UpdateEnvironmentResourceDefaultsSchema,
+        response: constructResponseSchema(EnvironmentResourceDefaultsSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      return reply.send(
+        await updateEnvironmentResourceDefaults({ organizationId, data: body }),
+      );
     },
   );
 

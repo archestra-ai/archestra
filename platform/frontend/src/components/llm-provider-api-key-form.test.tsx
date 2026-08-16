@@ -436,6 +436,37 @@ describe("LlmProviderApiKeyForm", () => {
     });
   });
 
+  describe("vLLM endpoint", () => {
+    it("asks for the server URL up front", async () => {
+      // A vLLM key is a server, not an account: the endpoint decides which
+      // models the key can reach, and blank routes to api.openai.com.
+      renderForm({ defaults: { provider: "vllm" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole("button", { name: "Advanced settings" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Base URL").textContent).not.toContain(
+        "optional",
+      );
+    });
+
+    it("treats a server-wide vLLM endpoint as the default", async () => {
+      vi.mocked(useProviderBaseUrls).mockReturnValue({
+        data: { vllm: "http://vllm:8000/v1" },
+      } as unknown as ReturnType<typeof useProviderBaseUrls>);
+
+      renderForm({ defaults: { provider: "vllm" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+    });
+  });
+
   describe("Bedrock region", () => {
     it("asks for a region instead of requiring a base URL", async () => {
       renderForm({ defaults: { provider: "bedrock" } });

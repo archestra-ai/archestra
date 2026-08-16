@@ -1,3 +1,4 @@
+import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -142,12 +143,39 @@ export const EnvironmentWithAssignedCountSchema =
   });
 
 /**
- * Full listing payload: the org's environments plus the count of catalog items
- * with no environment (which implicitly belong to the default environment).
+ * Where newly created resources of each kind land when their creator does not
+ * pick an environment. `null` (the default for every kind) means the org's
+ * implicit Default environment, i.e. the historical behavior.
+ *
+ * `satisfies` keeps the keys exhaustive against
+ * `ENVIRONMENT_DEFAULTABLE_RESOURCES` — adding a kind there fails to compile
+ * until it is represented here.
+ */
+export const EnvironmentResourceDefaultsSchema = z.object({
+  mcpRegistry: z.string().uuid().nullable(),
+  app: z.string().uuid().nullable(),
+  agent: z.string().uuid().nullable(),
+  mcpGateway: z.string().uuid().nullable(),
+  llmProxy: z.string().uuid().nullable(),
+  knowledgeSource: z.string().uuid().nullable(),
+} satisfies Record<EnvironmentDefaultableResource, z.ZodTypeAny>);
+
+/**
+ * Update payload for the per-resource defaults. Omitted kinds are left
+ * unchanged; an explicit `null` resets that kind to the Default environment.
+ */
+export const UpdateEnvironmentResourceDefaultsSchema =
+  EnvironmentResourceDefaultsSchema.partial();
+
+/**
+ * Full listing payload: the org's environments, the count of catalog items
+ * with no environment (which implicitly belong to the default environment),
+ * and where new resources of each kind land.
  */
 export const EnvironmentListSchema = z.object({
   environments: z.array(EnvironmentWithAssignedCountSchema),
   defaultAssignedCatalogCount: z.number().int().nonnegative(),
+  resourceDefaults: EnvironmentResourceDefaultsSchema,
 });
 
 export const KubernetesNamespaceSchema = z
@@ -189,6 +217,12 @@ export type EnvironmentWithAssignedCount = z.infer<
   typeof EnvironmentWithAssignedCountSchema
 >;
 export type EnvironmentList = z.infer<typeof EnvironmentListSchema>;
+export type EnvironmentResourceDefaults = z.infer<
+  typeof EnvironmentResourceDefaultsSchema
+>;
+export type UpdateEnvironmentResourceDefaults = z.infer<
+  typeof UpdateEnvironmentResourceDefaultsSchema
+>;
 export type CreateEnvironment = z.infer<typeof CreateEnvironmentSchema>;
 export type UpdateEnvironment = z.infer<typeof UpdateEnvironmentSchema>;
 export type TrustedImageRegistries = z.infer<

@@ -2899,6 +2899,27 @@
       "when": 1786554207675,
       "tag": "0413_grey_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 414,
+      "version": "7",
+      "when": 1786754855754,
+      "tag": "0414_brief_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 415,
+      "version": "7",
+      "when": 1786819743500,
+      "tag": "0415_youthful_kronos",
+      "breakpoints": true
+    },
+    {
+      "idx": 416,
+      "version": "7",
+      "when": 1786826617329,
+      "tag": "0416_marvelous_sabretooth",
+      "breakpoints": true
     }
   ]
 }

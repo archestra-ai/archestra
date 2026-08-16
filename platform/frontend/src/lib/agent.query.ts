@@ -16,6 +16,7 @@ const {
   suggestSkillDescription,
   deleteAgent,
   exportAgent,
+  getAgentCredentialReadiness,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
@@ -468,6 +469,23 @@ export function useDefaultAgentId() {
       throwOnApiError(error, { toastOnError: false });
       return data?.defaultAgentId ?? null;
     },
+  });
+}
+
+/**
+ * Which agents the current user cannot fully run, and which MCP connections
+ * they are missing. Only agents whose author moved them off the default
+ * "allow" behavior appear here, so an empty result is the common case.
+ */
+export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["agents", "credential-readiness"],
+    queryFn: async () => {
+      const { data, error } = await getAgentCredentialReadiness();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params?.enabled,
   });
 }
 

@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,7 +48,7 @@ Two settings in **Settings → Chat** govern how new apps start. Both are off by
 
 **New apps are disabled by default** creates every new app disabled. The app stays author-only and invisible to agents until you enable it in App settings.
 
-**New apps are locked by default** creates every new app [locked](#locking-an-app). No agent can edit it until a user unlocks it.
+**New apps are locked by default** creates every new app [locked](#locking-an-app). The chat that created the app can finish building it, so a new app never arrives frozen as an empty shell. Every other chat is refused from the first moment. Locking or unlocking the app yourself ends that one exception.
 
 ## Labels
 
@@ -129,7 +129,7 @@ Reads need `file:manage`, and the transfer tools need `sandbox:execute`. The fil
 
 ## Tools and auto-auth
 
-Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. `scaffold_app` binds the app to the authoring agent's [environment](./platform-environments); assignable tools are that environment's plus the Default environment's.
+Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. A new app binds to the [environment](./platform-environments) of the agent that builds it — the authoring agent for `scaffold_app`, the chat agent an app created on the Apps page opens with. With no such agent it lands in the organization's landing environment for new apps. Assignable tools are that environment's plus the Default environment's.
 
 Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 

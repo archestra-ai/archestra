@@ -108,7 +108,9 @@ export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
  * `source`. `executionModel` and `cspOrigin` are the machine-readable trust
  * disclosure (mcp-apps.md FR-29): owned apps run as the viewer under the
  * platform-pinned CSP; external apps run server-scoped under the server's own
- * declared CSP. `GET /api/apps/:appId` still returns {@link SelectAppSchema}.
+ * declared CSP. `GET /api/apps/:appId` still returns the whole app — the
+ * REST-facing {@link PublicAppSchema}, which is {@link SelectAppSchema} minus
+ * the columns that are internal bookkeeping rather than part of the contract.
  */
 const AppListItemBaseSchema = z.object({
   name: z.string(),
@@ -243,6 +245,15 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   environmentId: z.string().uuid().nullable(),
   labels: z.array(AgentLabelWithDetailsSchema),
 });
+
+/**
+ * The app as REST hands it out. `lockGraceSessionKey` is internal bookkeeping
+ * for the authoring gate — an opaque execution key no API consumer acts on —
+ * so it is dropped here rather than published in every app payload.
+ */
+export const PublicAppSchema = SelectAppSchema.omit({
+  lockGraceSessionKey: true,
+});
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {
@@ -300,7 +311,9 @@ export const CreateAppSchema = z.object({
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
-  // Environment binding. null/omitted = org default. Org membership and the
+  // Environment binding. null = the org default environment; omitted defers to
+  // the organization's configured landing environment for new apps (which is
+  // the default environment until an admin sets one). Org membership and the
   // restricted-env permission are enforced in the route via
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),

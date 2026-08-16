@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "missing_credential_behavior" text DEFAULT 'allow' NOT NULL;

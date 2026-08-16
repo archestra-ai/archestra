@@ -28,6 +28,7 @@ export const AgentConfigSnapshotSchema = z.object({
   systemPrompt: z.string().nullable(),
   considerContextUntrusted: z.boolean(),
   toolExposureMode: z.string(),
+  missingCredentialBehavior: z.string(),
   accessAllTools: z.boolean(),
   accessAllSubagents: z.boolean(),
   /** Header NAMES only (no values) — safe to capture verbatim. */

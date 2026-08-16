@@ -39,15 +39,20 @@ import {
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
+import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import {
   type Agent,
+  AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -361,6 +366,41 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agents/credential-readiness",
+    {
+      schema: {
+        operationId: RouteId.GetAgentCredentialReadiness,
+        description:
+          "For each internal agent that enforces a missing-credential behavior, the MCP servers the calling user has no usable connection to",
+        tags: ["Agents"],
+        response: constructResponseSchema(
+          z.array(AgentCredentialReadinessSchema),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      const agents = await AgentModel.findAll(
+        user.id,
+        checker.isAdmin("agent"),
+        {
+          agentTypes: ["agent"],
+          excludeBuiltIn: true,
+          onlyEnforcingMissingCredentials: true,
+        },
+      );
+
+      return reply.send(
+        await getAgentCredentialReadiness({ agents, userId: user.id }),
+      );
+    },
+  );
+
+  fastify.get(
     "/api/mcp-gateways/default",
     {
       schema: {
@@ -548,12 +588,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Always assert on create: a null/omitted environment still lands on the
-      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      const environmentId = await resolveNewAgentEnvironmentId({
+        userId: user.id,
+        organizationId,
+        agentType,
+        requested: body.environmentId,
+      });
+      // Always assert on create: a null environment still lands on the org
+      // default, which may itself be restricted (mirrors the MCP-catalog path).
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
         agentType,
       });
 
@@ -573,6 +619,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // environment exception), so a client-supplied value is dropped here.
       const createData = {
         ...body,
+        environmentId,
         builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
       };
@@ -2074,6 +2121,33 @@ async function assertEnvironmentAssignable(params: {
     environmentId,
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
+  });
+}
+
+/**
+ * The environment a new agent binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for the agent's
+ * type — agents, MCP gateways, and LLM proxies are configured separately.
+ */
+async function resolveNewAgentEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  agentType: AgentType;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, agentType, requested } = params;
+  if (requested !== undefined) return requested;
+  const resource = getResourceForAgentType(agentType);
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource,
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      resource,
+      "deploy-to-restricted",
+    ),
   });
 }
 

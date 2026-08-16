@@ -725,6 +725,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
   [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
@@ -1395,6 +1396,9 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["delete"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
+    environment: ["update"],
+  },
+  [RouteId.UpdateEnvironmentResourceDefaults]: {
     environment: ["update"],
   },
   [RouteId.GetK8sCapabilities]: {

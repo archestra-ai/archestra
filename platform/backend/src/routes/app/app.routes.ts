@@ -15,6 +15,7 @@ import {
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
+  AgentModel,
   AppAccessModel,
   AppLabelModel,
   AppModel,
@@ -42,6 +43,7 @@ import {
 import {
   createSeededAppConversation,
   createSeededExternalAppConversation,
+  resolveDefaultChatAgentId,
 } from "@/services/apps/app-chat-conversation";
 import {
   createAppBacking,
@@ -50,7 +52,10 @@ import {
 } from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import {
   ApiError,
   type App,
@@ -65,7 +70,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ExternalAppResolutionSchema,
-  SelectAppSchema,
+  PublicAppSchema,
   SelectAppVersionSchema,
   SelectToolSchema,
   UpdateAppSchema,
@@ -102,7 +107,7 @@ const UpdateAppBodySchema = UpdateAppSchema.extend({
 
 // Create/update responses carry soft save-time validation warnings (the save
 // succeeded; the html has structural issues worth surfacing to the author).
-const AppWithWarningsSchema = SelectAppSchema.extend({
+const AppWithWarningsSchema = PublicAppSchema.extend({
   warnings: z.array(z.string()).optional(),
 });
 
@@ -130,7 +135,7 @@ const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
 // render team-name badges and seed the visibility editor, plus the caller's
 // viewerRole so the settings surface can show a "Viewing as administrator"
 // banner when an admin opens an app they only see through oversight.
-const AppWithTeamsSchema = SelectAppSchema.extend({
+const AppWithTeamsSchema = PublicAppSchema.extend({
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   // People the app is shared with individually. A non-empty list on a
   // `personal`-scoped app is what the settings form renders as "Users" — the
@@ -478,10 +483,37 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: user.id,
         resourceTeamIds: teamIds,
       });
+      // `openInChat` hands the new app straight to a chat agent to build (the
+      // Apps page create flow), so that agent is resolved up front: the app
+      // binds to its environment below, and the seeded conversation reuses the
+      // very same agent rather than resolving one of its own.
+      //
+      // Best-effort, like the seeding itself — a failure here must not fail the
+      // create. It costs the environment inference: the app falls back to the
+      // configured landing environment and seeding resolves the agent on its
+      // own, exactly as both did before this was inferred at all.
+      const builderAgentId = body.openInChat
+        ? await resolveDefaultChatAgentId({
+            userId: user.id,
+            organizationId,
+          }).catch((error) => {
+            logger.warn(
+              { err: error, organizationId },
+              "Failed to resolve the chat agent for a new app",
+            );
+            return null;
+          })
+        : null;
+      const environmentId = await resolveNewAppEnvironmentId({
+        userId: user.id,
+        organizationId,
+        requested: body.environmentId,
+        builderAgentId,
+      });
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
       });
       const { html, seededFromTemplate } = await resolveCreateAppHtml({
         html: body.html,
@@ -522,7 +554,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await createAppBacking({
           app: created,
           scope,
-          environmentId: body.environmentId ?? null,
+          environmentId,
           userId: user.id,
           organizationId,
           teamIds,
@@ -549,11 +581,23 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             appId: app.id,
             userId: user.id,
             organizationId,
+            // The agent whose environment the app was just bound to, so the
+            // chat that builds it runs as that agent (see `builderAgentId`).
+            ...(builderAgentId ? { agentId: builderAgentId } : {}),
           }));
+          // The Apps page creates a blank app and drops the user straight into
+          // this conversation to build it. When the organization's default is
+          // what locked the app, that build has to be able to start, so the
+          // conversation gets the same creation-time grace `scaffold_app`
+          // gives its own (chat carries the conversation id as its session
+          // key). Everyone else meets the lock immediately.
+          if (lifecycleDefaults.locked) {
+            await AppModel.setLockGraceSessionKey(app.id, conversationId);
+          }
         } catch (error) {
           logger.warn(
-            { err: error, appId: app.id },
-            "Failed to seed chat conversation for newly created app",
+            { err: error, appId: app.id, conversationId },
+            "Failed to open the newly created app in chat",
           );
         }
       }
@@ -1496,6 +1540,79 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasAppDeploy,
   });
+}
+
+/**
+ * The environment a new app binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment). Otherwise
+ * the app follows the agent that will build it — the chat agent an
+ * `openInChat` create hands it to — because that is the environment the agent
+ * discovers tools in, so what `search_tools` just found is assignable to the
+ * app it is building (the same binding `scaffold_app` makes for an app created
+ * from chat). Only when there is no such agent, or its environment is one this
+ * caller may not deploy to, does the org's configured landing environment for
+ * new apps decide, and then the Default one.
+ */
+async function resolveNewAppEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  requested: string | null | undefined;
+  /** The chat agent that will build the app, when the create opens it in chat. */
+  builderAgentId: string | null;
+}): Promise<string | null> {
+  const { userId, organizationId, requested, builderAgentId } = params;
+  if (requested !== undefined) return requested;
+
+  const canDeployToRestricted = await userHasPermission(
+    userId,
+    organizationId,
+    "app",
+    "deploy-to-restricted",
+  );
+
+  if (builderAgentId) {
+    const agentEnvironmentId =
+      await AgentModel.findEnvironmentId(builderAgentId);
+    // A restricted environment the caller may not deploy to falls through to
+    // the configured default rather than failing the create — inferring an
+    // environment must never turn "New app" into a 403 (choosing that
+    // environment explicitly is still refused by assertEnvironmentAssignable).
+    if (
+      agentEnvironmentId &&
+      (await environmentIsAssignable({
+        environmentId: agentEnvironmentId,
+        organizationId,
+        canDeployToRestricted,
+      }))
+    ) {
+      return agentEnvironmentId;
+    }
+  }
+
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource: "app",
+    canDeployToRestricted,
+  });
+}
+
+/**
+ * The boolean form of {@link assertEnvironmentAssignable}, for an environment
+ * this route *inferred* rather than was handed: it falls back instead of
+ * failing the request.
+ */
+async function environmentIsAssignable(params: {
+  environmentId: string;
+  organizationId: string;
+  canDeployToRestricted: boolean;
+}): Promise<boolean> {
+  try {
+    await assertCanAssignEnvironment(params);
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError) return false;
+    throw error;
+  }
 }
 
 export default appRoutes;

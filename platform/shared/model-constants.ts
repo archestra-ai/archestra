@@ -206,6 +206,40 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
 ]);
 
 /**
+ * Providers where a provider key IS a server, not just a credential: each key
+ * carries its own base URL and only the models that server happens to host, so
+ * two keys of the same provider can serve disjoint catalogs.
+ *
+ * This is the normal shape for self-hosted inference — `vllm serve` runs one
+ * model per process, so an operator hosting several models runs several servers
+ * — and it is what makes request-time endpoint selection model-dependent:
+ * sending a model to a sibling server that does not host it is a guaranteed
+ * upstream 404, so resolution prefers whichever key's endpoint actually serves
+ * the requested model (see `LlmProviderApiKeyModel.findKeyServingModel`).
+ *
+ * Deliberately NOT every provider: for a credential-style provider (OpenAI,
+ * Anthropic, …) every key reaches the same catalog, so switching keys would
+ * only change which account is billed — never whether the call can succeed.
+ */
+const PROVIDERS_WITH_ENDPOINT_LOCAL_MODELS = new Set<SupportedProvider>([
+  "vllm",
+  "ollama",
+  "ollama-native",
+  // An Azure key names one AI Foundry resource, and a deployment exists only
+  // within the resource it was created in.
+  "azure",
+  // Points at one other Archestra instance's proxy, which exposes that
+  // instance's models.
+  "archestra",
+]);
+
+export function providerHasEndpointLocalModels(
+  provider: SupportedProvider,
+): boolean {
+  return PROVIDERS_WITH_ENDPOINT_LOCAL_MODELS.has(provider);
+}
+
+/**
  * Providers whose credential is an individual user's token rather than a shared
  * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
  * account's Copilot seat; Microsoft 365 Copilot: a per-user Entra ID refresh token

@@ -94,6 +94,7 @@ import {
   type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
+import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -184,6 +185,11 @@ interface ChatMessagesProps {
     status: "pending" | "success" | "skipped" | "failed";
     message: string;
   } | null;
+  /**
+   * The run is alive but the provider has not produced this turn yet — see
+   * `useStreamStall`. Surfaces a quiet note beside the loading indicator.
+   */
+  isUpstreamIdle?: boolean;
   unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }
 
@@ -242,6 +248,7 @@ export function ChatMessages({
   modelSource,
   isContextCompacting = false,
   contextCompactionFeedback = null,
+  isUpstreamIdle = false,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
   // Track editing by messageId-partIndex to support multiple text parts per message
@@ -1596,6 +1603,7 @@ export function ChatMessages({
               }
               feedback={contextCompactionFeedback}
             />
+            {isUpstreamIdle && <UpstreamIdleNotice />}
             {isResponseInProgress && !hasPendingMcpElicitation && (
               <div className="absolute bottom-[-10] left-0">
                 <Message from="assistant">
@@ -2960,6 +2968,28 @@ function getInlineErrorMessage(error: Error): string {
   }
 
   return error.message;
+}
+
+/**
+ * Quiet counterpart to `StreamTimeoutWarning`: the run is healthy, the provider
+ * is just slow to start. It rides next to the loading indicator instead of
+ * taking a full-width banner at the top of the chat, because nothing is wrong
+ * yet — the user is only being told why the wait is long and that stopping is
+ * an option.
+ */
+function UpstreamIdleNotice() {
+  return (
+    <div className="mb-4 flex justify-center">
+      <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <ClockIcon className="size-4 flex-none" />
+        <span>
+          Still waiting on the provider — no response yet after{" "}
+          {UPSTREAM_IDLE_THRESHOLD_SECONDS} seconds. You can keep waiting, or
+          stop and retry.
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function ContextCompactionStatus({

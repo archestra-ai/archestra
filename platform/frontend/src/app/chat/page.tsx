@@ -42,6 +42,7 @@ import {
   useOwnAppSessionRecorder,
 } from "@/components/app-session-recording/use-app-session-recorder";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import {
@@ -171,6 +172,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
   writePendingThinkingEffort,
@@ -1506,6 +1508,12 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  const { isTransportStalled, isUpstreamIdle } = useStreamStall({
+    status,
+    transportActivitySequence: chatSession?.transportActivitySequence ?? 0,
+    responseProgressSequence: chatSession?.responseProgressSequence ?? 0,
+    messages,
+  });
 
   // `status` here is read from the shared session map, which each
   // ChatSessionHook updates a render behind the real SDK status (via a
@@ -3078,15 +3086,7 @@ export function ChatPageContent({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning
-                status={status}
-                transportActivitySequence={
-                  chatSession?.transportActivitySequence ?? 0
-                }
-                responseProgressSequence={
-                  chatSession?.responseProgressSequence ?? 0
-                }
-              />
+              <StreamTimeoutWarning isStalled={isTransportStalled} />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -3176,6 +3176,7 @@ export function ChatPageContent({
                           status={status}
                           isContextCompacting={isContextCompacting}
                           contextCompactionFeedback={manualCompactionFeedback}
+                          isUpstreamIdle={isUpstreamIdle}
                           optimisticToolCalls={optimisticToolCalls}
                           isLoadingConversation={isLoadingConversation}
                           onMessagesUpdate={setMessages}
@@ -3314,6 +3315,7 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
+                            <AgentConnectionNotice agentId={activeAgentId} />
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
@@ -3513,77 +3515,91 @@ export function ChatPageContent({
                                   onKeyAdded={handleFirstKeyAdded}
                                 />
                               ) : (
-                                <ArchestraPromptInput
-                                  onSubmit={handleInitialSubmit}
-                                  toolsUnavailable={initialToolsUnavailable}
-                                  notRecommendedForAgents={
-                                    initialNotRecommended
-                                  }
-                                  status={
-                                    createConversationMutation.isPending
-                                      ? "submitted"
-                                      : "ready"
-                                  }
-                                  selectedModel={initialModel}
-                                  onModelChange={handleInitialModelChange}
-                                  agentId={newChatAgentId}
-                                  currentProvider={initialProvider}
-                                  textareaRef={textareaRef}
-                                  initialApiKeyId={initialApiKeyId}
-                                  onApiKeyChange={setInitialApiKeyId}
-                                  onProviderChange={handleInitialProviderChange}
-                                  allowFileUploads={
-                                    organization?.allowChatFileUploads ?? false
-                                  }
-                                  isModelsLoading={isModelsLoading}
-                                  inputModalities={selectedModelInputModalities}
-                                  agentLlmApiKeyId={
-                                    (
-                                      internalAgents.find(
-                                        (a) => a.id === initialAgentId,
-                                      ) as Record<string, unknown> | undefined
-                                    )?.llmApiKeyId as string | null
-                                  }
-                                  submitDisabled={
-                                    isPlaywrightSetupVisible ||
-                                    isAgentSubscriptionMetadataPending
-                                  }
-                                  subscriptionConnectRequired={
-                                    initialPerUserConnect.needsConnect
-                                  }
-                                  subscriptionProvider={
-                                    initialPerUserConnect.provider
-                                  }
-                                  isPlaywrightSetupVisible={
-                                    isPlaywrightSetupVisible
-                                  }
-                                  selectorAgentId={initialAgentId}
-                                  onAgentChange={handleInitialAgentChange}
-                                  incognito={isIncognitoDraft}
-                                  onIncognitoChange={setIsIncognitoDraft}
-                                  modelSource={initialModelSource}
-                                  onResetModelOverride={
-                                    handleResetModelOverride
-                                  }
-                                  thinkingEffort={initialThinkingEffort}
-                                  onThinkingEffortChange={
-                                    setInitialThinkingEffort
-                                  }
-                                  agentRequiresPerUserConnect={
-                                    isAgentSubscriptionMetadataPending ||
-                                    initialModelSource === "agent" ||
-                                    initialPerUserConnect.needsConnect
-                                  }
-                                  agentModelDisplayName={
-                                    initialPerUserConnect.needsConnect
-                                      ? initialPerUserConnect.modelName
-                                      : undefined
-                                  }
-                                  prefillText={composerPrefill}
-                                  onPrefillApplied={
-                                    handleComposerPrefillApplied
-                                  }
-                                />
+                                <>
+                                  {newChatAgentId && (
+                                    <div className="mb-3">
+                                      <AgentConnectionNotice
+                                        agentId={newChatAgentId}
+                                      />
+                                    </div>
+                                  )}
+                                  <ArchestraPromptInput
+                                    onSubmit={handleInitialSubmit}
+                                    toolsUnavailable={initialToolsUnavailable}
+                                    notRecommendedForAgents={
+                                      initialNotRecommended
+                                    }
+                                    status={
+                                      createConversationMutation.isPending
+                                        ? "submitted"
+                                        : "ready"
+                                    }
+                                    selectedModel={initialModel}
+                                    onModelChange={handleInitialModelChange}
+                                    agentId={newChatAgentId}
+                                    currentProvider={initialProvider}
+                                    textareaRef={textareaRef}
+                                    initialApiKeyId={initialApiKeyId}
+                                    onApiKeyChange={setInitialApiKeyId}
+                                    onProviderChange={
+                                      handleInitialProviderChange
+                                    }
+                                    allowFileUploads={
+                                      organization?.allowChatFileUploads ??
+                                      false
+                                    }
+                                    isModelsLoading={isModelsLoading}
+                                    inputModalities={
+                                      selectedModelInputModalities
+                                    }
+                                    agentLlmApiKeyId={
+                                      (
+                                        internalAgents.find(
+                                          (a) => a.id === initialAgentId,
+                                        ) as Record<string, unknown> | undefined
+                                      )?.llmApiKeyId as string | null
+                                    }
+                                    submitDisabled={
+                                      isPlaywrightSetupVisible ||
+                                      isAgentSubscriptionMetadataPending
+                                    }
+                                    subscriptionConnectRequired={
+                                      initialPerUserConnect.needsConnect
+                                    }
+                                    subscriptionProvider={
+                                      initialPerUserConnect.provider
+                                    }
+                                    isPlaywrightSetupVisible={
+                                      isPlaywrightSetupVisible
+                                    }
+                                    selectorAgentId={initialAgentId}
+                                    onAgentChange={handleInitialAgentChange}
+                                    incognito={isIncognitoDraft}
+                                    onIncognitoChange={setIsIncognitoDraft}
+                                    modelSource={initialModelSource}
+                                    onResetModelOverride={
+                                      handleResetModelOverride
+                                    }
+                                    thinkingEffort={initialThinkingEffort}
+                                    onThinkingEffortChange={
+                                      setInitialThinkingEffort
+                                    }
+                                    agentRequiresPerUserConnect={
+                                      isAgentSubscriptionMetadataPending ||
+                                      initialModelSource === "agent" ||
+                                      initialPerUserConnect.needsConnect
+                                    }
+                                    agentModelDisplayName={
+                                      initialPerUserConnect.needsConnect
+                                        ? initialPerUserConnect.modelName
+                                        : undefined
+                                    }
+                                    prefillText={composerPrefill}
+                                    onPrefillApplied={
+                                      handleComposerPrefillApplied
+                                    }
+                                  />
+                                </>
                               )}
                             </div>
                           </ViewTransition>

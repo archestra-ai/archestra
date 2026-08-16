@@ -2,8 +2,9 @@ import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
-  // FIXME(flaky): first-touch route cold-compile under `next dev` exceeds the
-  // visibility budget on loaded CI runners (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the agents table row no longer offers the title + "more
+  // actions" affordances this walks; needs rewriting against the current row
+  // markup, not re-timing.
   test.fixme("can create and delete an agent", async ({
     page,
     agentsPage,
@@ -54,7 +55,9 @@ test.describe("Agents", () => {
     await expect(agentsPage.rowFor(NAME)).toBeHidden();
   });
 
-  // FIXME(flaky): cold-route-compile timeout under CI load (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the agents table row no longer offers the title + "more
+  // actions" affordances this walks; needs rewriting against the current row
+  // markup, not re-timing.
   test.fixme("can clone an agent and rename it", async ({
     page,
     agentsPage,

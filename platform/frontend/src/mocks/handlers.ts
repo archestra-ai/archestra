@@ -2,7 +2,6 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
-import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
@@ -48,37 +47,32 @@ import {
   skillsListSeed,
 } from "./data/skills";
 
-// Register each endpoint twice: absolute URL for SSR (Next.js server
-// components fetch the backend origin directly) and relative URL for the
-// browser (served via Next.js rewrites). MSW path-to-regexp does not accept
-// `*/...` host wildcards.
-const BACKEND_ORIGIN =
-  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || DEFAULT_INTERNAL_API_BASE_URL;
-
-function paired(path: string): [string, string] {
-  return [`${BACKEND_ORIGIN}${path}`, path];
+// Every endpoint is registered once, under its backend-relative path, which
+// MSW matches against any origin. Both consumers arrive that way: the browser
+// worker sees same-origin `/api/...` requests, and the mock backend route
+// (`/internal-test/api/[...path]`) strips its own prefix before matching, so
+// SSR calls land on the same paths. Returned as an array because several
+// handlers below map over it to build a custom resolver.
+function paths(path: string): [string] {
+  return [path];
 }
 
 function getJson(path: string, body: JsonBodyType): HttpHandler[] {
-  return paired(path).map((url) =>
-    http.get(url, () => HttpResponse.json(body)),
-  );
+  return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
 }
 
 function postJson(path: string, body: JsonBodyType): HttpHandler[] {
-  return paired(path).map((url) =>
+  return paths(path).map((url) =>
     http.post(url, () => HttpResponse.json(body)),
   );
 }
 
 function putJson(path: string, body: JsonBodyType): HttpHandler[] {
-  return paired(path).map((url) =>
-    http.put(url, () => HttpResponse.json(body)),
-  );
+  return paths(path).map((url) => http.put(url, () => HttpResponse.json(body)));
 }
 
 function patchJson(path: string, body: JsonBodyType): HttpHandler[] {
-  return paired(path).map((url) =>
+  return paths(path).map((url) =>
     http.patch(url, () => HttpResponse.json(body)),
   );
 }
@@ -87,7 +81,7 @@ function deleteJson(
   path: string,
   body: JsonBodyType = { success: true },
 ): HttpHandler[] {
-  return paired(path).map((url) =>
+  return paths(path).map((url) =>
     http.delete(url, () => HttpResponse.json(body)),
   );
 }
@@ -189,6 +183,21 @@ export const handlers: HttpHandler[] = [
     },
   }),
 
+  // Gateway tokens, read by the agent detail page's connect panel. No tokens
+  // issued and no org/team token access, which is the quiet default: the panel
+  // renders its empty state instead of a roster.
+  ...getJson("/api/tokens", {
+    tokens: [],
+    permissions: { canAccessOrgToken: false, canAccessTeamTokens: false },
+  }),
+  ...getJson("/api/user-tokens/me", {
+    id: "test-user-token",
+    name: "Test Admin's token",
+    tokenStart: "archestra_",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lastUsedAt: null,
+  }),
+
   // Agents
   ...getJson("/api/agents", agentsSeed),
   ...getJson("/api/agents/all", []),
@@ -258,7 +267,7 @@ export const handlers: HttpHandler[] = [
   // indirectly — the import only succeeds for the exact body the catalog flow
   // must send. Any other payload is reported skipped, which keeps the import
   // dialog open and fails the spec's dialog-closed assertion.
-  ...paired("/api/skills/github/import").map((url) =>
+  ...paths("/api/skills/github/import").map((url) =>
     http.post(url, async ({ request }) => {
       const body = (await request.json()) as {
         repoUrl?: string;
@@ -282,7 +291,7 @@ export const handlers: HttpHandler[] = [
   // filter specs genuinely exercise the request wiring rather than asserting
   // against a pre-baked body. Specs needing other data still override it via
   // `mswControl.use(...)` (overrides take precedence).
-  ...paired("/api/interactions/sessions").map((url) =>
+  ...paths("/api/interactions/sessions").map((url) =>
     http.get(url, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const sessionId = params.get("sessionId");
@@ -318,7 +327,7 @@ export const handlers: HttpHandler[] = [
   // reason as the github import handler above: success (snippets revealed)
   // pins the exact body the step must send.
   ...getJson("/api/skill-share-links", { links: [] }),
-  ...paired("/api/skill-share-links").map((url) =>
+  ...paths("/api/skill-share-links").map((url) =>
     http.post(url, async ({ request }) => {
       const body = (await request.json()) as { skillIds?: string[] };
       const isExpectedPayload =
@@ -332,7 +341,7 @@ export const handlers: HttpHandler[] = [
           );
     }),
   ),
-  ...paired("/api/skill-share-links/:id/rotate").map((url) =>
+  ...paths("/api/skill-share-links/:id/rotate").map((url) =>
     http.post(url, async ({ request, params }) => {
       const body = (await request.json()) as {
         skillIds?: string[];

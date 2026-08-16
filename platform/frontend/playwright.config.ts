@@ -71,15 +71,16 @@ export default defineConfig({
       // outright on the `.next/dev/lock` single-instance guard.
       NEXT_DIST_DIR: ".next-pw",
       NEXT_PUBLIC_API_MOCKING: "enabled",
-      // Point the SDK at an unreachable port instead of the real backend so
-      // any SSR fetch that escapes MSW fails loudly with ECONNREFUSED rather
-      // than silently hitting a developer's locally running Fastify on 9000.
-      // Use a Fetch-allowed port: blocked "bad ports" fail before MSW can
-      // intercept the request.
-      // MSW Node registers handlers against this URL via getJson() and
-      // intercepts before the socket dial, so reachability is irrelevant for
-      // the happy path.
-      ARCHESTRA_INTERNAL_API_BASE_URL: "http://127.0.0.1:65535",
+      // Server components resolve their SDK base URL from this variable, so
+      // pointing it at the mock backend route turns every SSR call into an
+      // ordinary HTTP request answered from the MSW handler chain. It replaces
+      // in-process interception, which did not reliably survive `next dev`
+      // route compiles: a server component whose fetch escaped the patched
+      // globals fell through to the real backend origin, and a swallowed
+      // failure then rendered as a wrong page rather than an error. Nothing
+      // here can escape — an unmocked endpoint 501s and is reported by the
+      // fixture's coverage guard.
+      ARCHESTRA_INTERNAL_API_BASE_URL: `${INT_TESTS_URL}/internal-test/api`,
       NEXT_PUBLIC_SENTRY_DSN: "",
     },
   },

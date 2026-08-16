@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.38](https://github.com/archestra-ai/archestra/compare/platform-v1.3.37...platform-v1.3.38) (2026-08-16)
+
+
+### Bug Fixes
+
+* **apps:** create an app in the environment of the agent that builds it ([#7293](https://github.com/archestra-ai/archestra/issues/7293)) ([e037129](https://github.com/archestra-ai/archestra/commit/e037129287a9465db8eb0425bde46ca87194c6ff))
+
 ## [1.3.37](https://github.com/archestra-ai/archestra/compare/platform-v1.3.36...platform-v1.3.37) (2026-08-15)
 
 

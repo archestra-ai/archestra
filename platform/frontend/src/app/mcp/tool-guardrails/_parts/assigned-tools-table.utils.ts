@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   isAgentTool,
 } from "@archestra/shared";
+import { agentOwnerLabel } from "@/lib/agent-owner-label";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -31,11 +32,19 @@ export const APP_ORIGIN_FILTER_VALUE = "app";
 export type ToolSource =
   | { kind: "app"; appName: string }
   | { kind: "mcp"; catalogItem: InternalMcpCatalogItem | undefined }
-  | { kind: "agent"; agentName: string }
+  | { kind: "agent"; agentName: string; ownerEmail: string | null }
   | { kind: "observed" };
 
+type ToolDelegationTarget = NonNullable<
+  archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number]["delegateToAgent"]
+>;
+
 export function getToolSource(
-  tool: { catalogId: string | null; name: string },
+  tool: {
+    catalogId: string | null;
+    name: string;
+    delegateToAgent?: ToolDelegationTarget | null;
+  },
   catalogItems?: InternalMcpCatalogItem[],
 ): ToolSource {
   if (tool.catalogId) {
@@ -48,10 +57,23 @@ export function getToolSource(
     return { kind: "mcp", catalogItem };
   }
 
+  if (tool.delegateToAgent) {
+    return {
+      kind: "agent",
+      agentName: tool.delegateToAgent.name,
+      ownerEmail: agentOwnerLabel(tool.delegateToAgent),
+    };
+  }
+
+  // Endpoints that do not resolve the delegation target still have the agent's
+  // name slugified into the tool name. Nothing there identifies *which* agent,
+  // so callers on that path keep the pre-existing ambiguity rather than gaining
+  // a wrong owner.
   if (isAgentTool(tool.name)) {
     return {
       kind: "agent",
       agentName: tool.name.slice(AGENT_TOOL_PREFIX.length).replaceAll("_", " "),
+      ownerEmail: null,
     };
   }
 

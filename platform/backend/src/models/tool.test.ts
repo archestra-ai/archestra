@@ -4313,6 +4313,77 @@ describe("ToolModel", () => {
       expect(afterRestore.data.map((tool) => tool.id)).toContain(ghostTool.id);
     });
 
+    test("attributes same-named delegation tools to their target's owner", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const kim = await makeUser({ email: "kim@example.com" });
+      const sam = await makeUser({ email: "sam@example.com" });
+
+      // Personal agents are seeded one per member under the same name, so both
+      // mint a delegation tool called `agent__my_assistant`.
+      const kimsAgent = await makeAgent({
+        name: "My Assistant",
+        scope: "personal",
+        organizationId: org.id,
+        authorId: kim.id,
+      });
+      const samsAgent = await makeAgent({
+        name: "My Assistant",
+        scope: "personal",
+        organizationId: org.id,
+        authorId: sam.id,
+      });
+
+      const kimsTool = await ToolModel.findOrCreateDelegationTool(kimsAgent.id);
+      const samsTool = await ToolModel.findOrCreateDelegationTool(samsAgent.id);
+      expect(kimsTool.name).toBe(samsTool.name);
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const listedKims = result.data.find((tool) => tool.id === kimsTool.id);
+      const listedSams = result.data.find((tool) => tool.id === samsTool.id);
+
+      expect(listedKims?.delegateToAgent).toEqual({
+        id: kimsAgent.id,
+        name: "My Assistant",
+        scope: "personal",
+        ownerEmail: "kim@example.com",
+      });
+      expect(listedSams?.delegateToAgent).toEqual({
+        id: samsAgent.id,
+        name: "My Assistant",
+        scope: "personal",
+        ownerEmail: "sam@example.com",
+      });
+    });
+
+    test("leaves delegateToAgent null for tools that delegate to nothing", async ({
+      makeAdmin,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const tool = await makeTool({ name: "Bash" });
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      expect(
+        result.data.find((entry) => entry.id === tool.id)?.delegateToAgent,
+      ).toBeNull();
+    });
+
     test("counts only assignments to agents that still exist", async ({
       makeAdmin,
       makeAgent,

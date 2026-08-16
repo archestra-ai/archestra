@@ -325169,6 +325169,37 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "delegateToAgent": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "team",
+                                  "org"
+                                ]
+                              },
+                              "ownerEmail": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "scope",
+                              "ownerEmail"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -325183,7 +325214,8 @@
                           "policiesAutoConfiguredReasoning",
                           "policiesAutoConfiguredModel",
                           "assignmentCount",
-                          "assignments"
+                          "assignments",
+                          "delegateToAgent"
                         ],
                         "additionalProperties": false
                       }

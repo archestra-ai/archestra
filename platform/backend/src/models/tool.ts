@@ -59,6 +59,7 @@ import {
 } from "@/services/environments/environment-isolation";
 import type {
   Agent,
+  AgentScope,
   AssignedTool,
   ExtendedTool,
   InsertTool,
@@ -3817,6 +3818,17 @@ class ToolModel {
         break;
     }
 
+    // A delegation tool is named after its target agent, so personal agents —
+    // one "My Assistant" per member — mint identically named tools. Carry the
+    // target's identity so the listing can tell those rows apart. Both joins are
+    // many-to-one and LEFT, so they add no rows and drop none: most tools have
+    // no delegation target, and an agent whose author was deleted has no owner.
+    const delegateAgentAlias = alias(schema.agentsTable, "delegateAgent");
+    const delegateAgentOwnerAlias = alias(
+      schema.usersTable,
+      "delegateAgentOwner",
+    );
+
     // Query for tools that have at least one assignment
     // Secondary sort on id ensures deterministic ordering when primary sort values are equal
     // (e.g. bulk-inserted MCP tools share the same createdAt timestamp)
@@ -3836,8 +3848,20 @@ class ToolModel {
         policiesAutoConfiguredModel:
           schema.toolsTable.policiesAutoConfiguredModel,
         assignmentCount: assignmentCountSubquery,
+        delegateToAgentId: delegateAgentAlias.id,
+        delegateToAgentName: delegateAgentAlias.name,
+        delegateToAgentScope: delegateAgentAlias.scope,
+        delegateToAgentOwnerEmail: delegateAgentOwnerAlias.email,
       })
       .from(schema.toolsTable)
+      .leftJoin(
+        delegateAgentAlias,
+        eq(delegateAgentAlias.id, schema.toolsTable.delegateToAgentId),
+      )
+      .leftJoin(
+        delegateAgentOwnerAlias,
+        eq(delegateAgentOwnerAlias.id, delegateAgentAlias.authorId),
+      )
       .where(toolWhereClause)
       .orderBy(orderByClause, asc(schema.toolsTable.id))
       .limit(pagination.limit ?? 20)
@@ -3981,6 +4005,14 @@ class ToolModel {
         (tool.policiesAutoConfiguredModel as string | null) ?? null,
       assignmentCount: Number(tool.assignmentCount),
       assignments: assignmentsByToolId.get(tool.id as string) || [],
+      delegateToAgent: tool.delegateToAgentId
+        ? {
+            id: tool.delegateToAgentId,
+            name: tool.delegateToAgentName as string,
+            scope: tool.delegateToAgentScope as AgentScope,
+            ownerEmail: tool.delegateToAgentOwnerEmail,
+          }
+        : null,
     }));
 
     return createPaginatedResult(result, Number(total), {

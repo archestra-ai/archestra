@@ -114,8 +114,66 @@ describe("getToolSource", () => {
 
   it("labels a delegation tool with the agent it delegates to", () => {
     expect(
+      getToolSource(
+        {
+          catalogId: null,
+          name: "agent__my_assistant",
+          delegateToAgent: {
+            id: "agent-1",
+            name: "My Assistant",
+            scope: "team",
+            ownerEmail: "kim@example.com",
+          },
+        },
+        [],
+      ),
+    ).toEqual({ kind: "agent", agentName: "My Assistant", ownerEmail: null });
+  });
+
+  // Personal agents are seeded one per member, so every member's copy mints an
+  // `agent__my_assistant`. Without the owner those rows are indistinguishable.
+  it("qualifies a delegation tool by owner when its target is personal", () => {
+    const source = getToolSource(
+      {
+        catalogId: null,
+        name: "agent__my_assistant",
+        delegateToAgent: {
+          id: "agent-1",
+          name: "My Assistant",
+          scope: "personal",
+          ownerEmail: "kim@example.com",
+        },
+      },
+      [],
+    );
+    const other = getToolSource(
+      {
+        catalogId: null,
+        name: "agent__my_assistant",
+        delegateToAgent: {
+          id: "agent-2",
+          name: "My Assistant",
+          scope: "personal",
+          ownerEmail: "sam@example.com",
+        },
+      },
+      [],
+    );
+
+    expect(source).toEqual({
+      kind: "agent",
+      agentName: "My Assistant",
+      ownerEmail: "kim@example.com",
+    });
+    expect(source).not.toEqual(other);
+  });
+
+  // Endpoints that do not resolve the target still slugify the agent's name
+  // into the tool name; nothing there says which agent, so no owner is claimed.
+  it("falls back to the slugified name when no target is resolved", () => {
+    expect(
       getToolSource({ catalogId: null, name: "agent__my_assistant" }, []),
-    ).toEqual({ kind: "agent", agentName: "my assistant" });
+    ).toEqual({ kind: "agent", agentName: "my assistant", ownerEmail: null });
   });
 
   it("labels a tool with no catalog as observed", () => {

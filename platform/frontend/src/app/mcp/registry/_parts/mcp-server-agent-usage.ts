@@ -55,18 +55,10 @@ export function deriveAgentUsage(
 }
 
 /**
- * Personal agents are auto-seeded one per member, so every member's copy
- * carries the same name — a list of them reads as repeated "My Assistant" /
- * "My Gateway" rows. Attribute those to their owner; agents with a name their
- * author chose need no qualifier.
+ * Re-exported for this route's existing callers. It moved to `@/lib` once the
+ * guardrails table needed the same owner qualifier for delegation tools.
  */
-export function agentOwnerLabel(agent: {
-  scope: string;
-  ownerEmail: string | null;
-}): string | null {
-  if (agent.scope !== "personal") return null;
-  return agent.ownerEmail;
-}
+export { agentOwnerLabel } from "@/lib/agent-owner-label";
 
 /** Human-readable kind, for the usage table's Type column. */
 export function agentTypeLabel(agentType: string): string {

@@ -127,6 +127,17 @@ export function ToolDetailsDialog({
                   {displayName}
                 </DialogTitle>
               )}
+              {/*
+                Delegation tools are named after their target agent, so the
+                personal agents seeded one per member all open a dialog titled
+                `agent__my_assistant` and described "Delegate task to agent: My
+                Assistant". The owner is what says which one this is.
+              */}
+              {source.kind === "agent" && source.ownerEmail && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {source.ownerEmail}
+                </p>
+              )}
               {tool.description && (
                 <TruncatedText
                   message={tool.description}
@@ -188,7 +199,10 @@ export function ToolDetailsDialog({
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Delegates to {source.agentName} agent</p>
+                          <p>
+                            Delegates to {source.agentName} agent
+                            {source.ownerEmail ? ` (${source.ownerEmail})` : ""}
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

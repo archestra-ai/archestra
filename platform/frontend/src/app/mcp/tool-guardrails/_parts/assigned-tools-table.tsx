@@ -440,6 +440,11 @@ export function AssignedToolsTable({
           const displayName = row.original.catalogId
             ? parseFullToolName(row.original.name).toolName || row.original.name
             : row.original.name;
+          // A delegation tool is named after its target agent, so the personal
+          // agents seeded one per member all mint an `agent__my_assistant`.
+          // The owner is the only thing separating those rows.
+          const source = getToolSource(row.original, internalMcpCatalogItems);
+          const owner = source.kind === "agent" ? source.ownerEmail : null;
           return (
             <div className="max-w-[260px] md:max-w-none truncate">
               <TruncatedText
@@ -447,6 +452,11 @@ export function AssignedToolsTable({
                 className="break-all"
                 maxLength={60}
               />
+              {owner && (
+                <div className="truncate text-xs text-muted-foreground">
+                  {owner}
+                </div>
+              )}
             </div>
           );
         },
@@ -548,7 +558,10 @@ export function AssignedToolsTable({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Delegates to {source.agentName} agent</p>
+                    <p>
+                      Delegates to {source.agentName} agent
+                      {source.ownerEmail ? ` (${source.ownerEmail})` : ""}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

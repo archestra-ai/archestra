@@ -1,4 +1,8 @@
-import { ClientFilterSchema, TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
+import {
+  ClientFilterSchema,
+  ResourceVisibilityScopeSchema,
+  TOOL_SEARCH_MAX_LENGTH,
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -78,6 +82,21 @@ export const ToolAssignmentSchema = z.object({
   credentialResolutionMode: CredentialResolutionModeSchema,
 });
 
+/**
+ * The agent a delegation tool hands work to.
+ *
+ * A delegation tool is named after its target agent (`agent__<slug>`), so
+ * personal agents — seeded one per member, all called "My Assistant" — mint
+ * tools whose names collide. `scope` and `ownerEmail` are what tell those
+ * apart; without them the listing shows several identical rows.
+ */
+const ToolDelegationTargetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  scope: ResourceVisibilityScopeSchema,
+  ownerEmail: z.string().nullable(),
+});
+
 // Tool with embedded assignments schema
 export const ToolWithAssignmentsSchema = z.object({
   id: z.string(),
@@ -94,6 +113,8 @@ export const ToolWithAssignmentsSchema = z.object({
   policiesAutoConfiguredModel: z.string().nullable(),
   assignmentCount: z.number(),
   assignments: z.array(ToolAssignmentSchema),
+  /** Set only for agent delegation tools; null for catalog and observed tools. */
+  delegateToAgent: ToolDelegationTargetSchema.nullable(),
 });
 
 // Filter schema for tools with assignments

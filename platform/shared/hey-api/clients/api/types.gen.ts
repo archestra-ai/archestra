@@ -83848,6 +83848,12 @@ export type GetToolsWithAssignmentsResponses = {
                 executionOwnerEmail: string | null;
                 credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
             }>;
+            delegateToAgent: {
+                id: string;
+                name: string;
+                scope: 'personal' | 'team' | 'org';
+                ownerEmail: string | null;
+            } | null;
         }>;
         pagination: {
             currentPage: number;

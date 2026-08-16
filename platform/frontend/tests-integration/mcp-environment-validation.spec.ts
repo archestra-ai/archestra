@@ -45,8 +45,9 @@ const orgWithDefaultRule = (validationRegex: string | null) => ({
 });
 
 test.describe("MCP environment validation rule", () => {
-  // FIXME(flaky): first-touch route cold-compile under `next dev` exceeds the
-  // visibility budget on loaded CI runners (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the card's settings button now routes to the server detail
+  // page instead of opening a "<name> Settings" dialog. Rewriting this against
+  // the detail route needs its own fixtures — tracked separately.
   test.fixme("switching to a stricter environment flags stored values and blocks Save", async ({
     page,
     mcpRegistryPage,
@@ -120,7 +121,9 @@ test.describe("MCP environment validation rule", () => {
     await expect(dialog.getByRole("alert")).toBeHidden();
   });
 
-  // FIXME(flaky): cold-route-compile timeout under CI load (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the card's settings button now routes to the server detail
+  // page instead of opening a "<name> Settings" dialog. Rewriting this against
+  // the detail route needs its own fixtures — tracked separately.
   test.fixme("the env-var dialog blocks a value that violates the rule", async ({
     page,
     mcpRegistryPage,
@@ -270,7 +273,9 @@ test.describe("MCP environment validation rule", () => {
     ).toBeEnabled();
   });
 
-  // FIXME(flaky): cold-route-compile timeout under CI load (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the card's settings button now routes to the server detail
+  // page instead of opening a "<name> Settings" dialog. Rewriting this against
+  // the detail route needs its own fixtures — tracked separately.
   test.fixme("no rule configured blocks nothing", async ({
     page,
     mcpRegistryPage,
@@ -318,7 +323,9 @@ test.describe("MCP environment validation rule", () => {
     ).toBeEnabled();
   });
 
-  // FIXME(flaky): cold-route-compile timeout under CI load (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the card's settings button now routes to the server detail
+  // page instead of opening a "<name> Settings" dialog. Rewriting this against
+  // the detail route needs its own fixtures — tracked separately.
   test.fixme("the header dialog blocks a value that violates the rule", async ({
     page,
     mcpRegistryPage,

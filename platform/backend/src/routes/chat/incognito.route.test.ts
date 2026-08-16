@@ -187,7 +187,7 @@ describe("incognito conversation routes", () => {
         })
       ).json();
       expect(body.incognito).toBe(true);
-      expect(body.title).toBe("Incognito chat");
+      expect(body.title).toBe("Locked chat");
       // Server-side bookkeeping never reaches the API response.
       expect(body.incognitoEscrow).toBeUndefined();
       expect(body.incognitoDekFingerprint).toBeUndefined();
@@ -393,7 +393,7 @@ describe("incognito conversation routes", () => {
         payload: {},
       });
       expect(title.statusCode).toBe(200);
-      expect(title.json().title).toBe("Incognito chat");
+      expect(title.json().title).toBe("Locked chat");
     });
   });
 

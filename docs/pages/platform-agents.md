@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-14
+lastUpdated: 2026-08-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -71,13 +71,14 @@ The setting does nothing in **Auto** mode, where each caller's tools come from w
 
 Agents can be triggered through:
 
-- Archestra Chat UI
+- [Archestra Chat UI](/docs/platform-chat)
 - [Webhook (A2A)](/docs/platform-agent-triggers-webhook-a2a)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
+- [Telegram](/docs/platform-telegram)
 
-Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
+Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
 ## Knowledge Sources
 

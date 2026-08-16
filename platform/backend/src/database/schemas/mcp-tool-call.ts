@@ -48,7 +48,7 @@ const mcpToolCallsTable = pgTable(
     // - initialize: { capabilities, serverInfo }
     toolResult: jsonb("tool_result").$type<unknown>(),
     /**
-     * Non-null marks `toolCall`/`toolResult` as encrypted under an incognito
+     * Non-null marks `toolCall`/`toolResult` as encrypted under a locked-chat
      * conversation's browser-held key rather than the server key, and names the
      * conversation whose escrow record recovers it. Readers MUST consult this
      * before decrypting: a server-key decrypt of these envelopes throws.
@@ -57,7 +57,7 @@ const mcpToolCallsTable = pgTable(
      * retention — and no index: reads test it per row, and the rare offline
      * break-glass scan is acceptable.
      */
-    incognitoConversationId: uuid("incognito_conversation_id"),
+    lockedChatConversationId: uuid("locked_chat_conversation_id"),
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),

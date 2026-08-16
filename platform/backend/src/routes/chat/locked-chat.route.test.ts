@@ -1,18 +1,18 @@
 /**
- * Contract under test — incognito conversations at the route level:
+ * Contract under test — locked chats at the route level:
  * - the feature is FREE and on by default: creation needs no license and no
  *   escrow key, only a valid 32-byte key header; disabling it via
  *   creation is refused (403) when no escrow key is configured
  * - without escrow configured, the fingerprint is stored and
- *   incognito_escrow stays NULL (no recoverable key copy anywhere)
+ *   locked_chat_escrow stays NULL (no recoverable key copy anywhere)
  * - with enterprise escrow configured, the RSA-wrapped blob is stored and
  *   independently recoverable with the offline private key
  * - message content at rest is an envelope only the browser-held key opens;
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
- * - the sidebar list carries no message content for incognito rows
+ * - the sidebar list carries no message content for locked-chat rows
  * - share/fork/compact/projects/title-generation are rejected or no-op
- * - the at-rest backfill sweep never rewrites incognito envelopes
+ * - the at-rest backfill sweep never rewrites locked-chat envelopes
  */
 import {
   constants as cryptoConstants,
@@ -41,9 +41,9 @@ const { publicKey, privateKey } = generateKeyPairSync("rsa", {
 });
 const ESCROW_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
 
-const KEY_HEADER = "x-archestra-incognito-key";
+const KEY_HEADER = "x-archestra-locked-chat-key";
 
-describe("incognito conversation routes", () => {
+describe("locked chat routes", () => {
   let app: FastifyInstanceWithZod;
   let currentUser: User;
   let organizationId: string;
@@ -58,11 +58,11 @@ describe("incognito conversation routes", () => {
     // config auto-restore does not apply — a flag a test flips would
     // otherwise leak into the next test.
     config.enterpriseFeatures.core = false;
-    // Escrow is what enables incognito, and the db sink needs no license — so
+    // Escrow is what enables locked-chat, and the db sink needs no license — so
     // this IS the unlicensed default posture, not an enterprise one.
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+    config.lockedChat.escrowPublicKey = ESCROW_PEM;
     // Force at-rest content encryption OFF (a local .env may set
-    // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): incognito must be exercised on a
+    // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): locked-chat must be exercised on a
     // free-instance posture, and the envelopes asserted on must be the
     // browser-DEK ones.
     config.contentEncryption.secret = undefined;
@@ -99,34 +99,34 @@ describe("incognito conversation routes", () => {
     return { [KEY_HEADER]: key.toString("base64url") };
   }
 
-  async function createIncognitoConversation(): Promise<string> {
+  async function createLockedChatConversation(): Promise<string> {
     const response = await app.inject({
       method: "POST",
       url: "/api/chat/conversations",
       headers: dekHeader(),
-      payload: { agentId, incognito: true },
+      payload: { agentId, lockedChat: true },
     });
     expect(response.statusCode).toBe(200);
     return response.json().id as string;
   }
 
-  async function readIncognitoRow(id: string) {
+  async function readLockedChatRow(id: string) {
     const raw = await db.execute<{
-      incognito: boolean;
-      incognito_dek_fingerprint: string | null;
-      incognito_escrow: Record<string, unknown> | null;
+      locked_chat: boolean;
+      locked_chat_dek_fingerprint: string | null;
+      locked_chat_escrow: Record<string, unknown> | null;
     }>(
-      sql`SELECT incognito, incognito_dek_fingerprint, incognito_escrow FROM conversations WHERE id = ${id}::uuid`,
+      sql`SELECT locked_chat, locked_chat_dek_fingerprint, locked_chat_escrow FROM conversations WHERE id = ${id}::uuid`,
     );
     return raw.rows[0];
   }
 
-  describe("POST /api/chat/conversations (incognito)", () => {
+  describe("POST /api/chat/conversations (locked chat)", () => {
     test("rejects a missing or malformed key header", async () => {
       const missing = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
-        payload: { agentId, incognito: true },
+        payload: { agentId, lockedChat: true },
       });
       expect(missing.statusCode).toBe(400);
       expect(missing.json().error.message).toContain(KEY_HEADER);
@@ -135,20 +135,20 @@ describe("incognito conversation routes", () => {
         method: "POST",
         url: "/api/chat/conversations",
         headers: { [KEY_HEADER]: randomBytes(8).toString("base64url") },
-        payload: { agentId, incognito: true },
+        payload: { agentId, lockedChat: true },
       });
       expect(short.statusCode).toBe(400);
       expect(short.json().error.message).toContain("32 bytes");
     });
 
-    test("rejects incognito in a project", async () => {
+    test("rejects locked chats in a project", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
         payload: {
           agentId,
-          incognito: true,
+          lockedChat: true,
           projectId: "33333333-3333-4333-8333-333333333333",
         },
       });
@@ -160,24 +160,24 @@ describe("incognito conversation routes", () => {
       // Escrow is the enablement switch. Without it the chat's audit trail
       // would be encrypted under a key nobody could recover, so the feature
       // is simply unavailable rather than silently unrecoverable.
-      config.chatIncognito.escrowPublicKey = undefined;
+      config.lockedChat.escrowPublicKey = undefined;
 
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
-        payload: { agentId, incognito: true },
+        payload: { agentId, lockedChat: true },
       });
       expect(response.statusCode).toBe(403);
 
       const rows = await db.execute(
-        sql`SELECT id FROM conversations WHERE incognito = true`,
+        sql`SELECT id FROM conversations WHERE locked_chat = true`,
       );
       expect(rows.rows).toHaveLength(0);
     });
 
     test("creation stores the fingerprint and escrow blob, a static title, and never the raw key", async () => {
-      const id = await createIncognitoConversation();
+      const id = await createLockedChatConversation();
 
       const body = (
         await app.inject({
@@ -186,30 +186,30 @@ describe("incognito conversation routes", () => {
           headers: dekHeader(),
         })
       ).json();
-      expect(body.incognito).toBe(true);
+      expect(body.lockedChat).toBe(true);
       expect(body.title).toBe("Locked chat");
       // Server-side bookkeeping never reaches the API response.
-      expect(body.incognitoEscrow).toBeUndefined();
-      expect(body.incognitoDekFingerprint).toBeUndefined();
+      expect(body.lockedChatEscrow).toBeUndefined();
+      expect(body.lockedChatDekFingerprint).toBeUndefined();
 
-      const row = await readIncognitoRow(id);
-      expect(row.incognito).toBe(true);
-      expect(row.incognito_dek_fingerprint).toBeTruthy();
+      const row = await readLockedChatRow(id);
+      expect(row.locked_chat).toBe(true);
+      expect(row.locked_chat_dek_fingerprint).toBeTruthy();
       // The fingerprint is a digest, not the key.
-      expect(row.incognito_dek_fingerprint).not.toContain(
+      expect(row.locked_chat_dek_fingerprint).not.toContain(
         dek.toString("base64url"),
       );
-      // Escrow is mandatory, so every incognito row carries a wrapped copy.
-      expect(row.incognito_escrow).not.toBeNull();
+      // Escrow is mandatory, so every locked-chat row carries a wrapped copy.
+      expect(row.locked_chat_escrow).not.toBeNull();
     });
 
     test("the stored escrow blob is recoverable with the offline private key", async () => {
-      const id = await createIncognitoConversation();
-      const row = await readIncognitoRow(id);
-      expect(row.incognito_dek_fingerprint).toBeTruthy();
+      const id = await createLockedChatConversation();
+      const row = await readLockedChatRow(id);
+      expect(row.locked_chat_dek_fingerprint).toBeTruthy();
       // The escrow blob is independently recoverable with the private key —
       // the break-glass contract.
-      expect(row.incognito_escrow?.alg).toBe("RSA-OAEP-256");
+      expect(row.locked_chat_escrow?.alg).toBe("RSA-OAEP-256");
       const recovered = privateDecrypt(
         {
           key: privateKey,
@@ -217,7 +217,7 @@ describe("incognito conversation routes", () => {
           oaepHash: "sha256",
         },
         Buffer.from(
-          (row.incognito_escrow?.wrappedDek as string) ?? "",
+          (row.locked_chat_escrow?.wrappedDek as string) ?? "",
           "base64",
         ),
       );
@@ -225,13 +225,13 @@ describe("incognito conversation routes", () => {
     });
   });
 
-  describe("GET /api/chat/conversations/:id (incognito)", () => {
+  describe("GET /api/chat/conversations/:id (locked chat)", () => {
     test.for([
       ["the feature is turned off", () => {}],
       [
         "the escrow key is removed",
         () => {
-          config.chatIncognito.escrowPublicKey = undefined;
+          config.lockedChat.escrowPublicKey = undefined;
         },
       ],
     ] as const)("an existing chat is still readable after %s", async ([
@@ -241,7 +241,7 @@ describe("incognito conversation routes", () => {
       // Both settings gate CREATION. Neither may orphan a chat already made:
       // the browser key is what opens the content, and the row keeps its own
       // escrow copy no matter what the current configuration says.
-      const id = await createIncognitoConversation();
+      const id = await createLockedChatConversation();
       await MessageModel.create(
         {
           conversationId: id,
@@ -267,13 +267,44 @@ describe("incognito conversation routes", () => {
       expect(response.json().messages[0].parts[0].text).toBe("still readable");
     });
 
+    test("still accepts the key under the pre-rename header name", async () => {
+      // A tab loaded before the rename keeps sending the old header, and its
+      // key is the only copy outside escrow — so dropping it would show the
+      // user a tombstone for their own chat.
+      const id = await createLockedChatConversation();
+      await MessageModel.create(
+        {
+          conversationId: id,
+          role: "user",
+          content: {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "sent by an old tab" }],
+          },
+        },
+        { dek, conversationId: id },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${id}`,
+        headers: { "x-archestra-incognito-key": dek.toString("base64url") },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().contentLocked).toBeUndefined();
+      expect(response.json().messages[0].parts[0].text).toBe(
+        "sent by an old tab",
+      );
+    });
+
     test("decrypts with the key; locked without it; 409 on a wrong key", async () => {
       // Orthogonality pin: this full roundtrip runs on a FREE instance — no
       // enterprise license (beforeEach) and no at-rest content-encryption
-      // secret. Incognito must not depend on either.
+      // secret. LockedChat must not depend on either.
       expect(config.contentEncryption.secret).toBeUndefined();
 
-      const id = await createIncognitoConversation();
+      const id = await createLockedChatConversation();
       const content = {
         id: "msg-1",
         role: "user",
@@ -320,10 +351,10 @@ describe("incognito conversation routes", () => {
       expect(wrong.json().error.message).toContain("does not match");
     });
 
-    test("the conversations list carries no message content for incognito rows", async ({
+    test("the conversations list carries no message content for locked-chat rows", async ({
       makeConversation,
     }) => {
-      const id = await createIncognitoConversation();
+      const id = await createLockedChatConversation();
       await MessageModel.create(
         {
           conversationId: id,
@@ -350,18 +381,18 @@ describe("incognito conversation routes", () => {
       expect(list.statusCode).toBe(200);
       const rows = list.json() as Array<{
         id: string;
-        incognito: boolean;
+        lockedChat: boolean;
         messages: unknown[];
       }>;
-      const incognitoRow = rows.find((r) => r.id === id);
-      expect(incognitoRow?.incognito).toBe(true);
+      const lockedChatRow = rows.find((r) => r.id === id);
+      expect(lockedChatRow?.lockedChat).toBe(true);
       expect(list.body).not.toContain("listable secret");
     });
   });
 
   describe("disabled features", () => {
     test("share, fork, and compact are rejected; title generation is a no-op", async () => {
-      const id = await createIncognitoConversation();
+      const id = await createLockedChatConversation();
 
       const share = await app.inject({
         method: "POST",
@@ -398,8 +429,8 @@ describe("incognito conversation routes", () => {
   });
 
   describe("at-rest backfill interaction", () => {
-    test("the server-key sweep completes without rewriting incognito envelopes", async () => {
-      const id = await createIncognitoConversation();
+    test("the server-key sweep completes without rewriting locked-chat envelopes", async () => {
+      const id = await createLockedChatConversation();
       const content = {
         id: "m-sweep",
         role: "user",
@@ -426,7 +457,7 @@ describe("incognito conversation routes", () => {
         const result = await runContentEncryptionBackfill({});
         expect(result.status).toBe("completed");
 
-        // The incognito envelope is byte-identical: skipped, not re-wrapped.
+        // The locked-chat envelope is byte-identical: skipped, not re-wrapped.
         const after = await db.execute<{ content: { __encrypted: string } }>(
           sql`SELECT content FROM messages WHERE conversation_id = ${id}::uuid`,
         );

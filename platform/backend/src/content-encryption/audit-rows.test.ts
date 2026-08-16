@@ -5,9 +5,9 @@
  */
 import { randomBytes } from "node:crypto";
 import {
-  INCOGNITO_REDACTED_MARKER,
-  isIncognitoLockedContent,
-  isIncognitoRedactedContent,
+  isLockedChatRedactedContent,
+  isLockedChatSealedContent,
+  LOCKED_CHAT_REDACTED_MARKER,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import config from "@/config";
@@ -21,14 +21,14 @@ import {
   readInteractionRow,
   readMcpToolCallRow,
 } from "./audit-rows";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; the funnel's non-incognito branch IS the at-rest layer
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; the funnel's non-locked-chat branch IS the at-rest layer
 import { runContentEncryptionBackfill } from "./backfill.ee";
-import { decryptIncognitoValue } from "./incognito";
 import {
   _resetContentKeys,
   decryptContentValue,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "./index.ee";
+import { decryptLockedChatValue } from "./locked-chat";
 import {
   decryptInteractionRow,
   decryptMcpToolCallRow,
@@ -91,7 +91,7 @@ describe("audit row content funnel", () => {
 
       expect(isContentEnvelope(values.request)).toBe(true);
       expect(isContentEnvelope(values.response)).toBe(true);
-      expect(values.incognitoConversationId).toBe(CONVERSATION_ID);
+      expect(values.lockedChatConversationId).toBe(CONVERSATION_ID);
 
       // The server key cannot open it...
       expect(() =>
@@ -102,14 +102,14 @@ describe("audit row content funnel", () => {
       // Callers hand plaintext to the funnel; a caller-side pre-encrypt (or a
       // funnel that also ran the at-rest layer) would surface here as a
       // nested envelope.
-      const opened = decryptIncognitoValue(values.request, {
+      const opened = decryptLockedChatValue(values.request, {
         ...audit,
         context: "interactions.request",
       });
       expect(isContentEnvelope(opened)).toBe(false);
       expect(opened).toEqual(request);
       expect(
-        decryptIncognitoValue(values.response, {
+        decryptLockedChatValue(values.response, {
           ...audit,
           context: "interactions.response",
         }),
@@ -124,12 +124,12 @@ describe("audit row content funnel", () => {
         audit,
       ) as Record<string, unknown>;
 
-      expect(values.incognitoConversationId).toBe(CONVERSATION_ID);
+      expect(values.lockedChatConversationId).toBe(CONVERSATION_ID);
       expect(() =>
         decryptContentValue(values.toolResult, "mcp_tool_calls.tool_result"),
       ).toThrow();
       expect(
-        decryptIncognitoValue(values.toolResult, {
+        decryptLockedChatValue(values.toolResult, {
           ...audit,
           context: "mcp_tool_calls.tool_result",
         }),
@@ -146,7 +146,7 @@ describe("audit row content funnel", () => {
         null,
       ) as Record<string, unknown>;
       expect(plain.request).toEqual(request);
-      expect(plain.incognitoConversationId).toBeUndefined();
+      expect(plain.lockedChatConversationId).toBeUndefined();
 
       // At-rest ON: a server-key envelope, still unstamped.
       setServerKey(SERVER_SECRET);
@@ -155,7 +155,7 @@ describe("audit row content funnel", () => {
         null,
       ) as Record<string, unknown>;
       expect(isContentEnvelope(encrypted.request)).toBe(true);
-      expect(encrypted.incognitoConversationId).toBeUndefined();
+      expect(encrypted.lockedChatConversationId).toBeUndefined();
       expect(
         decryptContentValue(encrypted.request, "interactions.request"),
       ).toEqual(request);
@@ -165,7 +165,7 @@ describe("audit row content funnel", () => {
         null,
       ) as Record<string, unknown>;
       expect(isContentEnvelope(toolValues.toolResult)).toBe(true);
-      expect(toolValues.incognitoConversationId).toBeUndefined();
+      expect(toolValues.lockedChatConversationId).toBeUndefined();
     });
 
     test("null and absent content columns are left alone", () => {
@@ -209,9 +209,9 @@ describe("audit row content funnel", () => {
       // The locked-safe read never throws — one such row must not 500 a
       // whole logs page — and names the conversation whose escrow opens it.
       const read = readInteractionRow({ ...stored }) as Record<string, unknown>;
-      expect(isIncognitoLockedContent(read.request)).toBe(true);
-      expect(isIncognitoLockedContent(read.response)).toBe(true);
-      expect(read.request).toEqual({ __incognitoLocked: CONVERSATION_ID });
+      expect(isLockedChatSealedContent(read.request)).toBe(true);
+      expect(isLockedChatSealedContent(read.response)).toBe(true);
+      expect(read.request).toEqual({ __lockedChatSealed: CONVERSATION_ID });
     });
 
     test("a locked tool-call row reads as locked under both column spellings", () => {
@@ -226,8 +226,8 @@ describe("audit row content funnel", () => {
         string,
         unknown
       >;
-      expect(isIncognitoLockedContent(readCamel.toolCall)).toBe(true);
-      expect(isIncognitoLockedContent(readCamel.toolResult)).toBe(true);
+      expect(isLockedChatSealedContent(readCamel.toolCall)).toBe(true);
+      expect(isLockedChatSealedContent(readCamel.toolResult)).toBe(true);
 
       // Raw-SQL reads come back snake_case, including the discriminator; a
       // read site that only understood camelCase would fall through to a
@@ -235,15 +235,15 @@ describe("audit row content funnel", () => {
       const snake = {
         tool_call: camel.toolCall,
         tool_result: camel.toolResult,
-        incognito_conversation_id: CONVERSATION_ID,
+        locked_chat_conversation_id: CONVERSATION_ID,
       };
       const readSnake = readMcpToolCallRow({ ...snake }) as Record<
         string,
         unknown
       >;
-      expect(isIncognitoLockedContent(readSnake.tool_call)).toBe(true);
+      expect(isLockedChatSealedContent(readSnake.tool_call)).toBe(true);
       expect(readSnake.tool_result).toEqual({
-        __incognitoLocked: CONVERSATION_ID,
+        __lockedChatSealed: CONVERSATION_ID,
       });
     });
 
@@ -257,7 +257,7 @@ describe("audit row content funnel", () => {
       const read = readInteractionRow({ ...stored }) as Record<string, unknown>;
       expect(read.request).toEqual(request);
       expect(read.response).toEqual(response);
-      expect(isIncognitoLockedContent(read.request)).toBe(false);
+      expect(isLockedChatSealedContent(read.request)).toBe(false);
     });
 
     test("the fail-closed redaction marker keeps its own meaning", () => {
@@ -269,20 +269,20 @@ describe("audit row content funnel", () => {
       // Mixed row: the request could not be encrypted at write time (no key
       // on the request) and was dropped; the response was stored encrypted.
       const read = readInteractionRow({
-        request: INCOGNITO_REDACTED_MARKER,
+        request: LOCKED_CHAT_REDACTED_MARKER,
         response: encryptedResponse.response,
-        incognitoConversationId: CONVERSATION_ID,
+        lockedChatConversationId: CONVERSATION_ID,
       }) as Record<string, unknown>;
 
       // "Never stored" must not be relabelled as "recoverable via escrow".
-      expect(isIncognitoRedactedContent(read.request)).toBe(true);
-      expect(isIncognitoLockedContent(read.request)).toBe(false);
-      expect(isIncognitoLockedContent(read.response)).toBe(true);
+      expect(isLockedChatRedactedContent(read.request)).toBe(true);
+      expect(isLockedChatSealedContent(read.request)).toBe(false);
+      expect(isLockedChatSealedContent(read.response)).toBe(true);
     });
   });
 
   describe("at-rest backfill inertness", () => {
-    test("the sweep leaves incognito rows byte-identical", async () => {
+    test("the sweep leaves locked-chat rows byte-identical", async () => {
       const [interaction] = await db
         .insert(schema.interactionsTable)
         .values(
@@ -317,7 +317,7 @@ describe("audit row content funnel", () => {
       const callBefore = await rawToolCall(call.id);
 
       // An operator enables at-rest encryption later and the sweep runs over
-      // rows that already exist. Incognito envelopes look exactly like at-rest
+      // rows that already exist. LockedChat envelopes look exactly like at-rest
       // envelopes, so the sweep must recognize them as foreign-key and skip
       // them — re-wrapping under the server key would make them unopenable by
       // the conversation DEK and by break-glass alike.
@@ -341,19 +341,19 @@ describe("audit row content funnel", () => {
         isContentEnvelope((await rawToolCall(plainCall.id)).tool_call),
       ).toBe(true);
 
-      // ...while the incognito rows came through untouched.
+      // ...while the locked-chat rows came through untouched.
       expect(await rawInteraction(interaction.id)).toEqual(interactionBefore);
       expect(await rawToolCall(call.id)).toEqual(callBefore);
 
       // And they still open with the conversation key.
       expect(
-        decryptIncognitoValue(interactionBefore.request, {
+        decryptLockedChatValue(interactionBefore.request, {
           ...audit,
           context: "interactions.request",
         }),
       ).toEqual(request);
       expect(
-        decryptIncognitoValue(callBefore.tool_call, {
+        decryptLockedChatValue(callBefore.tool_call, {
           ...audit,
           context: "mcp_tool_calls.tool_call",
         }),

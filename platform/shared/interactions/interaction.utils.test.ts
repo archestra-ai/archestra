@@ -128,13 +128,13 @@ describe("DynamicInteraction with a normal provider response", () => {
     expect(interaction.getToolNamesRequested()).toEqual(["get_weather"]);
   });
 
-  it("renders no conversation for an incognito interaction instead of throwing", () => {
+  it("renders no conversation for a locked-chat interaction instead of throwing", () => {
     // Provider mappers read request.messages.length unguarded, so a locked
     // payload has to stop before delegation — otherwise the whole session
-    // detail page crashes on one incognito row.
+    // detail page crashes on one locked-chat row.
     for (const sentinel of [
-      { __incognitoLocked: "11111111-1111-4111-8111-111111111111" },
-      { __redacted: "incognito" },
+      { __lockedChatSealed: "11111111-1111-4111-8111-111111111111" },
+      { __redacted: "locked_chat" },
     ]) {
       const locked = {
         ...okInteraction,

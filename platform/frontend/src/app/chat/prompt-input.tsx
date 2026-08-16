@@ -35,7 +35,7 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,7 @@ import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
-import { isActionAvailableForConversation } from "@/lib/chat/incognito";
+import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
@@ -251,8 +251,8 @@ const PromptInputContent = ({
   agentModelDisplayName,
   subscriptionProvider,
   sandboxAvailable,
-  incognito = false,
-  onIncognitoChange,
+  lockedChat = false,
+  onLockedChatChange,
   prefillText,
   onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -289,25 +289,25 @@ const PromptInputContent = ({
     string | null
   >(null);
 
-  // /debug needs the conversation below; fetched early so the incognito gate
+  // /debug needs the conversation below; fetched early so the locked-chat gate
   // can read it too.
   const { data: conversation } = useConversation(conversationId);
 
-  // Incognito is "active" for the composer both while chatting in an
-  // incognito conversation and while the new-chat toggle is on — either way
+  // LockedChat is "active" for the composer both while chatting in an
+  // locked chat and while the new-chat toggle is on — either way
   // the backend will reject attachments and sandbox `!` commands, so their
   // affordances are hidden (not disabled).
-  const incognitoActive =
+  const lockedChatActive =
     !isActionAvailableForConversation(conversation, "attachments") ||
-    (incognito && !conversationId);
+    (lockedChat && !conversationId);
   const appName = useAppName();
 
   // Any file type can be attached regardless of model modalities or sandbox:
   // a file the model can't read is still stored and surfaced in the
   // conversation's Files panel (and staged into the sandbox when one is
   // available), so uploads are gated only by the org-level toggle (and the
-  // incognito block) and the OS picker is unrestricted.
-  const showFileUploadButton = allowFileUploads && !incognitoActive;
+  // locked-chat block) and the OS picker is unrestricted.
+  const showFileUploadButton = allowFileUploads && !lockedChatActive;
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -434,10 +434,10 @@ const PromptInputContent = ({
   // Subtle affordance for the `!` convention: shown while the typed text
   // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
   // could run it as a sandbox command instead of sending it to the model.
-  // Hidden for incognito chats, where the backend rejects sandbox commands.
+  // Hidden for locked chats, where the backend rejects sandbox commands.
   const isSandboxCommandHintVisible =
     sandboxAvailable &&
-    !incognitoActive &&
+    !lockedChatActive &&
     controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
@@ -600,12 +600,12 @@ const PromptInputContent = ({
       // a `!`-prefixed message runs directly in the conversation's sandbox —
       // disjoint from the `/`-commands above and the skill commands below,
       // since those require a `/` prefix. The text is sent exactly as typed;
-      // only a metadata marker rides along. Incognito chats never mark the
+      // only a metadata marker rides along. Locked chats never mark the
       // message (the backend rejects sandbox commands there), so a leading
       // `!` goes to the model as ordinary text.
       const isSandboxCommand =
         sandboxAvailable &&
-        !incognitoActive &&
+        !lockedChatActive &&
         parseSandboxCommand(trimmed) !== null;
 
       // a skill command activates the skill; any text after the token is an
@@ -647,7 +647,7 @@ const PromptInputContent = ({
     [
       canDebug,
       dispatchSubmit,
-      incognitoActive,
+      lockedChatActive,
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
@@ -906,16 +906,16 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {/* Incognito "drawer": a slim strip tucked against the composer's top
+      {/* LockedChat "drawer": a slim strip tucked against the composer's top
           edge, carrying the explanation that used to live in the toggle's
           tooltip. Paired with the dashed composer border below so an
-          incognito chat is unmistakable while composing. */}
-      {incognitoActive && (
+          locked chat is unmistakable while composing. */}
+      {lockedChatActive && (
         <div
-          data-testid={E2eTestId.ChatIncognitoNotice}
+          data-testid={E2eTestId.LockedChatNotice}
           className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
         >
-          <IncognitoIcon className="size-3.5" />
+          <LockedChatIcon className="size-3.5" />
           <span>
             Locked chat — encrypted with a key that stays in this browser.{" "}
             {appName} cannot read it, and it isn't available on other devices.
@@ -930,7 +930,7 @@ const PromptInputContent = ({
         maxFileSize={storageByteLimit}
         onError={handleFileError}
         className={cn(
-          incognitoActive &&
+          lockedChatActive &&
             // The dashed border replaces the composer's ring outright (both
             // at once read as two competing outlines). !important because the
             // ring and focus border are has-[]-variant classes on the
@@ -983,9 +983,9 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
-            attachmentsDisabledByIncognito={incognitoActive}
-            incognito={incognito}
-            onIncognitoChange={onIncognitoChange}
+            attachmentsDisabledByLockedChat={lockedChatActive}
+            lockedChat={lockedChat}
+            onLockedChatChange={onLockedChatChange}
             sandboxAvailable={sandboxAvailable}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
@@ -1105,8 +1105,8 @@ const ArchestraPromptInput = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
-  incognito,
-  onIncognitoChange,
+  lockedChat,
+  onLockedChatChange,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1216,8 +1216,8 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
-          incognito={incognito}
-          onIncognitoChange={onIncognitoChange}
+          lockedChat={lockedChat}
+          onLockedChatChange={onLockedChatChange}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
         />

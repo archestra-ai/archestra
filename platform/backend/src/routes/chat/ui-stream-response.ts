@@ -1,7 +1,7 @@
 import { ApiError } from "@archestra/shared";
 import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
 import type { FastifyReply } from "fastify";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import { activeChatRunService } from "@/services/active-chat-run";
 
@@ -18,8 +18,8 @@ export async function sendGatedUiMessageStreamResponse(params: {
   runId: string;
   conversationId: string;
   abortController: AbortController;
-  /** Incognito: suppress replay payload persistence (plaintext chunks). */
-  incognitoAudit?: IncognitoAuditContext | null;
+  /** LockedChat: suppress replay payload persistence (plaintext chunks). */
+  lockedChatAudit?: LockedChatAuditContext | null;
   suppressEventPayloads?: boolean;
   getTerminalStatus: () => Promise<{
     status: "completed" | "failed" | "cancelled";
@@ -36,7 +36,7 @@ export async function sendGatedUiMessageStreamResponse(params: {
     stream: persistenceStream,
     abortController,
     getTerminalStatus,
-    incognitoAudit: params.incognitoAudit ?? null,
+    lockedChatAudit: params.lockedChatAudit ?? null,
     suppressEventPayloads: params.suppressEventPayloads ?? false,
   });
 

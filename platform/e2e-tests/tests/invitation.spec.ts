@@ -88,8 +88,8 @@ test.describe("Invitation functionality", {
     expect(invitationLink).toBeTruthy();
     expect(invitationLink).toContain("/auth/sign-up-with-invitation");
 
-    // PART 2: Use the invitation link to sign up (as new user in incognito context)
-    // Create a new incognito context to simulate a new user (no shared storage)
+    // PART 2: Use the invitation link to sign up (as new user in locked-chat context)
+    // Create a new locked-chat context to simulate a new user (no shared storage)
     const newUserContext = await browser.newContext({
       // Ensure no storage state is shared
       storageState: undefined,

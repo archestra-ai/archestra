@@ -115,7 +115,7 @@ export function isEncryptedEnvelope(value: unknown): value is string {
  * Strict envelope-object check: exactly `{ __encrypted: "<v1 envelope>" }`
  * and nothing else, so arbitrary user JSON that merely contains an
  * `__encrypted` key can never be misread as ciphertext. Shared by the
- * incognito-chat layer and the enterprise at-rest layer (which re-exports it).
+ * locked-chat layer and the enterprise at-rest layer (which re-exports it).
  */
 export function isContentEnvelope(
   value: unknown,

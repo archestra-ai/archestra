@@ -3,7 +3,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
+import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -21,7 +21,7 @@ describe("useConversationSearch", () => {
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
-    // Incognito chats are on by default, matching the shipped default.
+    // Locked chats are on by default, matching the shipped default.
     vi.mocked(useFeature).mockReturnValue(true);
   });
 
@@ -200,7 +200,7 @@ describe("useConversationSearch", () => {
     expect(result.current.isOpen).toBe(true);
   });
 
-  it("starts a new incognito chat on Alt+I", () => {
+  it("starts a new locked chat on Alt+I", () => {
     mockPlatform("MacIntel");
     renderHook(() => useConversationSearch());
 
@@ -210,7 +210,7 @@ describe("useConversationSearch", () => {
       dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
     });
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat?lockedChat=1");
   });
 
   it("blurs the focused editable while handling Alt+I, then restores focus", async () => {
@@ -228,13 +228,13 @@ describe("useConversationSearch", () => {
     const observe = () => {
       activeDuringDispatch = document.activeElement;
     };
-    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+    window.addEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, observe);
     try {
       act(() => {
         dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
       });
     } finally {
-      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+      window.removeEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, observe);
     }
 
     expect(activeDuringDispatch).not.toBe(textarea);
@@ -252,19 +252,19 @@ describe("useConversationSearch", () => {
     // Stand in for the mounted new-chat composer: claim the cancelable
     // handshake event so the shortcut toggles in place instead of navigating.
     const claim = (event: Event) => event.preventDefault();
-    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+    window.addEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, claim);
     try {
       act(() => {
         dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
       });
     } finally {
-      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+      window.removeEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, claim);
     }
 
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it("ignores Alt+I when incognito chats are disabled", () => {
+  it("ignores Alt+I when locked chats are disabled", () => {
     vi.mocked(useFeature).mockReturnValue(false);
     mockPlatform("MacIntel");
     renderHook(() => useConversationSearch());
@@ -276,7 +276,7 @@ describe("useConversationSearch", () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it("requires the Alt modifier to start an incognito chat", () => {
+  it("requires the Alt modifier to start a locked chat", () => {
     mockPlatform("MacIntel");
     renderHook(() => useConversationSearch());
 

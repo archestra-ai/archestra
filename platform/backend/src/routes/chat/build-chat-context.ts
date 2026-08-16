@@ -8,7 +8,7 @@ import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import { ConversationEnabledToolModel } from "@/models";
@@ -50,7 +50,7 @@ export async function buildChatContext(params: {
   taskBridge: ChatTaskBridge;
   abortSignal: AbortSignal;
   /**
-   * Incognito conversation: span content is suppressed and long calls never
+   * Locked chat: span content is suppressed and long calls never
    * detach into durable tasks.
    */
   suppressContentLogging: boolean;
@@ -59,7 +59,7 @@ export async function buildChatContext(params: {
    * under the conversation key. Null when the conversation has no escrow
    * record, which falls those surfaces back to redaction.
    */
-  incognitoAudit: IncognitoAuditContext | null;
+  lockedChatAudit: LockedChatAuditContext | null;
 }): Promise<{
   mcpTools: Record<string, Tool>;
   toolUiResourceUris: Record<string, string>;
@@ -86,7 +86,7 @@ export async function buildChatContext(params: {
     taskBridge,
     abortSignal,
     suppressContentLogging,
-    incognitoAudit,
+    lockedChatAudit,
   } = params;
 
   const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -124,7 +124,7 @@ export async function buildChatContext(params: {
       taskBridge,
       repeatTracker,
       suppressContentLogging,
-      incognitoAudit,
+      lockedChatAudit,
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);

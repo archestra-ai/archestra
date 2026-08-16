@@ -416,7 +416,7 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("offers a new incognito chat only when the feature is enabled", () => {
+  it("offers a new locked chat only when the feature is enabled", () => {
     const { rerender } = render(
       <ConversationSearchPalette {...defaultProps} />,
     );
@@ -426,7 +426,7 @@ describe("ConversationSearchPalette", () => {
     rerender(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("New locked chat"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat?lockedChat=1");
   });
 
   it("shows the project a chat belongs to, like the sidebar does", () => {

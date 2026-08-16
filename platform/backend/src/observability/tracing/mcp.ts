@@ -62,7 +62,7 @@ export async function startActiveMcpSpan<T>(params: {
   toolArgs?: unknown;
   /**
    * Suppress tool argument/result content capture for this span even when
-   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (incognito chat sessions). Metadata
+   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (locked chat sessions). Metadata
    * attributes (tool name, agent, session) are unaffected.
    */
   suppressContent?: boolean;

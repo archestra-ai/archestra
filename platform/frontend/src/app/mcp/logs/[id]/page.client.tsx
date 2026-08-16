@@ -3,19 +3,19 @@
 import {
   type archestraApiTypes,
   extractMcpExecutedAs,
-  isIncognitoUnavailableContent,
+  isLockedChatUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
-import {
-  IncognitoContentUnavailable,
-  IncognitoContentUnavailableLabel,
-} from "@/components/incognito-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import {
+  LockedChatContentUnavailable,
+  LockedChatContentUnavailableLabel,
+} from "@/components/locked-chat-content-unavailable";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -99,7 +99,7 @@ function McpToolCallDetail({
 
   const agent = agents?.find((a) => a.id === mcpToolCall.agentId);
   const method = mcpToolCall.method || "tools/call";
-  // An incognito conversation's tool call and result are stored encrypted (or,
+  // A locked chat's tool call and result are stored encrypted (or,
   // in the fail-closed case, not at all), so the columns hold a sentinel rather
   // than the recorded content. Split them out before anything reads a field off
   // them — the tool name, the arguments and the success/error status are all
@@ -110,12 +110,14 @@ function McpToolCallDetail({
   const nestedRedactedArgs = (
     mcpToolCall.toolCall as { arguments?: unknown } | null
   )?.arguments;
-  const lockedToolCall = isIncognitoUnavailableContent(mcpToolCall.toolCall)
+  const lockedToolCall = isLockedChatUnavailableContent(mcpToolCall.toolCall)
     ? mcpToolCall.toolCall
-    : isIncognitoUnavailableContent(nestedRedactedArgs)
+    : isLockedChatUnavailableContent(nestedRedactedArgs)
       ? nestedRedactedArgs
       : null;
-  const lockedToolResult = isIncognitoUnavailableContent(mcpToolCall.toolResult)
+  const lockedToolResult = isLockedChatUnavailableContent(
+    mcpToolCall.toolResult,
+  )
     ? mcpToolCall.toolResult
     : null;
 
@@ -173,7 +175,7 @@ function McpToolCallDetail({
                 {method}
               </Badge>
               {lockedToolResult ? (
-                <IncognitoContentUnavailableLabel value={lockedToolResult} />
+                <LockedChatContentUnavailableLabel value={lockedToolResult} />
               ) : (
                 <Badge
                   variant={
@@ -259,7 +261,7 @@ function McpToolCallDetail({
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
                 {lockedToolCall ? (
-                  <IncognitoContentUnavailable value={lockedToolCall} />
+                  <LockedChatContentUnavailable value={lockedToolCall} />
                 ) : (
                   <JsonCodeBlock value={toolCall?.arguments} />
                 )}
@@ -275,7 +277,7 @@ function McpToolCallDetail({
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-4">
               {lockedToolResult ? (
-                <IncognitoContentUnavailable value={lockedToolResult} />
+                <LockedChatContentUnavailable value={lockedToolResult} />
               ) : (
                 <JsonCodeBlock value={toolResult} />
               )}

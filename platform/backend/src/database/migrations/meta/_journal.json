@@ -2920,6 +2920,13 @@
       "when": 1786826617329,
       "tag": "0416_marvelous_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 417,
+      "version": "7",
+      "when": 1786885497228,
+      "tag": "0417_plain_power_pack",
+      "breakpoints": true
     }
   ]
 }

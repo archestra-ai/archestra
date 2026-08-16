@@ -72,7 +72,7 @@ What changes while a locked chat is active:
 
 ### Key Escrow
 
-Escrow wraps each new chat's key to an RSA public key whose private half your security team holds offline. Configuring it enables locked chats. Recovery is a deliberate break-glass procedure, not something the platform can do alone. Set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits). Generate a keypair with:
+Escrow wraps each new chat's key to an RSA public key whose private half your security team holds offline. Configuring it enables locked chats. Recovery is a deliberate break-glass procedure, not something the platform can do alone. Set `ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits). Generate a keypair with:
 
 ```bash
 openssl genrsa -out locked-chat-escrow.pem 4096
@@ -89,11 +89,11 @@ Escrow key rotation affects new chats only: each conversation stores its key wra
 
 ### Break-Glass Recovery
 
-The escrow record is a JSON blob in the conversation row's `incognito_escrow` column, holding the chat key wrapped as RSA-OAEP (SHA-256). Column names, the environment variable, and the redaction marker still carry the feature's former name, `incognito`.
+The escrow record is a JSON blob in the conversation row's `locked_chat_escrow` column, holding the chat key wrapped as RSA-OAEP (SHA-256).
 
 Recovery happens outside the platform, with database access. The holder of the escrow private key decrypts `wrappedDek` to get the chat key, then decrypts each envelope with AES-256-GCM.
 
-Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which binds it to both the column and the chat. Use the column the value came from:
+Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which binds it to both the column and the chat. The `incognito` part is the feature's former name, kept because it is authenticated into envelopes already written. Use the column the value came from:
 
 | Table | Column | AAD column part |
 |---|---|---|
@@ -107,10 +107,10 @@ Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which bind
 | `mcp_tool_calls` | `tool_result` | `mcp_tool_calls.tool_result` |
 | `conversation_chat_errors` | `error` | `conversation_chat_errors.error` |
 
-Rows in `interactions` and `mcp_tool_calls` carry the chat they belong to in `incognito_conversation_id`. Select on it to find everything one chat produced — `mcp_tool_calls` has no other reference to the conversation.
+Rows in `interactions` and `mcp_tool_calls` carry the chat they belong to in `locked_chat_conversation_id`. Select on it to find everything one chat produced — `mcp_tool_calls` has no other reference to the conversation.
 
 Each envelope decrypts to `{"v": <original value>}`.
 
-A record whose content reads `{"__redacted": "incognito"}` was never stored and cannot be recovered. Archestra writes that only when it could not encrypt correctly — no key on the request, a key that did not match the chat, or a chat with no escrow record.
+A record whose content reads `{"__redacted": "locked_chat"}` was never stored and cannot be recovered. Records written before the feature was renamed read `{"__redacted": "incognito"}` and mean the same thing. Archestra writes that only when it could not encrypt correctly — no key on the request, a key that did not match the chat, or a chat with no escrow record.
 
 Plan who holds the private key and under what procedure before enabling escrow.

@@ -25,12 +25,12 @@ export const REDACTED_LOG_PATHS = [
 ]
   .flatMap((key) => [key, `*.${key}`, `*.headers.${key}`])
   .concat([
-    // The browser-held incognito conversation key rides this request header;
+    // The browser-held locked chat key rides this request header;
     // the server must never persist it, logs included. Hyphenated keys need
     // fast-redact's bracket syntax (same three shapes as above).
-    '["x-archestra-incognito-key"]',
-    '*["x-archestra-incognito-key"]',
-    '*.headers["x-archestra-incognito-key"]',
+    '["x-archestra-locked-chat-key"]',
+    '*["x-archestra-locked-chat-key"]',
+    '*.headers["x-archestra-locked-chat-key"]',
   ]);
 
 /**

@@ -37,9 +37,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
-  INCOGNITO_KEY_HEADER,
-  parseIncognitoDekHeader,
-} from "@/content-encryption/incognito";
+  LOCKED_CHAT_KEY_HEADER,
+  parseLockedChatDekHeader,
+} from "@/content-encryption/locked-chat";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
@@ -119,10 +119,10 @@ import {
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
-  type IncognitoAuditDisposition,
-  redactIncognitoInteraction,
-  resolveIncognitoAuditContext,
-} from "./utils/incognito-session";
+  type LockedChatAuditDisposition,
+  redactLockedChatInteraction,
+  resolveLockedChatAuditContext,
+} from "./utils/locked-chat-session";
 
 const {
   observability: {
@@ -149,9 +149,9 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Incognito chat session: span content capture is suppressed and persisted
+   * Locked chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
-   * True whenever `incognito.kind !== "none"`.
+   * True whenever `locked-chat.kind !== "none"`.
    */
   suppressContent: boolean;
   /**
@@ -159,7 +159,7 @@ export interface LLMProxyContext<TRequest> {
    * carries the validated conversation key; `redact` is the fail-closed
    * fallback. Resolved once per request so every write site agrees.
    */
-  incognito: IncognitoAuditDisposition;
+  lockedChat: LockedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
    * loopback-gated delegation header and re-validated against the executing
@@ -691,13 +691,13 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // Incognito chat sessions: interaction rows keep all usage/cost/session
+  // Locked chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
   // safely), and span content capture is suppressed either way. Resolved once
   // up front (server-derived, fail closed) so the catch below and both stream
   // handlers agree on it.
-  const incognito = await resolveIncognitoAuditContext({
+  const lockedChat = await resolveLockedChatAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -705,11 +705,11 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
-    dek: readIncognitoDek(request),
+    dek: readLockedChatDek(request),
   });
-  // Content never reaches spans or logs for an incognito session, whether it
+  // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted.
-  const suppressContent = incognito.kind !== "none";
+  const suppressContent = lockedChat.kind !== "none";
 
   // Advisor consultations bill to the delegating caller's environment (the
   // advisor's own row is env-less). Resolved once so the limit check and every
@@ -1271,7 +1271,7 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
-      incognito,
+      lockedChat,
       delegationBillingEnvironmentId,
       externalAgentId,
       authMethod,
@@ -1347,7 +1347,7 @@ export async function handleLLMProxy<
       };
       await persistProxyInteraction(
         record,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -1400,7 +1400,7 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    incognito,
+    lockedChat,
     delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
@@ -1465,7 +1465,7 @@ async function handleStreaming<
       };
       await persistProxyInteraction(
         record,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -1652,7 +1652,7 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content (suppressed for incognito chats)
+        // Capture streamed completion content (suppressed for locked chats)
         if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
@@ -1881,7 +1881,7 @@ async function handleStreaming<
         });
         await persistProxyInteraction(
           record,
-          incognito,
+          lockedChat,
           delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
@@ -1930,7 +1930,7 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    incognito,
+    lockedChat,
     delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
@@ -2083,7 +2083,7 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content (suppressed for incognito chats)
+      // Capture completion content (suppressed for locked chats)
       if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
@@ -2205,7 +2205,7 @@ async function handleNonStreaming<
       });
       await persistProxyInteraction(
         refusalRecord,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
 
@@ -2286,7 +2286,7 @@ async function handleNonStreaming<
     });
     await persistProxyInteraction(
       record,
-      incognito,
+      lockedChat,
       delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
@@ -2443,7 +2443,7 @@ function extractDurationStatusCode(error: unknown): string {
 
 /**
  * The single funnel every proxy interaction write goes through, so all five
- * sites treat incognito identically.
+ * sites treat locked-chat identically.
  *
  * - `encrypt`: store the full record, keyed to the conversation's browser-held
  *   DEK (recoverable offline via that conversation's escrow record).
@@ -2453,12 +2453,12 @@ function extractDurationStatusCode(error: unknown): string {
  */
 async function persistProxyInteraction(
   record: InsertInteraction,
-  incognito: IncognitoAuditDisposition,
+  lockedChat: LockedChatAuditDisposition,
   environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
-    incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
-    incognito.kind === "encrypt" ? incognito.audit : null,
+    lockedChat.kind === "redact" ? redactLockedChatInteraction(record) : record,
+    lockedChat.kind === "encrypt" ? lockedChat.audit : null,
     environmentIdOverride ? { environmentIdOverride } : undefined,
   );
 }
@@ -2536,16 +2536,16 @@ async function resolveDelegationBillingEnvironment(
 }
 
 /**
- * Read the incognito conversation key off the request. A malformed header is
+ * Read the locked chat key off the request. A malformed header is
  * treated as absent (the resolver then fails closed to redaction) rather than
  * failing the LLM call — the proxy's job is to serve the request; losing the
  * key costs audit fidelity, not the user's turn.
  */
-function readIncognitoDek(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[INCOGNITO_KEY_HEADER];
+function readLockedChatDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[LOCKED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseIncognitoDekHeader(value);
+    return parseLockedChatDekHeader(value);
   } catch {
     return null;
   }

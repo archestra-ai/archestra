@@ -1,9 +1,8 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import type { ChatStatus } from "ai";
 import { useEffect, useRef, useState } from "react";
-
-type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 /**
  * Seconds of total stream silence — not even a backend heartbeat — before the
@@ -34,11 +33,13 @@ interface StreamStallState {
  * `isUpstreamIdle` is deliberately gated on the turn having rendered nothing:
  * once any text, reasoning, tool call or file is on screen, a lull is not
  * something to warn about, and saying "no response progress has been received"
- * over an answer the user is already reading is simply wrong. Progress signals
- * only ever move forward, so without that gate the notice also outlived the
- * answer — the run stays open after the visible reply (heartbeats keep the
- * transport alive but do not count as response progress), the window expires,
- * and the warning appears above finished content and stays there.
+ * over an answer the user is already reading is simply wrong.
+ *
+ * That gate is also what stops the notice outliving the answer. The idle window
+ * only ever closes on a new progress signal or on the run ending, and a run that
+ * stays open past its visible reply produces neither: its heartbeats keep the
+ * transport clock fresh but count as transport activity, not response progress.
+ * Without the gate the window expires over finished content and never reopens.
  *
  * A genuinely dead connection is still reported through `isTransportStalled`
  * whether or not anything rendered.

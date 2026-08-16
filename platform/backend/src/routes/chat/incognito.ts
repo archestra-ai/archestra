@@ -18,7 +18,7 @@ import {
  * resolution, and creation bookkeeping. All key material stays request-scoped.
  */
 
-export const INCOGNITO_STATIC_TITLE = "Incognito chat";
+export const INCOGNITO_STATIC_TITLE = "Locked chat";
 
 /** Error type surfaced on a present-but-wrong conversation key (409). */
 export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
@@ -45,7 +45,7 @@ export function resolveIncognitoCreation(params: {
   if (!isIncognitoChatEnabled()) {
     throw new ApiError(
       403,
-      "Incognito chats are not enabled on this instance. An operator enables " +
+      "Locked chats are not enabled on this instance. An operator enables " +
         "them by configuring ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY, " +
         "which keeps an offline-recoverable copy of each conversation key.",
     );

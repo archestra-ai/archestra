@@ -172,6 +172,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
   writePendingThinkingEffort,
@@ -1507,6 +1508,12 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  const { isTransportStalled, isUpstreamIdle } = useStreamStall({
+    status,
+    transportActivitySequence: chatSession?.transportActivitySequence ?? 0,
+    responseProgressSequence: chatSession?.responseProgressSequence ?? 0,
+    messages,
+  });
 
   // `status` here is read from the shared session map, which each
   // ChatSessionHook updates a render behind the real SDK status (via a
@@ -3079,15 +3086,7 @@ export function ChatPageContent({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning
-                status={status}
-                transportActivitySequence={
-                  chatSession?.transportActivitySequence ?? 0
-                }
-                responseProgressSequence={
-                  chatSession?.responseProgressSequence ?? 0
-                }
-              />
+              <StreamTimeoutWarning isStalled={isTransportStalled} />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -3177,6 +3176,7 @@ export function ChatPageContent({
                           status={status}
                           isContextCompacting={isContextCompacting}
                           contextCompactionFeedback={manualCompactionFeedback}
+                          isUpstreamIdle={isUpstreamIdle}
                           optimisticToolCalls={optimisticToolCalls}
                           isLoadingConversation={isLoadingConversation}
                           onMessagesUpdate={setMessages}

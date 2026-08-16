@@ -62,4 +62,5 @@ export function KnowledgePageLayout({
 const KNOWLEDGE_TABS = [
   { label: "Connectors", href: "/knowledge/connectors" },
   { label: "Knowledge Bases", href: "/knowledge/knowledge-bases" },
+  { label: "Document Reviews", href: "/knowledge/reviews" },
 ];

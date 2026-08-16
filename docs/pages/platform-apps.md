@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-15
+lastUpdated: 2026-08-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -129,7 +129,7 @@ Reads need `file:manage`, and the transfer tools need `sandbox:execute`. The fil
 
 ## Tools and auto-auth
 
-Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. `scaffold_app` binds the app to the authoring agent's [environment](./platform-environments), or to the organization's landing environment for new apps when the agent has none; assignable tools are that environment's plus the Default environment's.
+Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. A new app binds to the [environment](./platform-environments) of the agent that builds it — the authoring agent for `scaffold_app`, the chat agent an app created on the Apps page opens with. With no such agent it lands in the organization's landing environment for new apps. Assignable tools are that environment's plus the Default environment's.
 
 Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 

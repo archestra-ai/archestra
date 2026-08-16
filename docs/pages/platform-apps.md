@@ -46,9 +46,11 @@ A locked app is immutable. Agents refuse every change to it — edits, tool assi
 
 Two settings in **Settings → Chat** govern how new apps start. Both are off by default. Flipping them never touches existing apps.
 
-**New apps are disabled by default** creates every new app disabled. The app stays author-only and invisible to agents until you enable it in App settings.
+**New apps are disabled by default** creates every new app disabled. The app stays author-only and cannot be run until you enable it in App settings.
 
-**New apps are locked by default** creates every new app [locked](#locking-an-app). The chat that created the app can finish building it, so a new app never arrives frozen as an empty shell. Every other chat is refused from the first moment. Locking or unlocking the app yourself ends that one exception.
+**New apps are locked by default** creates every new app [locked](#locking-an-app).
+
+Under either setting, the chat that created the app can finish building it. A new app never arrives frozen as an empty shell — you enable or unlock a finished app, not a starter template. Every other chat meets the setting from the app's first moment, and a disabled app is not even acknowledged there. Locking or disabling the app yourself ends that one exception.
 
 ## Labels
 

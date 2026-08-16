@@ -562,12 +562,14 @@ const registry = defineArchestraTools([
             templateId: DEFAULT_APP_TEMPLATE_ID,
             enabled: lifecycleDefaults.enabled,
             locked: lifecycleDefaults.locked,
-            // Born locked by the org default: this conversation still has to
-            // build the app it just scaffolded, so the lock spares it (and it
-            // alone) until someone sets the lock deliberately.
-            lockGraceSessionKey: lifecycleDefaults.locked
-              ? (sessionKey ?? null)
-              : null,
+            // Born locked or disabled by an org default: this conversation
+            // still has to build the app it just scaffolded, so those defaults
+            // spare it (and it alone) until someone sets the lifecycle
+            // deliberately.
+            creationGraceSessionKey:
+              lifecycleDefaults.locked || !lifecycleDefaults.enabled
+                ? (sessionKey ?? null)
+                : null,
           },
           payload,
         });
@@ -644,14 +646,17 @@ const registry = defineArchestraTools([
       const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(payload.html, "html")}`;
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
-      // The org's new-app defaults can make the app un-editable from chat the
-      // moment it exists (disabled = invisible to chat tools; locked = every
-      // modification refused). Say so in the result, or the model walks into
-      // refusals it has no way to explain to the user.
+      // The org's new-app defaults change what the app is the moment it exists
+      // (disabled = invisible to every other conversation and runnable by
+      // nobody; locked = every other conversation's modifications refused).
+      // Say so in the result, or the model either walks into refusals it has
+      // no way to explain or hands over an app the user cannot open.
       const lifecycleNotes: string[] = [];
       if (!lifecycleDefaults.enabled) {
         lifecycleNotes.push(
-          "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
+          sessionKey
+            ? "This organization creates new apps disabled: the app is invisible to every other conversation and nobody can run it yet, but this one may finish building it — keep going with edit_app/set_app_tools as usual. When you hand it over, tell the user to enable it in App settings on the Apps page before anyone can open it."
+            : "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
         );
       }
       if (lifecycleDefaults.locked) {
@@ -1736,9 +1741,9 @@ type AuthedCaller = {
    * The authoring session this call belongs to — the conversation in UI chat,
    * the execution key in a headless run, undefined where neither exists (an
    * external MCP client on the gateway). Carried alongside the caller's ids
-   * because an app's creation-time lock grace is granted to a session, not to
-   * a person: it rides every `loadApp` spread so no authoring tool can forget
-   * to present it.
+   * because an app's creation-time grace is granted to a session, not to a
+   * person: it rides every `loadApp` spread so no authoring tool can forget to
+   * present it.
    */
   sessionKey: string | undefined;
 };
@@ -1760,7 +1765,7 @@ function requireAuthed(
 
 /**
  * The key identifying the session an app tool call is made from, for the
- * creation-time lock grace (`apps.lock_grace_session_key`). `isolationKey` is
+ * creation-time grace (`apps.lock_grace_session_key`). `isolationKey` is
  * the conversation id in UI chat and a per-execution id in headless runs, so
  * one value covers both; it is stored as an opaque key and never read back as
  * a conversation reference.
@@ -1861,8 +1866,8 @@ async function loadApp(params: {
   appId: string;
   /**
    * The calling session, from {@link requireAuthed}. Consulted only by the
-   * lock check, to recognize the session an app was created from when the
-   * organization's new-app default is what locked it.
+   * lifecycle checks, to recognize the session an app was created from when an
+   * organization new-app default is what locked or disabled it.
    */
   sessionKey?: string;
   modify?: boolean;
@@ -1875,12 +1880,24 @@ async function loadApp(params: {
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
+  // The session an app was created from keeps building it through the
+  // restrictions the organization's new-app defaults applied at that moment —
+  // otherwise those defaults turn on the very agent that just scaffolded the
+  // app, stranding it as an empty shell nobody asked to freeze (T-1089). The
+  // grace covers this one session; every other session meets the lock and the
+  // disable from the app's first moment, and a deliberate restriction ends it.
+  const graced =
+    !!app &&
+    params.sessionKey !== undefined &&
+    app.creationGraceSessionKey === params.sessionKey;
   // A disabled app does not exist as far as chat is concerned (T-980): every
   // id-scoped tool reports it exactly like a missing id — for its author too,
   // and for reads as much as writes, so a conversation holding a pre-disable
   // snapshot learns nothing and can do nothing. The author sees and manages
-  // it on the Apps page (REST), where re-enabling lives.
-  if (!app || !app.enabled) {
+  // it on the Apps page (REST), where re-enabling lives. The graced session is
+  // the one exception, and only ever for an app born disabled: it is building
+  // that app right now, and it is the only session that can see it at all.
+  if (!app || (!app.enabled && !graced)) {
     return { error: errorResult(`No app found with id ${params.appId}.`) };
   }
   if (params.modify) {
@@ -1897,6 +1914,11 @@ async function loadApp(params: {
           authorId: app.authorId,
           enabled: app.enabled,
         },
+        // Same exception, at the disabled-app freeze inside the assertion: the
+        // creating session may finish its build. Nothing else about the gate
+        // is relaxed — the caller still has to be someone who could author the
+        // app if it were live.
+        creationGraceSession: graced,
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {
@@ -1904,15 +1926,6 @@ async function loadApp(params: {
         return { error: errorResult(error.message) };
       throw error;
     }
-    // The session an app was created from keeps its build rights over a lock
-    // the organization's new-app default applied — otherwise that default
-    // refuses the very agent that just scaffolded the app, stranding it as an
-    // empty shell nobody asked to freeze (T-1089). The grace covers this one
-    // session; every other session sees the lock from the app's first moment,
-    // and any deliberate lock clears it.
-    const graced =
-      params.sessionKey !== undefined &&
-      app.lockGraceSessionKey === params.sessionKey;
     if (app.locked && !params.allowLocked && !graced) {
       return {
         error: errorResult(

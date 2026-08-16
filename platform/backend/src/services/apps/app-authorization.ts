@@ -155,9 +155,11 @@ export async function assertCallerMayModifyApp(params: {
  *
  * A disabled app is additionally frozen for authoring — for its author too
  * (T-980: a parallel chat of the author rebuilt an app the user had just
- * disabled). Chat tools never reach this branch (their loader reports a
- * disabled app as not found); it guards the REST html rewrite, where the
- * author can see the app but must re-enable it before changing its content.
+ * disabled). It guards the REST html rewrite, where the author can see the app
+ * but must re-enable it before changing its content; chat tools reach it only
+ * for an app born disabled by an organization default, whose creating session
+ * their loader marks with `creationGraceSession` (every other chat caller is
+ * already reported a disabled app as not found).
  */
 export async function assertCallerMayAuthorApp(params: {
   userId: string;
@@ -168,6 +170,14 @@ export async function assertCallerMayAuthorApp(params: {
     authorId: string | null;
     enabled: boolean;
   };
+  /**
+   * Set by the chat loader when this call comes from the session an app was
+   * created in while an organization new-app default disabled it. That session
+   * is building the app right now, so the disabled freeze below does not apply
+   * to it; every other caller, and every app someone disabled deliberately,
+   * meets the freeze as before.
+   */
+  creationGraceSession?: boolean;
   resourceTeamIds: string[];
 }): Promise<void> {
   // "Reachable without the admin bypass" is exactly "not oversight-only": the
@@ -192,7 +202,7 @@ export async function assertCallerMayAuthorApp(params: {
       "You can view this app and change its settings, but only its owner can modify the app itself via chat.",
     );
   }
-  if (!params.app.enabled) {
+  if (!params.app.enabled && !params.creationGraceSession) {
     throw new ApiError(
       403,
       "This app is disabled: its content cannot be changed until it is re-enabled.",

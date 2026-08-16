@@ -49,6 +49,14 @@ export async function createSeededAppConversation(params: {
    * about which agent is building the app. Omitted, it is resolved here.
    */
   agentId?: string;
+  /**
+   * This conversation is the app's own creation-time build chat, and its caller
+   * grants it the app's creation grace the moment it has an id. An app an
+   * organization default disabled at birth is therefore seeded rather than
+   * refused: the authoring tools will answer this one conversation. Deep links
+   * to an existing app never set it, and so still meet the T-980 refusal below.
+   */
+  creationBuildChat?: boolean;
 }): Promise<{ conversationId: string }> {
   const { appId, userId, organizationId, agentId } = params;
 
@@ -61,8 +69,10 @@ export async function createSeededAppConversation(params: {
   // A disabled app does not exist for chat (T-980) — deep-link seeding
   // included, or the seeded render would hand the model the very app every
   // chat tool refuses to acknowledge. Its author previews it from the Apps
-  // page instead.
-  if (!app || !app.enabled) {
+  // page instead. The app's own build chat is the exception: there the tools
+  // do answer this conversation, so seeding it hands the model an app it can
+  // actually work on.
+  if (!app || (!app.enabled && !params.creationBuildChat)) {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 

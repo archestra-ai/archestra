@@ -584,15 +584,17 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // The agent whose environment the app was just bound to, so the
             // chat that builds it runs as that agent (see `builderAgentId`).
             ...(builderAgentId ? { agentId: builderAgentId } : {}),
+            creationBuildChat: true,
           }));
           // The Apps page creates a blank app and drops the user straight into
-          // this conversation to build it. When the organization's default is
-          // what locked the app, that build has to be able to start, so the
-          // conversation gets the same creation-time grace `scaffold_app`
-          // gives its own (chat carries the conversation id as its session
-          // key). Everyone else meets the lock immediately.
-          if (lifecycleDefaults.locked) {
-            await AppModel.setLockGraceSessionKey(app.id, conversationId);
+          // this conversation to build it. When an organization default is
+          // what locked or disabled the app, that build has to be able to
+          // start, so the conversation gets the same creation-time grace
+          // `scaffold_app` gives its own (chat carries the conversation id as
+          // its session key). Everyone else meets both from the app's first
+          // moment.
+          if (lifecycleDefaults.locked || !lifecycleDefaults.enabled) {
+            await AppModel.setCreationGraceSessionKey(app.id, conversationId);
           }
         } catch (error) {
           logger.warn(

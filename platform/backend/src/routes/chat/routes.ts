@@ -838,6 +838,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               openedApp: openedAppRef,
               userId: user.id,
               organizationId,
+              ...(conversationId ? { sessionKey: conversationId } : {}),
             }).catch((error) => {
               logger.warn(
                 { error, conversationId },

@@ -1,10 +1,14 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useStreamStall } from "./stream-stall.hook";
+import {
+  TRANSPORT_STALL_THRESHOLD_SECONDS,
+  UPSTREAM_IDLE_THRESHOLD_SECONDS,
+  useStreamStall,
+} from "./stream-stall.hook";
 
-const TRANSPORT_THRESHOLD = 10;
-const UPSTREAM_THRESHOLD = 20;
+/** Matches the backend's `data-heartbeat` cadence while a run is open. */
 const HEARTBEAT_SECONDS = 5;
 
 type StallProps = {
@@ -24,29 +28,21 @@ function userTurn(): UIMessage[] {
   ];
 }
 
-function answeredTurn(
-  text = "Hey! What can I help you with today?",
-): UIMessage[] {
+function assistantTurn(parts: unknown[]): UIMessage[] {
   return [
     ...userTurn(),
-    {
-      id: "assistant-1",
-      role: "assistant",
-      parts: [{ type: "text", text }],
-    } as UIMessage,
+    { id: "assistant-1", role: "assistant", parts } as unknown as UIMessage,
   ];
 }
 
+function answeredTurn(text = "Hey! What can I help you with today?") {
+  return assistantTurn([{ type: "text", text }]);
+}
+
 function renderStall(props: StallProps) {
-  return renderHook(
-    (next: StallProps) =>
-      useStreamStall({
-        ...next,
-        transportThresholdSeconds: TRANSPORT_THRESHOLD,
-        upstreamIdleThresholdSeconds: UPSTREAM_THRESHOLD,
-      }),
-    { initialProps: props },
-  );
+  return renderHook((next: StallProps) => useStreamStall(next), {
+    initialProps: props,
+  });
 }
 
 /**
@@ -89,7 +85,9 @@ describe("useStreamStall", () => {
       messages: userTurn(),
     });
 
-    act(() => vi.advanceTimersByTime(TRANSPORT_THRESHOLD * 1000 - 1));
+    act(() =>
+      vi.advanceTimersByTime(TRANSPORT_STALL_THRESHOLD_SECONDS * 1000 - 1),
+    );
     expect(result.current.isTransportStalled).toBe(false);
 
     act(() => vi.advanceTimersByTime(1));
@@ -107,10 +105,14 @@ describe("useStreamStall", () => {
     };
     const { result, rerender } = renderStall(props);
 
-    beat(rerender, props, UPSTREAM_THRESHOLD - HEARTBEAT_SECONDS);
+    const beaten = beat(
+      rerender,
+      props,
+      UPSTREAM_IDLE_THRESHOLD_SECONDS - HEARTBEAT_SECONDS,
+    );
     expect(result.current.isUpstreamIdle).toBe(false);
 
-    beat(rerender, props, HEARTBEAT_SECONDS);
+    beat(rerender, beaten, HEARTBEAT_SECONDS);
     expect(result.current.isTransportStalled).toBe(false);
     expect(result.current.isUpstreamIdle).toBe(true);
   });
@@ -127,7 +129,7 @@ describe("useStreamStall", () => {
     };
     const { result, rerender } = renderStall(props);
 
-    beat(rerender, props, UPSTREAM_THRESHOLD * 5);
+    beat(rerender, props, UPSTREAM_IDLE_THRESHOLD_SECONDS * 5);
 
     expect(result.current.isTransportStalled).toBe(false);
     expect(result.current.isUpstreamIdle).toBe(false);
@@ -142,7 +144,7 @@ describe("useStreamStall", () => {
     };
     const { result, rerender } = renderStall(props);
 
-    const beaten = beat(rerender, props, UPSTREAM_THRESHOLD);
+    const beaten = beat(rerender, props, UPSTREAM_IDLE_THRESHOLD_SECONDS);
     expect(result.current.isUpstreamIdle).toBe(true);
 
     rerender({
@@ -159,42 +161,48 @@ describe("useStreamStall", () => {
       status: "streaming",
       transportActivitySequence: 1,
       responseProgressSequence: 1,
-      messages: [
-        ...userTurn(),
-        { id: "assistant-1", role: "assistant", parts: [] } as UIMessage,
-      ],
+      messages: assistantTurn([]),
     };
     const { result, rerender } = renderStall(props);
 
-    beat(rerender, props, UPSTREAM_THRESHOLD);
+    beat(rerender, props, UPSTREAM_IDLE_THRESHOLD_SECONDS);
     expect(result.current.isUpstreamIdle).toBe(true);
   });
 
-  it("treats a pending tool call as rendered output", () => {
+  it.each([
+    [
+      "a pending tool call",
+      {
+        type: "dynamic-tool",
+        toolName: "search",
+        toolCallId: "call-1",
+        state: "input-available",
+        input: {},
+      },
+    ],
+    [
+      "a dual LLM analysis block",
+      {
+        type: DUAL_LLM_ANALYSIS_PART_TYPE,
+        id: "call-1",
+        data: {
+          toolCallId: "call-1",
+          toolName: "search",
+          status: "analyzing",
+          rounds: [],
+        },
+      },
+    ],
+  ])("treats %s as rendered output", (_label, part) => {
     const props: StallProps = {
       status: "streaming",
       transportActivitySequence: 1,
       responseProgressSequence: 1,
-      messages: [
-        ...userTurn(),
-        {
-          id: "assistant-1",
-          role: "assistant",
-          parts: [
-            {
-              type: "dynamic-tool",
-              toolName: "search",
-              toolCallId: "call-1",
-              state: "input-available",
-              input: {},
-            },
-          ],
-        } as unknown as UIMessage,
-      ],
+      messages: assistantTurn([part]),
     };
     const { result, rerender } = renderStall(props);
 
-    beat(rerender, props, UPSTREAM_THRESHOLD);
+    beat(rerender, props, UPSTREAM_IDLE_THRESHOLD_SECONDS);
     expect(result.current.isUpstreamIdle).toBe(false);
   });
 
@@ -207,7 +215,7 @@ describe("useStreamStall", () => {
     };
     const { result, rerender } = renderStall(props);
 
-    act(() => vi.advanceTimersByTime(TRANSPORT_THRESHOLD * 1000));
+    act(() => vi.advanceTimersByTime(TRANSPORT_STALL_THRESHOLD_SECONDS * 1000));
     expect(result.current.isTransportStalled).toBe(true);
 
     rerender({ ...props, status: "ready", messages: answeredTurn() });

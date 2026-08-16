@@ -1,6 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
+import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import { useEffect, useRef, useState } from "react";
 
@@ -49,8 +50,6 @@ export function useStreamStall({
   transportActivitySequence,
   responseProgressSequence,
   messages,
-  transportThresholdSeconds = TRANSPORT_STALL_THRESHOLD_SECONDS,
-  upstreamIdleThresholdSeconds = UPSTREAM_IDLE_THRESHOLD_SECONDS,
 }: {
   status: ChatStatus;
   /** Monotonic signal advanced by every event received from the stream. */
@@ -58,18 +57,19 @@ export function useStreamStall({
   /** Monotonic signal advanced only when the assistant response progresses. */
   responseProgressSequence: number;
   messages: UIMessage[];
-  transportThresholdSeconds?: number;
-  upstreamIdleThresholdSeconds?: number;
 }): StreamStallState {
+  // The thresholds are not injectable on purpose: the idle notice names its
+  // own threshold in its copy, so a caller able to shift the trigger could
+  // only make the two disagree.
   const isTransportStalled = useActivityIdle({
     status,
     activitySequence: transportActivitySequence,
-    thresholdSeconds: transportThresholdSeconds,
+    thresholdSeconds: TRANSPORT_STALL_THRESHOLD_SECONDS,
   });
   const isResponseProgressIdle = useActivityIdle({
     status,
     activitySequence: responseProgressSequence,
-    thresholdSeconds: upstreamIdleThresholdSeconds,
+    thresholdSeconds: UPSTREAM_IDLE_THRESHOLD_SECONDS,
   });
 
   return {
@@ -139,6 +139,8 @@ function hasRenderedAssistantOutput(messages: UIMessage[]): boolean {
     if (part.type === "text" || part.type === "reasoning") {
       return part.text.trim().length > 0;
     }
-    return part.type === "file";
+    // Kept in step with `rendersNothing` in chat-messages.utils.ts, which
+    // counts a dual LLM analysis as a drawn block of its own.
+    return part.type === "file" || part.type === DUAL_LLM_ANALYSIS_PART_TYPE;
   });
 }

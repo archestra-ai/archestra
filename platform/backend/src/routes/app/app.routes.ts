@@ -486,8 +486,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `openInChat` hands the new app straight to a chat agent to build (the
       // Apps page create flow), so that agent is resolved up front: the app
       // binds to its environment below, and the seeded conversation reuses the
-      // very same agent. Best-effort, like the seeding itself — a failure here
-      // must not fail the create, it only costs the environment inference.
+      // very same agent rather than resolving one of its own.
+      //
+      // Best-effort, like the seeding itself — a failure here must not fail the
+      // create. It costs the environment inference: the app falls back to the
+      // configured landing environment and seeding resolves the agent on its
+      // own, exactly as both did before this was inferred at all.
       const builderAgentId = body.openInChat
         ? await resolveDefaultChatAgentId({
             userId: user.id,

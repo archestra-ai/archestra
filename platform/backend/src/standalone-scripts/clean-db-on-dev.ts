@@ -72,7 +72,46 @@ export const clearDb = async (): Promise<void> => {
     await db.execute(dropEnumQuery);
   }
 
-  logger.info("✅ Database completely cleared (all tables and enums dropped)!");
+  /**
+   * Drop functions the migrations own, too.
+   *
+   * Without this the clean is silently incomplete: a migration that does a bare
+   * `CREATE FUNCTION` (not `CREATE OR REPLACE`) fails on the re-run, and because
+   * the CREATE TABLE statements before it have already committed, the migration
+   * aborts without recording itself. Every later attempt then dies on
+   * "relation ... already exists" — pointing at a table that is not the problem,
+   * and surviving `tilt down` and a full Docker prune because the data lives in
+   * a Kubernetes volume.
+   *
+   * Extension-owned functions (pgvector, pg_trgm) are excluded via `depend`:
+   * dropping those would break the extension.
+   */
+  logger.info("🗑️  Dropping all functions in public schema...");
+  const functionQuery = sql<string>`SELECT p.oid::regprocedure AS signature
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND NOT EXISTS (
+          SELECT 1 FROM pg_depend d
+          WHERE d.objid = p.oid AND d.deptype = 'e'
+        );
+    `;
+
+  const functionResult = await db.execute(functionQuery);
+  const functions = functionResult.rows as Array<{ signature: string }>;
+
+  logger.info(`📋 Found ${functions.length} functions to drop`);
+
+  for (const routine of functions) {
+    logger.info(`  🗑️  Dropping function: ${routine.signature}`);
+    await db.execute(
+      sql.raw(`DROP FUNCTION IF EXISTS ${routine.signature} CASCADE;`),
+    );
+  }
+
+  logger.info(
+    "✅ Database completely cleared (all tables, enums and functions dropped)!",
+  );
   logger.info("💡 Run 'pnpm db:migrate' to recreate tables from migrations");
 };
 

@@ -30,6 +30,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { reportVirtualKeyRateLimited } from "@/observability/metrics/proxy-auth";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -589,7 +590,7 @@ export async function authenticatePassthroughProxyRequest(params: {
     ip: request.ip,
     credential: presentedCredential,
   });
-  try {
+  const authenticate = async (): Promise<void> => {
     if (passthroughToken) {
       await validatePassthroughVirtualKey({
         tokenValue: passthroughToken,
@@ -623,6 +624,13 @@ export async function authenticatePassthroughProxyRequest(params: {
       return;
     }
     throw unauthenticated;
+  };
+
+  try {
+    await authenticate();
+    await virtualKeyRateLimiter.recordSuccess({
+      credential: presentedCredential,
+    });
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
       await virtualKeyRateLimiter.recordFailure({
@@ -639,21 +647,44 @@ export async function authenticatePassthroughProxyRequest(params: {
 // =========================================================================
 
 /**
- * Failures allowed per (IP, credential) pair before that pair is rejected.
- * Sized for a client retrying one credential, not for a shared origin.
+ * Failures allowed per (IP, credential) pair, per window, before that pair is
+ * rejected. Sized for a client retrying one credential, not for a shared origin.
  */
-const RATE_LIMIT_MAX_FAILURES = 10;
+const RATE_LIMIT_MAX_FAILURES = config.llmProxy.authRateLimit.maxFailures;
 /**
- * Failures allowed from one IP across ALL credentials before the whole IP is
- * rejected. This is the anti-enumeration backstop, so it must stay well above
- * the per-credential threshold: a single misconfigured client should exhaust
- * its own bucket long before it can exhaust its origin's.
+ * Failures allowed from one IP across ALL credentials, per window, before that
+ * IP is rejected. This is the anti-enumeration backstop, so it must stay well
+ * above the per-credential threshold: a single misconfigured client should
+ * exhaust its own bucket long before it can exhaust its origin's.
  */
-const RATE_LIMIT_MAX_FAILURES_PER_IP = 100;
-const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_FAILURES_PER_IP =
+  config.llmProxy.authRateLimit.maxFailuresPerIp;
+const RATE_LIMIT_WINDOW_MS = config.llmProxy.authRateLimit.windowMs;
+/**
+ * How long a credential stays exempt from the IP-wide backstop after it
+ * validates. Short enough that a revoked credential loses the exemption
+ * promptly, long enough to cover a client's ordinary request cadence.
+ */
+const RECENTLY_VALIDATED_TTL_MS = 5 * 60_000;
 
 interface RateLimitEntry {
   count: number;
+  /**
+   * Epoch ms at which this fixed window ends, and with it the entry's TTL.
+   *
+   * Load-bearing: without it, every failure rewrote the entry with a full-length
+   * TTL, so the counter only reset after a whole window with ZERO failures.
+   * On a busy origin that silence never comes, and the count ratcheted upward
+   * across minutes or hours until the bucket sat permanently over its ceiling —
+   * a "10 per minute" limit rejecting a client that had failed 10 times all
+   * day. Pinning the end of the window makes the documented rate the real one.
+   *
+   * Optional because entries written by an older build lack it. Those are read
+   * as expired (a new window opens), which is the safe direction during a
+   * rolling deploy: at worst one window's worth of failures is forgiven, and
+   * never the reverse.
+   */
+  windowEndsAt?: number;
 }
 
 /**
@@ -670,6 +701,15 @@ interface RateLimitEntry {
  *  - **IP-wide** at {@link RATE_LIMIT_MAX_FAILURES_PER_IP} — retains the
  *    brute-force ceiling the per-credential bucket alone would give up, since
  *    an enumerator gets a fresh credential bucket for every token it guesses.
+ *    A credential that validated in the last {@link RECENTLY_VALIDATED_TTL_MS}
+ *    is exempt from this bucket (see {@link VirtualKeyRateLimiter.recordSuccess}):
+ *    behind a shared origin the "IP" is the whole deployment, so without the
+ *    exemption one scanner's guesses throttle every legitimate caller too. The
+ *    exemption gives an attacker nothing — guessed credentials are by
+ *    definition not ones that just validated.
+ *
+ * Both buckets are FIXED windows: the first failure fixes the window's end, and
+ * later failures inside it neither extend it nor outlive it.
  *
  * The credential is reduced to a short salted-by-nothing SHA-256 fingerprint
  * rather than used verbatim: cache keys are persisted to PostgreSQL by the
@@ -702,19 +742,23 @@ export class VirtualKeyRateLimiter {
 
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
+    const now = Date.now();
     const [credentialEntry, ipEntry] = await Promise.all([
       this.cacheManager.get<RateLimitEntry>(this.credentialKey(ip, credential)),
       this.cacheManager.get<RateLimitEntry>(this.ipKey(ip)),
     ]);
 
+    const credentialWindow = activeWindow(credentialEntry, now);
+    if (credentialWindow.count >= RATE_LIMIT_MAX_FAILURES) {
+      throw this.rejection({ ip, bucket: "credential", ...credentialWindow });
+    }
+
+    const ipWindow = activeWindow(ipEntry, now);
     if (
-      (credentialEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES ||
-      (ipEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES_PER_IP
+      ipWindow.count >= RATE_LIMIT_MAX_FAILURES_PER_IP &&
+      !(await this.recentlyValidated(credential))
     ) {
-      throw new ApiError(
-        429,
-        "Too many failed virtual API key attempts. Please try again later.",
-      );
+      throw this.rejection({ ip, bucket: "ip", ...ipWindow });
     }
   }
 
@@ -729,13 +773,82 @@ export class VirtualKeyRateLimiter {
     ]);
   }
 
+  /**
+   * Mark a credential as one that just authenticated, exempting it from the
+   * IP-wide backstop while the mark lives. Called after a validation succeeds.
+   *
+   * Deliberately NOT scoped by IP: the point is to keep a working credential
+   * working while its origin is noisy, and a client's requests can arrive from
+   * several addresses (or through several pods) within one window.
+   */
+  async recordSuccess(params: { credential?: string }): Promise<void> {
+    const { credential } = params;
+    if (!credential) return;
+    try {
+      await this.cacheManager.set(
+        this.validatedKey(credential),
+        true,
+        RECENTLY_VALIDATED_TTL_MS,
+      );
+    } catch (error) {
+      // Best-effort: losing the mark only costs this credential its exemption
+      // from a backstop that is not currently rejecting anything. Failing the
+      // request over it would turn a cache blip into an outage.
+      logger.debug(
+        { err: error },
+        "[LLMProxy] could not record a validated credential for the rate limiter",
+      );
+    }
+  }
+
   private async increment(key: AllowedCacheKey): Promise<void> {
+    const now = Date.now();
     const entry = await this.cacheManager.get<RateLimitEntry>(key);
+    const window = activeWindow(entry, now);
+    // Keep the existing window's end when one is open, so a burst of failures
+    // cannot push the reset out indefinitely. The TTL tracks the window so the
+    // entry disappears exactly when the count stops counting.
+    const windowEndsAt = window.windowEndsAt ?? now + RATE_LIMIT_WINDOW_MS;
     await this.cacheManager.set<RateLimitEntry>(
       key,
-      { count: (entry?.count ?? 0) + 1 },
-      RATE_LIMIT_WINDOW_MS,
+      { count: window.count + 1, windowEndsAt },
+      Math.max(windowEndsAt - now, 1),
     );
+  }
+
+  private async recentlyValidated(credential?: string): Promise<boolean> {
+    if (!credential) return false;
+    return (
+      (await this.cacheManager.get<boolean>(this.validatedKey(credential))) ===
+      true
+    );
+  }
+
+  private rejection(params: {
+    ip: string;
+    bucket: "credential" | "ip";
+    count: number;
+    windowEndsAt?: number;
+  }): ApiError {
+    const { ip, bucket, count, windowEndsAt } = params;
+    const retryAfterSeconds = windowEndsAt
+      ? Math.max(Math.ceil((windowEndsAt - Date.now()) / 1000), 1)
+      : Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+
+    // The rejection is otherwise indistinguishable from an upstream 429 the
+    // proxy relays, which is what made "is this us or the provider?" guesswork.
+    logger.warn(
+      { ip, bucket, failures: count, retryAfterSeconds },
+      "[LLMProxy] rejected a request: too many failed virtual API key attempts",
+    );
+    reportVirtualKeyRateLimited({ bucket });
+
+    const error = new ApiError(
+      429,
+      `Too many failed virtual API key attempts. Please retry in ${retryAfterSeconds} seconds.`,
+    );
+    error.retryAfterSeconds = retryAfterSeconds;
+    return error;
   }
 
   private credentialKey(ip: string, credential?: string): AllowedCacheKey {
@@ -745,9 +858,27 @@ export class VirtualKeyRateLimiter {
   private ipKey(ip: string): AllowedCacheKey {
     return `${CacheKey.VirtualKeyRateLimit}-ip-${ip}`;
   }
+
+  private validatedKey(credential: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-ok-${fingerprintCredential(credential)}`;
+  }
 }
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
+
+/**
+ * The still-open window an entry describes, or an empty one when the entry is
+ * absent, already past its end, or was written by a build that did not record
+ * a window end.
+ */
+function activeWindow(
+  entry: RateLimitEntry | undefined,
+  now: number,
+): { count: number; windowEndsAt?: number } {
+  if (!entry || typeof entry.windowEndsAt !== "number") return { count: 0 };
+  if (entry.windowEndsAt <= now) return { count: 0 };
+  return { count: entry.count, windowEndsAt: entry.windowEndsAt };
+}
 
 async function validateClientCredentialsLlmOAuthAccessToken(params: {
   clientId: string;

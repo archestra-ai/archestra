@@ -914,6 +914,8 @@ async function getModelRouterAuth(
       );
     }
 
+    await virtualKeyRateLimiter.recordSuccess({ credential: bearerToken });
+
     return {
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,

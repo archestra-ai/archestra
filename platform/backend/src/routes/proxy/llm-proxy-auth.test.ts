@@ -902,10 +902,10 @@ describe("VirtualKeyRateLimiter", () => {
     const { limiter, mockCache } = createTestLimiter();
     await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
 
-    // Verify TTL (60_000 ms) is passed
+    // Verify the window-length TTL (60_000 ms) is passed
     expect(mockCache.set).toHaveBeenCalledWith(
       expect.any(String),
-      { count: 1 },
+      expect.objectContaining({ count: 1 }),
       60_000,
     );
   });
@@ -933,6 +933,129 @@ describe("VirtualKeyRateLimiter", () => {
     await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     await expect(
       limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
+  });
+
+  // The window is FIXED, not "60s since the last failure". Under the old
+  // refresh-on-write TTL these 15 failures blocked, even though no 60s stretch
+  // held more than 5 — the count simply never reset while failures kept
+  // arriving, which is what made a busy origin lock itself out.
+  test("does not accumulate failures across separate windows", async () => {
+    vi.useFakeTimers();
+    try {
+      const { limiter } = createTestLimiter();
+      for (let burst = 0; burst < 3; burst++) {
+        for (let i = 0; i < 5; i++) {
+          await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+        }
+        vi.advanceTimersByTime(40_000);
+      }
+      await expect(
+        limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+      ).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a failure inside an open window does not push the window's end out", async () => {
+    vi.useFakeTimers();
+    try {
+      const { limiter, mockCache } = createTestLimiter();
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+      vi.advanceTimersByTime(25_000);
+      mockCache.set.mockClear();
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+
+      for (const call of mockCache.set.mock.calls) {
+        expect(call[2]).toBe(35_000);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Rolling deploys read entries written before windowEndsAt existed. Forgiving
+  // them (rather than treating them as an open window of unknown length) is the
+  // direction that cannot strand a caller.
+  test("treats a legacy entry with no window end as expired", async () => {
+    const { limiter, store } = createTestLimiter();
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    const [key] = [...store.keys()];
+    store.set(key, { count: 999 });
+
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("reports how long to wait, bounded by the window", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    }
+    const error = await limiter
+      .check({ ip: "1.2.3.4", credential: KEY_A })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    const apiError = error as ApiError;
+    expect(apiError.statusCode).toBe(429);
+    expect(apiError.retryAfterSeconds).toBeGreaterThan(0);
+    expect(apiError.retryAfterSeconds).toBeLessThanOrEqual(60);
+    expect(apiError.message).toMatch(/retry in \d+ seconds/);
+  });
+
+  // The collateral-lockout fix for shared origins: behind an ingress every
+  // caller shares one `ip`, so the anti-enumeration backstop must not throttle
+  // a credential that is demonstrably working.
+  test("exempts a recently validated credential from the IP-wide backstop", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 100; i++) {
+      await limiter.recordFailure({
+        ip: "1.2.3.4",
+        credential: `arch_guess_${i}`,
+      });
+    }
+    await limiter.recordSuccess({ credential: KEY_A });
+
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
+    // ...while a credential that has not proven itself stays throttled.
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_B }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+  });
+
+  // The exemption is scoped to the IP backstop only: a credential of its own
+  // failing repeatedly must still be throttled even if it once worked.
+  test("does not exempt a validated credential from its own bucket", async () => {
+    const { limiter } = createTestLimiter();
+    await limiter.recordSuccess({ credential: KEY_A });
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    }
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+  });
+
+  test("never writes the credential into the recently-validated cache key", async () => {
+    const { limiter, store } = createTestLimiter();
+    await limiter.recordSuccess({ credential: KEY_A });
+    const keys = [...store.keys()];
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(key).not.toContain(KEY_A);
+    }
+  });
+
+  test("a failed exemption write does not fail the request", async () => {
+    const { limiter, mockCache } = createTestLimiter();
+    mockCache.set.mockRejectedValueOnce(new Error("cache down"));
+    await expect(
+      limiter.recordSuccess({ credential: KEY_A }),
     ).resolves.toBeUndefined();
   });
 });

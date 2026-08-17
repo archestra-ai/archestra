@@ -6,6 +6,7 @@ export * as database from "./database";
 export * as fileStorage from "./file-storage";
 export * as llm from "./llm";
 export * as mcp from "./mcp";
+export * as proxyAuth from "./proxy-auth";
 export * as rag from "./rag";
 export * as sandbox from "./sandbox";
 export * as scheduleTrigger from "./schedule-trigger";

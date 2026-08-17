@@ -989,12 +989,11 @@ class StatisticsModel {
         : []),
     ];
 
-    // PHASE 1 — the app roster. Cost is attached per page below rather than
-    // sorted on in SQL: the three cost sources live in different tables with
-    // different keys, so a single sortable expression would mean joining all of
-    // them for every app in the org. The roster is ordered newest-first and the
-    // page is then sorted on the assembled figures.
-    const [appRows, [{ total }], baseline] = await Promise.all([
+    // PHASE 1 — the whole app roster, newest first. No `limit` and no separate
+    // count query: the page is chosen after the cost figures are assembled (see
+    // the note on sorting above), so this set is both the sort input and the
+    // pagination total.
+    const [appRows, baseline] = await Promise.all([
       db
         .select({
           appId: schema.appsTable.id,
@@ -1010,20 +1009,13 @@ class StatisticsModel {
         )
         .where(and(...appFilters))
         .orderBy(desc(schema.appsTable.createdAt)),
-      db
-        .select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` })
-        .from(schema.appsTable)
-        .where(and(...appFilters)),
       StatisticsModel.getChatCostBaseline({ timeframe, organizationId }),
     ]);
+    const total = appRows.length;
 
-    if (appRows.length === 0) {
+    if (total === 0) {
       return {
-        ...createPaginatedResult<AppStatistics>(
-          [],
-          Number(total) || 0,
-          pagination,
-        ),
+        ...createPaginatedResult<AppStatistics>([], 0, pagination),
         ...baseline,
       };
     }
@@ -1096,7 +1088,7 @@ class StatisticsModel {
     );
 
     return {
-      ...createPaginatedResult(page, Number(total) || 0, pagination),
+      ...createPaginatedResult(page, total, pagination),
       ...baseline,
     };
   }

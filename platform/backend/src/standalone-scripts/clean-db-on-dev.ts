@@ -20,11 +20,23 @@ export const clearDb = async (): Promise<void> => {
 
   logger.info("⚠️  Completely clearing database (dropping all tables)...");
 
-  // Get all tables in all schemas (public and drizzle)
-  const query = sql<string>`SELECT table_schema, table_name
-      FROM information_schema.tables
-      WHERE table_schema IN ('public', 'drizzle')
-        AND table_type = 'BASE TABLE';
+  // Get application-owned tables in public and drizzle. Extension-owned tables
+  // (for example PostGIS spatial_ref_sys in the ParadeDB dev image) must remain.
+  const query = sql<string>`SELECT tables.table_schema, tables.table_name
+      FROM information_schema.tables tables
+      WHERE tables.table_schema IN ('public', 'drizzle')
+        AND tables.table_type = 'BASE TABLE'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_class relation
+          JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+          JOIN pg_depend dependency
+            ON dependency.classid = 'pg_class'::regclass
+            AND dependency.objid = relation.oid
+            AND dependency.deptype = 'e'
+          WHERE namespace.nspname = tables.table_schema
+            AND relation.relname = tables.table_name
+        );
     `;
 
   const result = await db.execute(query);

@@ -358,18 +358,36 @@ class QueryService {
         }),
       ),
       hybridEnabled
-        ? runSearchLane("keyword", () =>
-            KbChunkModel.fullTextSearch({
-              connectorIds,
-              queryText,
-              languages: searchLanguages,
-              ranking: bm25Active ? "bm25" : "ts_rank",
-              limit,
-              userAcl,
-              bypassAcl,
-              environmentId,
-            }),
-          )
+        ? runSearchLane("keyword", async () => {
+            const search = (ranking: "bm25" | "ts_rank") =>
+              KbChunkModel.fullTextSearch({
+                connectorIds,
+                queryText,
+                languages: searchLanguages,
+                ranking,
+                limit,
+                userAcl,
+                bypassAcl,
+                environmentId,
+              });
+
+            if (!bm25Active) return search("ts_rank");
+
+            try {
+              return await search("bm25");
+            } catch (error) {
+              // A timeout remains a timed-out lane. Other pg_search failures
+              // fall back to PostgreSQL FTS so this optional accelerator never
+              // turns a working knowledge search into an outage.
+              if (isDbStatementTimeoutError(error)) throw error;
+              bm25Capability.invalidate();
+              logger.warn(
+                { err: error },
+                "[QueryService] BM25 keyword search failed; falling back to ts_rank",
+              );
+              return search("ts_rank");
+            }
+          })
         : Promise.resolve<VectorSearchResult[] | null>([]),
     ]);
 

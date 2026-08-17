@@ -5,10 +5,12 @@
 --
 -- The ParadeDB pg_search extension is OPTIONAL: it is absent from managed
 -- services (Cloud SQL, RDS, Azure), from the bundled Bitnami/Alpine Postgres
--- images, and from the PGlite test database. Both blocks below therefore
--- degrade to a NOTICE instead of failing, mirroring 0116_pg_trgm_indexes.sql:
+-- images, and from the PGlite test database. Extension creation therefore
+-- degrades to a NOTICE instead of failing, mirroring 0116_pg_trgm_indexes.sql:
 -- a deployment without pg_search completes this migration as a no-op and the
 -- keyword lane keeps ranking with ts_rank (see knowledge-base/bm25-capability.ts).
+-- Once pg_search is installed, an index-build error fails the migration rather
+-- than recording an applied migration with no usable index.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_search') THEN
@@ -22,12 +24,12 @@ END$$;
 
 --> statement-breakpoint
 
--- The BM25 index over the same text the generated search_vector tsvector
--- folds: content, contextual header, keyword metadata suffix. Tokenizer note:
--- a pg_search index has ONE fixed tokenizer per field (no per-row
--- fts_language equivalent), so this index stems for the default corpus
--- language (English) and the query path only routes to BM25 when every
--- searched connector is English-configured; other languages keep ts_rank.
+-- The BM25 index folds the same text as search_vector into one field. Keeping
+-- one combined field preserves matches whose terms span the contextual header,
+-- content, and metadata. English stopwords and stemming mirror PostgreSQL's
+-- english text-search configuration closely enough for the same AND-first
+-- matching policy. The query path only routes all-English connector sets here;
+-- other language configurations keep ts_rank.
 -- The index name must match KB_CHUNKS_BM25_INDEX in models/kb-chunk.ts —
 -- the runtime probe looks it up by this literal.
 DO $$
@@ -39,13 +41,20 @@ BEGIN
       CREATE INDEX "kb_chunks_bm25_idx" ON "kb_chunks"
       USING bm25 (
         id,
-        (content::pdb.simple('stemmer=english')),
-        (contextual_header::pdb.simple('stemmer=english')),
-        (metadata_suffix_keyword::pdb.simple('stemmer=english'))
+        ((
+          COALESCE(contextual_header, '') || ' ' ||
+          content || ' ' ||
+          COALESCE(metadata_suffix_keyword, '')
+        )::pdb.simple(
+          'alias=search_text',
+          'stemmer=english',
+          'stopwords_language=english'
+        ))
       )
-      WITH (key_field='id');
+      WITH (key_field='id')
+      -- Media chunks contain base64 data URLs and are vector-only retrieval
+      -- inputs. Excluding them avoids indexing large opaque payloads.
+      WHERE content NOT LIKE 'data:image/%';
     END IF;
   END IF;
-EXCEPTION WHEN others THEN
-  RAISE NOTICE 'pg_search present but the BM25 index could not be created, keyword search stays on ts_rank: %', SQLERRM;
 END$$;

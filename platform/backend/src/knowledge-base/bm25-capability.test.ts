@@ -6,11 +6,11 @@ import { bm25Capability } from "./bm25-capability";
 
 describe("bm25Capability", () => {
   beforeEach(() => {
-    bm25Capability.reset();
+    bm25Capability.invalidate();
   });
 
   afterEach(() => {
-    bm25Capability.reset();
+    bm25Capability.invalidate();
     vi.restoreAllMocks();
   });
 
@@ -34,11 +34,11 @@ describe("bm25Capability", () => {
     expect(probeSpy).toHaveBeenCalledTimes(1);
   });
 
-  test("reset() forces a re-probe", async () => {
+  test("invalidate() forces a re-probe", async () => {
     config.kb.bm25RankingEnabled = true;
     const probeSpy = vi.spyOn(KbChunkModel, "probeBm25Support");
     await bm25Capability.isReady();
-    bm25Capability.reset();
+    bm25Capability.invalidate();
     await bm25Capability.isReady();
     expect(probeSpy).toHaveBeenCalledTimes(2);
   });

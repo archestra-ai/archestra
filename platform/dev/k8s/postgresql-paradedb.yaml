@@ -74,11 +74,11 @@ spec:
           volumeMounts:
             # Mounted at the parent so the image's own PGDATA default applies
             # (PG18 images keep the data dir under /var/lib/postgresql).
-            - name: data
+            - name: paradedb-data
               mountPath: /var/lib/postgresql
   volumeClaimTemplates:
     - metadata:
-        name: data
+        name: paradedb-data
       spec:
         accessModes: [ReadWriteOnce]
         resources:

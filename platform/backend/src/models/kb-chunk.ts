@@ -228,8 +228,9 @@ class KbChunkModel {
 
   /**
    * Whether this database can serve BM25 keyword ranking: the pg_search
-   * extension is installed AND the kb_chunks BM25 index exists. Plain catalog
-   * reads, so it answers (negatively) on any PostgreSQL, including PGlite.
+   * extension is installed AND a ready, valid ParadeDB index belongs to
+   * kb_chunks. Plain catalog reads, so it answers (negatively) on any
+   * PostgreSQL, including PGlite.
    */
   static async probeBm25Support(): Promise<{
     extensionInstalled: boolean;
@@ -240,8 +241,20 @@ class KbChunkModel {
         EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_search')
           AS "extensionInstalled",
         EXISTS (
-          SELECT 1 FROM pg_class idx
-          WHERE idx.relname = ${KB_CHUNKS_BM25_INDEX} AND idx.relkind = 'i'
+          SELECT 1
+          FROM pg_index index_state
+          JOIN pg_class idx ON idx.oid = index_state.indexrelid
+          JOIN pg_am access_method ON access_method.oid = idx.relam
+          JOIN pg_class indexed_table ON indexed_table.oid = index_state.indrelid
+          JOIN pg_namespace indexed_schema
+            ON indexed_schema.oid = indexed_table.relnamespace
+          WHERE idx.relname = ${KB_CHUNKS_BM25_INDEX}
+            AND idx.relkind = 'i'
+            AND indexed_table.relname = 'kb_chunks'
+            AND indexed_schema.nspname = current_schema()
+            AND access_method.amname IN ('bm25', 'paradedb')
+            AND index_state.indisvalid
+            AND index_state.indisready
         ) AS "indexPresent"
     `);
     const row = result.rows[0] as
@@ -552,17 +565,10 @@ class KbChunkModel {
   }
 
   /**
-   * The BM25 keyword statement (pg_search). Matches over the same text the
-   * generated tsvector folds — content, contextual header, keyword metadata
-   * suffix — and ranks with `pdb.score`, i.e. real BM25: length-normalized,
-   * term-saturating, IDF-weighted (issue #7158).
-   *
-   * Semantics note: `&&&` requires every token within ONE of the three
-   * fields, while the tsvector path matches terms anywhere across their
-   * concatenation. A query whose terms straddle fields (say, one term only in
-   * the metadata suffix) can miss the AND pass here and be caught by the
-   * `|||` fallback with looser precision. TODO(prototype): measure whether
-   * that divergence matters once the eval harness (issue #7162) exists.
+   * The BM25 keyword statement (pg_search). Matches one expression containing
+   * the same text as the generated tsvector — contextual header, content, and
+   * keyword metadata — then ranks with length-normalized, term-saturating,
+   * IDF-weighted `pdb.score` (issue #7158).
    */
   private static async runBm25Statement(params: {
     connectorIds: string[];
@@ -599,15 +605,25 @@ class KbChunkModel {
         ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
         : sql``;
 
-    // The raw query text binds directly: pg_search's match operators tokenize
-    // it with the index's tokenizer, so unlike pdb.parse there is no query
-    // syntax for user input to break.
+    // Normalize query lexemes with the same PostgreSQL English parser used by
+    // search_vector. This preserves its stemming and complete stopword list;
+    // ParadeDB's English stopword list differs (for example, it keeps "what").
+    // The resulting plain lexeme string is still bound data, not query syntax.
+    const normalizedQuery = sql`
+      array_to_string(
+        tsvector_to_array(
+          to_tsvector(${DEFAULT_TEXT_SEARCH_LANGUAGE}::regconfig, ${queryText})
+        ),
+        ' '
+      )
+    `;
     const matchOperator = matchAllTerms ? sql.raw("&&&") : sql.raw("|||");
-    const matchPredicate = sql`(
-      c.content ${matchOperator} ${queryText}
-      OR c.contextual_header ${matchOperator} ${queryText}
-      OR c.metadata_suffix_keyword ${matchOperator} ${queryText}
-    )`;
+    const searchableText = sql`
+      COALESCE(c.contextual_header, '') || ' ' ||
+      c.content || ' ' ||
+      COALESCE(c.metadata_suffix_keyword, '')
+    `;
+    const matchPredicate = sql`(${searchableText}) ${matchOperator} ${normalizedQuery}`;
 
     const rows = await executeWithSearchTimeout(sql`
       SELECT
@@ -619,6 +635,9 @@ class KbChunkModel {
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
+        -- Matches the BM25 partial-index predicate. Media chunks are base64
+        -- image payloads intended for vector retrieval, not keyword search.
+        AND c.content NOT LIKE 'data:image/%'
         -- Mirrors the same guard in vectorSearch: retrieval is a security
         -- surface, so never serve chunks from a soft-deleted connector even if
         -- a stale connectorId reaches this far.

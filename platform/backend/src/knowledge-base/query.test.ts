@@ -85,6 +85,7 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
+import { bm25Capability } from "./bm25-capability";
 import { KnowledgeBaseSearchTimeoutError } from "./errors";
 import { findEmbeddingDimensionMismatch, queryService } from "./query";
 
@@ -129,6 +130,7 @@ describe("QueryService", () => {
   beforeEach(() => {
     embeddingRequests.length = 0;
     embeddingQueue.length = 0;
+    bm25Capability.invalidate();
   });
 
   test("returns ranked results with citations", async ({
@@ -503,6 +505,56 @@ describe("QueryService", () => {
 
     vectorSearchSpy.mockRestore();
     fullTextSearchSpy.mockRestore();
+  });
+
+  test("falls back to ts_rank when optional BM25 execution fails", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const vectorSearchSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockResolvedValue([]);
+    const probeSpy = vi
+      .spyOn(KbChunkModel, "probeBm25Support")
+      .mockResolvedValue({
+        extensionInstalled: true,
+        indexPresent: true,
+      });
+    const fullTextSearchSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockRejectedValueOnce(new Error("BM25 index became unavailable"))
+      .mockResolvedValueOnce([]);
+
+    try {
+      embeddingQueue.push(makeFakeEmbedding(1));
+      await queryService.query({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "billing API limit",
+        userAcl: ["org:*"],
+      });
+
+      expect(fullTextSearchSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ ranking: "bm25" }),
+      );
+      expect(fullTextSearchSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ ranking: "ts_rank" }),
+      );
+    } finally {
+      vectorSearchSpy.mockRestore();
+      probeSpy.mockRestore();
+      fullTextSearchSpy.mockRestore();
+      bm25Capability.invalidate();
+    }
   });
 
   test("calls reranker after fusion", async ({

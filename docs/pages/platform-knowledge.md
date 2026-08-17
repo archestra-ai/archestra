@@ -90,9 +90,9 @@ Set the language on each connector under **Advanced > Keyword Search Language**,
 
 ### BM25 Ranking
 
-Keyword results rank with PostgreSQL `ts_rank` by default. With the optional [ParadeDB pg_search](https://github.com/paradedb/paradedb) extension installed, they rank with BM25 instead. BM25 normalizes for document length — a short runbook precisely about your query outranks a long handbook that mentions it often.
+Keyword results rank with PostgreSQL `ts_rank` by default. With the optional [ParadeDB pg_search](https://github.com/paradedb/paradedb) extension installed, they rank with BM25 instead. BM25 normalizes chunk length and limits the effect of repeated terms. This favors focused chunks over verbose chunks that repeat the query terms.
 
-Archestra detects the extension automatically; nothing needs configuring beyond installing it. Queries over connectors with a non-English keyword language keep `ts_rank`. See [Deployment](/docs/platform-deployment#pg_search-extension-optional-bm25-ranking) for installation.
+Archestra detects the extension and index automatically. Queries over connectors with a non-English keyword language keep `ts_rank`. See [Deployment](/docs/platform-deployment#pg_search-extension-optional-bm25-ranking) for installation.
 
 ### Tuning
 

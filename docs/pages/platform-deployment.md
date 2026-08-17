@@ -560,7 +560,7 @@ If pgvector is not installed or the database user lacks permissions, the Knowled
 
 With the [ParadeDB pg_search](https://github.com/paradedb/paradedb) extension installed, the keyword leg of hybrid search ranks with BM25. Without it, ranking uses PostgreSQL `ts_rank`. The extension is optional — no Archestra feature requires it, and Archestra does not bundle it (pg_search is AGPL-3.0 licensed; installing it is the operator's choice).
 
-pg_search is not available on AWS RDS, Google Cloud SQL, or Azure Database for PostgreSQL. On self-managed PostgreSQL 15+, install the [prebuilt package](https://docs.paradedb.com/deploy/self-hosted/extension), add `pg_search` to `shared_preload_libraries`, and restart PostgreSQL. If the extension is present when migrations run, Archestra creates the BM25 index automatically. If migrations ran before the extension was installed, run the statements from `backend/src/database/migrations/0414_kb_bm25_index.sql` manually.
+pg_search is not available on AWS RDS, Google Cloud SQL, or Azure Database for PostgreSQL. On self-managed PostgreSQL 15+, install the [prebuilt package](https://docs.paradedb.com/deploy/self-hosted/extension), add `pg_search` to `shared_preload_libraries`, and restart PostgreSQL. If the extension is present when migrations run, Archestra creates the BM25 index automatically. If migrations ran before the extension was installed, run the statements from `backend/src/database/migrations/0418_kb_bm25_index.sql` manually. Restart Archestra after adding the index.
 
 Archestra detects the extension and index at runtime. Queries over connectors with a non-English keyword search language keep `ts_rank` ranking.
 

@@ -30,8 +30,8 @@ class Bm25Capability {
     return this.probe;
   }
 
-  /** @internal for tests — forces the next isReady() to re-probe */
-  reset(): void {
+  /** Forget the cached verdict so the next query re-probes database support. */
+  invalidate(): void {
     this.probe = null;
   }
 
@@ -47,7 +47,7 @@ class Bm25Capability {
       }
       if (extensionInstalled && !indexPresent) {
         logger.warn(
-          `pg_search is installed but the ${KB_CHUNKS_BM25_INDEX} index is missing; keyword search stays on ts_rank (re-run migrations to build it)`,
+          `pg_search is installed but a ready ${KB_CHUNKS_BM25_INDEX} index is missing; keyword search stays on ts_rank (create the index, then restart Archestra)`,
         );
       }
       return false;

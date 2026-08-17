@@ -3,7 +3,8 @@
   "include": [
     "*.ts",
     "tests/**/*.ts",
-    "utils/**/*.ts"
+    "utils/**/*.ts",
+    "smoke/**/*.ts"
   ],
   "compilerOptions": {
     "types": ["node"]

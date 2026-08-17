@@ -1688,10 +1688,6 @@ The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one
   - Default: Not set.
   - The secret is read on every token refresh, so rotating it alone needs no reconnect. Changing the client **ID** invalidates existing authorizations — each affected connector reports that and needs reconnecting.
 
-### Batch Analysis
-
-Batch analysis runs a saved set of prompts across a set of sources and collects the answers into a grid. Work is dispatched through the task queue one row at a time, in a lane of its own.
-
 ### Data Retention
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

@@ -19,7 +19,7 @@ export type PreviewableDocument = {
 
 /**
  * A modal wrapper around `FilePreview`, for surfaces where files live in a
- * table rather than a panel — the knowledge repository, batch-analysis rows.
+ * table rather than a panel, like the knowledge repository.
  * PDFs render in the browser's own viewer; markdown, images, text and CSV get
  * the same treatment as the chat Files panel; anything else offers a download.
  */

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 /**
  * The bordered drag-and-drop target plus its hidden file input — extracted
  * from the knowledge upload dialog so every surface that takes documents by
- * drop (the repository, batch-analysis rows) looks and behaves identically.
+ * drop looks and behaves identically on every surface that accepts files.
  *
  * Selection state lives in the caller; this only reports files. Pair with
  * `StagedFileList` to show what has been picked.

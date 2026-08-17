@@ -2,7 +2,7 @@
 title: Available Integrations
 category: Archestra Platform
 order: 9
-description: Turn off the model providers, messaging channels, and knowledge connectors your organization does not allow, and rename the ones it does
+description: Turn off the model providers, messaging channels, and knowledge connectors your organization does not allow, and rename the providers it does
 lastUpdated: 2026-08-17
 ---
 
@@ -38,6 +38,6 @@ Messaging channels and knowledge connectors are on/off only. Each names a single
 
 ## Use Case
 
-Northwind Robotics allows OpenAI and Gemini for model traffic, and nothing else. Their admin opens Page settings on Model Providers, presses **Turn all off**, then switches the two approved providers back on. She renames OpenAI to "OpenAI (Finance-approved)" so engineers know which one to pick.
+Northwind Robotics allows OpenAI and Gemini for model traffic, and nothing else. Their admin opens Page settings on Model Providers and switches off every provider but those two. She renames OpenAI to "OpenAI (Finance-approved)" so engineers know which one to pick.
 
 An engineer opening Add API Key now sees exactly two providers. When one of them pastes an old Anthropic key into the API, the request is refused.

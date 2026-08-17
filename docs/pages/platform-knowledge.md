@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-15
+lastUpdated: 2026-08-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -172,9 +172,9 @@ Each connector has a visibility setting that determines which users can retrieve
 | **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
 | **Auto-sync permissions** | Per-document ACLs synced from the source system, so each user sees only what they can see upstream. See [Auto-Sync Permissions](#auto-sync-permissions). |
 
-Users with the `knowledgeSource:admin` permission can view and query every connector regardless of visibility.
+Users with `knowledgeSource:admin` bypass document ACLs while querying. This permission does not grant access to manage auto-sync connectors.
 
-Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permissions. They control who can create, update, and see these connectors. By default only the Admin role has them; grant them to other users through a [custom role](/docs/platform-access-control). Users without them still query the connector's documents — their results follow the synced ACLs.
+Auto-sync connectors use dedicated `knowledgeSourceAutoSync` permissions for read, create, update, and delete actions. Admin and Platform Admin roles receive all four actions by default. Grant them to other users through a [custom role](/docs/platform-access-control). Users without these management actions can still query documents allowed by the synced ACLs.
 
 > **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
 
@@ -182,55 +182,45 @@ Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permis
 
 > **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the visibility option and its Users and Groups tabs. See [Deployment](/docs/platform-deployment).
 
-Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
+Auto-sync permissions mirrors the source system's access control into Archestra. Each query returns only documents allowed by the latest permission snapshot. Users with `knowledgeSource:admin` bypass this filter.
+
+The option appears when the beta flag and Knowledge enterprise feature are enabled. It also requires a supported connector and the applicable `knowledgeSourceAutoSync:create` or `update` action.
 
 Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
 | Connector    | Auto-sync permissions                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------------------------- |
-| Asana        | Supported                                                                                                 |
-| Confluence   | Supported                                                                                                 |
-| Dropbox      | Supported                                                                                                 |
-| GitHub       | Supported                                                                                                 |
-| GitLab       | Supported                                                                                                 |
-| Jira         | Supported                                                                                                 |
-| Linear       | Supported                                                                                                 |
-| M-Files      | Supported with the VAF Add On                                                                             |
-| Google Drive | Supported                                                                                                 |
+| Asana        | Supported ([setup](#asana-auto-sync-permissions))                                                         |
+| Confluence   | Supported ([setup](#confluence-auto-sync-permissions))                                                    |
+| Dropbox      | Limited: stored access tokens cannot refresh ([details](#dropbox-auto-sync-permissions))                  |
+| GitHub       | Supported ([setup](#github-auto-sync-permissions))                                                        |
+| GitLab       | Supported ([setup](#gitlab-auto-sync-permissions))                                                        |
+| Google Drive | Limited by authentication mode ([details](#google-drive-auto-sync-permissions))                            |
+| Jira         | Jira Cloud only; issue security unsupported ([details](#jira-auto-sync-permissions))                      |
+| Linear       | Supported ([setup](#linear-auto-sync-permissions))                                                        |
+| M-Files      | Supported with the VAF Add On ([setup](#m-files-auto-sync-permissions))                                   |
 | Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
-| OneDrive     | Supported                                                                                                 |
-| Outline      | Supported                                                                                                 |
-| Perforce     | Supported with the Kubernetes orchestrator ([details](#perforce-helix-core))                              |
-| Salesforce   | Supported                                                                                                 |
-| ServiceNow   | Supported ([details](#servicenow-auto-sync-permissions))                                                  |
-| SharePoint   | Supported                                                                                                 |
+| OneDrive     | Supported ([setup](#onedrive-auto-sync-permissions))                                                      |
+| Outline      | Supported ([setup](#outline-auto-sync-permissions))                                                       |
+| Perforce     | Supported with the Kubernetes orchestrator ([setup](#perforce-auto-sync-permissions))                     |
+| Salesforce   | Supported ([setup](#salesforce-auto-sync-permissions))                                                    |
+| ServiceNow   | Supported ([setup](#servicenow-auto-sync-permissions))                                                    |
+| SharePoint   | Supported ([setup](#sharepoint-auto-sync-permissions))                                                    |
 | Web Crawler  | Not supported                                                                                             |
 
-**Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
+#### Credentials and Email Resolution
 
-- **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
-- **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
-- **GitLab** only exposes an email the user has made **public on their profile**. An instance admin token also reads private emails; a regular token does not.
-- **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
-- **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
-- **Linear** returns member emails to any workspace API key. No extra credential is needed.
-- **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
-- **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
-- **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
-- **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
-- **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
-- **ServiceNow** reads user emails from the `sys_user` table with the same credential the connector uses. A user whose email field is empty stays unresolvable.
-- **Perforce** reads each account's `Email` field from its user spec, through the connector's admin user. Accounts without one stay unresolvable. See [Perforce](#perforce-helix-core).
+Permission sync uses the connector's upstream identity. That identity must read both content and its permission settings. Unreadable permission data fails closed, so the affected documents grant no access.
 
-**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
+External accounts match Archestra users by email. A hidden or empty email leaves that account unassigned and removes it from resolved audiences. Accounts listed under **Users** can be assigned manually. An empty group roster must be fixed upstream because manual assignment cannot add members to it.
 
-**Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
+Each connector section lists its credential type, required scopes, and upstream setup. Use a dedicated identity whose visibility covers every configured source. **Test connection** validates authentication, but a successful test cannot prove access to every project or permission table.
 
 **Editing a connector.** Saving new settings or credentials stops the permission sync running against the old ones — that run ends as **Superseded**. A replacement run starts straight away, so you don't wait for the next scheduled one.
 
 #### Atlassian Organization Admin API Key
 
-An organization admin API key reads managed accounts' emails through the Atlassian admin APIs. Add it to a Jira or Confluence connector, and permission sync resolves members whose profile email visibility is not **"Anyone"**.
+An organization admin API key reads managed accounts' emails through the Atlassian admin APIs. Add it to a Jira or Confluence Cloud connector. Permission sync can then resolve managed users whose profile email is private.
 
 Create the key in [Atlassian administration](https://admin.atlassian.com) under **Settings → API keys**:
 
@@ -239,6 +229,8 @@ Create the key in [Atlassian administration](https://admin.atlassian.com) under 
 3. Copy the key into the connector's **Organization admin API key** field.
 
 The API token stays required. Atlassian does not accept admin API keys on the Jira and Confluence APIs.
+
+Changing **Cloud Instance** on an existing Jira or Confluence connector changes its authentication method, so re-enter the token or password. Switching to Cloud also requires the Atlassian account email. Switching away from Cloud removes the stored organization admin key. For Server or Data Center, leave **Username** empty while entering a new personal access token to select PAT authentication; re-enter the username when changing a Basic-auth password.
 
 ## Deleting and Restoring Knowledge Bases and Connectors
 
@@ -260,7 +252,7 @@ Sync issues and discussions from Atlassian Jira.
 
 **Indexed:** issue descriptions, comments, and metadata from Jira Cloud or Server.
 
-**Authentication:** an Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens). For auto-sync permissions on Cloud, also add an [organization admin API key](#atlassian-organization-admin-api-key).
+**Authentication:** Jira Cloud uses an Atlassian account email and API token. Jira Server and Data Center use a personal access token with the Username field empty. On releases without personal access tokens, enter the account username and password for Basic authentication.
 
 | Field                   | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -271,23 +263,52 @@ Sync issues and discussions from Atlassian Jira.
 | Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)      |
 | Labels to Skip          | Comma-separated issue labels to exclude (optional)                 |
 
+#### Jira Auto-Sync Permissions
+
+For Jira Cloud, use a dedicated Jira administrator:
+
+1. Create an API token from [Atlassian account security](https://id.atlassian.com/manage-profile/security/api-tokens). Choose an unscoped token for the connector's site URL.
+2. Grant the account **Administer Jira** and **Browse users and groups** global permissions.
+3. Grant **Browse Projects** on every synced project. Add the account to every issue-security level whose issues it must index.
+4. Create a separate [organization admin API key](#atlassian-organization-admin-api-key) to resolve private managed-account emails.
+
+The product API token reads Jira data. The organization key reads managed-account profiles only. External accounts still need public profile emails or [manual assignment](#credentials-and-email-resolution).
+
+Jira Server and Data Center content sync remains supported, but auto-sync permissions is not. Its permission APIs differ from Jira Cloud, and Jira exposes no equivalent REST API for issue-security membership. Personal access tokens require Jira Core or Software 8.14+, or Jira Service Management 4.15+. On older releases, enter the username in **Username** and the password in **API Token / Personal Access Token** to use Basic authentication.
+
+Do not enable auto-sync permissions for Jira Cloud projects that use issue security. Jira requires both **Browse Projects** and issue-security membership, but the connector cannot currently enforce that intersection. Browse Projects grants through Project Lead or user/group custom fields, and dynamic issue-security holders such as Reporter and Assignee, are also unsupported.
+
 ### Confluence
 
 Sync wiki pages from Atlassian Confluence.
 
 **Indexed:** pages from Confluence Cloud or Server.
 
-**Authentication:** the same Atlassian email and API token used for Jira, with the same optional [organization admin API key](#atlassian-organization-admin-api-key) for auto-sync permissions.
+**Authentication:** Confluence Cloud uses an Atlassian account email and API token. Confluence Server and Data Center 7.9+ use a personal access token with the Username field empty. On older releases, enter the account username and password for Basic authentication.
 
 | Field          | Description                                                                   |
 | -------------- | ----------------------------------------------------------------------------- |
-| URL            | Your Confluence instance URL (e.g., `https://your-domain.atlassian.net/wiki`) |
+| URL            | Your Confluence site root (e.g., `https://your-domain.atlassian.net`)         |
 | Cloud Instance | Toggle on for Confluence Cloud, off for Server/Data Center                    |
 | Space Keys     | Comma-separated space keys to sync (optional)                                 |
 | Page IDs       | Comma-separated specific page IDs to sync (optional)                          |
 | CQL Query      | Custom CQL to filter content (optional)                                       |
 | Labels to Skip | Comma-separated labels to exclude (optional)                                  |
 | Batch Size     | Pages per batch (default: 50)                                                 |
+
+#### Confluence Auto-Sync Permissions
+
+For Confluence Cloud, use a dedicated account with product access:
+
+1. Create an unscoped API token from [Atlassian account security](https://id.atlassian.com/manage-profile/security/api-tokens).
+2. Enter the site root, such as `https://example.atlassian.net`, without `/wiki`.
+3. Grant **View** on every synced space. Add the account to every page and ancestor restriction it must index.
+4. Grant **Confluence Administrator** when audit-based incremental permission reads are required.
+5. Create a separate [organization admin API key](#atlassian-organization-admin-api-key) to resolve private managed-account emails.
+
+A Cloud administrator does not automatically bypass page restrictions through the API. Unreadable pages never enter the index.
+
+For Confluence Server or Data Center 7.9+, create a token under **Profile > Personal access tokens** and leave **Username** empty. On older releases, enter the username in **Username** and the password in **API Token / Personal Access Token**. Membership in the `confluence-administrators` group provides the broadest space and restricted-page visibility.
 
 ### GitHub
 
@@ -311,6 +332,22 @@ Sync issues, pull request discussions, and repository files from GitHub.
 | Folders               | Comma-separated folders to index, relative to the repository root (optional -- leave blank to index the whole repository) |
 | Labels to Skip        | Comma-separated labels to exclude (optional)                                                    |
 
+#### GitHub Auto-Sync Permissions
+
+A GitHub App is the preferred credential. Create one under **Settings > Developer settings > GitHub Apps** with these read-only permissions:
+
+| Permission type | Read permission |
+| --- | --- |
+| Repository | Administration, Issues, Pull requests, and Metadata |
+| Repository, when files are indexed | Contents |
+| Organization | Members |
+
+Install the App on every target repository. Generate a private key and copy its PEM value. Save the App ID, installation ID, API URL, and private key under **Settings > GitHub**, then select that configuration in the connector.
+
+A fine-grained personal access token needs the same repository and organization permissions. Select every target repository. Its owner also needs write, maintain, or admin access to list collaborators. A classic token needs `repo` and `read:org`; authorize it for SAML SSO when the organization requires SSO.
+
+GitHub exposes only each user's public profile email. No App or token permission reveals a private email, so those users need [manual assignment](#credentials-and-email-resolution).
+
 ### GitLab
 
 Sync issues and merge request discussions from GitLab.
@@ -329,7 +366,13 @@ Sync issues and merge request discussions from GitLab.
 | Include Markdown Files | Toggle to sync `.md` and `.mdx` files from the repository (default: off)           |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
 
-**Auto-sync permissions.** Each project is one permission scope. Its audience is the project's members with the **Reporter** role or higher — direct members, members inherited from ancestor groups, and members of invited groups, each at their effective access level. Guests are excluded: GitLab does not let them read code or confidential issues, so including them would over-share. **Public** and **internal** projects are readable by everyone in your Archestra organization.
+#### GitLab Auto-Sync Permissions
+
+Create a personal access token under **Edit profile > Access > Personal access tokens**. Grant only the `read_api` scope and set an expiry. The token's user needs **Reporter** or higher on every private project. Use an **Owner** of the configured top-level group for broad project discovery.
+
+A regular token receives only `public_email`. On self-managed GitLab, an instance administrator token can read private email. Add `admin_mode` when Admin Mode is enabled. GitLab.com users without public email need [manual assignment](#credentials-and-email-resolution).
+
+Each project is one permission scope. Its audience is the project's members with the **Reporter** role or higher — direct members, members inherited from ancestor groups, and members of invited groups, each at their effective access level. Guests are excluded: GitLab does not let them read code or confidential issues, so including them would over-share. **Public** and **internal** projects are readable by everyone in your Archestra organization.
 
 Each sync snapshots one member roster per project, shown in the connector's **Users** and **Groups** tabs as `<project path> members`. A member whose email is hidden upstream stays unresolvable — assign them to an Archestra user from the Users tab, or ask them to set a public email on their GitLab profile.
 
@@ -347,7 +390,15 @@ Sync tasks and discussions from Asana projects.
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
 
-**Auto-sync permissions.** Each project is one permission scope. A project shared with the whole workspace grants every workspace member — guests excluded. Any other project grants its explicit members: users directly, teams through their team rosters. A task in several projects is readable through any of them; its scope is the union of those audiences. Task collaborators are granted individually on their tasks.
+#### Asana Auto-Sync Permissions
+
+Create a token in the [Asana Developer Console](https://app.asana.com/0/my-apps). Personal access tokens have no selectable scopes and inherit the user's visibility. Add that user to every private project and team the connector syncs.
+
+Asana Enterprise organizations can use a service account instead. A super admin creates it under **Admin console > Apps > Service accounts**. Grant **Full Permissions**, because standard task and membership APIs require that level.
+
+Both credentials expose workspace-member emails. A missing email still needs [manual assignment](#credentials-and-email-resolution).
+
+Each project is one permission scope. A project shared with the whole workspace grants every workspace member — guests excluded. Any other project grants its explicit members: users directly, teams through their team rosters. A task in several projects is readable through any of them; its scope is the union of those audiences. Task collaborators are granted individually on their tasks.
 
 Each permission sync also snapshots workspace members and team rosters — the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Users added to a project directly — guests included — appear there too, under the synthetic **Direct project members** group. Limited-access team members get only the projects they are explicitly added to. Guests get only explicit project and task grants.
 
@@ -359,7 +410,7 @@ Sync ITSM records from a ServiceNow instance.
 
 **Indexed:** incidents, change requests, change tasks, problems, business applications, and published knowledge articles. Incidents are enabled by default; the rest are opt-in.
 
-**Authentication:** basic auth (username + password) or an OAuth bearer token. For basic auth, put the username in the Email field and the password in the API Token field. For OAuth, leave Email empty and put the bearer token in the API Token field.
+**Authentication:** the connector form uses basic auth. Create a dedicated user under **User Administration > Users**, enable **Web service access only**, and set a password. API-created connectors can instead leave Email empty and store a pre-issued OAuth bearer token in the API Token field; the connector does not refresh that token.
 
 **Required roles.** Use a dedicated service account ("Web service access only" is fine). The account needs roles that can read every synced table:
 
@@ -395,7 +446,7 @@ An account without the right roles fails in one of two ways, depending on the in
 
 #### ServiceNow Auto-Sync Permissions
 
-ServiceNow decides record access with ACL rules, and those rules cannot be read through its REST API. For ITSM records and business applications, the connector grants each record to its participants instead: assignment group members plus the referenced users — the caller, the opener, and the assignee. That never grants wider than ServiceNow itself, but a user who could read a record upstream through roles or custom ACLs may not see it here. To widen a table's audience, add role names under **Role audiences** (`itil`, for example) — every holder of those roles may then read every synced record of that table, including business applications.
+ServiceNow decides record access with ACL rules, and those rules cannot be read through its REST API. For ITSM records and business applications, the connector grants each record to its participants instead: assignment group members plus the referenced users — the caller, the opener, and the assignee. Custom ACL conditions can make this audience differ from ServiceNow. To widen a table's audience, add role names under **Role audiences** (`itil`, for example) only when every holder can read every synced record in that table.
 
 Knowledge articles follow ServiceNow's own permission model: **Can Read** and **Cannot Read** user criteria at knowledge-base and article level. The connector expands each criteria to its users, groups, roles, companies, departments, and locations. Script-based (advanced) criteria cannot be evaluated over the API: on an allow path they grant nobody; on a deny path the affected knowledge base or article is hidden from everyone. A knowledge base without criteria follows the instance's `glide.knowman.block_access_with_no_user_criteria` property — open to your whole Archestra organization when `false`, hidden when `true` or unreadable.
 
@@ -420,7 +471,7 @@ Sync pages and databases from a Notion workspace.
 
 **Indexed:** pages from a Notion workspace.
 
-**Authentication:** an internal integration secret from the [Notion Developer portal](https://app.notion.com/developers/connections). New secrets start with `ntn_`; older `secret_` tokens keep working. Create an internal integration in your workspace and share the relevant pages or databases with it.
+**Authentication:** an internal connection's installation access token. A Workspace Owner creates the connection in the [Notion Developer portal](https://app.notion.com/developers/connections) and copies the token from its **Configuration** tab.
 
 | Field        | Description                                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
@@ -428,6 +479,13 @@ Sync pages and databases from a Notion workspace.
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
 
 #### Notion Auto-Sync Permissions
+
+Create the credential in the [Notion Developer portal](https://app.notion.com/developers/connections):
+
+1. As a Workspace Owner, create an internal connection in the target workspace.
+2. Enable **Read content** and **User information with email addresses** capabilities.
+3. Copy the installation access token into **Integration Token**.
+4. Under **Content access**, connect every page or database root to sync. Access flows to child pages.
 
 Support is *Limited*. Notion's API does not say who can see a page — there is no sharing endpoint, and teamspaces are not exposed. Archestra cannot mirror per-page access, so every synced page shares one workspace-wide audience:
 
@@ -470,17 +528,30 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
-**Auto-sync permissions.** Each document library is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. Site pages follow the site's default library audience; per-page unique sharing is not modeled. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+#### SharePoint Auto-Sync Permissions
 
-Group grants (Microsoft 365 / Entra groups and SharePoint site groups) carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream (or does not match an Archestra user's email) can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. The roster covers groups granted on library roots; a group granted only on a single item is listed in the Groups tab but resolves no members until it also holds a library-level grant.
+Create one single-tenant application under **Microsoft Entra ID > App registrations**. Add a client secret under **Certificates & secrets**, then copy its **Value**. Under **API permissions**, add the application permissions below and select **Grant admin consent**:
 
-`Sites.Read.All` covers library and item grants. Three more application permissions unlock more, progressively:
+| API | Application permission | Purpose |
+| --- | --- | --- |
+| Microsoft Graph | `Sites.Read.All` | Site content, libraries, items, and permission lists |
+| Microsoft Graph | `User.Read.All` | User grants, emails, and organization-link audiences |
+| Microsoft Graph | `GroupMember.Read.All` | Microsoft 365 and Entra group rosters |
+| Microsoft Graph | `Sites.FullControl.All` | Sharing-aware delta permission scans |
+
+Each document library is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. Site pages follow the site's default library audience; per-page unique sharing is not modeled. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Microsoft 365 and Entra group grants carry the group's identity, and each permission sync snapshots their member rosters. Direct grantees appear under the synthetic `direct-grants` group. A group granted only on a single item is not discovered by roster sync. Its grant remains fail-closed until that group also appears on a library root.
+
+SharePoint site groups are not currently expandable. The connector accepts a client secret, while SharePoint Online requires certificate authentication for app-only REST calls. Site-group grants remain fail-closed until certificate credentials are supported.
+
+`Sites.Read.All` covers library and item grants. Extra permissions unlock more, progressively:
 
 | Extra permission | Unlocks |
 | ---------------- | ------- |
 | `User.Read.All` | User grants expand to emails, and organization-wide links expand to the tenant's active users. |
 | `GroupMember.Read.All` | Microsoft 365 / Entra group member rosters (the Users and Groups tabs, and group-based document access). |
-| `Sites.FullControl.All` | SharePoint site-group member rosters through the site's REST API, and permission sync switches to cheaper sharing-aware delta runs. |
+| Microsoft Graph `Sites.FullControl.All` | Permission sync switches to cheaper sharing-aware delta runs. |
 
 Each tier is detected at runtime: without it, that kind of grant or roster drops (fail-closed) and the rest of the sync proceeds.
 
@@ -509,9 +580,18 @@ To configure the connector:
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
-**Auto-sync permissions.** Each configured user's drive is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. The drive's owner is always part of its audience. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+#### OneDrive Auto-Sync Permissions
 
-Grants to Microsoft 365 / Entra groups carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. SharePoint site groups granted on a personal drive are listed in the Groups tab but resolve no members; assign their users manually if you need them.
+Create one single-tenant application under **Microsoft Entra ID > App registrations**. Add a client secret and copy its **Value**. Add these Microsoft Graph application permissions, then grant tenant-wide admin consent:
+
+- `Files.Read.All` reads drive content and item permissions.
+- `User.Read.All` resolves owners and direct user grants to emails.
+- `GroupMember.Read.All` expands Microsoft 365 and Entra groups.
+- `Sites.FullControl.All` enables sharing-aware delta permission scans.
+
+Each configured user's drive is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. The drive's owner is always part of its audience. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Only groups granted on drive roots are expanded. A Microsoft 365 or Entra group granted only on a uniquely shared item gets no roster and remains fail-closed; manual assignment cannot repair it. Direct grantees appear under the synthetic `direct-grants` group. SharePoint site groups on personal drives also resolve no members and remain fail-closed.
 
 `Files.Read.All` covers drive and item grants. Three more application permissions unlock more, progressively:
 
@@ -550,7 +630,7 @@ A service account with domain-wide delegation impersonates users across your dom
 
 In the [Google Cloud Console](https://console.cloud.google.com/), create a service account, enable the Google Drive API and the Admin SDK API, and download the JSON key. Copy the service account's client ID from its **Advanced settings**.
 
-In the [Google Admin console](https://admin.google.com/), go to **Security -> Access and data control -> API controls -> Domain-wide delegation**. Add that client ID with two scopes:
+In the [Google Admin console](https://admin.google.com/), go to **Security > Access and data control > API controls > Domain-wide delegation**. Add that client ID with the two base scopes:
 
 ```
 https://www.googleapis.com/auth/drive.readonly
@@ -583,22 +663,40 @@ The connector sees only what someone has shared with the service account's email
 
 **Test connection** checks the setup rather than just the credential. It confirms that impersonation works for the delegated admin, that the directory can be read when the sync will enumerate one, and that any folder or shared drive you named is reachable. The result says which of those failed.
 
+#### Google Drive Auto-Sync Permissions
+
+Use **Google Workspace domain** mode to resolve users and Google Groups. In addition to the two base scopes above, authorize `https://www.googleapis.com/auth/admin.directory.group.readonly` for group and group-member reads. The delegated account needs directory privileges to read users, groups, and group members. **Test connection** checks the base scopes but does not validate the group-directory scope.
+
+Domain mode currently indexes every user's Drive, but permission sync lists files only as the delegated admin. Files visible only while impersonating another user remain fail-closed. Do not use domain-wide auto-sync permissions until per-user permission enumeration is supported.
+
+For files the delegated admin can see, direct user grants resolve from the email in the permission list and group grants expand through the Admin SDK directory. Nested groups are not inherited into their parent roster; flatten the parent group upstream, or grant the child group or users directly.
+
+**One Google account** and **Service account only** modes cannot read the Workspace directory. Their direct user grants work, but Google Group grants remain unresolved and fail closed.
+
 ### Dropbox
 
 Sync text and source files from a Dropbox account or team folder.
 
 **Indexed:** files from a Dropbox account or team folder — text and source files (`.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`), documents (`.pdf`, `.docx`, `.pptx`, `.xlsx` — every sheet of a workbook, not just the first), and images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) when the configured embedding model accepts image input. Files the connector cannot extract are reported as skipped on the run.
 
-**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission. Auto-sync permissions also needs `sharing.read`. The token can be a member token or a Dropbox Business team token. With a team token, the connector acts as the admin who generated it. On a Business team with a team space, the connector syncs from the team root automatically — the team space and the member folder are both visible.
+**Authentication:** a Dropbox access token from the [Dropbox App Console](https://www.dropbox.com/developers/apps). The connector stores this token directly and does not refresh it.
 
 | Field      | Description                                                                                              |
 | ---------- | -------------------------------------------------------------------------------------------------------- |
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
 
-**Auto-sync permissions.** Each shared folder is one permission scope — a file belongs to its nearest containing shared folder. Files outside every shared folder are visible only to the token's account. Shared-folder members resolve to their emails directly; pending invitees are excluded until they accept. A file shared with extra people directly carries those people as additional grants. A file shared directly with a group does not carry that group — only shared-folder group grants are mirrored.
+#### Dropbox Auto-Sync Permissions
 
-Grants to Dropbox groups carry the group's identity. Reading a group's member roster is a Business team API. Dropbox serves it only to team access tokens — a member token cannot read it, whatever scopes the app holds. To expand groups, give the connector a team access token as its one Access Token. In the [App Console](https://www.dropbox.com/developers/apps), add the `groups.read` and `members.read` team scopes next to the app's files and sharing scopes. Then generate a new access token as a team admin — an app with team scopes issues team tokens. The connector detects the team token and syncs content as the admin who generated it. Granted groups — including the automatic "Everyone at ..." team group — then expand to their active members. With a member token, granted groups appear in the **Groups** tab with no members; assign their users manually from the **Users** tab. Direct grantees appear there too, under the synthetic `direct-grants` group.
+Create a scoped app with **Full Dropbox** access. Add `account_info.read`, `files.metadata.read`, `files.content.read`, and `sharing.read`. Generate a member token when direct user and shared-folder grants are enough.
+
+Group expansion requires a Dropbox Business team app. Add `team_info.read`, `team_data.member`, and `groups.read`, then have an active team administrator authorize the app. Paste the resulting team-linked token into **Access Token**.
+
+App Console generated access tokens are short-lived testing credentials. The connector stores only the access token and cannot refresh it, so scheduled content and permission sync stop after expiration. Reconnect with a new token; durable background sync requires an offline OAuth flow, which is not yet supported.
+
+Each shared folder is one permission scope — a file belongs to its nearest containing shared folder. Files outside every shared folder are visible only to the token's account. Shared-folder members resolve to their emails directly; pending invitees are excluded until they accept. A file shared with extra people directly carries those people as additional grants. A file shared directly with a group does not carry that group — only shared-folder group grants are mirrored.
+
+A team-linked token expands granted groups, including the automatic team-wide group, to active members. A member token leaves group rosters empty and fail-closed; manual assignment cannot populate them. Direct grantees appear under the synthetic `direct-grants` group.
 
 Shared links are not reflected. A file shared only by link stays visible to the audiences above, nobody more.
 
@@ -621,7 +719,13 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
-**Auto-sync permissions.** Linear's access unit is the team. Issues and cycles get their team's audience: a public team admits every workspace member, a private team only its listed members. Guests get access only through teams they were invited to. A project's audience is the members of its teams plus the users listed on the project. Each sync also snapshots every team's roster, so the connector's **Users** and **Groups** tabs show each member with their assignment status. Suspended accounts belong to no audience.
+#### Linear Auto-Sync Permissions
+
+Create a personal API key under **Settings > Account > Security & Access > Personal API keys**. Select **Read** and every team the connector will sync. Use a dedicated workspace owner or administrator that belongs to every private team; the role alone does not grant private-team access.
+
+Linear returns member emails through the same key. No extra scope is required.
+
+Linear's access unit is the team. Issues and cycles get their team's audience: a public team admits every workspace member, a private team only its listed members. Guests get access only through teams they were invited to. A project's audience is the members of its teams plus the users listed on the project. Each sync also snapshots every team's roster, so the connector's **Users** and **Groups** tabs show each member with their assignment status. Suspended accounts belong to no audience.
 
 The API key sees what its owner can see. A private team the owner does not belong to syncs no content and grants no access. Use a key from an owner whose access matches what you want indexed.
 
@@ -639,7 +743,13 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
 
-**Auto-sync permissions.** Each collection is one permission scope. A collection's audience is its individual members, its granted groups, and — when the collection has workspace-wide default access — every active workspace member except guests. Guests only see collections they are explicitly added to, directly or through a group.
+#### Outline Auto-Sync Permissions
+
+Create an API key under **Settings > API Keys**. An unscoped key inherits its creator's endpoint and collection access. For a scoped key, grant `auth.info`, `documents.list`, `users.list`, `groups.list`, `groups.memberships`, `collections.list`, `collections.info`, `collections.memberships`, `collections.group_memberships`, and `shares.list`.
+
+Use a dedicated admin that belongs to every private target collection. Admin status does not automatically reveal a private collection. User emails come from `users.list`, so an account that cannot list users leaves all members unresolved.
+
+Each collection is one permission scope. A collection's audience is its individual members, its granted groups, and — when the collection has workspace-wide default access — every active workspace member except guests. Guests only see collections they are explicitly added to, directly or through a group.
 
 Each permission sync also snapshots group member rosters, so the connector's **Users** and **Groups** tabs show every member with their assignment status. Members granted a collection individually appear there too, under the synthetic `direct-grants` group. Workspace-wide default access appears as a group named after your workspace, holding every active non-guest member.
 
@@ -679,7 +789,21 @@ Example advanced config:
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
 
-**Auto-sync permissions.** Each object is one permission scope, decided by its organization-wide default: a public object grants every active Salesforce user; a private object resolves each record individually from its owner and its share table (manual, team, and sharing-rule grants). A contact inherits its parent account's audience. Restriction rules, territory hierarchies, and high-volume portal shares are not modeled — they only ever hide content, never over-grant. The same username/password login is used for everything; no extra credential or scope is needed. Private objects on very large orgs resolve per record, so give those connectors a longer permission-sync interval.
+#### Salesforce Auto-Sync Permissions
+
+Use a dedicated Salesforce integration user. The same username, password, and security token authenticate content and permission reads. Configure its profile or permission sets with:
+
+- **API Enabled**. In **Setup > User Interface**, enable **SOAP API login()**. If SOAP login restrictions are enforced, also grant **Use Any API Auth**. Salesforce retires this authentication method in Summer '27, so Archestra must migrate to External Client App OAuth before then.
+- **Read** object and field permissions for every configured field and association.
+- Read access to each object's owner fields and share object.
+- Read access to `User`, `Group`, and `GroupMember`.
+- **View All Users** for grant-holder email resolution.
+- **View All Records** on every synced object, or **View All Data**, for complete ingestion.
+- **Modify Metadata Through Metadata API Functions**, or **Modify All Data**, for organization-wide defaults.
+
+Each object is one permission scope, decided by its organization-wide default. A public object grants every user in the Archestra organization. A private object resolves records from owners and modeled share rows. A contact inherits its parent account's audience.
+
+Restriction rules, territory hierarchies, high-volume portal shares, object CRUD access, and field-level visibility are not modeled. Restriction rules can narrow access upstream, so do not sync restricted objects through auto-sync permissions. Private objects in large organizations resolve per record; use a longer permission-sync interval.
 
 Every permission sync also snapshots the org's groups and queues with their (recursively expanded) memberships, plus record owners and per-user share grantees under the synthetic `direct-grants` group — so the connector's **Users** and **Groups** tabs show every grant-holder with their assignment status, and an account whose email is hidden (or matches no Archestra user's email) can be assigned manually from the Users tab. Inactive users stay visible in the roster but never resolve to access.
 
@@ -731,7 +855,13 @@ Each depot path and extension combination is listed in its own REST API request.
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
 
-#### Permission Sync
+#### Perforce Auto-Sync Permissions
+
+Use two dedicated Perforce identities:
+
+1. Give the content user `read` access to every configured depot path. Generate its all-host ticket with `p4 login -a -p`.
+2. Give the permission user `admin` access with `dm.protects.allow.admin=1`, or `super` access, plus a password. This identity runs `p4 protects -a`, reads groups, and reads every user spec.
+3. Populate each Perforce user's `Email` field. Missing emails require [manual assignment](#credentials-and-email-resolution).
 
 The connector supports [auto-sync permissions](#auto-sync-permissions). The REST API cannot read the protections table, so permission sync runs the `p4` CLI in a dedicated in-cluster pod — the p4 shim. This requires the Kubernetes orchestrator. The shim pod is isolated: it accepts connections only from platform pods and connects out only to the Perforce server. For `ssl:` targets the server's certificate fingerprint is trusted on first use, like `p4 trust`. The image contains no Perforce software; the backend downloads the pinned `p4` binary when it provisions the pod — see [Deployment](/docs/platform-deployment#perforce-permission-sync-p4-shim) for the image and binary-source variables (air-gapped installs point them at an internal mirror).
 
@@ -743,7 +873,7 @@ Choosing the auto-sync-permissions visibility adds three fields to the form:
 | Admin Password     | That account's password                                                            |
 | P4 Port            | Wire-protocol address of the server, when that is not the Server URL's host        |
 
-The admin user needs `super` access — or `admin` with the `dm.protects.allow.admin=1` configurable — to read the full protections table (`p4 protects -a`), group definitions, and the user list.
+The permission user needs `admin` access with the server configurable `dm.protects.allow.admin=1`, or `super` access, to read the full protections table with `p4 protects -a`. The group and user-list reads require only `list` access.
 
 Leave P4 Port empty on a normal server. The P4 web server runs inside the Perforce server, so Archestra dials the Server URL's host on port 1666 and works out the transport by trying plain and SSL. Fill the field in only when something else serves the REST API — an ingress in front of the web server, for example.
 
@@ -763,7 +893,7 @@ Sync versioned files and their source permissions from an M-Files vault.
 
 **Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
 
-**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication.
+**Authentication:** a dedicated M-Files login account, or an Application Account when `ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED` is enabled. Login accounts exchange a username and password for short-lived MFWS tokens. Application Accounts use OAuth client credentials.
 
 | Field | Description |
 | --- | --- |
@@ -774,6 +904,14 @@ Sync versioned files and their source permissions from an M-Files vault.
 | Windows Domain | Optional, under Advanced — only for domain-authenticated accounts |
 
 Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
+
+#### M-Files Auto-Sync Permissions
+
+Install the VAF Add On below before creating the connector. In M-Files Admin, add a dedicated login account to the vault and grant **Change full control of vault**. Also grant read access to every configured object, version, and file. The administrative role permits add-on calls but does not grant content visibility by itself.
+
+For Application Account authentication, create an [M-Files Application Account](https://userguide.m-files.com/user-guide/manage/latest/eng/application_accounts.html) and map it to a vault user with the same access. Configure an identity-provider application for client credentials. Enter its token endpoint, client ID, client secret, token audience, M-Files authentication configuration name and scope, and Application Account username.
+
+The add-on returns user and group rosters. Accounts without an email stay unresolved and need [manual assignment](#credentials-and-email-resolution).
 
 #### M-Files VAF Add On
 

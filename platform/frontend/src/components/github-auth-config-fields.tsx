@@ -28,6 +28,8 @@ interface GithubAuthConfigFieldsProps {
   authOptional?: boolean;
   authDescription?: ReactNode;
   configuredDescription?: ReactNode;
+  /** Extra line under the App configuration picker, above any error. */
+  appConfigDescription?: ReactNode;
   appConfigError?: ReactNode;
   patFields?: ReactNode;
 }
@@ -42,6 +44,7 @@ export function GithubAuthConfigFields({
   authOptional = false,
   authDescription = "Use GitHub App authentication for organization-managed installs.",
   configuredDescription = "Manage GitHub App configurations in",
+  appConfigDescription,
   appConfigError,
   patFields,
 }: GithubAuthConfigFieldsProps) {
@@ -94,12 +97,13 @@ export function GithubAuthConfigFields({
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">
-                {configuredDescription} <GithubAppSettingsLink />.
+                {configuredDescription} <GithubAppSettingsLink />.{" "}
+                {appConfigDescription}
               </p>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Create one in <GithubAppSettingsLink />.
+              Create one in <GithubAppSettingsLink />. {appConfigDescription}
             </p>
           )}
           {appConfigError && (

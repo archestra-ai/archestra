@@ -50,6 +50,8 @@ import {
 } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
+  AutoSyncCredentialRequirement,
+  autoSyncRequirementSlot,
   CONNECTOR_OPTIONS,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
@@ -62,7 +64,6 @@ import {
   getConnectorTypeLabel,
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
-  getPermissionSyncCredentialNote,
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -270,6 +271,30 @@ export function CreateConnectorDialog({
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
     : null;
+  // Only the auto-sync visibility mirrors the source's access control, so the
+  // upstream-permission requirement is noise on any other visibility.
+  const autoSyncRequirement =
+    visibility === "auto-sync-permissions" ? (
+      <AutoSyncCredentialRequirement type={connectorType} />
+    ) : undefined;
+  // Sources whose credential is minted inside the customer's own workspace
+  // link to that workspace, taken from the URL field above.
+  const connectorInstanceUrl = form.watch("config.outlineUrl") as
+    | string
+    | undefined;
+  const requirementSlot = autoSyncRequirementSlot({
+    type: connectorType,
+    authMethod,
+    authMode,
+  });
+  const credentialRequirement =
+    requirementSlot === "credential" ? autoSyncRequirement : undefined;
+  const connectorFieldsRequirement =
+    requirementSlot === "connector-fields" ? autoSyncRequirement : undefined;
+  const permissionSyncRequirement =
+    requirementSlot === "permission-sync-fields"
+      ? autoSyncRequirement
+      : undefined;
   const {
     apiTokenHelpText,
     apiTokenLabel,
@@ -282,9 +307,9 @@ export function CreateConnectorDialog({
     mode: "create",
     authMethod,
     authMode,
+    autoSyncRequirementShown: Boolean(credentialRequirement),
+    instanceUrl: connectorInstanceUrl,
   });
-  const permissionSyncCredentialNote =
-    getPermissionSyncCredentialNote(connectorType);
 
   useLayoutEffect(() => {
     if (open && step === "select") {
@@ -509,6 +534,7 @@ export function CreateConnectorDialog({
                   form={form}
                   mode="create"
                   emailRequired={emailRequired}
+                  autoSyncRequirement={connectorFieldsRequirement}
                 />
 
                 {Boolean(apiTokenLabel) && (
@@ -533,13 +559,14 @@ export function CreateConnectorDialog({
                             />
                           )}
                         </FormControl>
-                        {apiTokenHelpText}
-                        {visibility === "auto-sync-permissions" &&
-                          permissionSyncCredentialNote && (
-                            <FormDescription>
-                              {permissionSyncCredentialNote}
-                            </FormDescription>
-                          )}
+                        {(apiTokenHelpText || credentialRequirement) && (
+                          <FormDescription>
+                            {apiTokenHelpText ? (
+                              <span>{apiTokenHelpText}</span>
+                            ) : null}{" "}
+                            {credentialRequirement}
+                          </FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -573,7 +600,11 @@ export function CreateConnectorDialog({
 
                 {visibility === "auto-sync-permissions" &&
                   connectorType === "perforce" && (
-                    <PerforcePermissionSyncFields form={form} mode="create" />
+                    <PerforcePermissionSyncFields
+                      form={form}
+                      mode="create"
+                      adminCredentialDescription={permissionSyncRequirement}
+                    />
                   )}
 
                 <Collapsible>

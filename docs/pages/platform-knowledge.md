@@ -172,6 +172,19 @@ Uploading stores a document; indexing makes it retrievable. Select documents or 
 
 A file attached to a chat belongs to that conversation. To keep it, save it to the repository — from the attachment in the message, or from the Files panel, where you can select several at once. You choose the name, directory and visibility as you save, and can index it in one step.
 
+### Chat, Project, and Knowledge Files
+
+Files live in three places, and each answers a different need.
+
+|                   | Chat attachments | Project files | Knowledge Files |
+| ----------------- | ---------------- | ------------- | --------------- |
+| Scope             | One conversation | Every chat in the project | The whole organization |
+| Who can read them | You              | Everyone in the project | The audience you set — organization, teams, or only you |
+| How agents use them | Sent to the model with your message | Read on demand by any chat in the project | Retrieved from a Knowledge Base, with citations |
+| Use them for      | A one-off question about a file | Working files for one piece of work | Reference documents agents should answer from |
+
+A file can move up this ladder: save a chat attachment to the repository, then index it into a Knowledge Base.
+
 ### Use Case: Vendor Security Reviews
 
 A security analyst reviews vendor documents that arrive by email.

@@ -107,9 +107,9 @@
     "server_url": "https://mcp.posthog.com/mcp",
     "client_id": "",
     "redirect_uris": ["http://localhost:8080/oauth/callback"],
-    "scopes": ["read", "write"],
+    "scopes": [],
     "description": "PostHog MCP Server (dynamic registration)",
-    "default_scopes": ["read", "write"],
+    "default_scopes": [],
     "supports_resource_metadata": true
   },
   "readme": null,

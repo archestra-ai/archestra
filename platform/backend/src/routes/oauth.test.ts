@@ -1642,3 +1642,188 @@ describe("OAuth dynamic client registration client name", () => {
     }
   });
 });
+
+describe("OAuth dynamic client registration scope fallback", () => {
+  const ctx = useRouteTestApp(oauthRoutes);
+  const originalFetch = globalThis.fetch;
+  const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
+
+  beforeEach(() => {
+    cacheManager.start();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  // A catalog item without a client_id whose configured scopes have gone stale
+  // relative to what the authorization server accepts today.
+  const makeStaleScopeCatalog = (
+    makeInternalMcpCatalog: (
+      overrides?: Record<string, unknown>,
+    ) => Promise<{ id: string; name: string }>,
+  ) =>
+    makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Stale Scope MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Stale Scope MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read", "write"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+      },
+    });
+
+  /**
+   * Metadata requests advertise a registration endpoint; the registration
+   * POST behavior is delegated to `onRegister` so each test can shape the
+   * server's scope policy.
+   */
+  const mockAuthServer = (
+    onRegister: (body: Record<string, unknown>) => {
+      ok: boolean;
+      status?: number;
+      payload: Record<string, unknown>;
+    },
+  ): Mock => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === REGISTRATION_ENDPOINT) {
+          const body = JSON.parse(String(init?.body));
+          const result = onRegister(body);
+          return {
+            ok: result.ok,
+            status: result.status ?? (result.ok ? 201 : 400),
+            json: async () => result.payload,
+            text: async () => JSON.stringify(result.payload),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            authorization_endpoint: "https://auth.example.com/authorize",
+            token_endpoint: "https://auth.example.com/token",
+            registration_endpoint: REGISTRATION_ENDPOINT,
+          }),
+        };
+      },
+    ) as Mock;
+    globalThis.fetch = fetchMock;
+    return fetchMock;
+  };
+
+  const initiate = (catalogId: string) =>
+    ctx.app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: { catalogId },
+    });
+
+  test("retries registration without scope when the server rejects the scope list and authorizes with the granted scope", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeStaleScopeCatalog(makeInternalMcpCatalog);
+    const fetchMock = mockAuthServer((body) =>
+      "scope" in body
+        ? {
+            ok: false,
+            payload: {
+              error: "invalid_client_metadata",
+              error_description:
+                "None of the requested scopes are available to self-registered clients. Omit `scope` to register with the default scope set.",
+            },
+          }
+        : {
+            ok: true,
+            payload: { client_id: "dyn-client", scope: "things:read" },
+          },
+    );
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.get("client_id")).toBe("dyn-client");
+    // The rejected configured scopes must not reach the authorization
+    // endpoint; the server-granted scope set takes their place.
+    expect(authorizationUrl.searchParams.get("scope")).toBe("things:read");
+
+    const registrationCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === REGISTRATION_ENDPOINT,
+    );
+    expect(registrationCalls).toHaveLength(2);
+    expect(
+      JSON.parse(String(registrationCalls[1]?.[1]?.body)),
+    ).not.toHaveProperty("scope");
+  });
+
+  test("omits the scope parameter entirely when the scope-less registration reports no granted scope", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeStaleScopeCatalog(makeInternalMcpCatalog);
+    mockAuthServer((body) =>
+      "scope" in body
+        ? { ok: false, payload: { error: "invalid_client_metadata" } }
+        : { ok: true, payload: { client_id: "dyn-client" } },
+    );
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.get("client_id")).toBe("dyn-client");
+    // No granted scope reported: defer to the server's default scope set for
+    // this client instead of re-sending the scopes it just rejected.
+    expect(authorizationUrl.searchParams.has("scope")).toBe(false);
+  });
+
+  test("prefers the granted scope from a first-attempt registration response", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeStaleScopeCatalog(makeInternalMcpCatalog);
+    const fetchMock = mockAuthServer(() => ({
+      ok: true,
+      payload: { client_id: "dyn-client", scope: "read" },
+    }));
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    // RFC 7591: the registration response's `scope` is what the client may
+    // use — requesting more would fail at the authorization endpoint.
+    expect(authorizationUrl.searchParams.get("scope")).toBe("read");
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => String(input) === REGISTRATION_ENDPOINT,
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("surfaces the registration failure when both attempts fail", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeStaleScopeCatalog(makeInternalMcpCatalog);
+    mockAuthServer(() => ({
+      ok: false,
+      payload: {
+        error: "invalid_client_metadata",
+        error_description: "Registration is disabled for this tenant.",
+      },
+    }));
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(400);
+    const message = response.json().error.message as string;
+    expect(message).toContain("dynamic client registration failed");
+    expect(message).toContain("Registration is disabled for this tenant.");
+  });
+});

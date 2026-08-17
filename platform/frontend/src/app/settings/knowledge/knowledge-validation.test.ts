@@ -50,6 +50,7 @@ describe("saveResultStatuses", () => {
         error: null,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "connected", error: null },
@@ -74,6 +75,7 @@ describe("saveResultStatuses", () => {
         error: embeddingError,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "failed", error: "bad embed" },
@@ -88,6 +90,7 @@ describe("saveResultStatuses", () => {
         error: rerankerError,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "connected", error: null },

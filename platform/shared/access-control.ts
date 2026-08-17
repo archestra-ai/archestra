@@ -124,11 +124,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
-  /**
-   * Batch analysis: running a saved set of prompts across a set of sources.
-   * `run` is separate from `update` because dispatching a run spends LLM budget
-   * proportional to the grid's size, while editing a definition costs nothing.
-   */
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -1916,10 +1911,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 
-  // Batch analysis. Adding rows is an `update` on the definition; dispatching
-  // work is the separate `run` action, because a run's cost scales with the
-  // grid while editing the definition costs nothing.
-
   // Knowledge files. Reads are `knowledgeSource:read` like every other
   // knowledge surface; indexing a file into a base changes what agents can
   // retrieve, so it is an `update` rather than a read.
@@ -1976,8 +1967,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Projects
   "/projects": { project: ["read"] },
   "/projects/[id]": { project: ["read"] },
-
-  // Batch Analyses
 
   // Knowledge files
   "/knowledge/files": { knowledgeSource: ["read"] },

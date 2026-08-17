@@ -797,7 +797,6 @@ export const RouteId = {
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 
-  // Batch analysis
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

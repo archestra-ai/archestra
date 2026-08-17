@@ -1445,6 +1445,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TestRerankerConnection]: {
     knowledgeSettings: ["update"],
   },
+  [RouteId.TestOcrConnection]: {
+    knowledgeSettings: ["update"],
+  },
 
   /**
    * Get public identity providers route (minimal info for login page)

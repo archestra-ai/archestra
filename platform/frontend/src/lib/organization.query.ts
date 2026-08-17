@@ -789,6 +789,29 @@ export function useTestRerankerConnection() {
 }
 
 /**
+ * Test an OCR pair by having the backend send a synthetic PDF page to the
+ * model. Same contract as the embedding/reranker tests.
+ */
+export function useTestOcrConnection() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.TestOcrConnectionData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.testOcrConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
+      }
+
+      return data ?? { success: false, error: "No response" };
+    },
+  });
+}
+
+/**
  * Users the current caller can see: the full organization roster with
  * member:read, otherwise only the caller's teammates (may be empty).
  */

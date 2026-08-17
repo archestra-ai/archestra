@@ -690,6 +690,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.rerankerModel !== undefined
           ? body.rerankerModel
           : (currentOrg?.rerankerModel ?? null);
+      const effectiveOcrKeyId =
+        body.ocrChatApiKeyId !== undefined
+          ? body.ocrChatApiKeyId
+          : (currentOrg?.ocrChatApiKeyId ?? null);
+      const effectiveOcrModel =
+        body.ocrModel !== undefined
+          ? body.ocrModel
+          : (currentOrg?.ocrModel ?? null);
 
       // Embedding is locked once fully configured: changing OR clearing it (any
       // difference from the current pair, incl. a null clear) must go through the
@@ -719,6 +727,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const patchTouchesReranker =
         body.rerankerChatApiKeyId !== undefined ||
         body.rerankerModel !== undefined;
+      const patchTouchesOcr =
+        body.ocrChatApiKeyId !== undefined || body.ocrModel !== undefined;
 
       // Embedding is mandatory: a half-configured pair (a key with no model, or a
       // model with no key) is invalid and blocks save. To clear the embedding
@@ -786,6 +796,57 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "reranker_validation_failed",
           );
         }
+      }
+
+      if (
+        patchTouchesOcr &&
+        Boolean(effectiveOcrKeyId) !== Boolean(effectiveOcrModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Both an OCR API key and model are required, or clear both.",
+          "ocr_validation_failed",
+        );
+      }
+      if (patchTouchesOcr && effectiveOcrKeyId && effectiveOcrModel) {
+        const result = await knowledgeSettingsService.validateOcrConfig({
+          keyId: effectiveOcrKeyId,
+          model: effectiveOcrModel,
+          organizationId,
+        });
+        if (!result.ok) {
+          throw new ApiError(
+            400,
+            result.error ?? "OCR validation failed.",
+            "ocr_validation_failed",
+          );
+        }
+      }
+
+      // Turning OCR on (unset -> configured) resets connector checkpoints so
+      // the next sync re-presents documents that were previously skipped as
+      // having no extractable text — a delta sync would otherwise never show
+      // them again and enabling OCR would appear to do nothing. Key/model
+      // swaps and clears deliberately do not trigger this. The reset runs
+      // BEFORE the organization write: resetting is idempotent and benign on
+      // its own, while the reverse order could persist an enabled OCR whose
+      // reset failed — and a retry would then see OCR as "already configured"
+      // and never reset at all.
+      const ocrWasConfigured =
+        !!currentOrg?.ocrChatApiKeyId && !!currentOrg?.ocrModel;
+      const ocrBecomesConfigured =
+        patchTouchesOcr &&
+        !ocrWasConfigured &&
+        !!effectiveOcrKeyId &&
+        !!effectiveOcrModel;
+      if (ocrBecomesConfigured) {
+        await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
+          organizationId,
+        );
+        logger.info(
+          { organizationId },
+          "OCR enabled — connector checkpoints reset for a full re-sync",
+        );
       }
 
       const organization = await OrganizationModel.patch(organizationId, body);
@@ -896,6 +957,39 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await knowledgeSettingsService.validateRerankerConfig({
         keyId: body.rerankerChatApiKeyId,
         model: body.rerankerModel,
+        organizationId,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/test-ocr",
+    {
+      schema: {
+        operationId: RouteId.TestOcrConnection,
+        description:
+          "Test the OCR configuration by sending a synthetic PDF page to the model",
+        tags: ["Organization"],
+        body: z.object({
+          ocrChatApiKeyId: z.string().uuid(),
+          ocrModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      const result = await knowledgeSettingsService.validateOcrConfig({
+        keyId: body.ocrChatApiKeyId,
+        model: body.ocrModel,
         organizationId,
       });
       return reply.send({

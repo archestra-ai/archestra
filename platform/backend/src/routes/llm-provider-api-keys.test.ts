@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -529,6 +530,32 @@ describe("LLM Provider API Keys CRUD", () => {
       url: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
     expect(getResponse.statusCode).toBe(404);
+  });
+
+  test("refuses to delete a key backing the organization's OCR configuration", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "OCR Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-ocr-test",
+        scope: "personal",
+      },
+    });
+    const createdKey = createResponse.json();
+    await OrganizationModel.patch(organizationId, {
+      ocrChatApiKeyId: createdKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("OCR");
   });
 
   test("should return 404 for non-existent LLM provider API key", async () => {

@@ -143,6 +143,19 @@ A chat model also powers query expansion and [contextual retrieval](#contextual-
 
 A chat reranker scores passages by returning a JSON object, so Archestra asks the endpoint to constrain the model's output to that shape. **Test connection** checks that it does. If the test reports that the model replied without a JSON object, the endpoint is not applying the constraint. Enable structured outputs on it — a self-hosted vLLM server needs this — or choose a model that supports them.
 
+### Document OCR
+
+![Document OCR card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge_document-ocr.webp)
+
+A scanned PDF has no text layer, so connectors cannot index it — the run reports it under "No text extracted". Configure Document OCR and syncs transcribe those pages with a vision model instead. The text becomes searchable like any other document.
+
+- **Key** — an API key on a provider that accepts PDF input: Anthropic, OpenAI, Gemini, Bedrock, Azure, OpenRouter, or vLLM.
+- **Model** — a vision-capable model from that provider. Self-hosted models (a vLLM server, for example) sync without modality metadata: mark the model's image or PDF input modality in **LLM Providers > Models** to make it selectable. **Test connection** sends a synthetic PDF page to verify the pair works.
+
+OCR runs only on pages that yielded no text. A mixed document — a contract with a scanned signature page, for example — keeps its digital text and gets the scanned pages transcribed. Each transcribed page is one metered model call, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - OCR". A single document is capped at `ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT` pages (default 100); pages past the cap stay untranscribed and the run says so.
+
+Saving the configuration for the first time resets every connector's sync checkpoint. The next sync re-reads all sources, so documents previously skipped as unreadable are picked up. A run also carries an overall transcription budget: a document whose pages did not fit is indexed with a warning naming what was left out, and its untranscribed pages are only revisited when the source modifies the document or after another full re-sync.
+
 ## Creating a Knowledge Base
 
 A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.

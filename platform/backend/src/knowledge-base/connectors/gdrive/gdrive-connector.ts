@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
 import type { admin_directory_v1, drive_v3 } from "googleapis";
+import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -27,7 +28,6 @@ import {
 import {
   describePdfEmptyText,
   describePdfExtractionWarning,
-  parsePdfBuffer,
 } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
@@ -1554,7 +1554,12 @@ export class GoogleDriveConnector extends BaseConnector {
           { responseType: "arraybuffer" },
         );
         const buffer = Buffer.from(res.data as ArrayBuffer);
-        const extracted = await extractTextFromBinary(buffer, resolved.format);
+        const extracted = await extractTextFromBinary({
+          buffer,
+          format: resolved.format,
+          filename: fileName,
+          ocr: this.ocrContext,
+        });
         if (extracted.warning) {
           this.log.warn(
             { fileId, fileName, reason: extracted.warning },
@@ -1586,7 +1591,12 @@ export class GoogleDriveConnector extends BaseConnector {
     // Binary files (.docx, .pdf, .pptx, .xlsx): download and extract text
     if (resolved?.kind === "binary") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
-      const extracted = await extractTextFromBinary(buffer, resolved.format);
+      const extracted = await extractTextFromBinary({
+        buffer,
+        format: resolved.format,
+        filename: fileName,
+        ocr: this.ocrContext,
+      });
       if (extracted.warning) {
         this.log.warn(
           { fileId, fileName, reason: extracted.warning },
@@ -1930,16 +1940,19 @@ function fileToDocument(
   };
 }
 
-async function extractTextFromBinary(
-  buffer: Buffer,
-  format: BinaryFormat,
-): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+async function extractTextFromBinary(params: {
+  buffer: Buffer;
+  format: BinaryFormat;
+  filename?: string;
+  ocr?: OcrRunContext;
+}): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+  const { buffer, format, filename, ocr } = params;
   switch (format) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      const result = await parsePdfBuffer(buffer);
+      const result = await extractPdfText({ buffer, filename, ocr });
       return {
         text: result.text,
         emptyReason: describePdfEmptyText(result),

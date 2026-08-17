@@ -28,7 +28,9 @@ import {
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 import { buildDocumentContext } from "./contextual-retrieval";
-import { resolveEmbeddingConfig } from "./kb-llm-client";
+import { toKnowledgeBaseUserMessage } from "./errors";
+import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
+import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
 
@@ -286,6 +288,48 @@ class ConnectorSyncService {
         embeddingConfig?.acceptedImageMimeTypes ?? undefined;
     } catch {
       // Non-fatal: proceed without modality info
+    }
+
+    // Arm OCR for the run when the organization has it configured. Resolved
+    // once here — not per document — and degraded to "sync without OCR" on
+    // any resolution fault: OCR is an optional enhancement and must never
+    // fail a sync that would have succeeded without it. The deadline aligns
+    // with the sync's own 90%-of-budget early stop so page transcription can
+    // never push a run past its wall-clock budget.
+    try {
+      const ocrConfig = await resolveOcrConfig(connector.organizationId);
+      if (ocrConfig && connectorImpl instanceof BaseConnector) {
+        const budgetMs =
+          options?.maxDurationMs ??
+          (config.kb.connectorSyncMaxDurationSeconds
+            ? config.kb.connectorSyncMaxDurationSeconds * 1000
+            : undefined);
+        connectorImpl.setOcrContext({
+          config: ocrConfig,
+          connectorId: connector.id,
+          // No wall-clock budget on the run means no OCR deadline either.
+          deadlineAt: budgetMs
+            ? startTime + budgetMs * 0.9
+            : Number.POSITIVE_INFINITY,
+          budget: { remainingPages: OCR_RUN_PAGE_BUDGET },
+          log: runLog,
+          connectorType: connector.connectorType,
+        });
+        runLog.info(
+          { model: ocrConfig.modelName, provider: ocrConfig.provider },
+          "OCR armed: textless PDF pages will be transcribed",
+        );
+      }
+    } catch (error) {
+      runLog.warn(
+        // Prefer the taxonomy's actionable message ("provider X cannot accept
+        // PDF input…") over the generic Error message when one exists.
+        {
+          error:
+            toKnowledgeBaseUserMessage(error) ?? extractErrorMessage(error),
+        },
+        "OCR is configured but unusable — syncing without it",
+      );
     }
 
     // Estimate total items for progress display

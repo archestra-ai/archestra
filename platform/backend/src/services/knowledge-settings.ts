@@ -1,5 +1,5 @@
 import { addNomicTaskPrefix } from "@archestra/shared";
-import { generateObject, NoObjectGeneratedError } from "ai";
+import { generateObject, generateText, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
@@ -9,6 +9,7 @@ import {
   callNativeRerank,
   isNativeRerankModel,
 } from "@/knowledge-base/native-rerank";
+import { providerSupportsPdfInput } from "@/knowledge-base/pdf-ocr";
 import { RERANKER_OUTPUT_CONTRACT } from "@/knowledge-base/reranker-prompt";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel } from "@/models";
@@ -178,6 +179,101 @@ class KnowledgeSettingsService {
       };
     }
   }
+
+  /**
+   * Validate an OCR pair by actually sending a PDF: transport support is a
+   * property of the provider adapter AND the endpoint's model, so the only
+   * trustworthy check is a real file-part call. The probe document is a tiny
+   * synthetic page built here — no organization content is sent.
+   */
+  async validateOcrConfig(params: {
+    keyId: string;
+    model: string;
+    organizationId: string;
+  }): Promise<KnowledgeConfigValidationResult> {
+    const { keyId, model, organizationId } = params;
+
+    const chatApiKey = await LlmProviderApiKeyModel.findById(keyId);
+    // Scope the key to the caller's org (see validateEmbeddingConfig).
+    if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
+      return { ok: false, error: "The OCR API key could not be found." };
+    }
+
+    const resolved = await resolveApiKeyFromChatApiKey(keyId);
+    if (!resolved) {
+      return {
+        ok: false,
+        error: "The OCR API key could not be resolved. Reconfigure it.",
+      };
+    }
+
+    if (!providerSupportsPdfInput(resolved.provider)) {
+      return {
+        ok: false,
+        error: `The provider "${resolved.provider}" cannot send PDF pages to a model, so it cannot back OCR. Use an Anthropic, OpenAI, Gemini, Bedrock, Azure, OpenRouter, or vLLM key.`,
+      };
+    }
+
+    const modelRow = await ModelModel.findByProviderAndModelId(
+      resolved.provider,
+      model,
+    );
+    // Modality metadata is advisory (custom endpoints often have no models
+    // row); when it exists and rules out documents AND images, fail before
+    // spending a probe call on a text-only model.
+    if (
+      modelRow?.inputModalities &&
+      !modelRow.inputModalities.includes("pdf") &&
+      !modelRow.inputModalities.includes("image")
+    ) {
+      return {
+        ok: false,
+        error:
+          "The selected model is text-only (per LLM Providers > Models) — OCR needs a model that accepts PDF or image input.",
+      };
+    }
+
+    try {
+      const llmModel = createDirectLLMModel({
+        provider: resolved.provider,
+        apiKey: resolved.apiKey ?? undefined,
+        modelName: model,
+        baseUrl: resolved.baseUrl,
+      });
+      // Success is the call being accepted end to end (transport serialized
+      // the file part, the endpoint took it, the model answered) — the reply's
+      // wording is irrelevant.
+      await generateText({
+        model: llmModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "This is a document-input capability check. Reply with the single word OK.",
+              },
+              {
+                type: "file",
+                data: buildOcrProbePdf(),
+                mediaType: "application/pdf",
+              },
+            ],
+          },
+        ],
+        maxOutputTokens: 64,
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(OCR_PROBE_TIMEOUT_MS),
+      });
+      return { ok: true };
+    } catch (error) {
+      logger.error({ err: error }, "[KnowledgeSettings] OCR validation failed");
+      return {
+        ok: false,
+        error: `Failed to verify the OCR model with a PDF page. Raw error: ${knowledgeValidationErrorMessage(error)}`,
+      };
+    }
+  }
 }
 
 export const knowledgeSettingsService = new KnowledgeSettingsService();
@@ -243,3 +339,34 @@ const RERANKER_VALIDATION_PROMPT =
   `Return a score for the passage.\n\n${RERANKER_OUTPUT_CONTRACT}`;
 
 const RESPONSE_EXCERPT_MAX_LENGTH = 200;
+
+/**
+ * A minimal one-page classic-xref PDF ("DOCUMENT INPUT PROBE") built from a
+ * template. Constructed in code rather than shipped as an asset so the
+ * production bundle needs no fixture file.
+ */
+function buildOcrProbePdf(): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 120] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+  ];
+  const stream = "BT /F1 14 Tf 30 60 Td (DOCUMENT INPUT PROBE) Tj ET";
+  objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+
+  let body = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const [i, obj] of objects.entries()) {
+    offsets.push(body.length);
+    body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  }
+  const xrefStart = body.length;
+  const xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+    .map((offset) => `${offset.toString().padStart(10, "0")} 00000 n \n`)
+    .join("")}`;
+  const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return Buffer.from(body + xref + trailer, "latin1");
+}
+
+const OCR_PROBE_TIMEOUT_MS = 30_000;

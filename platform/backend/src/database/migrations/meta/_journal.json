@@ -2927,6 +2927,13 @@
       "when": 1786885497228,
       "tag": "0417_plain_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 418,
+      "version": "7",
+      "when": 1786989381709,
+      "tag": "0418_kb_ocr_settings",
+      "breakpoints": true
     }
   ]
 }

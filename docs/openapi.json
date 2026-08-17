@@ -140757,6 +140757,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -141367,6 +141368,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -142398,6 +142400,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -143128,6 +143131,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -143858,6 +143862,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -144588,6 +144593,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -145198,6 +145204,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -145808,6 +145815,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -148378,6 +148386,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -151682,6 +151691,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -152292,6 +152302,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -152902,6 +152913,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -153512,6 +153524,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -154122,6 +154135,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -154732,6 +154746,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -155342,6 +155357,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -155941,6 +155957,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -156540,6 +156557,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -157139,6 +157157,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -157749,6 +157768,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -158359,6 +158379,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -158969,6 +158990,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -161801,6 +161823,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -164628,6 +164651,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -167460,6 +167484,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -168070,6 +168095,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -168916,6 +168942,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -169947,6 +169974,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -170978,6 +171006,7 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "knowledge:contextual-retrieval",
+                                  "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -172260,6 +172289,7 @@
                 "knowledge:reranker",
                 "knowledge:query-expansion",
                 "knowledge:contextual-retrieval",
+                "knowledge:ocr",
                 "app:llm_complete",
                 "app:recording_enhancement"
               ]
@@ -172381,6 +172411,7 @@
                               "knowledge:reranker",
                               "knowledge:query-expansion",
                               "knowledge:contextual-retrieval",
+                              "knowledge:ocr",
                               "app:llm_complete",
                               "app:recording_enhancement"
                             ]
@@ -172409,6 +172440,7 @@
                                 "knowledge:reranker",
                                 "knowledge:query-expansion",
                                 "knowledge:contextual-retrieval",
+                                "knowledge:ocr",
                                 "app:llm_complete",
                                 "app:recording_enhancement"
                               ]
@@ -173564,6 +173596,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -174174,6 +174207,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -175205,6 +175239,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -175935,6 +175970,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -176665,6 +176701,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -177395,6 +177432,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -178005,6 +178043,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -178615,6 +178654,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -181185,6 +181225,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -184489,6 +184530,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -185099,6 +185141,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -185709,6 +185752,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -186319,6 +186363,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -186929,6 +186974,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -187539,6 +187585,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -188149,6 +188196,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -188748,6 +188796,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -189347,6 +189396,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -189946,6 +189996,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -190556,6 +190607,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -191166,6 +191218,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -191776,6 +191829,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -194608,6 +194662,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -197435,6 +197490,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -200267,6 +200323,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -200877,6 +200934,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -201723,6 +201781,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -202754,6 +202813,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -203785,6 +203845,7 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "knowledge:contextual-retrieval",
+                            "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -275113,6 +275174,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -275493,6 +275564,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -276105,6 +276178,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -276485,6 +276568,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -277390,6 +277475,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -277770,6 +277865,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -278238,6 +278335,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -278618,6 +278725,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -279079,6 +279188,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -279459,6 +279578,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -279920,6 +280041,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -280300,6 +280431,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -280776,6 +280909,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -281156,6 +281299,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -281711,6 +281856,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -282091,6 +282246,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -282625,6 +282782,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -283005,6 +283172,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -283482,6 +283651,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -283862,6 +284041,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -284181,6 +284362,16 @@
                   "rerankerModel": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "ocrChatApiKeyId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "ocrModel": {
+                    "nullable": true,
+                    "type": "string"
                   }
                 }
               }
@@ -284338,6 +284529,16 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -284721,6 +284922,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -285167,6 +285370,16 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -285547,6 +285760,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -286416,6 +286631,298 @@
         }
       }
     },
+    "/api/organization/knowledge-settings/test-ocr": {
+      "post": {
+        "operationId": "testOcrConnection",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Test the OCR configuration by sending a synthetic PDF page to the model\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ocrChatApiKeyId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "ocrModel": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "ocrChatApiKeyId",
+                  "ocrModel"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSettings:update"
+          ]
+        }
+      }
+    },
     "/api/organization/complete-onboarding": {
       "post": {
         "operationId": "completeOnboarding",
@@ -286595,6 +287102,16 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "rerankerModel": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "ocrChatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "ocrModel": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -286978,6 +287495,8 @@
                     "embeddingChatApiKeyId",
                     "rerankerChatApiKeyId",
                     "rerankerModel",
+                    "ocrChatApiKeyId",
+                    "ocrModel",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",

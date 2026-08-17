@@ -5,6 +5,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -44,6 +45,12 @@ describe("organization routes", () => {
     });
 
     const { default: organizationRoutes } = await import("./organization");
+    // The audit hook is part of the route contract here: the OCR settings
+    // tests assert the organization.updated before/after diff.
+    const { registerAuditLogHook } = await import(
+      "@/middleware/audit-log-hook"
+    );
+    registerAuditLogHook(app);
     await app.register(organizationRoutes);
   });
 
@@ -1411,6 +1418,186 @@ describe("organization routes", () => {
           dimensions: 3072,
         }),
       );
+    });
+  });
+
+  describe("knowledge-settings OCR configuration", () => {
+    async function makeOcrKey(
+      makeSecret: (over: object) => Promise<{ id: string }>,
+    ) {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      return LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "OCR Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+    }
+
+    test("saves a validated OCR pair and audits the model name", async ({
+      makeSecret,
+    }) => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateOcrConfig")
+        .mockResolvedValue({ ok: true });
+      const ocrKey = await makeOcrKey(makeSecret);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ocrModel).toBe("claude-sonnet-5");
+      expect(response.json().ocrChatApiKeyId).toBe(ocrKey.id);
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId: ocrKey.id,
+        model: "claude-sonnet-5",
+        organizationId,
+      });
+
+      // Audit rows are written fire-and-forget, so poll rather than assert once.
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit).toBeDefined();
+        expect(audit.before).toMatchObject({ ocrModel: null });
+        expect(audit.after).toMatchObject({ ocrModel: "claude-sonnet-5" });
+      });
+    });
+
+    test("blocks a half-configured OCR pair", async ({ makeSecret }) => {
+      const ocrKey = await makeOcrKey(makeSecret);
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe("ocr_validation_failed");
+    });
+
+    test("blocks an OCR pair the live validation rejects", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: false, error: "The provider cannot send PDF pages." },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "text-only-model" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("cannot send PDF pages");
+    });
+
+    test("enabling OCR resets connector checkpoints; a later model swap does not", async ({
+      makeSecret,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: true },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+      };
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+      expect(enable.statusCode).toBe(200);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.checkpoint,
+      ).toBeNull();
+
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+      const swap = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrModel: "claude-opus-5" },
+      });
+      expect(swap.statusCode).toBe(200);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.checkpoint,
+      ).toEqual(checkpoint);
+    });
+
+    test("clearing both OCR fields disables OCR", async ({ makeSecret }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: true },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: null, ocrModel: null },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ocrModel).toBeNull();
+      expect(response.json().ocrChatApiKeyId).toBeNull();
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/test-ocr", () => {
+    test("maps the candidate pair to the validator, scoped to the org", async () => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateOcrConfig")
+        .mockResolvedValue({ ok: true });
+      const keyId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-ocr",
+        payload: { ocrChatApiKeyId: keyId, ocrModel: "claude-sonnet-5" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId,
+        model: "claude-sonnet-5",
+        organizationId,
+      });
+    });
+
+    test("returns a sanitized failure reason", async () => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: false, error: "Failed to verify the OCR model with a PDF page." },
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-ocr",
+        payload: {
+          ocrChatApiKeyId: crypto.randomUUID(),
+          ocrModel: "claude-sonnet-5",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        success: false,
+        error: "Failed to verify the OCR model with a PDF page.",
+      });
     });
   });
 

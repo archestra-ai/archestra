@@ -1,6 +1,9 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@archestra/shared";
+import {
+  isProviderApiKeyOptional,
+  OCR_PDF_INPUT_PROVIDERS,
+} from "@archestra/shared";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -69,6 +72,7 @@ import {
   useDropEmbeddingConfig,
   useOrganization,
   useTestEmbeddingConnection,
+  useTestOcrConnection,
   useTestRerankerConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
@@ -265,6 +269,7 @@ function ApiKeySelector({
   label,
   pulse,
   allowedKeyIds,
+  autoSelectFirstKey = true,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
@@ -273,6 +278,12 @@ function ApiKeySelector({
   label: string;
   pulse?: boolean;
   allowedKeyIds?: Set<string>;
+  /**
+   * Optional sections pass false: auto-filling their key would leave a
+   * half-configured pair (key set, model empty) that blocks the next save of
+   * a section the user never touched.
+   */
+  autoSelectFirstKey?: boolean;
 }) {
   const { data: apiKeys, isPending } = useAvailableLlmProviderApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -297,10 +308,10 @@ function ApiKeySelector({
     const prevCount = prevSelectableCountRef.current;
     prevSelectableCountRef.current = keys.length;
 
-    if (prevCount === 0 && keys.length > 0 && !value) {
+    if (autoSelectFirstKey && prevCount === 0 && keys.length > 0 && !value) {
       onChange(keys[0].id);
     }
-  }, [keys, value, onChange, isPending]);
+  }, [keys, value, onChange, isPending, autoSelectFirstKey]);
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -422,6 +433,79 @@ function RerankerModelSelector({
   );
 }
 
+function OcrModelSelector({
+  value,
+  onChange,
+  disabled,
+  selectedKeyId,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  disabled: boolean;
+  selectedKeyId: string | null;
+}) {
+  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useModelsWithApiKeys();
+
+  const selectedProvider = useMemo(() => {
+    if (!selectedKeyId || !apiKeys) return null;
+    return apiKeys.find((k) => k.id === selectedKeyId)?.provider ?? null;
+  }, [selectedKeyId, apiKeys]);
+
+  const models = useMemo(() => {
+    if (!allModels || !selectedProvider) return [];
+    return allModels.filter((m) => {
+      if (m.provider !== selectedProvider) return false;
+      // Vision-capable models only. Modality metadata is advisory: a model
+      // with none (a custom endpoint) stays selectable — the save probe sends
+      // a real PDF page and is the actual gate.
+      if (!m.inputModalities) return true;
+      return (
+        m.inputModalities.includes("pdf") || m.inputModalities.includes("image")
+      );
+    });
+  }, [allModels, selectedProvider]);
+
+  if (!selectedKeyId) {
+    return (
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={() => {}}
+        placeholder="Select an OCR API key first..."
+        options={[]}
+        className={cn("w-full")}
+        disabled
+      />
+    );
+  }
+
+  if (modelsLoading) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <LlmModelSearchableSelect
+      value={value ?? ""}
+      onValueChange={(v) => onChange(v || null)}
+      options={models.map((model) => ({
+        value: model.modelId,
+        model: model.modelId,
+        provider: model.provider,
+      }))}
+      placeholder="Select vision model..."
+      searchPlaceholder="Search vision models..."
+      emptyMessage="No vision-capable models for this key's provider. Mark your model's image or PDF input modality in LLM Providers > Models."
+      className={cn("w-full")}
+      popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+      popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
+      popoverSide="bottom"
+      popoverAlign="end"
+      truncateOptionLabels={false}
+      disabled={disabled}
+    />
+  );
+}
+
 /**
  * Determine which setup step needs attention for a section.
  * Returns the step that should pulse, or null if setup is complete.
@@ -496,6 +580,7 @@ function KnowledgeSettingsContent() {
   );
   const testConnection = useTestEmbeddingConnection();
   const testRerankerConnection = useTestRerankerConnection();
+  const testOcrConnection = useTestOcrConnection();
   const [showDropDialog, setShowDropDialog] = useState(false);
 
   // Per-section connection status (the pill + inline reason on each card).
@@ -504,6 +589,10 @@ function KnowledgeSettingsContent() {
     error: null,
   });
   const [rerankerStatus, setRerankerStatus] = useState<SectionStatus>({
+    status: "untested",
+    error: null,
+  });
+  const [ocrStatus, setOcrStatus] = useState<SectionStatus>({
     status: "untested",
     error: null,
   });
@@ -516,6 +605,8 @@ function KnowledgeSettingsContent() {
     string | null
   >(null);
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
+  const [ocrChatApiKeyId, setOcrChatApiKeyId] = useState<string | null>(null);
+  const [ocrModel, setOcrModel] = useState<string | null>(null);
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
   const {
@@ -542,6 +633,20 @@ function KnowledgeSettingsContent() {
     }
     return ids;
   }, [modelsWithApiKeys]);
+  // OCR can only run on transports verified to forward PDF file parts.
+  const ocrCapableKeyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const key of apiKeys ?? []) {
+      if (
+        OCR_PDF_INPUT_PROVIDERS.includes(
+          key.provider as (typeof OCR_PDF_INPUT_PROVIDERS)[number],
+        )
+      ) {
+        ids.add(key.id);
+      }
+    }
+    return ids;
+  }, [apiKeys]);
   const selectedEmbeddingApiKey = useMemo(
     () =>
       apiKeys?.find((apiKey) => apiKey.id === embeddingChatApiKeyId) ?? null,
@@ -580,6 +685,8 @@ function KnowledgeSettingsContent() {
       setEmbeddingChatApiKeyId(organization.embeddingChatApiKeyId ?? null);
       setRerankerChatApiKeyId(organization.rerankerChatApiKeyId ?? null);
       setRerankerModel(organization.rerankerModel ?? null);
+      setOcrChatApiKeyId(organization.ocrChatApiKeyId ?? null);
+      setOcrModel(organization.ocrModel ?? null);
     }
   }, [organization]);
 
@@ -592,6 +699,10 @@ function KnowledgeSettingsContent() {
   useEffect(() => {
     setRerankerStatus({ status: "untested", error: null });
   }, [rerankerChatApiKeyId, rerankerModel]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on config change only
+  useEffect(() => {
+    setOcrStatus({ status: "untested", error: null });
+  }, [ocrChatApiKeyId, ocrModel]);
 
   // A stable signature of each section's current config. An in-flight test or
   // save captures the signature it ran against and only applies its result if
@@ -599,8 +710,10 @@ function KnowledgeSettingsContent() {
   // changed the key/model (or cleared it) isn't attributed to the new config.
   const embeddingConfigSig = `${embeddingChatApiKeyId ?? ""}|${embeddingModel ?? ""}`;
   const rerankerConfigSig = `${rerankerChatApiKeyId ?? ""}|${rerankerModel ?? ""}`;
+  const ocrConfigSig = `${ocrChatApiKeyId ?? ""}|${ocrModel ?? ""}`;
   const embeddingConfigSigRef = useRef(embeddingConfigSig);
   const rerankerConfigSigRef = useRef(rerankerConfigSig);
+  const ocrConfigSigRef = useRef(ocrConfigSig);
   // Sync the refs during render (not in an effect): the value is derived purely
   // from committed state, so writing it here keeps the ref in lock-step with the
   // current config. An effect would lag by a commit, leaving a window where an
@@ -608,6 +721,7 @@ function KnowledgeSettingsContent() {
   // to the just-changed config.
   embeddingConfigSigRef.current = embeddingConfigSig;
   rerankerConfigSigRef.current = rerankerConfigSig;
+  ocrConfigSigRef.current = ocrConfigSig;
 
   const serverEmbeddingKeyId = organization?.embeddingChatApiKeyId ?? null;
   const serverEmbeddingModel = serverEmbeddingKeyId
@@ -615,18 +729,24 @@ function KnowledgeSettingsContent() {
     : null;
   const serverRerankerKeyId = organization?.rerankerChatApiKeyId ?? null;
   const serverRerankerModel = organization?.rerankerModel ?? null;
+  const serverOcrKeyId = organization?.ocrChatApiKeyId ?? null;
+  const serverOcrModel = organization?.ocrModel ?? null;
 
   const hasChanges =
     embeddingModel !== serverEmbeddingModel ||
     embeddingChatApiKeyId !== serverEmbeddingKeyId ||
     rerankerChatApiKeyId !== serverRerankerKeyId ||
-    rerankerModel !== serverRerankerModel;
+    rerankerModel !== serverRerankerModel ||
+    ocrChatApiKeyId !== serverOcrKeyId ||
+    ocrModel !== serverOcrModel;
 
   // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
   const embeddingConfigured = !!embeddingChatApiKeyId && !!embeddingModel;
   const rerankerConfigured = !!rerankerChatApiKeyId && !!rerankerModel;
+  const ocrConfigured = !!ocrChatApiKeyId && !!ocrModel;
+  const ocrWasEnabled = !!serverOcrKeyId && !!serverOcrModel;
   // A section's connection can be tested whenever it is fully configured —
   // including a locked embedding, to confirm it still works.
   const showEmbeddingFooter = isEmbeddingModelLocked || embeddingConfigured;
@@ -688,13 +808,35 @@ function KnowledgeSettingsContent() {
     setRerankerStatus(next);
   };
 
+  const handleTestOcr = async () => {
+    if (!ocrChatApiKeyId || !ocrModel) return;
+    const sig = ocrConfigSig;
+    setOcrStatus({ status: "testing", error: null });
+    let next: SectionStatus;
+    try {
+      const result = await testOcrConnection.mutateAsync({
+        ocrChatApiKeyId,
+        ocrModel,
+      });
+      next = result.success
+        ? { status: "connected", error: null }
+        : { status: "failed", error: result.error ?? "Connection failed." };
+    } catch {
+      next = { status: "failed", error: "Connection test failed." };
+    }
+    if (ocrConfigSigRef.current !== sig) return;
+    setOcrStatus(next);
+  };
+
   const handleSave = async () => {
     // Snapshot what we're validating so a save that resolves after the user
     // edited a section doesn't stamp its result onto the changed config.
     const embeddingSig = embeddingConfigSig;
     const rerankerSig = rerankerConfigSig;
+    const ocrSig = ocrConfigSig;
     const savedEmbeddingConfigured = embeddingConfigured;
     const savedRerankerConfigured = rerankerConfigured;
+    const savedOcrConfigured = ocrConfigured;
     // Drive each configured section's pill through the save; the checks run
     // server-side and resolve to connected / failed (with the reason) per field.
     if (savedEmbeddingConfigured) {
@@ -703,6 +845,9 @@ function KnowledgeSettingsContent() {
     if (savedRerankerConfigured) {
       setRerankerStatus({ status: "testing", error: null });
     }
+    if (savedOcrConfigured) {
+      setOcrStatus({ status: "testing", error: null });
+    }
     let saveError: unknown = null;
     try {
       await updateKnowledgeSettings.mutateAsync({
@@ -710,6 +855,8 @@ function KnowledgeSettingsContent() {
         embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
         rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
         rerankerModel: rerankerModel ?? null,
+        ocrChatApiKeyId: ocrChatApiKeyId ?? null,
+        ocrModel: ocrModel ?? null,
       });
     } catch (error) {
       saveError = error;
@@ -718,12 +865,16 @@ function KnowledgeSettingsContent() {
       error: saveError,
       embeddingConfigured: savedEmbeddingConfigured,
       rerankerConfigured: savedRerankerConfigured,
+      ocrConfigured: savedOcrConfigured,
     });
     if (embeddingConfigSigRef.current === embeddingSig) {
       setEmbeddingStatus(next.embedding);
     }
     if (rerankerConfigSigRef.current === rerankerSig) {
       setRerankerStatus(next.reranker);
+    }
+    if (ocrConfigSigRef.current === ocrSig) {
+      setOcrStatus(next.ocr);
     }
   };
 
@@ -732,6 +883,8 @@ function KnowledgeSettingsContent() {
     setEmbeddingChatApiKeyId(serverEmbeddingKeyId);
     setRerankerChatApiKeyId(serverRerankerKeyId);
     setRerankerModel(serverRerankerModel);
+    setOcrChatApiKeyId(serverOcrKeyId);
+    setOcrModel(serverOcrModel);
   };
 
   // Clear reranker model when switching provider keys
@@ -739,6 +892,13 @@ function KnowledgeSettingsContent() {
     setRerankerChatApiKeyId(keyId);
     if (keyId !== rerankerChatApiKeyId) {
       setRerankerModel(null);
+    }
+  };
+
+  const handleOcrKeyChange = (keyId: string | null) => {
+    setOcrChatApiKeyId(keyId);
+    if (keyId !== ocrChatApiKeyId) {
+      setOcrModel(null);
     }
   };
 
@@ -1023,6 +1183,114 @@ function KnowledgeSettingsContent() {
                     >
                       <Trash2 className="mr-1 h-3.5 w-3.5" />
                       Clear reranking configuration
+                    </Button>
+                  </div>
+                )}
+              </WithPermissions>
+            </CardFooter>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Document OCR</CardTitle>
+            <CardDescription>
+              Transcribe scanned or image-only PDF pages with a vision model
+              during knowledge syncs, so their text becomes searchable. Each
+              transcribed page is a metered model call, visible in LLM cost
+              statistics. Optional.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WithPermissions
+              permissions={{ knowledgeSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="flex flex-col gap-4">
+                  <CardRow label="Key">
+                    <ApiKeySelector
+                      value={ocrChatApiKeyId}
+                      onChange={handleOcrKeyChange}
+                      disabled={!hasPermission}
+                      label="OCR API key"
+                      allowedKeyIds={ocrCapableKeyIds}
+                      autoSelectFirstKey={false}
+                    />
+                  </CardRow>
+                  <CardRow label="Model">
+                    <OcrModelSelector
+                      value={ocrModel}
+                      onChange={setOcrModel}
+                      disabled={!hasPermission}
+                      selectedKeyId={ocrChatApiKeyId}
+                    />
+                  </CardRow>
+                  <p className="text-sm text-muted-foreground sm:pl-28">
+                    Don't see your model?{" "}
+                    <Link
+                      href="/llm/models"
+                      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                    >
+                      Mark its image or PDF input modality
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </p>
+                  {ocrConfigured && !ocrWasEnabled && (
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-28">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Saving triggers a full re-sync of every connector so
+                        documents previously skipped as unreadable are picked
+                        up.
+                      </span>
+                    </p>
+                  )}
+                  {ocrStatus.status === "failed" && ocrStatus.error && (
+                    <p className="flex items-start gap-2 text-sm text-destructive sm:pl-28">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{ocrStatus.error}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </WithPermissions>
+          </CardContent>
+          {(ocrChatApiKeyId || ocrModel) && (
+            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <span />
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {ocrConfigured && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          !hasPermission || ocrStatus.status === "testing"
+                        }
+                        onClick={handleTestOcr}
+                      >
+                        <TestConnectionIcon status={ocrStatus.status} />
+                        Test connection
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasPermission}
+                      onClick={() => {
+                        setOcrChatApiKeyId(null);
+                        setOcrModel(null);
+                      }}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Clear OCR configuration
                     </Button>
                   </div>
                 )}

@@ -26,6 +26,7 @@ describe("parsePdfBuffer with a real scanned PDF", () => {
       status: "no_text_layer",
       pageCount: 1,
       textlessPageCount: 1,
+      pages: [{ pageNumber: 1, status: "textless" }],
     });
     expect(describePdfEmptyText(result)).toContain("no extractable text layer");
   });

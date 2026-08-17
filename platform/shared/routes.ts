@@ -539,6 +539,7 @@ export const RouteId = {
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
   TestRerankerConnection: "testRerankerConnection",
+  TestOcrConnection: "testOcrConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",

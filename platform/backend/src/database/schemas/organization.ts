@@ -155,6 +155,18 @@ const organizationsTable = pgTable("organization", {
   /** LLM model used for reranking (e.g. "gpt-4o") */
   rerankerModel: text("reranker_model"),
 
+  /**
+   * Chat API key used for OCR transcription of scanned PDF pages at ingest.
+   * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
+   */
+  ocrChatApiKeyId: uuid("ocr_chat_api_key_id"),
+
+  /**
+   * Vision-capable LLM model used for OCR transcription (e.g. "claude-sonnet-5").
+   * OCR is enabled exactly when both this and `ocrChatApiKeyId` are set.
+   */
+  ocrModel: text("ocr_model"),
+
   /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
   defaultLlmModel: text("default_llm_model"),
   /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */

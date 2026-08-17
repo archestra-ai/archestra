@@ -1262,6 +1262,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const usages: string[] = [];
         if (org.embeddingChatApiKeyId === params.id) usages.push("embedding");
         if (org.rerankerChatApiKeyId === params.id) usages.push("reranking");
+        if (org.ocrChatApiKeyId === params.id) usages.push("OCR");
         if (usages.length > 0) {
           throw new ApiError(
             400,

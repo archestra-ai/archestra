@@ -1,5 +1,7 @@
+import { MockLanguageModelV3 } from "ai/test";
 import JSZip from "jszip";
 import { describe, expect, it, vi } from "vitest";
+import { makeTestPdf } from "@/test/pdf";
 import type { ConnectorSyncBatch } from "@/types";
 import { parsePdfBuffer } from "../pdf-utils";
 import { GoogleDriveConnector } from "./gdrive-connector";
@@ -917,6 +919,91 @@ describe("GoogleDriveConnector", () => {
       expect(skip?.name).toBe("scanned-contract.pdf");
       expect(skip?.category).toBe("no_extractable_text");
       expect(skip?.reason).toContain("no extractable text layer");
+    });
+
+    it("transcribes a scanned PDF into a document instead of a skip when OCR is armed", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      const info = vi.fn();
+      connector.setLogger({
+        info,
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as never);
+      // Parse is stubbed (the bundled pdf.js is unreliable on repeated
+      // parses); the page subsetting and the transcription merge run for
+      // real against a real single-page PDF buffer, with the vision model
+      // as the only other fake.
+      vi.mocked(parsePdfBuffer).mockResolvedValueOnce({
+        text: "",
+        status: "no_text_layer",
+        pageCount: 1,
+        textlessPageCount: 1,
+        pages: [{ pageNumber: 1, status: "textless" }],
+      });
+      const model = new MockLanguageModelV3({
+        doGenerate: async () => ({
+          content: [
+            { type: "text" as const, text: "Scanned contract: net 30 terms." },
+          ],
+          finishReason: { unified: "stop" as const, raw: "stop" },
+          usage: {
+            inputTokens: {
+              total: 10,
+              noCache: 10,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            outputTokens: { total: 8, text: 8, reasoning: 0 },
+          },
+          warnings: [],
+        }),
+      });
+      connector.setOcrContext({
+        config: {
+          modelName: "mock-vision",
+          provider: "anthropic",
+          llmModel: model as never,
+        },
+        connectorId: null,
+        deadlineAt: Date.now() + 60_000,
+        budget: { remainingPages: 10 },
+        log: { info, warn: vi.fn() } as never,
+      });
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-scan-ocr", "scanned-contract.pdf", {
+              mimeType: "application/pdf",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      const pdf = makeTestPdf([null]);
+      mockFilesGet.mockResolvedValueOnce({
+        data: pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].skipped ?? []).toHaveLength(0);
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain(
+        "Scanned contract: net 30 terms.",
+      );
+      expect(info).toHaveBeenCalledWith(
+        expect.objectContaining({ transcribedPages: 1 }),
+        "OCR transcribed textless PDF page(s)",
+      );
     });
 
     it("warns while indexing the readable pages of a partially extractable PDF", async () => {

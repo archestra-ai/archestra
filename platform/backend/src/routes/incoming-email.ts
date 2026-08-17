@@ -12,6 +12,10 @@ import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
 import {
+  assertMessagingChannelAllowed,
+  getHiddenMessagingChannels,
+} from "@/services/integration-overrides";
+import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -128,6 +132,19 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         return reply.status(429).send({
           error: "Too many requests",
+        });
+      }
+
+      // An admin who switched the email channel off expects mail to stop
+      // reaching agents, even while a provider subscription is still live.
+      // Sits behind the rate limiter so an unauthenticated caller cannot spend
+      // a database round-trip per request on it.
+      if ((await getHiddenMessagingChannels()).has("email")) {
+        logger.warn(
+          "[IncomingEmail] Webhook called while the email channel is turned off",
+        );
+        return reply.status(400).send({
+          error: "The email channel is turned off for this organization",
         });
       }
 
@@ -334,6 +351,10 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!provider) {
         throw new ApiError(400, "Incoming email provider not configured");
       }
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "email",
+      });
 
       const { webhookUrl } = request.body;
 

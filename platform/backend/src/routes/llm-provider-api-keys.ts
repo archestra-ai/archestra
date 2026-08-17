@@ -40,6 +40,7 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
+import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
@@ -393,6 +394,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user, headers }, reply) => {
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
+      // …and providers the organization's admins switched off entirely.
+      await assertModelProviderAllowed({
+        organizationId,
+        provider: body.provider,
+      });
 
       // Validate scope/teamId combination and authorization
       await validateScopeAndAuthorization({
@@ -814,6 +820,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+      });
+
+      // A key for a provider the admins switched off is frozen: it can be
+      // deleted, but not renamed, rescoped, or rotated back into service.
+      await assertModelProviderAllowed({
+        organizationId,
+        provider: apiKeyFromDB.provider,
       });
 
       // If scope is changing, validate the new scope

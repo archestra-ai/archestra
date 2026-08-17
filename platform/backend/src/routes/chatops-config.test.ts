@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import config from "@/config";
-import { ChatOpsConfigModel } from "@/models";
+import { ChatOpsConfigModel, OrganizationModel } from "@/models";
 import { createFastifyInstance } from "@/server";
 import { beforeEach, describe, expect, test } from "@/test";
 import chatopsRoutes from "./chatops";
@@ -226,6 +226,70 @@ describe("PUT /api/chatops/config/telegram", () => {
     expect(response.statusCode).toBe(400);
     expect(await ChatOpsConfigModel.getTelegramConfig()).toBeNull();
     expect(reinitializeMock).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+});
+
+describe("channels the organization turned off", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const createApp = async (organizationId: string) => {
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    await app.register(chatopsRoutes);
+    return app;
+  };
+
+  test("refuses to configure Slack once it is turned off", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      messagingChannelOverrides: { slack: { hidden: true } },
+    });
+    const app = await createApp(organization.id);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/chatops/config/slack",
+      payload: { enabled: true, botToken: "xoxb-token" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+    expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
+    expect(reinitializeMock).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  test("still configures a channel left switched on", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      messagingChannelOverrides: { slack: { hidden: true } },
+    });
+    const app = await createApp(organization.id);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/chatops/config/ms-teams",
+      payload: {
+        enabled: true,
+        appId: "app-id",
+        appSecret: "app-secret",
+        tenantId: "tenant-id",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
 
     await app.close();
   });

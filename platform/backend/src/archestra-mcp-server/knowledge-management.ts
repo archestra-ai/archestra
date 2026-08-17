@@ -52,6 +52,7 @@ import {
   UserModel,
 } from "@/models";
 import * as metrics from "@/observability/metrics";
+import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import {
   type AclEntry,
   ConnectorTypeSchema,
@@ -902,6 +903,16 @@ async function handleCreateKnowledgeConnector(params: {
       });
     if (mfilesViolation) {
       return errorResult(mfilesViolation);
+    }
+
+    // Same reason: connector types the organization's admins switched off
+    // must not be creatable through the gateway either.
+    const hiddenTypeViolation = await hiddenKnowledgeConnectorViolation({
+      organizationId: context.organizationId,
+      connectorType: args.connector_type,
+    });
+    if (hiddenTypeViolation) {
+      return errorResult(hiddenTypeViolation);
     }
 
     // Environment isolation: a connector created through a gateway belongs to the

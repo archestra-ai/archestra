@@ -1856,3 +1856,122 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     expect(response.json().error.message).toContain("Vault");
   });
 });
+
+describe("LLM Provider API Keys — providers the organization turned off", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const turnOffAnthropic = async (displayName?: string) => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: {
+          anthropic: { hidden: true, ...(displayName ? { displayName } : {}) },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  };
+
+  test("refuses to create a key for a turned-off provider", async () => {
+    await turnOffAnthropic();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Blocked Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-blocked",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+  });
+
+  test("names the turned-off provider the way the admin renamed it", async () => {
+    await turnOffAnthropic("Anthropic (retired)");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Blocked Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-blocked",
+        scope: "personal",
+      },
+    });
+
+    expect(response.json().error.message).toContain("Anthropic (retired)");
+  });
+
+  test("still allows providers left switched on", async () => {
+    await turnOffAnthropic();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Allowed Key",
+        provider: "openai",
+        apiKey: "sk-openai-allowed",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("freezes an existing key once its provider is turned off, but keeps it deletable", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Existing Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-existing",
+        scope: "personal",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOffAnthropic();
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+});

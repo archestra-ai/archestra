@@ -95,6 +95,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -826,6 +827,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mfilesAuthMethodGateViolation({ nextConfig: body.config });
       if (mfilesViolation) {
         throw new ApiError(403, mfilesViolation);
+      }
+
+      const hiddenTypeViolation = await hiddenKnowledgeConnectorViolation({
+        organizationId,
+        connectorType: body.connectorType,
+      });
+      if (hiddenTypeViolation) {
+        throw new ApiError(403, hiddenTypeViolation);
       }
 
       // Validate connector config

@@ -30,7 +30,6 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { reportVirtualKeyRateLimited } from "@/observability/metrics/proxy-auth";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -844,7 +843,6 @@ export class VirtualKeyRateLimiter {
       { ip, bucket, failures: count, retryAfterSeconds },
       "[LLMProxy] rejected a request: too many failed virtual API key attempts",
     );
-    reportVirtualKeyRateLimited({ bucket });
 
     const error = new ApiError(
       429,

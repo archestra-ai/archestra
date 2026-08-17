@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganization } from "@/lib/organization.query";
 import { LlmModelPicker } from "./llm-model-picker";
 
 vi.mock("next/image", () => ({
@@ -39,6 +40,17 @@ const mockModels = [
     pricePerMillionOutput: "15.00",
   },
 ];
+
+vi.mock("@/lib/organization.query");
+
+// The components under test resolve provider labels through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider visible under its built-in name.
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("LlmModelPicker", () => {
   describe("single select mode", () => {

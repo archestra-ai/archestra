@@ -22,6 +22,7 @@ import {
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  OrganizationModel,
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
@@ -855,6 +856,56 @@ describe("knowledge base routes", () => {
       expect(response.json().error.message).toContain(
         "The M-Files connector is not enabled",
       );
+    });
+
+    test("rejects a connector type the organization turned off", async () => {
+      await OrganizationModel.patch(organizationId, {
+        knowledgeConnectorOverrides: { jira: { hidden: true } },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Blocked Jira",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: { email: "user@example.com", apiToken: "token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("Jira");
+      expect(response.json().error.message).toContain("turned off");
+    });
+
+    test("still creates connectors of types left switched on", async () => {
+      await OrganizationModel.patch(organizationId, {
+        knowledgeConnectorOverrides: { jira: { hidden: true } },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Allowed GitHub",
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          credentials: { apiToken: "ghp_token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
     });
 
     test("rejects the M-Files Application Account auth method while its gate is off", async () => {

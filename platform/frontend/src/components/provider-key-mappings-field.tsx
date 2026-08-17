@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  E2eTestId,
-  providerDisplayNames,
-  type SupportedProvider,
-} from "@archestra/shared";
+import { E2eTestId, type SupportedProvider } from "@archestra/shared";
 import { KeyRound, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
@@ -14,6 +10,7 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 
 export type ProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
 
@@ -29,6 +26,7 @@ export function ProviderKeyMappingsField({
   className?: string;
 }) {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
+  const providerCatalog = useModelProviderCatalog();
   const configuredMappings = useMemo(() => {
     return providerApiKeyMapToArray(providerApiKeyIds)
       .map(({ provider, providerApiKeyId }) => {
@@ -38,9 +36,11 @@ export function ProviderKeyMappingsField({
         return { provider, providerApiKeyId, key };
       })
       .sort((a, b) =>
-        getProviderName(a.provider).localeCompare(getProviderName(b.provider)),
+        providerCatalog
+          .label(a.provider)
+          .localeCompare(providerCatalog.label(b.provider)),
       );
-  }, [providerApiKeyIds, providerApiKeys]);
+  }, [providerApiKeyIds, providerApiKeys, providerCatalog]);
   const availableProviderApiKeys = useMemo(
     () =>
       providerApiKeys.filter((apiKey) => !providerApiKeyIds[apiKey.provider]),
@@ -113,6 +113,7 @@ export function ProviderKeyMappingsField({
           <div className="space-y-2">
             {configuredMappings.map(({ provider, providerApiKeyId, key }) => {
               const config = PROVIDER_CONFIG[provider];
+              const label = providerCatalog.label(provider);
               return (
                 <div
                   key={provider}
@@ -121,7 +122,7 @@ export function ProviderKeyMappingsField({
                   <div className="flex min-w-0 items-center gap-3">
                     <Image
                       src={config.icon}
-                      alt={config.name}
+                      alt={label}
                       width={20}
                       height={20}
                       className="rounded dark:invert"
@@ -131,7 +132,7 @@ export function ProviderKeyMappingsField({
                         {key?.name ?? providerApiKeyId}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {config.name}
+                        {label}
                       </div>
                     </div>
                   </div>
@@ -140,7 +141,7 @@ export function ProviderKeyMappingsField({
                     variant="ghost"
                     size="icon"
                     onClick={() => handleRemoveProviderKey(provider)}
-                    aria-label={`Remove ${config.name} key`}
+                    aria-label={`Remove ${label} key`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -176,6 +177,8 @@ export function providerApiKeyArrayToMap(
 
 export function formatProviderKeySummary(
   providerApiKeys: Array<{ provider: string }>,
+  /** Resolves the organization's own name for a provider (see integration overrides). */
+  labelFor: (provider: SupportedProvider) => string,
 ): string {
   if (providerApiKeys.length === 0) {
     return "None";
@@ -183,16 +186,9 @@ export function formatProviderKeySummary(
 
   return [
     ...new Set(
-      providerApiKeys.map(
-        (mapping) =>
-          providerDisplayNames[
-            mapping.provider as keyof typeof providerDisplayNames
-          ] ?? mapping.provider,
+      providerApiKeys.map((mapping) =>
+        labelFor(mapping.provider as SupportedProvider),
       ),
     ),
   ].join(", ");
-}
-
-function getProviderName(provider: SupportedProvider): string {
-  return providerDisplayNames[provider] ?? provider;
 }

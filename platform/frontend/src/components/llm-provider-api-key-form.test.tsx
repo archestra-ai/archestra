@@ -7,9 +7,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   LlmProviderApiKeyForm,
@@ -122,6 +127,12 @@ beforeEach(() => {
   vi.mocked(useTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useTeams>);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
 });
 
 describe("LlmProviderApiKeyForm", () => {
@@ -595,6 +606,48 @@ describe("LlmProviderApiKeyForm", () => {
       await waitFor(() => {
         expect(
           screen.getByText(/carries no recognizable region/),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Admins can rename a provider (see the model-provider settings dialog), and
+  // the form's own copy has to follow: a deployment that calls Bedrock
+  // something else should never read a sentence about "Bedrock".
+  describe("copy for a renamed provider", () => {
+    const renameBedrock = (displayName: string) =>
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { modelProviderOverrides: { bedrock: { displayName } } },
+      } as unknown as ReturnType<typeof useOrganization>);
+
+    it("names the provider the way the organization does", async () => {
+      renameBedrock("Northwind Model Cloud");
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/region to send Northwind Model Cloud requests to/),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("keeps the vendor's own name for the region itself", async () => {
+      renameBedrock("Northwind Model Cloud");
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // "AWS" is the vendor, not this provider: renaming it would point at
+      // something that does not exist.
+      await waitFor(() => {
+        expect(screen.getByText(/^The AWS region to send/)).toBeInTheDocument();
+      });
+    });
+
+    it("falls back to the built-in name when nothing is overridden", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/region to send AWS Bedrock requests to/),
         ).toBeInTheDocument();
       });
     });

@@ -1,4 +1,6 @@
 "use client";
+
+import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
 import Divider from "@/components/divider";
@@ -22,7 +24,7 @@ import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const msTeamsProviderConfig: ProviderConfig = {
   provider: "ms-teams",
-  providerLabel: "MS Teams",
+  providerLabel: MESSAGING_CHANNEL_LABELS["ms-teams"],
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
   supportsAnswerAll: true,
@@ -67,13 +69,14 @@ export default function MsTeamsPage() {
   const isLocalDev =
     configData?.features.isQuickstart || config.environment === "development";
   const { msTeams: allStepsCompleted } = useTriggerStatuses();
+  const channelLabel = MESSAGING_CHANNEL_LABELS["ms-teams"];
 
   return (
     <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
-        providerLabel="Microsoft Teams"
+        providerLabel={channelLabel}
         docsUrl={getFrontendDocsUrl("platform-ms-teams")}
       >
         <LlmKeySetupStep />
@@ -128,17 +131,18 @@ export default function MsTeamsPage() {
                 <code className="bg-muted px-1 py-0.5 rounded text-xs">
                   POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
                 </code>{" "}
-                must be publicly accessible so MS Teams can deliver messages to
+                must be publicly accessible so {channelLabel} can deliver
+                messages to
                 {configuredAppName}
               </span>
             </div>
           </div>
         )}
         <SetupStep
-          title="Setup MS Teams"
+          title={`Setup ${channelLabel}`}
           description={`Register a Teams bot application and connect it to ${configuredAppName}`}
           done={!!msTeams?.configured}
-          ctaLabel="Setup MS Teams"
+          ctaLabel={`Setup ${channelLabel}`}
           onAction={() => setMsTeamsSetupOpen(true)}
           doneActionLabel="Reconfigure"
           onDoneAction={() => setMsTeamsSetupOpen(true)}
@@ -164,7 +168,12 @@ export default function MsTeamsPage() {
       {allStepsCompleted && (
         <>
           <Divider />
-          <ChannelsSection providerConfig={msTeamsProviderConfig} />
+          <ChannelsSection
+            providerConfig={{
+              ...msTeamsProviderConfig,
+              providerLabel: channelLabel,
+            }}
+          />
         </>
       )}
 

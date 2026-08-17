@@ -587,6 +587,37 @@ export function useUpdateConnectionSettings(
 }
 
 /**
+ * Hide entries of the built-in integration catalogs (model providers,
+ * messaging channels, knowledge connectors) or override how they are labelled.
+ */
+export function useUpdateIntegrationSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateIntegrationSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateIntegrationSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update the org-wide default environment (the implicit "Default" target that
  * catalog items use when no environment is assigned). Unlike real environments,
  * the default has no slug, so both its name and namespace are freely editable.

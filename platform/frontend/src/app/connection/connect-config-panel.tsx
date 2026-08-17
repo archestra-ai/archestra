@@ -1,6 +1,5 @@
 "use client";
 
-import { providerDisplayNames } from "@archestra/shared";
 import {
   AlertTriangle,
   Check,
@@ -34,6 +33,7 @@ import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useCreateSkillShareLink } from "@/lib/skills/skill-share.query";
 import {
@@ -98,6 +98,7 @@ export function ConnectConfigPanel({
   baseUrlMetadata,
   onBaseUrlChange,
 }: ConnectConfigPanelProps) {
+  const providerCatalog = useModelProviderCatalog();
   // Target OS — only used to label the downloaded file; the profile itself is
   // identical across platforms. Auto-detected after mount to avoid a hydration
   // mismatch, overridable in the review step.
@@ -205,7 +206,7 @@ export function ConnectConfigPanel({
           >
             Route{" "}
             <span className="font-medium text-foreground">
-              {providerDisplayNames.anthropic}
+              {providerCatalog.label("anthropic")}
             </span>{" "}
             through{" "}
             <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>
@@ -500,6 +501,7 @@ function ConfigDownloadStep({
   includeSkills: boolean;
   skillIds: string[];
 }) {
+  const providerCatalog = useModelProviderCatalog();
   const { canCreateVirtualKey, canCreateProviderKey, anthropicHasKey } =
     useConfigProfileAvailability();
 
@@ -614,26 +616,28 @@ function ConfigDownloadStep({
     return (
       <>
         <p className="text-sm text-muted-foreground">
-          You need an {providerDisplayNames.anthropic} provider key before you
-          can download a profile — the profile uses it to authorize inference,
-          and none is configured yet.{" "}
+          You need an {providerCatalog.label("anthropic")} provider key before
+          you can download a profile — the profile uses it to authorize
+          inference, and none is configured yet.{" "}
           {canCreateProviderKey ? (
             <button
               type="button"
               className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
               onClick={() => setShowAddProviderKey(true)}
             >
-              Add an {providerDisplayNames.anthropic} key
+              Add an {providerCatalog.label("anthropic")} key
             </button>
           ) : (
-            <>Ask an admin to add an {providerDisplayNames.anthropic} key.</>
+            <>
+              Ask an admin to add an {providerCatalog.label("anthropic")} key.
+            </>
           )}
         </p>
         <CreateLlmProviderApiKeyDialog
           open={showAddProviderKey}
           onOpenChange={setShowAddProviderKey}
-          title={`Add an ${providerDisplayNames.anthropic} key`}
-          description={`Add an ${providerDisplayNames.anthropic} provider API key so a virtual key can be minted from it for the configuration profile.`}
+          title={`Add an ${providerCatalog.label("anthropic")} key`}
+          description={`Add an ${providerCatalog.label("anthropic")} provider API key so a virtual key can be minted from it for the configuration profile.`}
           defaultValues={{ provider: "anthropic" }}
           allowedProviders={["anthropic"]}
           onSuccess={() => setShowAddProviderKey(false)}

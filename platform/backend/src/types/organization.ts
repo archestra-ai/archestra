@@ -1,11 +1,17 @@
 import {
   EmbeddingDimensionsSchema,
+  KnowledgeConnectorOverridesSchema,
+  MessagingChannelOverridesSchema,
+  ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
+  StoredKnowledgeConnectorOverridesSchema,
+  StoredMessagingChannelOverridesSchema,
+  StoredModelProviderOverridesSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -338,6 +344,12 @@ const extendedFields = {
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  // The stored (lenient) shapes: a jsonb value written by an older build must
+  // not 500 the organization read.
+  modelProviderOverrides: StoredModelProviderOverridesSchema.nullable(),
+  messagingChannelOverrides: StoredMessagingChannelOverridesSchema.nullable(),
+  knowledgeConnectorOverrides:
+    StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
@@ -520,6 +532,20 @@ export const UpdateConnectionSettingsSchema = z.object({
         });
       }
     }),
+});
+
+/**
+ * Admin customization of the built-in integration catalogs. Each map is keyed
+ * by the catalog entry's id and only needs entries for the ones the admin
+ * actually changed; `null` clears every override for that catalog. Omitted
+ * fields are left untouched, so the three surfaces can be saved independently.
+ */
+export const UpdateIntegrationSettingsSchema = z.object({
+  modelProviderOverrides: ModelProviderOverridesSchema.nullable().optional(),
+  messagingChannelOverrides:
+    MessagingChannelOverridesSchema.nullable().optional(),
+  knowledgeConnectorOverrides:
+    KnowledgeConnectorOverridesSchema.nullable().optional(),
 });
 
 /**

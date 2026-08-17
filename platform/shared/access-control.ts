@@ -1382,6 +1382,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
+  [RouteId.UpdateIntegrationSettings]: {
+    organizationSettings: ["update"],
+  },
   // Listing environments is available to any authenticated user (read is ungated).
   [RouteId.ListEnvironments]: {
     environment: ["read"],

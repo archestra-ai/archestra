@@ -44,6 +44,7 @@ import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
+import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
   useCreateConnector,
   useStartGoogleDriveOAuth,
@@ -115,6 +116,7 @@ export function CreateConnectorDialog({
   const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
   // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
   const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
+  const connectorCatalog = useKnowledgeConnectorCatalog();
 
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -136,10 +138,15 @@ export function CreateConnectorDialog({
       ? "auto-sync-permissions"
       : "org-wide";
   // SPDX-SnippetEnd
+  // Connector types the organization's admins turned off are never offered —
+  // the create API refuses them too.
   const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
     (option) =>
       (option.type !== "mfiles" || mfilesEnabled) &&
-      option.label.toLowerCase().includes(search.toLowerCase()),
+      !connectorCatalog.isHidden(option.type) &&
+      getConnectorTypeLabel(option.type)
+        .toLowerCase()
+        .includes(search.toLowerCase()),
   );
 
   const form = useForm<CreateConnectorFormValues>({
@@ -369,7 +376,9 @@ export function CreateConnectorDialog({
                         />
                       </div>
                       <div>
-                        <div className="font-medium">{option.label}</div>
+                        <div className="font-medium">
+                          {getConnectorTypeLabel(option.type)}
+                        </div>
                         <div className="mt-1 text-xs text-muted-foreground">
                           {option.description}
                         </div>

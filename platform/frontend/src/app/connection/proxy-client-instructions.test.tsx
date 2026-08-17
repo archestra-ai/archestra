@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 
@@ -72,6 +73,17 @@ function renderInstructions() {
     />,
   );
 }
+
+vi.mock("@/lib/organization.query");
+
+// The components under test resolve provider labels through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider visible under its built-in name.
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("ProxyClientInstructions — Any Client step 4", () => {
   beforeEach(() => {

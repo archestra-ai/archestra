@@ -2,8 +2,9 @@ import { E2eTestId } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { LlmProviderApiKeyDropdown } from "./llm-provider-api-key-dropdown";
 
 global.ResizeObserver = class ResizeObserver {
@@ -12,6 +13,14 @@ global.ResizeObserver = class ResizeObserver {
   disconnect = vi.fn();
 };
 Element.prototype.scrollIntoView = vi.fn();
+
+vi.mock("@/lib/organization.query");
+
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("LlmProviderApiKeyDropdown", () => {
   it("renders chat selector test ids and provider groups", async () => {

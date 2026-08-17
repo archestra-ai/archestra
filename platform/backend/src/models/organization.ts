@@ -1,7 +1,10 @@
 import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
+  type KnowledgeConnectorOverrides,
   MEMBER_ROLE_NAME,
+  type MessagingChannelOverrides,
+  type ModelProviderOverrides,
   type OrganizationCustomFont,
   type SupportedProvider,
   TimeInMs,
@@ -17,6 +20,13 @@ import type {
   Organization,
   OrganizationAnalyticsState,
 } from "@/types";
+
+/** @public — the shape {@link OrganizationModel.getIntegrationOverrides} resolves */
+export type IntegrationOverrideColumns = {
+  modelProviderOverrides: ModelProviderOverrides | null;
+  messagingChannelOverrides: MessagingChannelOverrides | null;
+  knowledgeConnectorOverrides: KnowledgeConnectorOverrides | null;
+};
 
 class OrganizationModel {
   /**
@@ -363,6 +373,34 @@ class OrganizationModel {
   }
 
   /**
+   * The admin's customization of the built-in integration catalogs. Reads only
+   * the three override columns, so callers on the cold configuration paths
+   * don't drag the row's base64 logo fields along. Pass `null` to resolve the
+   * deployment's organization, for callers with no request context (the
+   * ChatOps manager starts before any request).
+   */
+  static async getIntegrationOverrides(
+    id: string | null,
+  ): Promise<IntegrationOverrideColumns> {
+    const columns = {
+      modelProviderOverrides: schema.organizationsTable.modelProviderOverrides,
+      messagingChannelOverrides:
+        schema.organizationsTable.messagingChannelOverrides,
+      knowledgeConnectorOverrides:
+        schema.organizationsTable.knowledgeConnectorOverrides,
+    };
+    const query = db.select(columns).from(schema.organizationsTable);
+    const [row] = await (id === null
+      ? query.limit(1)
+      : query.where(eq(schema.organizationsTable.id, id)).limit(1));
+    return {
+      modelProviderOverrides: row?.modelProviderOverrides ?? null,
+      messagingChannelOverrides: row?.messagingChannelOverrides ?? null,
+      knowledgeConnectorOverrides: row?.knowledgeConnectorOverrides ?? null,
+    };
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {
@@ -603,6 +641,9 @@ class OrganizationModel {
       connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
       connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
       connectionDefaultClientId: org.connectionDefaultClientId ?? null,
+      modelProviderOverrides: org.modelProviderOverrides ?? null,
+      messagingChannelOverrides: org.messagingChannelOverrides ?? null,
+      knowledgeConnectorOverrides: org.knowledgeConnectorOverrides ?? null,
       metadata: org.metadata ?? null,
       createdAt: org.createdAt.toISOString(),
     };

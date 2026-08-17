@@ -512,6 +512,9 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
+  // Integration catalog customization (organization-level)
+  UpdateIntegrationSettings: "updateIntegrationSettings",
+
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
   CreateEnvironment: "createEnvironment",

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   useAllVirtualApiKeys,
   useDeleteVirtualApiKey,
@@ -10,6 +11,7 @@ import {
 import { VirtualKeyManagement } from "./virtual-key-management";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: vi.fn(),
   useDeleteVirtualApiKey: vi.fn(),
@@ -61,6 +63,9 @@ function result(offset = 0, total = 1) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);

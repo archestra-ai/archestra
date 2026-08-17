@@ -4,7 +4,8 @@ import {
 } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganization } from "@/lib/organization.query";
 import { LlmModelSearchableSelect } from "./llm-model-select";
 
 vi.mock("next/image", () => ({
@@ -12,6 +13,17 @@ vi.mock("next/image", () => ({
     <img alt={alt} src={src} />
   ),
 }));
+
+vi.mock("@/lib/organization.query");
+
+// The components under test resolve provider labels through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider visible under its built-in name.
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("LlmModelSearchableSelect", () => {
   it("can render fit-content dropdown content with full option labels", async () => {

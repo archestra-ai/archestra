@@ -1,10 +1,10 @@
 "use client";
 
 import {
+  builtInProviderLabel,
   compareModelsForDisplay,
   isOpenRouterLatestAlias,
   OPENROUTER_AUTO_MODEL_ID,
-  providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { PopoverContentProps } from "@radix-ui/react-popover";
@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { ModelCapabilities } from "@/lib/llm-models.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerLogoUrl } from "@/lib/provider-logos";
@@ -95,7 +96,7 @@ export function LlmModelOptionLabel({
     <div className="flex min-w-0 items-center gap-2">
       <Image
         src={providerLogoUrl(option.provider)}
-        alt={providerDisplayNames[option.provider]}
+        alt={builtInProviderLabel(option.provider)}
         width={16}
         height={16}
         className="shrink-0 rounded dark:invert"
@@ -152,7 +153,7 @@ function LlmModelSelectedValue({
       <div className="flex min-w-0 items-center gap-2">
         <Image
           src={providerLogoUrl(option.provider)}
-          alt={providerDisplayNames[option.provider]}
+          alt={builtInProviderLabel(option.provider)}
           width={16}
           height={16}
           className="shrink-0 rounded dark:invert"
@@ -167,7 +168,7 @@ function LlmModelSelectedValue({
     <div className="flex min-w-0 items-center gap-2 py-0.5">
       <Image
         src={providerLogoUrl(option.provider)}
-        alt={providerDisplayNames[option.provider]}
+        alt={builtInProviderLabel(option.provider)}
         width={16}
         height={16}
         className="shrink-0 rounded dark:invert"
@@ -192,7 +193,7 @@ function LlmModelSelectedBadge({ option }: { option: LlmModelSelectOption }) {
     <div className="flex min-w-0 items-center gap-1.5">
       <Image
         src={providerLogoUrl(option.provider)}
-        alt={providerDisplayNames[option.provider]}
+        alt={builtInProviderLabel(option.provider)}
         width={14}
         height={14}
         className="shrink-0 rounded dark:invert"
@@ -247,6 +248,7 @@ export type LlmModelSearchableSelectProps =
   | MultiSelectProps;
 
 export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
+  const providerCatalog = useModelProviderCatalog();
   const {
     options,
     placeholder = "Select model...",
@@ -326,7 +328,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
         ...visibleOptions.map((option) => ({
           value: option.value,
           label: option.model,
-          searchText: `${providerDisplayNames[option.provider]} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
+          searchText: `${providerCatalog.label(option.provider)} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
           content: (
             <LlmModelOptionLabel
               option={option}
@@ -369,7 +371,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
         ...visibleOptions.map((option) => ({
           value: option.value,
           label: option.model,
-          searchText: `${providerDisplayNames[option.provider]} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
+          searchText: `${providerCatalog.label(option.provider)} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
           content: (
             <LlmModelOptionLabel
               option={option}

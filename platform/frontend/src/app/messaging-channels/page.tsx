@@ -10,6 +10,9 @@ export default function AgentTriggersPage() {
 
   useEffect(() => {
     if (isLoading) return;
+    // Null means every channel is turned off. Staying here lets the layout
+    // render its "no channels" state rather than bouncing onto a dead route.
+    if (!firstActiveHref) return;
     router.replace(firstActiveHref);
   }, [isLoading, firstActiveHref, router]);
 

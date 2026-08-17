@@ -6,7 +6,6 @@ import {
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
-  providerDisplayNames,
   requiresPerplexityAgentApi,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -57,6 +56,7 @@ import {
 } from "@/components/ui/tooltip";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerToLogoProvider } from "@/lib/provider-logos";
@@ -167,17 +167,20 @@ type ProviderModelSection = {
  * strings that name these transports everywhere else.
  */
 const PROVIDER_MODEL_SECTIONERS: Partial<
-  Record<SupportedProvider, (models: LlmModel[]) => ProviderModelSection[]>
+  Record<
+    SupportedProvider,
+    (models: LlmModel[], providerLabel: string) => ProviderModelSection[]
+  >
 > = {
-  perplexity: (models) => [
+  perplexity: (models, providerLabel) => [
     {
       key: "perplexity:chatCompletions",
-      heading: `${providerDisplayNames.perplexity} — Chat Completions`,
+      heading: `${providerLabel} — Chat Completions`,
       models: models.filter((model) => !requiresPerplexityAgentApi(model.id)),
     },
     {
       key: "perplexity:responses",
-      heading: `${providerDisplayNames.perplexity} — Agent API`,
+      heading: `${providerLabel} — Agent API`,
       models: models.filter((model) => requiresPerplexityAgentApi(model.id)),
     },
   ],
@@ -186,10 +189,13 @@ const PROVIDER_MODEL_SECTIONERS: Partial<
 function providerModelSections(
   provider: SupportedProvider,
   models: LlmModel[],
+  /** What this organization calls the provider (see integration overrides). */
+  providerLabel: string,
 ): ProviderModelSection[] {
-  const sections = PROVIDER_MODEL_SECTIONERS[provider]?.(models) ?? [
-    { key: provider, heading: providerDisplayNames[provider], models },
-  ];
+  const sections = PROVIDER_MODEL_SECTIONERS[provider]?.(
+    models,
+    providerLabel,
+  ) ?? [{ key: provider, heading: providerLabel, models }];
   return sections.filter((section) => section.models.length > 0);
 }
 
@@ -713,6 +719,7 @@ function ModelSelectorDialogBody({
   onClose: () => void;
 }) {
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
+  const providerCatalog = useModelProviderCatalog();
 
   // Calculate which modalities are available across all models
   const availableModalities = useMemo(() => {
@@ -822,6 +829,7 @@ function ModelSelectorDialogBody({
           providerModelSections(
             provider,
             sortedModelsByProvider[provider] ?? [],
+            providerCatalog.label(provider),
           ).map((section) => (
             <ModelSelectorGroup key={section.key} heading={section.heading}>
               {section.models.map((model) => {

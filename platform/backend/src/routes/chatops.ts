@@ -51,6 +51,7 @@ import {
   UserModel,
 } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -1365,6 +1366,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { enabled, appId, appSecret, tenantId } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "ms-teams",
+      });
 
       // Merge new values with existing DB config (or defaults for first setup)
       const existing = await ChatOpsConfigModel.getMsTeamsConfig();
@@ -1521,6 +1526,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectionMode,
         appLevelToken,
       } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
 
       // Merge new values with existing DB config (or defaults for first setup)
       const existing = await ChatOpsConfigModel.getSlackConfig();
@@ -1598,6 +1607,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
         );
       }
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "telegram",
+      });
       const { enabled, botToken } = request.body;
 
       // Merge new values with existing DB config (or defaults for first setup)

@@ -12,6 +12,7 @@ import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge"
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useAllVirtualApiKeys,
   useDeleteVirtualApiKey,
@@ -29,6 +30,7 @@ export function VirtualKeyManagement({
 }) {
   const pageSize = 20;
   const [offset, setOffset] = useState(0);
+  const providerCatalog = useModelProviderCatalog();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canRead } = useHasPermissions({ llmVirtualKey: ["read"] });
@@ -100,7 +102,10 @@ export function VirtualKeyManagement({
               </td>
               {keyType === "standard" && (
                 <td className="max-w-[140px] truncate px-3 py-1.5 text-muted-foreground">
-                  {formatProviderKeySummary(key.providerApiKeys)}
+                  {formatProviderKeySummary(
+                    key.providerApiKeys,
+                    providerCatalog.label,
+                  )}
                 </td>
               )}
               <td className="max-w-[180px] px-3 py-1.5">

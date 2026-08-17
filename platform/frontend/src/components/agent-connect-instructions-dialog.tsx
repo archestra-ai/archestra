@@ -5,7 +5,6 @@ import {
   type archestraApiTypes,
   LLM_PROXY_OAUTH_SCOPE,
   MCP_GATEWAY_OAUTH_SCOPE,
-  providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Copy, Info, Pencil, RefreshCw, Trash2 } from "lucide-react";
@@ -13,7 +12,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  getShownProviders,
+  getConnectableProviders,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
@@ -45,6 +44,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useCreateLlmOauthClient,
   useDeleteLlmOauthClient,
@@ -70,8 +70,6 @@ type ConnectTarget = {
   agentType: AgentType;
 };
 
-const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
-
 export function LlmProxyConnectInstructionsDialog({
   proxy,
   onOpenChange,
@@ -88,7 +86,7 @@ export function LlmProxyConnectInstructionsDialog({
 
   if (!proxy) return null;
 
-  const providers = getShownProviders(organization) ?? ALL_PROVIDERS;
+  const providers = getConnectableProviders(organization);
 
   return (
     <ConnectDialog agent={proxy} open onOpenChange={onOpenChange}>
@@ -552,6 +550,7 @@ function OauthClientTable({
   proxyId: string;
   clients: LlmOauthClientRow[] | undefined;
 }) {
+  const providerCatalog = useModelProviderCatalog();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canDelete } = useHasPermissions({
@@ -636,7 +635,7 @@ function OauthClientTable({
               <td className="max-w-[140px] truncate px-3 py-1.5 text-muted-foreground">
                 {client.providerApiKeys.length > 0
                   ? client.providerApiKeys
-                      .map((mapping) => providerDisplayNames[mapping.provider])
+                      .map((mapping) => providerCatalog.label(mapping.provider))
                       .join(", ")
                   : "—"}
               </td>

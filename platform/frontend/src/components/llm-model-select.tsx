@@ -372,7 +372,6 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
           value: option.value,
           label: option.model,
           searchText: `${providerCatalog.label(option.provider)} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
-          description: option.description,
           content: (
             <LlmModelOptionLabel
               option={option}

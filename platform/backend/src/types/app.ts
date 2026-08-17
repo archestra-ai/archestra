@@ -250,9 +250,13 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
  * The app as REST hands it out. `creationGraceSessionKey` is internal
  * bookkeeping for the authoring gate — an opaque execution key no API consumer
  * acts on — so it is dropped here rather than published in every app payload.
+ * `authoringSessionId` goes the same way: it is a cost-reporting join key
+ * consumed only by the statistics endpoint, and publishing it would hand every
+ * viewer of a shared app the id of the conversation that built it.
  */
 export const PublicAppSchema = SelectAppSchema.omit({
   creationGraceSessionKey: true,
+  authoringSessionId: true,
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.

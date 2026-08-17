@@ -18948,7 +18948,6 @@ export type CreateAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20040,7 +20039,6 @@ export type GetAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20209,7 +20207,6 @@ export type UpdateAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20339,7 +20336,6 @@ export type EnableAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20479,7 +20475,6 @@ export type DisableAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20619,7 +20614,6 @@ export type LockAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -20759,7 +20753,6 @@ export type UnlockAppResponses = {
         latestVersion: number;
         enabled: boolean;
         locked: boolean;
-        authoringSessionId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -83401,7 +83394,7 @@ export type GetSkillStatisticsData = {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
         limit?: number;
         offset?: number;
-        sortBy?: 'attributedCost' | 'contextTokens' | 'activations' | 'lastActivatedAt' | 'skillName';
+        sortBy?: 'contextTokens' | 'activations' | 'lastActivatedAt' | 'skillName';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/statistics/skills';

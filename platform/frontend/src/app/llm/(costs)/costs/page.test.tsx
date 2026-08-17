@@ -13,6 +13,8 @@ const mockUseProfileStatistics = vi.fn();
 const mockUseModelStatistics = vi.fn();
 const mockUseCostSavingsStatistics = vi.fn();
 const mockUseUserStatistics = vi.fn();
+const mockUseAppStatistics = vi.fn();
+const mockUseSkillStatistics = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
@@ -37,6 +39,10 @@ vi.mock("@/lib/statistics.query", () => ({
     mockUseCostSavingsStatistics(params),
   useUserStatistics: (params: StatisticsHookParams) =>
     mockUseUserStatistics(params),
+  useAppStatistics: (params: StatisticsHookParams) =>
+    mockUseAppStatistics(params),
+  useSkillStatistics: (params: StatisticsHookParams) =>
+    mockUseSkillStatistics(params),
 }));
 
 vi.mock("recharts", () => ({
@@ -81,6 +87,17 @@ describe("StatisticsPage", () => {
       data: { timeSeries: [] },
     });
     mockUseUserStatistics.mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+    });
+    mockUseAppStatistics.mockReturnValue({
+      data: {
+        data: [],
+        pagination: { total: 0 },
+        chatBaselineCostPerSession: 0,
+        chatBaselineSessions: 0,
+      },
+    });
+    mockUseSkillStatistics.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
   });
@@ -247,11 +264,133 @@ describe("StatisticsPage", () => {
       container.querySelectorAll(".max-h-\\[280px\\]"),
     );
 
-    // Teams, Agents, LLM Proxies, Models, People
-    expect(tablePanels).toHaveLength(5);
+    // Teams, Agents, LLM Proxies, Models, People, Apps, Skills
+    expect(tablePanels).toHaveLength(7);
     for (const tablePanel of tablePanels) {
       expect(tablePanel.className).toContain("max-h-[280px]");
       expect(tablePanel.className).toContain("overflow-auto");
     }
+  });
+  it("splits an app's build and runtime cost and discloses a shared build session", async () => {
+    mockUseAppStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            appId: "app-1",
+            appName: "Sales Dashboard",
+            authorName: "Dana Reyes",
+            createdAt: "2026-07-20T10:00:00.000Z",
+            buildRequests: 6,
+            buildInputTokens: 20000,
+            buildOutputTokens: 3000,
+            buildCost: 1.5,
+            // The same session built another app, so the build figure is shared.
+            buildSessionAppCount: 2,
+            hasBuildSession: true,
+            runtimeLlmRequests: 4,
+            runtimeInputTokens: 800,
+            runtimeOutputTokens: 200,
+            runtimeCost: 0.25,
+            runs: 30,
+            toolCalls: 90,
+            estimatedChatEquivalentCost: 22.5,
+            estimatedNetSavings: 20.75,
+          },
+        ],
+        pagination: { total: 1 },
+        chatBaselineCostPerSession: 0.75,
+        chatBaselineSessions: 12,
+      },
+    });
+
+    const { container, findByText, getByText } = render(<StatisticsPage />);
+
+    expect(await findByText("Sales Dashboard")).toBeInTheDocument();
+    // Build and runtime spend are reported separately: an app is not LLM-free
+    // once built, so collapsing them would hide its recurring cost.
+    expect(getByText("$1.50")).toBeInTheDocument();
+    expect(getByText("$0.25")).toBeInTheDocument();
+    expect(getByText("$20.75")).toBeInTheDocument();
+    // The counterfactual states its own basis rather than being a bare number.
+    // The sentence spans sibling elements, so it is asserted on the container.
+    const appsDescription = Array.from(
+      container.querySelectorAll('[data-slot="card-description"]'),
+    ).find((node) => node.textContent?.includes("chat-equivalent estimate"));
+    expect(appsDescription).toHaveTextContent(
+      "measured average of $0.75 across 12 chat sessions",
+    );
+    // A shared build session is flagged, not silently divided.
+    expect(getByText("$1.50").className).toContain("decoration-dotted");
+  });
+
+  it("reports no build cost for an app with no authoring session", async () => {
+    mockUseAppStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            appId: "app-2",
+            appName: "Made In The UI",
+            authorName: null,
+            createdAt: "2026-07-20T10:00:00.000Z",
+            buildRequests: 0,
+            buildInputTokens: 0,
+            buildOutputTokens: 0,
+            buildCost: 0,
+            buildSessionAppCount: 0,
+            hasBuildSession: false,
+            runtimeLlmRequests: 0,
+            runtimeInputTokens: 0,
+            runtimeOutputTokens: 0,
+            runtimeCost: 0,
+            runs: 2,
+            toolCalls: 5,
+            estimatedChatEquivalentCost: 1.5,
+            estimatedNetSavings: 1.5,
+          },
+        ],
+        pagination: { total: 1 },
+        chatBaselineCostPerSession: 0.75,
+        chatBaselineSessions: 12,
+      },
+    });
+
+    const { findByText, getByText } = render(<StatisticsPage />);
+
+    expect(await findByText("Made In The UI")).toBeInTheDocument();
+    // An em dash, not $0.00: nothing was spent building it *that we know of*.
+    expect(getByText("—")).toBeInTheDocument();
+  });
+
+  it("shows a skill's own context footprint next to the spend it rode", async () => {
+    mockUseSkillStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            skillId: "skill-1",
+            skillName: "PDF Extraction",
+            activations: 5,
+            distinctUsers: 3,
+            contextTokens: 6420,
+            // Two older activations predate the measurement.
+            measuredActivations: 3,
+            attributedSessions: 4,
+            attributedRequests: 12,
+            attributedInputTokens: 90000,
+            attributedOutputTokens: 7000,
+            attributedCost: 1.68,
+            lastActivatedAt: "2026-07-27T10:00:00.000Z",
+          },
+        ],
+        pagination: { total: 1 },
+      },
+    });
+
+    const { findByText, getByText } = render(<StatisticsPage />);
+
+    expect(await findByText("PDF Extraction")).toBeInTheDocument();
+    expect(getByText("6,420")).toBeInTheDocument();
+    expect(getByText("$1.68")).toBeInTheDocument();
+    // A partially-measured total is flagged rather than read as the full one.
+    expect(getByText("6,420").className).toContain("decoration-dotted");
   });
 });

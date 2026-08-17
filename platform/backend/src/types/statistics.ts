@@ -223,8 +223,15 @@ export const SkillStatisticsSchema = z.object({
   lastActivatedAt: z.string().nullable(),
 });
 
+/**
+ * Sortable columns for the per-skill view. `attributedCost` is deliberately
+ * absent: it is computed by joining each activation's session to the
+ * interactions that followed it, which happens only for the page that has
+ * already been selected — offering it as a sort would silently rank within a
+ * page chosen by something else. Defaults to `contextTokens`, which is both
+ * SQL-sortable and the figure that is genuinely the skill's own.
+ */
 export const SKILL_STATISTICS_SORT_BY = [
-  "attributedCost",
   "contextTokens",
   "activations",
   "lastActivatedAt",

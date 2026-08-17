@@ -52,7 +52,7 @@ describe("StatisticsModel.getAppStatistics", () => {
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const app = await makeApp({
       organizationId: org.id,
       authorId: author.id,
@@ -108,7 +108,7 @@ describe("StatisticsModel.getAppStatistics", () => {
     makeInteraction,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const [appA, appB] = await Promise.all([
       makeApp({ organizationId: org.id, name: "Runtime A" }),
       makeApp({ organizationId: org.id, name: "Runtime B" }),
@@ -199,7 +199,7 @@ describe("StatisticsModel.getAppStatistics", () => {
     makeInteraction,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const [first, second] = await Promise.all([
       makeApp({
         organizationId: org.id,
@@ -262,7 +262,7 @@ describe("StatisticsModel.getAppStatistics", () => {
     makeInteraction,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const app = await makeApp({
       organizationId: org.id,
       name: "Replaces chat",
@@ -324,7 +324,7 @@ describe("StatisticsModel.getAppStatistics", () => {
     makeInteraction,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const app = await makeApp({
       organizationId: org.id,
       name: "Subscription built",
@@ -379,6 +379,53 @@ describe("StatisticsModel.getAppStatistics", () => {
 
     expect(result.data.map((entry) => entry.appId)).toEqual([visible.id]);
     expect(result.data.map((entry) => entry.appId)).not.toContain(hidden.id);
+  });
+
+  test("ignores another organization's spend on a colliding session id", async ({
+    makeOrganization,
+    makeApp,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const [org, otherOrg] = await Promise.all([
+      makeOrganization(),
+      makeOrganization(),
+    ]);
+    const agent = await makeAgent({ organizationId: org.id });
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const app = await makeApp({
+      organizationId: org.id,
+      name: "Own build",
+      authoringSessionId: "shared-id",
+    });
+
+    await makeInteraction(agent.id, {
+      sessionId: "shared-id",
+      source: "chat",
+      cost: "0.3000000000",
+    });
+    // A session id is caller-chosen (X-Archestra-Session-Id), so another
+    // tenant reusing this one must not land in this app's build cost.
+    await makeInteraction(foreignAgent.id, {
+      sessionId: "shared-id",
+      source: "chat",
+      cost: "50.0000000000",
+    });
+
+    const result = await StatisticsModel.getAppStatistics({
+      timeframe: "24h",
+      organizationId: org.id,
+      pagination: PAGE,
+      sortBy: "totalCost",
+      sortDirection: "desc",
+    });
+
+    const row = result.data.find((entry) => entry.appId === app.id);
+    expect(row?.buildCost).toBeCloseTo(0.3, 10);
+    expect(row?.buildRequests).toBe(1);
+    // The baseline averages this organization's chat sessions only.
+    expect(result.chatBaselineSessions).toBe(1);
+    expect(result.chatBaselineCostPerSession).toBeCloseTo(0.3, 10);
   });
 
   test("omits apps of another organization", async ({
@@ -460,7 +507,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const skill = await SkillModel.createWithFiles({
       skill: skillInput({ organizationId: org.id, name: "attributed" }),
       files: [],
@@ -505,7 +552,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
       timeframe: "24h",
       organizationId: org.id,
       pagination: PAGE,
-      sortBy: "attributedCost",
+      sortBy: "contextTokens",
       sortDirection: "desc",
     });
 
@@ -525,7 +572,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const skill = await SkillModel.createWithFiles({
       skill: skillInput({ organizationId: org.id, name: "repeated" }),
       files: [],
@@ -561,7 +608,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
       timeframe: "24h",
       organizationId: org.id,
       pagination: PAGE,
-      sortBy: "attributedCost",
+      sortBy: "contextTokens",
       sortDirection: "desc",
     });
 
@@ -580,7 +627,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const agent = await makeAgent();
+    const agent = await makeAgent({ organizationId: org.id });
     const skill = await SkillModel.createWithFiles({
       skill: skillInput({ organizationId: org.id, name: "sessionless" }),
       files: [],
@@ -603,7 +650,7 @@ describe("StatisticsModel.getSkillStatistics", () => {
       timeframe: "24h",
       organizationId: org.id,
       pagination: PAGE,
-      sortBy: "attributedCost",
+      sortBy: "contextTokens",
       sortDirection: "desc",
     });
 

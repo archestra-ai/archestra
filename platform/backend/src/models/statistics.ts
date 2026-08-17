@@ -8,7 +8,9 @@ import {
   gte,
   inArray,
   isNotNull,
+  isNull,
   lte,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -945,8 +947,13 @@ class StatisticsModel {
    *   opens (`tools/list`, one per host opening the app) and tool calls come from
    *   there.
    *
-   * Paginated like the per-user view: app cardinality is unbounded, and the page
-   * is resolved first so the three enrichment aggregations are bounded by it.
+   * Paginated, but sorted in memory rather than in SQL: the three cost sources
+   * live in different tables under different keys, so no single sortable
+   * expression exists without joining all of them for every app in the
+   * organization. The org's app roster is read whole and then ordered, the same
+   * fetch-all-then-slice the Apps list itself does — app cardinality is tens,
+   * not thousands. If that ever stops holding, the roster query is the thing to
+   * push the sort into.
    */
   static async getAppStatistics(params: {
     timeframe: StatisticsTimeFrame;
@@ -1007,14 +1014,16 @@ class StatisticsModel {
         .select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` })
         .from(schema.appsTable)
         .where(and(...appFilters)),
-      StatisticsModel.getChatCostBaseline(timeframe),
+      StatisticsModel.getChatCostBaseline({ timeframe, organizationId }),
     ]);
 
     if (appRows.length === 0) {
       return {
-        ...createPaginatedResult<AppStatistics>([], Number(total) || 0, {
-          ...pagination,
-        }),
+        ...createPaginatedResult<AppStatistics>(
+          [],
+          Number(total) || 0,
+          pagination,
+        ),
         ...baseline,
       };
     }
@@ -1032,6 +1041,7 @@ class StatisticsModel {
       await Promise.all([
         StatisticsModel.getBuildSpendBySession({
           timeframe,
+          organizationId,
           sessionIds: buildSessionIds,
         }),
         StatisticsModel.getAppRuntimeSpend({ timeframe, appIds }),
@@ -1145,11 +1155,10 @@ class StatisticsModel {
     const contextTokensExpr = sql<number>`COALESCE(SUM(${events.contextTokens}), 0)`;
     const lastActivatedExpr = sql`MAX(${events.createdAt})`;
 
+    // Every option here is a real SQL sort over the activation rows, so the page
+    // is always the page the caller asked for. Attributed cost is not sortable
+    // for that reason — see SKILL_STATISTICS_SORT_BY.
     const sortExpr = {
-      // Attributed cost is not on these rows; fall back to the closest signal
-      // available in SQL so the page is stable, then re-sort the page below once
-      // the cost is joined on.
-      attributedCost: contextTokensExpr,
       contextTokens: contextTokensExpr,
       activations: activationsExpr,
       lastActivatedAt: lastActivatedExpr,
@@ -1218,17 +1227,6 @@ class StatisticsModel {
           : null,
       };
     });
-
-    // `attributedCost` only exists once the join above has run, so a request
-    // sorting by it gets the page ordered here. The page itself is chosen by the
-    // SQL proxy above (context tokens), which is the closest available signal.
-    if (sortBy === "attributedCost") {
-      data.sort((a, b) =>
-        sortDirection === "asc"
-          ? a.attributedCost - b.attributedCost
-          : b.attributedCost - a.attributedCost,
-      );
-    }
 
     return createPaginatedResult(data, Number(total) || 0, pagination);
   }
@@ -1534,6 +1532,25 @@ class StatisticsModel {
   }
 
   /**
+   * Restrict interactions to one organization, via the agent that served them.
+   *
+   * Requires a LEFT JOIN on `agents` at the call site. Deliberately a left join
+   * with an IS NULL escape rather than an inner one: `interactions.profile_id` is
+   * ON DELETE SET NULL, so an inner join would silently drop every interaction
+   * whose agent has since been deleted — which for a build cost means an app
+   * quietly reporting less than it cost. An orphaned row names no organization,
+   * so it is kept rather than assigned to none.
+   */
+  private static organizationScopeConditions(organizationId: string): SQL[] {
+    return [
+      or(
+        eq(schema.agentsTable.organizationId, organizationId),
+        isNull(schema.interactionsTable.profileId),
+      ) as SQL,
+    ];
+  }
+
+  /**
    * What one chat session costs on average in this timeframe — the measured
    * baseline the per-app savings estimate multiplies.
    *
@@ -1545,9 +1562,11 @@ class StatisticsModel {
    * app look worthless — it gets a $0 baseline honestly, because that traffic
    * genuinely costs it nothing per token.
    */
-  private static async getChatCostBaseline(
-    timeframe: StatisticsTimeFrame,
-  ): Promise<ChatCostBaseline> {
+  private static async getChatCostBaseline(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<ChatCostBaseline> {
+    const { timeframe, organizationId } = params;
     const perSession = db
       .select({
         sessionCost: billedSum(
@@ -1556,11 +1575,16 @@ class StatisticsModel {
         ).as("session_cost"),
       })
       .from(schema.interactionsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+      )
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
           eq(schema.interactionsTable.source, "chat"),
           isNotNull(schema.interactionsTable.sessionId),
+          ...StatisticsModel.organizationScopeConditions(organizationId),
         ),
       )
       .groupBy(schema.interactionsTable.sessionId)
@@ -1582,12 +1606,17 @@ class StatisticsModel {
   /**
    * Billed spend of each app-authoring session in the timeframe, keyed by
    * session id. Rides `interactions_session_created_at_idx`.
+   *
+   * A session id is not a tenant-scoped value — an external caller chooses its
+   * own via `X-Archestra-Session-Id` — so this is additionally restricted to the
+   * organization rather than trusting the id to be unique across tenants.
    */
   private static async getBuildSpendBySession(params: {
     timeframe: StatisticsTimeFrame;
+    organizationId: string;
     sessionIds: string[];
   }): Promise<Map<string, InteractionSpend>> {
-    const { timeframe, sessionIds } = params;
+    const { timeframe, organizationId, sessionIds } = params;
     if (sessionIds.length === 0) return new Map();
 
     const rows = await db
@@ -1599,10 +1628,15 @@ class StatisticsModel {
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+      )
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
           inArray(schema.interactionsTable.sessionId, sessionIds),
+          ...StatisticsModel.organizationScopeConditions(organizationId),
         ),
       )
       .groupBy(schema.interactionsTable.sessionId);

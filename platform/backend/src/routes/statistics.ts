@@ -208,7 +208,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAppStatistics,
         description:
-          "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated because app cardinality is unbounded. Apps outside the caller's visibility are excluded.",
+          "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.",
         tags: ["Statistics"],
         querystring: AppStatisticsQuerySchema,
         response: constructResponseSchema(
@@ -257,7 +257,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetSkillStatistics,
         description:
-          "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone. Paginated; skills outside the caller's scope are excluded.",
+          "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.",
         tags: ["Statistics"],
         querystring: SkillStatisticsQuerySchema,
         response: constructResponseSchema(
@@ -289,7 +289,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           timeframe,
           organizationId,
           pagination: { limit, offset },
-          sortBy: sortBy ?? "attributedCost",
+          sortBy: sortBy ?? "contextTokens",
           sortDirection,
           accessibleSkillIds,
         }),

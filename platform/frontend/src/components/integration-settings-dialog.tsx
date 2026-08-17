@@ -174,9 +174,10 @@ function IntegrationSettingsForm<Id extends string>({
     );
   };
 
-  // The list scrolls inside itself (see the list's own `overflow-y-auto`) so
-  // the search box and the "N turned off" summary stay put while the admin
-  // works through a long catalog.
+  // The body carries no padding of its own: the search box and the "N turned
+  // off" summary sit in a fixed block above a full-bleed scroll region, so the
+  // list's scrollbar runs edge to edge — flush against the dialog's right side,
+  // and flush against the block above it and the footer below.
   return (
     <StandardDialog
       open
@@ -187,7 +188,7 @@ function IntegrationSettingsForm<Id extends string>({
       title={title}
       description={description}
       size="medium"
-      bodyClassName="flex flex-col gap-3 overflow-hidden py-5"
+      bodyClassName="flex flex-col overflow-hidden p-0"
       footer={
         <>
           <Button
@@ -207,51 +208,53 @@ function IntegrationSettingsForm<Id extends string>({
         </>
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* A plain input rather than the shared SearchInput: this filter is
-            dialog-local, and SearchInput mirrors its value into the page URL. */}
-        <div className="relative max-w-64 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${entityNamePlural}…`}
-            aria-label={`Search ${entityNamePlural}`}
-            className="pl-8 text-sm"
-          />
+      <div className="flex flex-col gap-2 px-4 pt-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* A plain input rather than the shared SearchInput: this filter is
+              dialog-local, and SearchInput mirrors its value into the page URL. */}
+          <div className="relative max-w-64 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${entityNamePlural}…`}
+              aria-label={`Search ${entityNamePlural}`}
+              className="pl-8 text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAllHidden(false)}
+            >
+              <span>Turn all on</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAllHidden(true)}
+            >
+              <span>Turn all off</span>
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setAllHidden(false)}
-          >
-            <span>Turn all on</span>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setAllHidden(true)}
-          >
-            <span>Turn all off</span>
-          </Button>
-        </div>
+
+        <p className="text-[13px] text-muted-foreground">
+          {hiddenCount === 0 ? (
+            <span>All {entityNamePlural} are available.</span>
+          ) : (
+            <span>
+              {hiddenCount} of {items.length} {entityNamePlural} turned off —
+              they are hidden everywhere and cannot be configured.
+            </span>
+          )}
+        </p>
       </div>
 
-      <p className="text-[13px] text-muted-foreground">
-        {hiddenCount === 0 ? (
-          <span>All {entityNamePlural} are available.</span>
-        ) : (
-          <span>
-            {hiddenCount} of {items.length} {entityNamePlural} turned off — they
-            are hidden everywhere and cannot be configured.
-          </span>
-        )}
-      </p>
-
-      <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-4">
         {visibleItems.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             No {entityNamePlural} match “{search}”.

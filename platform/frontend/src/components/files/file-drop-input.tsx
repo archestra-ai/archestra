@@ -49,8 +49,7 @@ export function FileDropInput({
   );
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the drop target is a
-    // region; the nested button and input carry the keyboard path.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the drop target is a region; the nested button and input carry the keyboard path.
     <div
       className={cn(
         "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",

@@ -2955,6 +2955,13 @@
       "when": 1787039911186,
       "tag": "0421_mcp_idle_hibernation",
       "breakpoints": true
+    },
+    {
+      "idx": 422,
+      "version": "7",
+      "when": 1787073872909,
+      "tag": "0422_batch_analysis",
+      "breakpoints": true
     }
   ]
 }

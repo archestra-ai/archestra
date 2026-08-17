@@ -1,5 +1,6 @@
 import type { TaskQueueService } from "../task-queue";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
+import { handleBatchAnalysisRow } from "./batch-analysis-row-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-handler";
@@ -54,5 +55,9 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "skill_publication_backfill",
     handleSkillPublicationBackfill,
+  );
+  taskQueueService.registerHandler(
+    "batch_analysis_row",
+    handleBatchAnalysisRow,
   );
 }

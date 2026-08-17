@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-06
+lastUpdated: 2026-08-17
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -66,6 +66,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Environments | `read`, `create`, `update`, `delete` |
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
+| Batch Analyses | `read`, `create`, `update`, `delete`, `execute` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
@@ -110,6 +111,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Knowledge Sources | `read`, `query` |
+| Batch Analyses | `read` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
@@ -173,6 +175,11 @@ The following table lists all available permissions that can be assigned to cust
 | `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
 | `auditLog:read` | View audit log records of your own administrative actions |
 | `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
+| `batchAnalysis:read` | View batch analyses and their results |
+| `batchAnalysis:create` | Create batch analyses |
+| `batchAnalysis:update` | Modify batch analyses and add rows to them |
+| `batchAnalysis:delete` | Delete batch analyses |
+| `batchAnalysis:execute` | Dispatch a batch analysis run (spends LLM budget per cell) |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |

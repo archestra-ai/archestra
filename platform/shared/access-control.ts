@@ -124,6 +124,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
+  /**
+   * Batch analysis: running a saved set of prompts across a set of sources.
+   * `run` is separate from `update` because dispatching a run spends LLM budget
+   * proportional to the grid's size, while editing a definition costs nothing.
+   */
+  batchAnalysis: ["read", "create", "update", "delete", "execute"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -249,6 +255,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   knowledgeSourceAutoSync: [],
+  batchAnalysis: ["read", "create", "update", "delete", "execute"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -327,6 +334,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   knowledgeSourceAutoSync: [],
   // Members can see analyses and their results, but dispatching a run
   // spends LLM budget across a whole grid, so running is an editor action.
+  batchAnalysis: ["read"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -666,6 +674,12 @@ export const permissionDescriptions: Record<string, string> = {
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
     "Modify knowledge settings (embedding and reranking models)",
+  "batchAnalysis:read": "View batch analyses and their results",
+  "batchAnalysis:create": "Create batch analyses",
+  "batchAnalysis:update": "Modify batch analyses and add rows to them",
+  "batchAnalysis:delete": "Delete batch analyses",
+  "batchAnalysis:execute":
+    "Dispatch a batch analysis run (spends LLM budget per cell)",
 
   // UI behavior
   "simpleView:enable": "Sidebar is collapsed by default on page load",
@@ -1920,6 +1934,19 @@ export const requiredEndpointPermissionsMap: Partial<
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 
+  // Batch analysis. Adding rows is an `update` on the definition; dispatching
+  // work is the separate `run` action, because a run's cost scales with the
+  // grid while editing the definition costs nothing.
+  [RouteId.GetBatchAnalyses]: { batchAnalysis: ["read"] },
+  [RouteId.GetBatchAnalysis]: { batchAnalysis: ["read"] },
+  [RouteId.CreateBatchAnalysis]: { batchAnalysis: ["create"] },
+  [RouteId.UpdateBatchAnalysis]: { batchAnalysis: ["update"] },
+  [RouteId.DeleteBatchAnalysis]: { batchAnalysis: ["delete"] },
+  [RouteId.AddBatchAnalysisRows]: { batchAnalysis: ["update"] },
+  [RouteId.DeleteBatchAnalysisRow]: { batchAnalysis: ["update"] },
+  [RouteId.StartBatchAnalysisRun]: { batchAnalysis: ["execute"] },
+  [RouteId.RetryBatchAnalysisCell]: { batchAnalysis: ["execute"] },
+
   // Knowledge files. Reads are `knowledgeSource:read` like every other
   // knowledge surface; indexing a file into a base changes what agents can
   // retrieve, so it is an `update` rather than a read.
@@ -1976,6 +2003,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Projects
   "/projects": { project: ["read"] },
   "/projects/[id]": { project: ["read"] },
+
+  // Batch Analyses
+  "/batch-analyses": { batchAnalysis: ["read"] },
+  "/batch-analyses/new": { batchAnalysis: ["create"] },
+  "/batch-analyses/[id]": { batchAnalysis: ["read"] },
 
   // Knowledge files
   "/knowledge/files": { knowledgeSource: ["read"] },

@@ -797,6 +797,17 @@ export const RouteId = {
   AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
+
+  // Batch analysis
+  GetBatchAnalyses: "getBatchAnalyses",
+  CreateBatchAnalysis: "createBatchAnalysis",
+  UpdateBatchAnalysis: "updateBatchAnalysis",
+  DeleteBatchAnalysis: "deleteBatchAnalysis",
+  GetBatchAnalysis: "getBatchAnalysis",
+  AddBatchAnalysisRows: "addBatchAnalysisRows",
+  DeleteBatchAnalysisRow: "deleteBatchAnalysisRow",
+  StartBatchAnalysisRun: "startBatchAnalysisRun",
+  RetryBatchAnalysisCell: "retryBatchAnalysisCell",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

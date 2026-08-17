@@ -3240,6 +3240,35 @@ const config = {
         undefined,
     },
   },
+  batchAnalysis: {
+    /**
+     * Concurrency cap for the `analysis` task-queue lane. Separate from the
+     * content lane because a run is user-initiated and someone is watching it
+     * fill in, whereas the content lane is sized for background embedding.
+     * Each slot is one in-flight row, and a row is one LLM call, so this is
+     * effectively the parallel-request budget a single deployment spends on
+     * analysis work.
+     */
+    workerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_BATCH_ANALYSIS_WORKER_MAX_CONCURRENT,
+      4,
+    ),
+    /**
+     * Upper bound on source text handed to the model for one row. Sources are
+     * analysed whole rather than retrieved, so this is the guard against a
+     * single outsized document blowing the context window. Truncation is
+     * recorded on the cell, never silent.
+     */
+    maxSourceChars: parsePositiveInt(
+      process.env.ARCHESTRA_BATCH_ANALYSIS_MAX_SOURCE_CHARS,
+      200_000,
+    ),
+    /** Rows a single analysis may hold. Bounds one run's queue burst. */
+    maxRowsPerAnalysis: parsePositiveInt(
+      process.env.ARCHESTRA_BATCH_ANALYSIS_MAX_ROWS,
+      1_000,
+    ),
+  },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",

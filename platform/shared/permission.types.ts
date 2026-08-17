@@ -44,6 +44,7 @@ export const resources = [
   "knowledgeSource",
   "knowledgeSourceAutoSync",
   "knowledgeSettings",
+  "batchAnalysis",
   "environment",
   "githubAppConfig",
   "chat",
@@ -112,6 +113,7 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSource: "Knowledge Sources",
   knowledgeSourceAutoSync: "Auto-Sync Permissions Connectors",
   knowledgeSettings: "Knowledge Settings",
+  batchAnalysis: "Batch Analyses",
   environment: "Environments",
   githubAppConfig: "GitHub App Configurations",
   team: "Teams",
@@ -196,6 +198,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Knowledge connectors with auto-sync permissions — access mirrors the source system, and managing them exposes upstream identities and group memberships",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
+  batchAnalysis:
+    "Saved sets of prompts run across a set of sources, producing a grid of answers. Running one spends LLM budget per cell.",
   simpleView: "Controls if the simple view of the app is enabled",
   chatAgentPicker: "Controls visibility of the agent picker in chat",
   chatProviderSettings:
@@ -251,6 +255,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "knowledgeSource",
     "knowledgeSourceAutoSync",
     "knowledgeSettings",
+    "batchAnalysis",
   ],
   Other: [
     "chat",

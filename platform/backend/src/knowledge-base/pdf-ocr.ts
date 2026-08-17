@@ -1,6 +1,7 @@
-import type {
-  SupportedProvider,
-  SupportedProviderDiscriminator,
+import {
+  OCR_PDF_INPUT_PROVIDERS,
+  type SupportedProvider,
+  type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { generateText } from "ai";
@@ -55,30 +56,9 @@ export interface OcrRunContext {
  */
 export const OCR_RUN_PAGE_BUDGET = 2_000;
 
-/**
- * Providers whose direct-call transport is verified to forward
- * `application/pdf` file parts to the vendor API.
- *
- * Membership is about the TRANSPORT, not the model: `ollama-native`'s
- * converter silently drops non-image file parts, so a "vision" model there
- * would transcribe nothing while appearing configured — it must never be
- * selectable. The OpenAI-compatible transports (azure, openrouter, vllm)
- * serialize PDF file parts faithfully; whether the endpoint's model accepts
- * them is endpoint-dependent and surfaces as a per-document warning.
- */
-const PDF_INPUT_PROVIDERS: ReadonlySet<SupportedProvider> = new Set([
-  "anthropic",
-  "openai",
-  "gemini",
-  "bedrock",
-  "azure",
-  "openrouter",
-  "vllm",
-]);
-
 /** Whether a provider's transport can carry PDF input for OCR transcription. */
 export function providerSupportsPdfInput(provider: SupportedProvider): boolean {
-  return PDF_INPUT_PROVIDERS.has(provider);
+  return OCR_PDF_INPUT_PROVIDERS.includes(provider);
 }
 
 /**

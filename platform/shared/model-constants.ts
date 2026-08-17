@@ -69,6 +69,26 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
+
+/**
+ * Providers whose direct-call transport is verified to forward
+ * `application/pdf` file parts to the vendor API — the transports knowledge
+ * OCR can run on. Membership is about the TRANSPORT, not the model:
+ * `ollama-native`'s converter silently drops non-image file parts, so a
+ * "vision" model there would transcribe nothing while appearing configured.
+ * The OpenAI-compatible transports (azure, openrouter, vllm) serialize PDF
+ * file parts faithfully; whether the endpoint's model accepts them is
+ * endpoint-dependent and surfaces per document.
+ */
+export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
+  "anthropic",
+  "openai",
+  "gemini",
+  "bedrock",
+  "azure",
+  "openrouter",
+  "vllm",
+];
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**

@@ -66,6 +66,7 @@ import {
   useDropEmbeddingConfig,
   useOrganization,
   useTestEmbeddingConnection,
+  useTestOcrConnection,
   useTestRerankerConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
@@ -270,6 +271,11 @@ beforeEach(() => {
     mutate: vi.fn(),
     isPending: false,
   } as unknown as ReturnType<typeof useTestRerankerConnection>);
+  vi.mocked(useTestOcrConnection).mockReturnValue({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useTestOcrConnection>);
   vi.mocked(useDropEmbeddingConfig).mockReturnValue({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -906,6 +912,45 @@ describe("KnowledgeSettingsPage", () => {
         embeddingModel: undefined,
         rerankerChatApiKeyId: null,
         rerankerModel: null,
+        ocrChatApiKeyId: null,
+        ocrModel: null,
+      });
+    });
+
+    it("shows the Document OCR card and saves a cleared OCR configuration", async () => {
+      const user = userEvent.setup();
+
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        ocrChatApiKeyId: "key-1",
+        ocrModel: "claude-sonnet-5",
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Anthropic Key",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ];
+      renderPage();
+
+      expect(screen.getByText("Document OCR")).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Clear OCR configuration" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(mockUpdateKnowledgeSettings).toHaveBeenCalledWith({
+        embeddingChatApiKeyId: null,
+        embeddingModel: undefined,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        ocrChatApiKeyId: null,
+        ocrModel: null,
       });
     });
 

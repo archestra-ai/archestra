@@ -35,6 +35,8 @@ export function makeOrganization(
     embeddingChatApiKeyId: null,
     rerankerChatApiKeyId: null,
     rerankerModel: null,
+    ocrChatApiKeyId: null,
+    ocrModel: null,
     defaultLlmModel: null,
     defaultLlmProvider: "openai",
     defaultLlmApiKeyId: null,

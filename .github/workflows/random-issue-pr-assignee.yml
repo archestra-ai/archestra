@@ -23,6 +23,9 @@ permissions: {}
 env:
   ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","divineforest"]'
   CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","divineforest","arsenyinfo"]'
+  # PRs opened by these bot accounts already have an owner shepherding them
+  # (e.g. the task-env pipeline's requester), so skip reviewer auto-assignment.
+  REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}
@@ -120,6 +123,7 @@ jobs:
           script: |
             const owners = JSON.parse(process.env.ASSIGNEE_LOGINS);
             const coreTeam = JSON.parse(process.env.CORE_TEAM_LOGINS);
+            const exemptLogins = JSON.parse(process.env.REVIEW_REQUEST_EXEMPT_LOGINS);
             const isManualBackfill = context.eventName === 'workflow_dispatch';
             const updatedSince = isManualBackfill
               ? null
@@ -176,6 +180,11 @@ jobs:
 
                   if (coreTeam.includes(pr.user.login)) {
                     console.log(`Skipping reviewer request because ${pr.user.login} is on the core team`);
+                    continue;
+                  }
+
+                  if (exemptLogins.includes(pr.user.login)) {
+                    console.log(`Skipping reviewer request because ${pr.user.login} is exempt from review assignment`);
                     continue;
                   }
 

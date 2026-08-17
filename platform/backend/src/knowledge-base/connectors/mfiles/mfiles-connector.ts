@@ -1,6 +1,7 @@
 import { randomUUID, scryptSync } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
 import { z } from "zod";
+import { extractPdfText } from "@/knowledge-base/pdf-ocr";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -20,7 +21,6 @@ import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   describePdfEmptyText,
   describePdfExtractionWarning,
-  parsePdfBuffer,
 } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
@@ -1196,7 +1196,11 @@ export class MFilesConnector extends BaseConnector {
         text = await extractTextFromDocx(buffer);
         break;
       case "pdf": {
-        const result = await parsePdfBuffer(buffer);
+        const result = await extractPdfText({
+          buffer,
+          filename: buildFileName(params.file),
+          ocr: this.ocrContext,
+        });
         const emptyReason = describePdfEmptyText(result);
         if (emptyReason) {
           this.trackSkipped({

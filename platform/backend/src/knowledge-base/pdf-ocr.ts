@@ -4,7 +4,9 @@ import type {
 } from "@archestra/shared";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { generateText } from "ai";
+import type { Logger } from "pino";
 import config from "@/config";
+import { metrics } from "@/observability";
 import {
   type OcrOutcome,
   type PdfExtractionResult,
@@ -40,6 +42,10 @@ export interface OcrRunContext {
    * way the per-document cap bounds one file.
    */
   budget: { remainingPages: number };
+  /** Run logger; OCR outcomes per document are written here when present. */
+  log?: Pick<Logger, "info" | "warn">;
+  /** Metric label for the transcribed-pages counter. */
+  connectorType?: string;
 }
 
 /**
@@ -218,6 +224,7 @@ export async function extractPdfText(params: {
     ...(failureSummary ? { failureSummary } : {}),
   };
 
+  reportOutcome({ ocr, outcome, filename });
   if (transcriptions.size === 0) {
     return withOutcome(parsed, outcome);
   }
@@ -433,6 +440,34 @@ function buildResponseBody(params: {
         },
       };
   }
+}
+
+/** Run-log line + pages metric for one document's OCR pass. */
+function reportOutcome(params: {
+  ocr: OcrRunContext;
+  outcome: OcrOutcome;
+  filename: string | undefined;
+}): void {
+  const { ocr, outcome, filename } = params;
+  const context = {
+    filename: filename ?? "document",
+    transcribedPages: outcome.transcribedPageCount,
+    failedPages: outcome.failedPageCount,
+    skippedPages: outcome.skippedPageCount,
+    ...(outcome.skippedBy ? { skippedBy: outcome.skippedBy } : {}),
+    ...(outcome.failureSummary ? { failure: outcome.failureSummary } : {}),
+  };
+  if (outcome.transcribedPageCount > 0) {
+    ocr.log?.info(context, "OCR transcribed textless PDF page(s)");
+  } else {
+    ocr.log?.warn(context, "OCR could not transcribe any textless PDF page");
+  }
+  metrics.rag.reportOcrPages({
+    connectorType: ocr.connectorType ?? "unknown",
+    transcribed: outcome.transcribedPageCount,
+    failed: outcome.failedPageCount,
+    skipped: outcome.skippedPageCount,
+  });
 }
 
 /** Attach an OCR outcome to an otherwise-unchanged parse result. */

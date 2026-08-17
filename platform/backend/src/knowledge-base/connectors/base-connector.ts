@@ -1,5 +1,6 @@
 import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
+import type { OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import defaultLogger from "@/logging";
 import type {
   Connector,
@@ -86,6 +87,7 @@ export abstract class BaseConnector implements Connector {
   supportsPermissionSync = false;
 
   protected log: pino.Logger = defaultLogger;
+  protected ocrContext: OcrRunContext | undefined;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
   private itemSkipped: ConnectorItemSkipped[] = [];
@@ -96,6 +98,15 @@ export abstract class BaseConnector implements Connector {
 
   setLogger(log: pino.Logger): void {
     this.log = log;
+  }
+
+  /**
+   * Arm OCR for this run. Connector instances are constructed per run (see
+   * the registry), so like `setLogger` this is per-run wiring, not shared
+   * state; extractors read it to transcribe textless PDF pages.
+   */
+  setOcrContext(ocr: OcrRunContext): void {
+    this.ocrContext = ocr;
   }
 
   protected async validateConfigWithSchema<T>(params: {

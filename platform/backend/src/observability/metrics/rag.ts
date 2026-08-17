@@ -19,6 +19,7 @@ let ragConnectorSyncsTotal: client.Counter<string>;
 let ragDocumentsProcessedTotal: client.Counter<string>;
 let ragDocumentsIngestedTotal: client.Counter<string>;
 let ragDocumentsWithoutTextTotal: client.Counter<string>;
+let ragOcrPagesTotal: client.Counter<string>;
 let ragChunksCreatedTotal: client.Counter<string>;
 
 // ===== Embedding metrics =====
@@ -78,6 +79,12 @@ export function initializeRagMetrics(): void {
     name: "rag_documents_without_text_total",
     help: "Documents a content sync found but could not index (scanned PDF with no text layer, unparseable or empty file, oversized image) — skipped, so invisible to search",
     labelNames: ["connector_type"],
+  });
+
+  ragOcrPagesTotal = new client.Counter({
+    name: "rag_ocr_pages_total",
+    help: "Textless PDF pages the OCR pass attempted during ingestion, by outcome (transcribed, failed, skipped-by-limit)",
+    labelNames: ["connector_type", "outcome"],
   });
 
   ragChunksCreatedTotal = new client.Counter({
@@ -230,6 +237,31 @@ export function reportConnectorSync(params: {
       { connector_type: params.connectorType },
       params.documentsWithoutText,
     );
+  }
+}
+
+/**
+ * Reports the OCR pass's per-document page outcomes.
+ */
+export function reportOcrPages(params: {
+  connectorType: string;
+  transcribed: number;
+  failed: number;
+  skipped: number;
+}): void {
+  if (!ragOcrPagesTotal) return;
+  const outcomes = [
+    ["transcribed", params.transcribed],
+    ["failed", params.failed],
+    ["skipped", params.skipped],
+  ] as const;
+  for (const [outcome, count] of outcomes) {
+    if (count > 0) {
+      ragOcrPagesTotal.inc(
+        { connector_type: params.connectorType, outcome },
+        count,
+      );
+    }
   }
 }
 

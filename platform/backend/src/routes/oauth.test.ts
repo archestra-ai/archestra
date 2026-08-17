@@ -1692,6 +1692,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
       status?: number;
       payload: Record<string, unknown>;
     },
+    metadataExtra: Record<string, unknown> = {},
   ): Mock => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1711,6 +1712,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
             authorization_endpoint: "https://auth.example.com/authorize",
             token_endpoint: "https://auth.example.com/token",
             registration_endpoint: REGISTRATION_ENDPOINT,
+            ...metadataExtra,
           }),
         };
       },
@@ -1762,6 +1764,46 @@ describe("OAuth dynamic client registration scope fallback", () => {
     expect(
       JSON.parse(String(registrationCalls[1]?.[1]?.body)),
     ).not.toHaveProperty("scope");
+  });
+
+  test("retries with the server's advertised scopes when the configured scopes are rejected", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeStaleScopeCatalog(makeInternalMcpCatalog);
+    const fetchMock = mockAuthServer(
+      (body) => {
+        const scope = body.scope as string | undefined;
+        if (scope === "things:read things:write") {
+          return {
+            ok: true,
+            payload: { client_id: "dyn-client", scope: "things:read" },
+          };
+        }
+        return {
+          ok: false,
+          payload: {
+            error: "invalid_client_metadata",
+            error_description: "Requested scopes are not available.",
+          },
+        };
+      },
+      { scopes_supported: ["things:read", "things:write"] },
+    );
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.get("client_id")).toBe("dyn-client");
+    // The advertised-scope registration succeeded and the server narrowed the
+    // grant, so the authorization request uses the granted set.
+    expect(authorizationUrl.searchParams.get("scope")).toBe("things:read");
+
+    const registrationCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === REGISTRATION_ENDPOINT,
+    );
+    // Configured attempt, then advertised-scope retry — no scope-less attempt.
+    expect(registrationCalls).toHaveLength(2);
   });
 
   test("omits the scope parameter entirely when the scope-less registration reports no granted scope", async ({

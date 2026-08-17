@@ -974,24 +974,67 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 },
               );
             } catch (error) {
-              // RFC 7591 makes `scope` optional, and servers that restrict
-              // which scopes dynamically registered clients may request reject
-              // the whole registration when the requested list has gone stale
-              // (e.g. an auth server that migrated to a new scope scheme).
-              // Retry without `scope` so the server assigns its default scope
-              // set instead of dead-ending the install.
+              // Servers that restrict which scopes dynamically registered
+              // clients may request reject the whole registration when the
+              // requested list has gone stale (e.g. an auth server that
+              // migrated to a granular scope scheme). Retry with the scopes
+              // the server currently advertises, so the resulting token
+              // carries real API scopes.
               fastify.log.warn(
                 {
                   error: error instanceof Error ? error.message : String(error),
                   scopes: scopesToUse,
                 },
-                "Dynamic registration with explicit scope failed, retrying without scope",
+                "Dynamic registration with configured scopes failed, retrying with advertised scopes",
               );
-              registrationResult = await registerOAuthClient(
-                registrationEndpoint,
-                registrationMetadata,
-              );
-              registeredWithoutScope = true;
+              const advertisedScopes =
+                configuredScopes.length > 0
+                  ? await discoverScopes(
+                      oauthConfig.server_url,
+                      oauthConfig.supports_resource_metadata || false,
+                      [],
+                      {
+                        authServerUrl: oauthConfig.auth_server_url,
+                        resourceMetadataUrl: oauthConfig.resource_metadata_url,
+                        wellKnownUrl: oauthConfig.well_known_url,
+                      },
+                    )
+                  : []; // scopes already came from discovery; nothing new to try
+              if (
+                advertisedScopes.length > 0 &&
+                advertisedScopes.join(" ") !== scopesToUse.join(" ")
+              ) {
+                try {
+                  registrationResult = await registerOAuthClient(
+                    registrationEndpoint,
+                    {
+                      ...registrationMetadata,
+                      scope: advertisedScopes.join(" "),
+                    },
+                  );
+                  scopesToUse = advertisedScopes;
+                } catch (retryError) {
+                  fastify.log.warn(
+                    {
+                      error:
+                        retryError instanceof Error
+                          ? retryError.message
+                          : String(retryError),
+                    },
+                    "Dynamic registration with advertised scopes failed, retrying without scope",
+                  );
+                }
+              }
+              if (!registrationResult) {
+                // Last resort: RFC 7591 makes `scope` optional — let the
+                // server assign its default scope set instead of dead-ending
+                // the install.
+                registrationResult = await registerOAuthClient(
+                  registrationEndpoint,
+                  registrationMetadata,
+                );
+                registeredWithoutScope = true;
+              }
             }
 
             clientId = registrationResult?.client_id as string;

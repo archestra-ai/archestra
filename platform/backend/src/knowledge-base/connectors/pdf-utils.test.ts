@@ -238,3 +238,60 @@ describe("PDF extraction descriptions", () => {
     ).toContain("no pages");
   });
 });
+
+describe("OCR outcome descriptions", () => {
+  it("names the size limit and the failure cause for a wholesale-skipped document", () => {
+    const reason = describePdfEmptyText({
+      text: "",
+      status: "no_text_layer",
+      pageCount: 3,
+      textlessPageCount: 3,
+      ocr: {
+        transcribedPageCount: 0,
+        failedPageCount: 0,
+        skippedPageCount: 3,
+        skippedBy: "document-size-limit",
+      },
+    });
+    expect(reason).toContain(
+      "OCR could not transcribe any of the 3 textless page(s)",
+    );
+    expect(reason).toContain("per-document size limit");
+  });
+
+  it("appends the OCR outcome to a parse_failed reason", () => {
+    const reason = describePdfEmptyText({
+      text: "",
+      status: "parse_failed",
+      pageCount: 2,
+      failedPageCount: 1,
+      textlessPageCount: 1,
+      error: "page 1: font decoder failed",
+      ocr: {
+        transcribedPageCount: 0,
+        failedPageCount: 1,
+        skippedPageCount: 0,
+        failureSummary: "model unavailable",
+      },
+    });
+    expect(reason).toContain("could not be parsed");
+    expect(reason).toContain("model unavailable");
+  });
+
+  it("falls back to the failure summary when counts alone don't explain zero transcription", () => {
+    const warning = describePdfExtractionWarning({
+      text: "Digital page",
+      status: "partial",
+      pageCount: 3,
+      textlessPageCount: 2,
+      ocr: {
+        transcribedPageCount: 0,
+        failedPageCount: 0,
+        skippedPageCount: 2,
+        failureSummary: "document is larger than the 50 MB OCR limit",
+      },
+    });
+    expect(warning).toContain("OCR transcribed 0 of 2 textless page(s)");
+    expect(warning).toContain("larger than the 50 MB OCR limit");
+  });
+});

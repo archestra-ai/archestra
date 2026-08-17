@@ -823,25 +823,23 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const organization = await OrganizationModel.patch(organizationId, body);
-
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
-      }
-
       // Turning OCR on (unset -> configured) resets connector checkpoints so
       // the next sync re-presents documents that were previously skipped as
       // having no extractable text — a delta sync would otherwise never show
       // them again and enabling OCR would appear to do nothing. Key/model
-      // swaps and clears deliberately do not trigger this.
+      // swaps and clears deliberately do not trigger this. The reset runs
+      // BEFORE the organization write: resetting is idempotent and benign on
+      // its own, while the reverse order could persist an enabled OCR whose
+      // reset failed — and a retry would then see OCR as "already configured"
+      // and never reset at all.
       const ocrWasConfigured =
         !!currentOrg?.ocrChatApiKeyId && !!currentOrg?.ocrModel;
-      if (
+      const ocrBecomesConfigured =
         patchTouchesOcr &&
         !ocrWasConfigured &&
-        organization.ocrChatApiKeyId &&
-        organization.ocrModel
-      ) {
+        !!effectiveOcrKeyId &&
+        !!effectiveOcrModel;
+      if (ocrBecomesConfigured) {
         await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
           organizationId,
         );
@@ -849,6 +847,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { organizationId },
           "OCR enabled — connector checkpoints reset for a full re-sync",
         );
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
       }
 
       return reply.send(organization);

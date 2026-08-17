@@ -341,7 +341,7 @@ const RERANKER_VALIDATION_PROMPT =
 const RESPONSE_EXCERPT_MAX_LENGTH = 200;
 
 /**
- * A minimal one-page classic-xref PDF ("ARCHESTRA OCR PROBE") built from a
+ * A minimal one-page classic-xref PDF ("DOCUMENT INPUT PROBE") built from a
  * template. Constructed in code rather than shipped as an asset so the
  * production bundle needs no fixture file.
  */
@@ -352,7 +352,7 @@ function buildOcrProbePdf(): Buffer {
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 120] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
   ];
-  const stream = "BT /F1 14 Tf 30 60 Td (ARCHESTRA OCR PROBE) Tj ET";
+  const stream = "BT /F1 14 Tf 30 60 Td (DOCUMENT INPUT PROBE) Tj ET";
   objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
 
   let body = "%PDF-1.4\n";

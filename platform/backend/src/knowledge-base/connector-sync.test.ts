@@ -50,6 +50,8 @@ import {
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import OrganizationModel from "@/models/organization";
 import { describe, expect, test } from "@/test";
 import { connectorSyncService } from "./connector-sync";
 import { deleteConnector } from "./knowledge-source-deletion";
@@ -130,6 +132,57 @@ describe("ConnectorSyncService", () => {
     // Connector stays "running" — the last batch_embedding task sets "success"
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
     expect(updated?.lastSyncStatus).toBe("running");
+  });
+
+  test("an unresolvable OCR configuration degrades to syncing without OCR", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    // Configured but unusable: a keyless native-Ollama credential resolves,
+    // but its transport cannot carry PDF input, so resolveOcrConfig throws —
+    // the sync must proceed OCR-less, not fail.
+    const badKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Native Ollama",
+      provider: "ollama-native",
+      secretId: null,
+      scope: "org",
+      userId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: badKey.id,
+      ocrModel: "llava",
+    });
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue(
+      makeMockConnector([{ id: "ext-1", title: "Doc 1", content: "Text" }]),
+    );
+
+    // The shared test setup silences pino, so capture through a stub logger
+    // rather than the capturing stream the task handler uses.
+    const warn = vi.fn();
+    const stubLogger = {
+      info: vi.fn(),
+      warn,
+      debug: vi.fn(),
+      error: vi.fn(),
+      child: () => stubLogger,
+    };
+    const result = await connectorSyncService.executeSync(connector.id, {
+      logger: stubLogger as never,
+    });
+    expect(result.status).toBe("success");
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.stringContaining("PDF input") }),
+      "OCR is configured but unusable — syncing without it",
+    );
   });
 
   test("sub-resource fallbacks stay warnings: a run that ingested every document is a success", async ({

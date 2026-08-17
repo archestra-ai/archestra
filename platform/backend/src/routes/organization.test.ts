@@ -1537,9 +1537,7 @@ describe("organization routes", () => {
       ).toEqual(checkpoint);
     });
 
-    test("clearing both OCR fields disables OCR without touching checkpoints", async ({
-      makeSecret,
-    }) => {
+    test("clearing both OCR fields disables OCR", async ({ makeSecret }) => {
       vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
         { ok: true },
       );

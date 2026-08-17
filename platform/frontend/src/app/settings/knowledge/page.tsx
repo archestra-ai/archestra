@@ -269,6 +269,7 @@ function ApiKeySelector({
   label,
   pulse,
   allowedKeyIds,
+  autoSelectFirstKey = true,
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
@@ -277,6 +278,12 @@ function ApiKeySelector({
   label: string;
   pulse?: boolean;
   allowedKeyIds?: Set<string>;
+  /**
+   * Optional sections pass false: auto-filling their key would leave a
+   * half-configured pair (key set, model empty) that blocks the next save of
+   * a section the user never touched.
+   */
+  autoSelectFirstKey?: boolean;
 }) {
   const { data: apiKeys, isPending } = useAvailableLlmProviderApiKeys();
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -301,10 +308,10 @@ function ApiKeySelector({
     const prevCount = prevSelectableCountRef.current;
     prevSelectableCountRef.current = keys.length;
 
-    if (prevCount === 0 && keys.length > 0 && !value) {
+    if (autoSelectFirstKey && prevCount === 0 && keys.length > 0 && !value) {
       onChange(keys[0].id);
     }
-  }, [keys, value, onChange, isPending]);
+  }, [keys, value, onChange, isPending, autoSelectFirstKey]);
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -487,7 +494,7 @@ function OcrModelSelector({
       }))}
       placeholder="Select vision model..."
       searchPlaceholder="Search vision models..."
-      emptyMessage="No vision-capable models for this key's provider. Mark your model's Image or PDF input modality in Model Providers > Models."
+      emptyMessage="No vision-capable models for this key's provider. Mark your model's image or PDF input modality in LLM Providers > Models."
       className={cn("w-full")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -1208,6 +1215,7 @@ function KnowledgeSettingsContent() {
                       disabled={!hasPermission}
                       label="OCR API key"
                       allowedKeyIds={ocrCapableKeyIds}
+                      autoSelectFirstKey={false}
                     />
                   </CardRow>
                   <CardRow label="Model">

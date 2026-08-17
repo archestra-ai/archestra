@@ -90,10 +90,10 @@ export async function extractPdfText(params: {
   const { buffer, filename, ocr } = params;
   const parsed = await parsePdfBuffer(buffer);
   if (!ocr) return parsed;
-  if (parsed.status !== "no_text_layer" && parsed.status !== "partial") {
-    return parsed;
-  }
 
+  // Candidates come from the per-page outcomes, not the overall status: a
+  // document whose remaining pages all FAILED extraction still reports
+  // `parse_failed`, but its textless pages are scans worth transcribing.
   const pages = parsed.pages ?? [];
   const textless = pages.filter((page) => page.status === "textless");
   if (textless.length === 0) return parsed;
@@ -103,17 +103,36 @@ export async function extractPdfText(params: {
   const documentCap = config.kb.ocrMaxPagesPerDocument;
   const runRemaining = Math.max(0, ocr.budget.remainingPages);
   const take = Math.min(textless.length, documentCap, runRemaining);
+  // Mixed causes collapse to one label (deadline wins over budget over cap);
+  // the counts stay exact, only the attribution is approximate.
   let skippedBy: OcrOutcome["skippedBy"];
   if (take < textless.length) {
     skippedBy =
       runRemaining < documentCap ? "run-page-budget" : "document-page-cap";
   }
 
-  if (buffer.length > OCR_MAX_SOURCE_BYTES) {
-    return withOutcome(parsed, {
+  const finish = (outcome: OcrOutcome): PdfExtractionResult => {
+    reportOutcome({ ocr, outcome, filename });
+    return withOutcome(parsed, outcome);
+  };
+
+  // Everything below costs real work (a pdf-lib parse of up to 50 MB), so an
+  // exhausted budget or an already-passed deadline returns before it.
+  if (take === 0 || Date.now() >= ocr.deadlineAt) {
+    return finish({
       transcribedPageCount: 0,
       failedPageCount: 0,
       skippedPageCount: textless.length,
+      skippedBy: Date.now() >= ocr.deadlineAt ? "sync-deadline" : skippedBy,
+    });
+  }
+
+  if (buffer.length > OCR_MAX_SOURCE_BYTES) {
+    return finish({
+      transcribedPageCount: 0,
+      failedPageCount: 0,
+      skippedPageCount: textless.length,
+      skippedBy: "document-size-limit",
       failureSummary: `document is larger than the ${Math.round(OCR_MAX_SOURCE_BYTES / (1024 * 1024))} MB OCR limit`,
     });
   }
@@ -124,7 +143,7 @@ export async function extractPdfText(params: {
   } catch (error) {
     // pdf.js parsed this buffer but the subsetting parser cannot — degrade to
     // the pre-OCR behavior rather than failing the document.
-    return withOutcome(parsed, {
+    return finish({
       transcribedPageCount: 0,
       failedPageCount: textless.length,
       skippedPageCount: 0,
@@ -145,7 +164,7 @@ export async function extractPdfText(params: {
   // single loaded source, model calls within a chunk run concurrently.
   for (let i = 0; i < candidates.length; i += OCR_PAGE_CONCURRENCY) {
     if (Date.now() >= ocr.deadlineAt) {
-      deadlineSkipped = candidates.length - i;
+      deadlineSkipped += candidates.length - i;
       break;
     }
     const chunk = candidates.slice(i, i + OCR_PAGE_CONCURRENCY);
@@ -170,6 +189,12 @@ export async function extractPdfText(params: {
 
     await Promise.all(
       prepared.map(async ({ page, bytes }) => {
+        // Sub-PDF preparation is real work; recheck the deadline so a page
+        // prepared just past it never becomes a billable request.
+        if (Date.now() >= ocr.deadlineAt) {
+          deadlineSkipped++;
+          return;
+        }
         try {
           const text = await transcribePage({
             bytes,
@@ -192,6 +217,10 @@ export async function extractPdfText(params: {
     );
   }
 
+  // Pages the deadline dropped were reserved from the run budget but never
+  // spent; hand them back so later attribution stays honest.
+  ocr.budget.remainingPages += deadlineSkipped;
+
   const outcome: OcrOutcome = {
     transcribedPageCount: transcriptions.size,
     failedPageCount,
@@ -209,6 +238,8 @@ export async function extractPdfText(params: {
     return withOutcome(parsed, outcome);
   }
   return mergeTranscriptions(parsed, transcriptions, outcome);
+  // (finish() is not used here: a merge rebuilds the result instead of
+  // attaching the outcome to the original parse.)
 }
 
 // ===== Internal constants =====
@@ -268,8 +299,10 @@ async function transcribePage(params: {
             role: "user",
             content: [
               {
+                // The filename is untrusted source metadata — it stays in
+                // logs and interaction records, never in the model prompt.
                 type: "text",
-                text: `Transcribe this page (page ${pageNumber} of "${name}").`,
+                text: `Transcribe this page (page ${pageNumber}).`,
               },
               { type: "file", data: bytes, mediaType: "application/pdf" },
             ],
@@ -301,7 +334,9 @@ async function transcribePage(params: {
  * a scan is megabytes, and interactions are long-lived rows read by the LLM
  * logs UI. The response keeps the transcription, like every other recorded
  * completion, in the wire shape of the interaction's own type so the read
- * path's per-provider schema accepts it.
+ * path's per-provider schema accepts it. (The REQUEST stays one OpenAI-ish
+ * metadata shape for every family — non-OpenAI reads fall back to the loose
+ * persisted-payload schema by design, rendering as plain JSON.)
  *
  * @public — exercised directly by tests pinning per-family schema conformance
  */

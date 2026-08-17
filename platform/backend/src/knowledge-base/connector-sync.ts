@@ -28,6 +28,7 @@ import {
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 import { buildDocumentContext } from "./contextual-retrieval";
+import { toKnowledgeBaseUserMessage } from "./errors";
 import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
 import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
@@ -321,7 +322,12 @@ class ConnectorSyncService {
       }
     } catch (error) {
       runLog.warn(
-        { error: extractErrorMessage(error) },
+        // Prefer the taxonomy's actionable message ("provider X cannot accept
+        // PDF input…") over the generic Error message when one exists.
+        {
+          error:
+            toKnowledgeBaseUserMessage(error) ?? extractErrorMessage(error),
+        },
         "OCR is configured but unusable — syncing without it",
       );
     }

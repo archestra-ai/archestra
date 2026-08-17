@@ -37,8 +37,16 @@ export interface OcrOutcome {
   failedPageCount: number;
   /** Textless pages never attempted because a limit stopped OCR first. */
   skippedPageCount: number;
-  /** Which limit stopped scheduling, when skippedPageCount > 0. */
-  skippedBy?: "document-page-cap" | "run-page-budget" | "sync-deadline";
+  /**
+   * Which limit stopped scheduling, when skippedPageCount > 0. When several
+   * limits bind in one document the label is the dominant one (deadline over
+   * budget over cap); the counts stay exact.
+   */
+  skippedBy?:
+    | "document-page-cap"
+    | "run-page-budget"
+    | "sync-deadline"
+    | "document-size-limit";
   /** Summary of the first failure, for run diagnostics. */
   failureSummary?: string;
 }
@@ -75,7 +83,7 @@ export function describePdfEmptyText(
     case "empty":
       return "PDF contains no pages";
     case "parse_failed":
-      return `PDF could not be parsed or its pages could not be extracted${result.error ? `: ${result.error}` : ""}`;
+      return `PDF could not be parsed or its pages could not be extracted${result.error ? `: ${result.error}` : ""}${describeFailedOcr(result)}`;
   }
 }
 
@@ -307,6 +315,15 @@ function describeOcrSummary(ocr: OcrOutcome | undefined): string {
       `${ocr.skippedPageCount} skipped by the ${describeOcrLimit(ocr.skippedBy)}`,
     );
   }
+  // A zero-transcription outcome whose cause the counts above don't carry
+  // (e.g. an oversize document skipped wholesale) still names its reason.
+  if (
+    parts.length === 1 &&
+    ocr.transcribedPageCount === 0 &&
+    ocr.failureSummary
+  ) {
+    parts.push(ocr.failureSummary);
+  }
   return ` ${parts.join("; ")}.`;
 }
 
@@ -318,6 +335,8 @@ function describeOcrLimit(limit: NonNullable<OcrOutcome["skippedBy"]>): string {
       return "sync run's OCR page budget";
     case "sync-deadline":
       return "sync run's time budget";
+    case "document-size-limit":
+      return "per-document size limit";
   }
 }
 

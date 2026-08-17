@@ -154,7 +154,7 @@ A scanned PDF has no text layer, so connectors cannot index it — the run repor
 
 OCR runs only on pages that yielded no text. A mixed document — a contract with a scanned signature page, for example — keeps its digital text and gets the scanned pages transcribed. Each transcribed page is one metered model call, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - OCR". A single document is capped at `ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT` pages (default 100); pages past the cap stay untranscribed and the run says so.
 
-Saving the configuration for the first time resets every connector's sync checkpoint. The next sync re-reads all sources, so documents previously skipped as unreadable are picked up. Pages a scan-heavy sync cannot fit into its time budget are picked up by the next run.
+Saving the configuration for the first time resets every connector's sync checkpoint. The next sync re-reads all sources, so documents previously skipped as unreadable are picked up. A run also carries an overall transcription budget: a document whose pages did not fit is indexed with a warning naming what was left out, and its untranscribed pages are only revisited when the source modifies the document or after another full re-sync.
 
 ## Creating a Knowledge Base
 

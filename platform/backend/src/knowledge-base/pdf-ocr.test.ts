@@ -293,3 +293,64 @@ test.for([
   expect(interaction.inputTokens).toBe(5);
   expect(interaction.outputTokens).toBe(7);
 });
+
+test("an exhausted run budget short-circuits before any subsetting or model work", async () => {
+  const { model, calls } = mockModel(() => "unused");
+  const context = ocrContext(model, { budget: { remainingPages: 0 } });
+  const result = await extractPdfText({
+    buffer: makeTestPdf([null, null]),
+    ocr: context,
+  });
+  expect(calls).toHaveLength(0);
+  expect(result.status).toBe("no_text_layer");
+  expect(result.ocr).toMatchObject({
+    transcribedPageCount: 0,
+    skippedPageCount: 2,
+    skippedBy: "run-page-budget",
+  });
+});
+
+test("a deadline crossing mid-run stops later chunks and refunds their budget", async () => {
+  // The clock is virtual: page one's transcription pushes it past the
+  // deadline, so the second chunk (page 5) is never scheduled and its
+  // reserved budget is handed back.
+  const realNow = Date.now();
+  let offset = 0;
+  const nowSpy = vi
+    .spyOn(Date, "now")
+    .mockImplementation(() => realNow + offset);
+  try {
+    const { model, calls } = mockModel(() => {
+      offset += 120_000; // cross the deadline during chunk 1
+      return "Transcribed before the deadline";
+    });
+    const context = ocrContext(model, {
+      deadlineAt: realNow + 60_000,
+      budget: { remainingPages: 100 },
+    });
+    // 5 textless pages = one chunk of 4 (concurrency) + one of 1.
+    const result = await extractPdfText({
+      buffer: makeTestPdf([null, null, null, null, null]),
+      ocr: context,
+    });
+
+    // Chunk 1 transcribed (the recheck passed before the calls started);
+    // chunk 2 was dropped by the loop's deadline check.
+    expect(calls.length).toBeLessThanOrEqual(4);
+    expect(result.ocr?.skippedBy).toBe("sync-deadline");
+    const outcome = result.ocr;
+    if (!outcome) throw new Error("expected an OCR outcome");
+    expect(
+      outcome.transcribedPageCount +
+        outcome.failedPageCount +
+        outcome.skippedPageCount,
+    ).toBe(5);
+    expect(outcome.skippedPageCount).toBeGreaterThanOrEqual(1);
+    // Refund: only genuinely attempted pages stay charged against the run.
+    expect(context.budget.remainingPages).toBe(
+      100 - outcome.transcribedPageCount - outcome.failedPageCount,
+    );
+  } finally {
+    nowSpy.mockRestore();
+  }
+});

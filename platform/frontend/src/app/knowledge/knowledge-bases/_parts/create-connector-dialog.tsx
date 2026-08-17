@@ -144,8 +144,7 @@ export function CreateConnectorDialog({
     (option) =>
       (option.type !== "mfiles" || mfilesEnabled) &&
       !connectorCatalog.isHidden(option.type) &&
-      connectorCatalog
-        .label(option.type)
+      getConnectorTypeLabel(option.type)
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
@@ -378,11 +377,10 @@ export function CreateConnectorDialog({
                       </div>
                       <div>
                         <div className="font-medium">
-                          {connectorCatalog.label(option.type)}
+                          {getConnectorTypeLabel(option.type)}
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {connectorCatalog.description(option.type) ??
-                            option.description}
+                          {option.description}
                         </div>
                       </div>
                     </button>

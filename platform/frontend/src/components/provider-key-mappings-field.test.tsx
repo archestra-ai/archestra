@@ -1,12 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
   type ProviderApiKeyMap,
   ProviderKeyMappingsField,
 } from "@/components/provider-key-mappings-field";
+import { useOrganization } from "@/lib/organization.query";
 
 global.ResizeObserver = class ResizeObserver {
   observe = vi.fn();
@@ -14,6 +15,14 @@ global.ResizeObserver = class ResizeObserver {
   disconnect = vi.fn();
 };
 Element.prototype.scrollIntoView = vi.fn();
+
+vi.mock("@/lib/organization.query");
+
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 const providerApiKeys = [
   {

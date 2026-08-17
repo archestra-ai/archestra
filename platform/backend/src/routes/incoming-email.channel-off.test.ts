@@ -11,7 +11,10 @@ vi.mock("@/agents/incoming-email", () => ({
   processIncomingEmail: vi.fn(),
 }));
 
-import { getEmailProvider, getSubscriptionStatus } from "@/agents/incoming-email";
+import {
+  getEmailProvider,
+  getSubscriptionStatus,
+} from "@/agents/incoming-email";
 
 /**
  * Turning the email channel off has to read as off on every surface, not only
@@ -38,9 +41,8 @@ describe("incoming email while the channel is turned off", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: User }).user = user;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
     const { default: incomingEmailRoutes } = await import("./incoming-email");
     await app.register(incomingEmailRoutes);

@@ -13,7 +13,6 @@ import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
-  PROVIDER_CONFIG,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
@@ -129,7 +128,7 @@ export function CreateLlmProviderApiKeyDialog({
           values.name?.trim() ||
           (subscriptionKind
             ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
-            : PROVIDER_CONFIG[values.provider].name),
+            : providerCatalog.label(values.provider)),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,

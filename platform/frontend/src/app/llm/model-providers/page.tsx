@@ -389,6 +389,7 @@ export default function ApiKeysPage() {
         field="modelProviderOverrides"
         title="Model provider settings"
         description="Admin only — turn off the providers your organization does not allow, and rename the ones it does. Turned-off providers disappear from every picker and cannot be given credentials."
+        allowRename
         entityNamePlural="providers"
         items={providerSettingsItems}
         overrides={providerCatalog.overrides}

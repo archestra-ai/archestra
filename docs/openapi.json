@@ -139114,6 +139114,25 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       }
@@ -275467,11 +275486,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -275485,16 +275499,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -275508,16 +275512,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -276543,11 +276537,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -276561,16 +276550,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -276584,16 +276563,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -277912,11 +277881,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -277930,16 +277894,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -277953,16 +277907,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -278844,11 +278788,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -278862,16 +278801,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -278885,16 +278814,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -279769,11 +279688,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -279787,16 +279701,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -279810,16 +279714,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -280694,11 +280588,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -280712,16 +280601,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -280735,16 +280614,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -281634,11 +281503,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -281652,16 +281516,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -281675,16 +281529,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -282653,11 +282497,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -282671,16 +282510,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -282694,16 +282523,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -283136,13 +282955,9 @@
                           "nullable": true,
                           "type": "string",
                           "maxLength": 60
-                        },
-                        "description": {
-                          "nullable": true,
-                          "type": "string",
-                          "maxLength": 300
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "messagingChannelOverrides": {
@@ -283153,18 +282968,9 @@
                       "properties": {
                         "hidden": {
                           "type": "boolean"
-                        },
-                        "displayName": {
-                          "nullable": true,
-                          "type": "string",
-                          "maxLength": 60
-                        },
-                        "description": {
-                          "nullable": true,
-                          "type": "string",
-                          "maxLength": 300
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "knowledgeConnectorOverrides": {
@@ -283175,18 +282981,9 @@
                       "properties": {
                         "hidden": {
                           "type": "boolean"
-                        },
-                        "displayName": {
-                          "nullable": true,
-                          "type": "string",
-                          "maxLength": 60
-                        },
-                        "description": {
-                          "nullable": true,
-                          "type": "string",
-                          "maxLength": 300
                         }
-                      }
+                      },
+                      "additionalProperties": false
                     }
                   }
                 }
@@ -283631,11 +283428,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -283649,16 +283441,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -283672,16 +283454,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -284627,11 +284399,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -284645,16 +284412,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -284668,16 +284425,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -285568,11 +285315,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -285586,16 +285328,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -285609,16 +285341,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -286521,11 +286243,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -286539,16 +286256,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -286562,16 +286269,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -287431,11 +287128,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -287449,16 +287141,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -287472,16 +287154,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -289238,11 +288910,6 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -289256,16 +288923,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false
@@ -289279,16 +288936,6 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
-                          },
-                          "displayName": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 60
-                          },
-                          "description": {
-                            "nullable": true,
-                            "type": "string",
-                            "maxLength": 300
                           }
                         },
                         "additionalProperties": false

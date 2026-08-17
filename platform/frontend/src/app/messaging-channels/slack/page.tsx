@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   buildSlackSlashCommands,
+  MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
 import { AlertTriangle, Cable, Globe, Info, Waypoints } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -32,7 +33,7 @@ function useSlackProviderConfig(): ProviderConfig {
   const appName = useAppName();
   return {
     provider: "slack",
-    providerLabel: "Slack",
+    providerLabel: MESSAGING_CHANNEL_LABELS.slack,
     providerIcon: "/icons/slack.png",
     webhookPath: "/api/webhooks/chatops/slack",
     supportsAnswerAll: true,
@@ -97,19 +98,23 @@ export default function SlackPage() {
   const isLocalDev =
     configData?.features.isQuickstart || config.environment === "development";
   const { slack: allStepsCompleted } = useTriggerStatuses();
+  // What this organization calls the channel — the vendor's own product nouns
+  // ("Slack App", the api.slack.com console) stay literal so the setup steps
+  // remain followable.
+  const channelLabel = MESSAGING_CHANNEL_LABELS.slack;
 
   return (
     <div className="flex flex-col gap-4">
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
-        providerLabel="Slack"
+        providerLabel={channelLabel}
         docsUrl={getFrontendDocsUrl("platform-slack")}
       >
         <LlmKeySetupStep />
         <SetupStep
           title="Choose connection mode"
-          description={`How Slack delivers events to ${appName}`}
+          description={`How ${channelLabel} delivers events to ${appName}`}
           done={
             !hasModeChange &&
             (isSocket ||
@@ -130,7 +135,7 @@ export default function SlackPage() {
               icon={Cable}
               title="WebSocket"
               badge="Recommended"
-              description={`${appName} exchanges WebSocket messages with Slack — no public URL needed`}
+              description={`${appName} exchanges WebSocket messages with ${channelLabel} — no public URL needed`}
             />
             {isLocalDev ? (
               <>
@@ -174,7 +179,7 @@ export default function SlackPage() {
                 onSelect={() => setSelectedMode("webhook")}
                 icon={Globe}
                 title="Webhook"
-                description={`Slack makes HTTP requests to ${appName}, requires a public URL`}
+                description={`${channelLabel} makes HTTP requests to ${appName}, requires a public URL`}
               />
             )}
           </div>
@@ -195,8 +200,8 @@ export default function SlackPage() {
                 <code className="bg-muted px-1 py-0.5 rounded">
                   POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
                 </code>{" "}
-                must be publicly accessible so Slack can deliver events to{" "}
-                {appName}.
+                must be publicly accessible so {channelLabel} can deliver events
+                to {appName}.
               </span>
             </div>
           )}
@@ -207,8 +212,8 @@ export default function SlackPage() {
                   <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                   <span className="text-muted-foreground text-xs">
                     Changing the connection mode will reset your Slack
-                    configuration. You will need to reconfigure Slack with a new
-                    app manifest.
+                    configuration. You will need to reconfigure {channelLabel}
+                    with a new app manifest.
                   </span>
                 </div>
               )}

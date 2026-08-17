@@ -38570,6 +38570,12 @@ export type PostApiWebhooksIncomingEmailErrors = {
     500: {
         error: string;
     };
+    /**
+     * Default Response
+     */
+    503: {
+        error: string;
+    };
 };
 
 export type PostApiWebhooksIncomingEmailError = PostApiWebhooksIncomingEmailErrors[keyof PostApiWebhooksIncomingEmailErrors];
@@ -70701,21 +70707,16 @@ export type GetOrganizationResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -71026,21 +71027,16 @@ export type UpdateAppearanceSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -71227,21 +71223,16 @@ export type UpdateSecuritySettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -71423,21 +71414,16 @@ export type UpdateLlmSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -71618,21 +71604,16 @@ export type UpdateMcpSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -71813,21 +71794,16 @@ export type UpdateSkillsSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72010,21 +71986,16 @@ export type UpdateAgentSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72218,21 +72189,16 @@ export type UpdateConnectionSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72262,21 +72228,16 @@ export type UpdateIntegrationSettingsData = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides?: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides?: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
     };
@@ -72431,21 +72392,16 @@ export type UpdateIntegrationSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72637,21 +72593,16 @@ export type UpdateDefaultEnvironmentResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72835,21 +72786,16 @@ export type UpdateAuthSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73035,21 +72981,16 @@ export type UpdateKnowledgeSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73228,21 +73169,16 @@ export type DropEmbeddingConfigResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73684,21 +73620,16 @@ export type CompleteOnboardingResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         messagingChannelOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         knowledgeConnectorOverrides: {
             [key: string]: {
                 hidden?: boolean;
-                displayName?: string | null;
-                description?: string | null;
             };
         } | null;
         defaultEnvironmentName: string | null;

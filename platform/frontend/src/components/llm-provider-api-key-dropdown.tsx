@@ -4,7 +4,6 @@ import {
   E2eTestId,
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
-  providerDisplayNames,
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -29,6 +28,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
@@ -343,12 +343,12 @@ function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
 }
 
 function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {
-  const providerName = providerDisplayNames[provider] ?? provider;
+  const providerCatalog = useModelProviderCatalog();
 
   return (
     <span className="flex items-center gap-1.5">
       <ProviderIcon provider={provider} />
-      <span>{PROVIDER_CONFIG[provider]?.name ?? providerName}</span>
+      <span>{providerCatalog.label(provider)}</span>
     </span>
   );
 }

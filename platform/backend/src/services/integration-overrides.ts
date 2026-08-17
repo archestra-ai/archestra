@@ -1,11 +1,11 @@
 import {
+  builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
   integrationLabel,
   isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
-  providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
 import OrganizationModel from "@/models/organization";
@@ -32,7 +32,7 @@ export async function assertModelProviderAllowed(params: {
     `${integrationLabel(
       modelProviderOverrides,
       params.provider,
-      providerDisplayNames[params.provider],
+      builtInProviderLabel(params.provider),
     )} is turned off for this organization. Ask an administrator to re-enable it under model providers.`,
   );
 }
@@ -47,11 +47,7 @@ export async function assertMessagingChannelAllowed(params: {
   if (!isIntegrationHidden(messagingChannelOverrides, params.channel)) return;
   throw new ApiError(
     400,
-    `${integrationLabel(
-      messagingChannelOverrides,
-      params.channel,
-      MESSAGING_CHANNEL_LABELS[params.channel],
-    )} is turned off for this organization. Ask an administrator to re-enable it under messaging channels.`,
+    `${MESSAGING_CHANNEL_LABELS[params.channel]} is turned off for this organization. Ask an administrator to re-enable it under messaging channels.`,
   );
 }
 
@@ -73,11 +69,7 @@ export async function hiddenKnowledgeConnectorViolation(params: {
   if (!isIntegrationHidden(knowledgeConnectorOverrides, connectorType)) {
     return null;
   }
-  const label = integrationLabel(
-    knowledgeConnectorOverrides,
-    connectorType,
-    CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType,
-  );
+  const label = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
   return `${label} connectors are turned off for this organization. Ask an administrator to re-enable the connector type.`;
 }
 

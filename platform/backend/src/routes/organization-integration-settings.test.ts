@@ -61,9 +61,7 @@ describe("PATCH /api/organization/integration-settings", () => {
         openai: { displayName: "OpenAI (approved)" },
       },
       messagingChannelOverrides: { telegram: { hidden: true } },
-      knowledgeConnectorOverrides: {
-        dropbox: { hidden: true, description: "Use SharePoint instead" },
-      },
+      knowledgeConnectorOverrides: { dropbox: { hidden: true } },
     });
 
     expect(response.statusCode).toBe(200);
@@ -76,7 +74,7 @@ describe("PATCH /api/organization/integration-settings", () => {
       telegram: { hidden: true },
     });
     expect(body.knowledgeConnectorOverrides).toEqual({
-      dropbox: { hidden: true, description: "Use SharePoint instead" },
+      dropbox: { hidden: true },
     });
   });
 
@@ -100,6 +98,18 @@ describe("PATCH /api/organization/integration-settings", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().modelProviderOverrides).toBeNull();
+  });
+
+  // Channels and connectors are toggle-only, so a name there is a mistake
+  // rather than a customization the API should silently accept.
+  test("rejects a display name on a toggle-only catalog", async () => {
+    expect(
+      (
+        await patch({
+          messagingChannelOverrides: { slack: { displayName: "Corp chat" } },
+        })
+      ).statusCode,
+    ).toBe(400);
   });
 
   test("rejects ids that are not part of a catalog", async () => {

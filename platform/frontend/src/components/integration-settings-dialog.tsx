@@ -1,9 +1,8 @@
 "use client";
 
 import {
-  type IntegrationOverride,
-  MAX_INTEGRATION_DESCRIPTION_LENGTH,
   MAX_INTEGRATION_DISPLAY_NAME_LENGTH,
+  type ModelProviderOverride,
   pruneIntegrationOverrides,
 } from "@archestra/shared";
 import { Search, Settings2 } from "lucide-react";
@@ -17,10 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useUpdateIntegrationSettings } from "@/lib/organization.query";
 
-/** One row of the dialog: a catalog entry the admin can hide or relabel. */
+/** One row of the dialog: a catalog entry the admin can turn off. */
 export type IntegrationSettingsItem<Id extends string> = {
   id: Id;
-  /** The built-in name, shown as the placeholder for the custom label. */
+  /** The name the entry ships with. */
   label: string;
   icon?: ReactNode;
 };
@@ -35,11 +34,14 @@ type IntegrationCatalogField =
  * Admin-only control for one of the built-in integration catalogs — model
  * providers, messaging channels, or knowledge connectors. Mirrors the connect
  * page's "Page settings": a member never sees the button, and an admin gets a
- * per-entry switch plus the label and blurb overrides that decide how the
- * entry reads everywhere else.
+ * per-entry switch.
  *
- * Hiding is not cosmetic — the API refuses to configure a hidden entry — so
- * the copy says "turned off", not "hidden".
+ * Turning an entry off is not cosmetic — the API refuses to configure a
+ * turned-off entry — so the copy says "turned off", not "hidden".
+ *
+ * `allowRename` adds a name field. Only model providers take one: a channel or
+ * a connector names a single external service, and renaming those would only
+ * make their setup instructions harder to follow.
  */
 export function IntegrationSettingsDialog<Id extends string>({
   field,
@@ -48,15 +50,24 @@ export function IntegrationSettingsDialog<Id extends string>({
   entityNamePlural,
   items,
   overrides,
+  allowRename = false,
+  compact = false,
   testId,
 }: {
   field: IntegrationCatalogField;
   title: string;
   description: string;
-  /** Lowercase plural used in the empty/summary copy, e.g. "providers". */
+  /** Lowercase plural used in the search and empty copy, e.g. "providers". */
   entityNamePlural: string;
   items: IntegrationSettingsItem<Id>[];
-  overrides: Partial<Record<Id, IntegrationOverride>> | null;
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null;
+  allowRename?: boolean;
+  /**
+   * Drops the search box. For a catalog short enough to read at a glance —
+   * the five messaging channels — it is chrome around a list you can already
+   * see all of.
+   */
+  compact?: boolean;
   testId: string;
 }) {
   const { data: canUpdateSettings } = useHasPermissions({
@@ -88,6 +99,8 @@ export function IntegrationSettingsDialog<Id extends string>({
           entityNamePlural={entityNamePlural}
           items={items}
           overrides={overrides}
+          allowRename={allowRename}
+          compact={compact}
           onClose={() => setOpen(false)}
         />
       )}
@@ -111,6 +124,8 @@ function IntegrationSettingsForm<Id extends string>({
   entityNamePlural,
   items,
   overrides,
+  allowRename,
+  compact,
   onClose,
 }: {
   field: IntegrationCatalogField;
@@ -118,7 +133,9 @@ function IntegrationSettingsForm<Id extends string>({
   description: string;
   entityNamePlural: string;
   items: IntegrationSettingsItem<Id>[];
-  overrides: Partial<Record<Id, IntegrationOverride>> | null;
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null;
+  allowRename: boolean;
+  compact: boolean;
   onClose: () => void;
 }) {
   const serverDraft = useMemo(
@@ -134,9 +151,8 @@ function IntegrationSettingsForm<Id extends string>({
   );
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(serverDraft);
-  const hiddenCount = items.filter((item) => draft[item.id]?.hidden).length;
 
-  // Matches the admin's own label too, so a renamed entry is findable by the
+  // Matches the admin's own name too, so a renamed entry is findable by the
   // name their organization actually knows it by.
   const query = search.trim().toLowerCase();
   const visibleItems = items.filter((item) =>
@@ -148,25 +164,14 @@ function IntegrationSettingsForm<Id extends string>({
   const patch = (id: Id, changes: Partial<DraftEntry>) =>
     setDraft((prev) => ({ ...prev, [id]: { ...prev[id], ...changes } }));
 
-  const setAllHidden = (hidden: boolean) =>
-    setDraft((prev) => {
-      const next = { ...prev };
-      for (const item of items) {
-        next[item.id] = { ...next[item.id], hidden };
-      }
-      return next;
-    });
-
   const handleSave = () => {
-    const next: Partial<Record<Id, IntegrationOverride>> = {};
+    const next: Partial<Record<Id, ModelProviderOverride>> = {};
     for (const item of items) {
       const entry = draft[item.id];
       if (!entry) continue;
-      next[item.id] = {
-        hidden: entry.hidden,
-        displayName: entry.displayName,
-        description: entry.description,
-      };
+      next[item.id] = allowRename
+        ? { hidden: entry.hidden, displayName: entry.displayName }
+        : { hidden: entry.hidden };
     }
     updateMutation.mutate(
       { [field]: pruneIntegrationOverrides(next) },
@@ -174,10 +179,10 @@ function IntegrationSettingsForm<Id extends string>({
     );
   };
 
-  // The body carries no padding of its own: the search box and the "N turned
-  // off" summary sit in a fixed block above a full-bleed scroll region, so the
-  // list's scrollbar runs edge to edge — flush against the dialog's right side,
-  // and flush against the block above it and the footer below.
+  // The body carries no padding of its own: the search box sits in a fixed
+  // block above a full-bleed scroll region, so the list's scrollbar runs edge
+  // to edge — flush against the dialog's right side, and flush against the
+  // block above it and the footer below.
   return (
     <StandardDialog
       open
@@ -208,11 +213,9 @@ function IntegrationSettingsForm<Id extends string>({
         </>
       }
     >
-      <div className="flex flex-col gap-2 px-4 pt-4 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* A plain input rather than the shared SearchInput: this filter is
-              dialog-local, and SearchInput mirrors its value into the page URL. */}
-          <div className="relative max-w-64 flex-1">
+      {!compact && (
+        <div className="px-4 pt-4 pb-3">
+          <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -222,39 +225,10 @@ function IntegrationSettingsForm<Id extends string>({
               className="pl-8 text-sm"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setAllHidden(false)}
-            >
-              <span>Turn all on</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setAllHidden(true)}
-            >
-              <span>Turn all off</span>
-            </Button>
-          </div>
         </div>
+      )}
 
-        <p className="text-[13px] text-muted-foreground">
-          {hiddenCount === 0 ? (
-            <span>All {entityNamePlural} are available.</span>
-          ) : (
-            <span>
-              {hiddenCount} of {items.length} {entityNamePlural} turned off —
-              they are hidden everywhere and cannot be configured.
-            </span>
-          )}
-        </p>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-4">
         {visibleItems.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             No {entityNamePlural} match “{search}”.
@@ -291,28 +265,18 @@ function IntegrationSettingsForm<Id extends string>({
                     <span>Available</span>
                   </Label>
                 </div>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {allowRename && (
                   <Input
                     aria-label={`${item.label} display name`}
                     value={entry.displayName}
                     onChange={(e) =>
                       patch(item.id, { displayName: e.target.value })
                     }
-                    placeholder={item.label}
+                    placeholder={`Show as “${item.label}”`}
                     maxLength={MAX_INTEGRATION_DISPLAY_NAME_LENGTH}
-                    className="text-sm"
+                    className="mt-2 text-sm"
                   />
-                  <Input
-                    aria-label={`${item.label} description`}
-                    value={entry.description}
-                    onChange={(e) =>
-                      patch(item.id, { description: e.target.value })
-                    }
-                    placeholder="Description (optional)"
-                    maxLength={MAX_INTEGRATION_DESCRIPTION_LENGTH}
-                    className="text-sm"
-                  />
-                </div>
+                )}
               </div>
             );
           })
@@ -322,18 +286,14 @@ function IntegrationSettingsForm<Id extends string>({
   );
 }
 
-/** Inputs are controlled, so the draft holds "" rather than null/undefined. */
-type DraftEntry = { hidden: boolean; displayName: string; description: string };
+/** The name input is controlled, so the draft holds "" rather than null. */
+type DraftEntry = { hidden: boolean; displayName: string };
 
-const EMPTY_DRAFT_ENTRY: DraftEntry = {
-  hidden: false,
-  displayName: "",
-  description: "",
-};
+const EMPTY_DRAFT_ENTRY: DraftEntry = { hidden: false, displayName: "" };
 
 function toDraft<Id extends string>(
   items: IntegrationSettingsItem<Id>[],
-  overrides: Partial<Record<Id, IntegrationOverride>> | null,
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null,
 ): Record<Id, DraftEntry> {
   const draft = {} as Record<Id, DraftEntry>;
   for (const item of items) {
@@ -341,7 +301,6 @@ function toDraft<Id extends string>(
     draft[item.id] = {
       hidden: override?.hidden === true,
       displayName: override?.displayName ?? "",
-      description: override?.description ?? "",
     };
   }
   return draft;

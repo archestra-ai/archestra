@@ -116,7 +116,7 @@ export default function AgentTriggersLayout({
         label: (
           <TabLabel
             iconSrc={CHANNEL_ICON_SRC["ms-teams"]}
-            label={channelCatalog.label("ms-teams")}
+            label={MESSAGING_CHANNEL_LABELS["ms-teams"]}
             active={msTeamsActive}
           />
         ),
@@ -128,7 +128,7 @@ export default function AgentTriggersLayout({
         label: (
           <TabLabel
             iconSrc={CHANNEL_ICON_SRC.slack}
-            label={channelCatalog.label("slack")}
+            label={MESSAGING_CHANNEL_LABELS.slack}
             active={slackActive}
           />
         ),
@@ -143,7 +143,7 @@ export default function AgentTriggersLayout({
               label: (
                 <TabLabel
                   iconSrc={CHANNEL_ICON_SRC.telegram}
-                  label={channelCatalog.label("telegram")}
+                  label={MESSAGING_CHANNEL_LABELS.telegram}
                   active={telegramActive}
                 />
               ),
@@ -157,7 +157,7 @@ export default function AgentTriggersLayout({
         label: (
           <TabLabel
             icon={Mail}
-            label={channelCatalog.label("email")}
+            label={MESSAGING_CHANNEL_LABELS.email}
             active={emailActive}
           />
         ),
@@ -174,7 +174,7 @@ export default function AgentTriggersLayout({
         label: (
           <TabLabel
             icon={Bot}
-            label={channelCatalog.label("a2a")}
+            label={MESSAGING_CHANNEL_LABELS.a2a}
             active={a2aActive}
           />
         ),
@@ -214,7 +214,7 @@ export default function AgentTriggersLayout({
               // connect, and a sentence that reshuffles itself reads like a bug.
               CHANNEL_SETTINGS_ITEMS.filter((item) =>
                 tabs.some((tab) => tab.id === item.id),
-              ).map((item) => channelCatalog.label(item.id)),
+              ).map((item) => MESSAGING_CHANNEL_LABELS[item.id]),
             )}`
       }
       tabs={tabs}
@@ -222,9 +222,10 @@ export default function AgentTriggersLayout({
         <IntegrationSettingsDialog
           field="messagingChannelOverrides"
           title="Messaging channel settings"
-          description="Admin only — turn off the channels your organization does not allow, and rename the ones it does. A turned-off channel stops listening and disappears from this page."
+          description="Admin only — turn off the channels your organization does not allow. A turned-off channel stops listening and disappears from this page."
           entityNamePlural="channels"
           items={CHANNEL_SETTINGS_ITEMS}
+          compact
           overrides={channelCatalog.overrides}
           testId="messaging-channel-page-settings"
         />
@@ -237,7 +238,7 @@ export default function AgentTriggersLayout({
         />
       ) : currentChannel && channelCatalog.isHidden(currentChannel) ? (
         <ChannelsOffNotice
-          title={`${channelCatalog.label(currentChannel)} is turned off`}
+          title={`${MESSAGING_CHANNEL_LABELS[currentChannel]} is turned off`}
           body="An administrator turned this channel off for your organization, so it cannot be configured or used."
         />
       ) : (

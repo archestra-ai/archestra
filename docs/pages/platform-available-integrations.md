@@ -28,11 +28,13 @@ Turning a messaging channel off also stops it listening. A Slack bot that was al
 
 Credentials and connectors that already exist keep working, so turning a provider off never breaks live traffic mid-flight. They are marked as turned off in the list, and you can delete them when you are ready — a retired provider's key can no longer be edited or rotated.
 
-## Renaming an Integration
+## Renaming a Model Provider
 
-Each row also takes a display name and a short description. The display name replaces the built-in one everywhere the integration appears — pickers, tables, and tabs. Leave it empty to keep the name the integration ships with.
+A model provider row also takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave it empty to keep the name the provider ships with.
 
-Use the description to say what the integration is for in your organization, for example which team owns the account. It shows up next to the integration in the connector chooser.
+Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
+
+Messaging channels and knowledge connectors are on/off only. Each names a single external service, so renaming Slack would just make its own setup steps harder to follow.
 
 ## Use Case
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  integrationDescription,
   integrationLabel,
   isIntegrationHidden,
   KnowledgeConnectorIdSchema,
@@ -46,30 +45,12 @@ describe("integrationLabel", () => {
   });
 });
 
-describe("integrationDescription", () => {
-  it("returns null when unset or blank", () => {
-    expect(integrationDescription(null, "slack")).toBeNull();
-    expect(
-      integrationDescription({ slack: { description: " " } }, "slack"),
-    ).toBeNull();
-  });
-
-  it("returns the admin's blurb when set", () => {
-    expect(
-      integrationDescription(
-        { slack: { description: "Corp workspace" } },
-        "slack",
-      ),
-    ).toBe("Corp workspace");
-  });
-});
-
 describe("pruneIntegrationOverrides", () => {
   it("drops entries that carry no customization", () => {
     expect(
       pruneIntegrationOverrides({
-        openai: { hidden: false, displayName: "", description: "" },
-        gemini: { hidden: false, displayName: "   ", description: "" },
+        openai: { hidden: false, displayName: "" },
+        gemini: { hidden: false, displayName: "   " },
       }),
     ).toBeNull();
   });
@@ -77,8 +58,8 @@ describe("pruneIntegrationOverrides", () => {
   it("keeps only the fields the admin actually set", () => {
     expect(
       pruneIntegrationOverrides({
-        openai: { hidden: true, displayName: "", description: "" },
-        gemini: { hidden: false, displayName: " Gemini Pro ", description: "" },
+        openai: { hidden: true, displayName: "" },
+        gemini: { hidden: false, displayName: " Gemini Pro " },
       }),
     ).toEqual({
       openai: { hidden: true },
@@ -86,12 +67,12 @@ describe("pruneIntegrationOverrides", () => {
     });
   });
 
-  it("keeps a label on a turned-off entry so re-enabling restores the name", () => {
+  it("keeps a label on a turned-off provider so re-enabling restores the name", () => {
     expect(
       pruneIntegrationOverrides({
-        slack: { hidden: true, displayName: "Slack (corp)", description: "" },
+        openai: { hidden: true, displayName: "OpenAI (retired)" },
       }),
-    ).toEqual({ slack: { hidden: true, displayName: "Slack (corp)" } });
+    ).toEqual({ openai: { hidden: true, displayName: "OpenAI (retired)" } });
   });
 });
 

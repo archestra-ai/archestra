@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { CONNECTOR_TYPE_LABELS, type ConnectorType } from "./knowledge-base";
-import { SupportedProvidersSchema } from "./model-constants";
+import {
+  providerDisplayNames,
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "./model-constants";
 
 /**
  * Messaging channels an admin can hide or relabel. Mirrors the tabs on
@@ -32,59 +36,114 @@ export const KnowledgeConnectorIdSchema = z.enum(
 );
 
 export const MAX_INTEGRATION_DISPLAY_NAME_LENGTH = 60;
-export const MAX_INTEGRATION_DESCRIPTION_LENGTH = 300;
 
 /**
- * One admin override of a built-in catalog entry — a model provider, a
- * messaging channel, or a knowledge connector.
+ * An admin override of a built-in catalog entry.
  *
- * `hidden` is the off switch: a hidden entry disappears from the pickers and
- * the API refuses to configure it, so hiding is a real restriction rather than
- * cosmetic. `displayName` and `description` only change how the entry reads,
- * mirroring the per-URL customization on the connect page. Every field is
- * optional; an absent entry means "visible, named as it ships".
+ * `hidden` is the off switch, and it is a real restriction rather than a
+ * cosmetic one: a hidden entry disappears from the pickers and the API refuses
+ * to configure it. An absent entry means "available, named as it ships".
  */
-export const IntegrationOverrideSchema = z.object({
-  hidden: z.boolean().optional(),
+const integrationToggleShape = { hidden: z.boolean().optional() };
+
+/**
+ * Strict on input: a key this catalog does not take (a name on a toggle-only
+ * catalog, say) is a client mistake worth a 400 rather than a silent strip.
+ */
+export const IntegrationToggleSchema = z.strictObject(integrationToggleShape);
+export type IntegrationToggle = z.infer<typeof IntegrationToggleSchema>;
+
+/**
+ * Lenient on the way out. These columns are jsonb, so a row written by an
+ * older build can hold a key this one no longer knows; validating the stored
+ * value strictly would turn that into a 500 on the organization endpoint —
+ * one stale key taking the whole app down for everyone.
+ */
+export const StoredIntegrationToggleSchema = z.object(integrationToggleShape);
+
+/**
+ * Model providers additionally take the organization's own name for the
+ * provider, which replaces the built-in one everywhere it is rendered.
+ * Messaging channels and knowledge connectors are deliberately toggle-only:
+ * they name a single external service each, so there is nothing to rename that
+ * would not make the setup instructions harder to follow.
+ */
+const modelProviderOverrideShape = {
+  ...integrationToggleShape,
   displayName: z
     .string()
     .trim()
     .max(MAX_INTEGRATION_DISPLAY_NAME_LENGTH)
     .nullish(),
-  description: z
-    .string()
-    .trim()
-    .max(MAX_INTEGRATION_DESCRIPTION_LENGTH)
-    .nullish(),
-});
-export type IntegrationOverride = z.infer<typeof IntegrationOverrideSchema>;
+};
+
+export const ModelProviderOverrideSchema = z.strictObject(
+  modelProviderOverrideShape,
+);
+export type ModelProviderOverride = z.infer<typeof ModelProviderOverrideSchema>;
+
+// ---- Input: what PATCH /api/organization/integration-settings accepts ----
 
 export const ModelProviderOverridesSchema = z.partialRecord(
   SupportedProvidersSchema,
-  IntegrationOverrideSchema,
+  ModelProviderOverrideSchema,
 );
-export type ModelProviderOverrides = z.infer<
-  typeof ModelProviderOverridesSchema
->;
 
 export const MessagingChannelOverridesSchema = z.partialRecord(
   MessagingChannelIdSchema,
-  IntegrationOverrideSchema,
+  IntegrationToggleSchema,
 );
-export type MessagingChannelOverrides = z.infer<
-  typeof MessagingChannelOverridesSchema
->;
 
 export const KnowledgeConnectorOverridesSchema = z.partialRecord(
   KnowledgeConnectorIdSchema,
-  IntegrationOverrideSchema,
+  IntegrationToggleSchema,
 );
-export type KnowledgeConnectorOverrides = z.infer<
-  typeof KnowledgeConnectorOverridesSchema
+
+// ---- Stored: what the organization columns may actually hold ----
+
+export const StoredModelProviderOverridesSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.object(modelProviderOverrideShape),
+);
+export type ModelProviderOverrides = z.infer<
+  typeof StoredModelProviderOverridesSchema
 >;
 
+export const StoredMessagingChannelOverridesSchema = z.partialRecord(
+  MessagingChannelIdSchema,
+  StoredIntegrationToggleSchema,
+);
+export type MessagingChannelOverrides = z.infer<
+  typeof StoredMessagingChannelOverridesSchema
+>;
+
+export const StoredKnowledgeConnectorOverridesSchema = z.partialRecord(
+  KnowledgeConnectorIdSchema,
+  StoredIntegrationToggleSchema,
+);
+export type KnowledgeConnectorOverrides = z.infer<
+  typeof StoredKnowledgeConnectorOverridesSchema
+>;
+
+/**
+ * The name an entry ships with, ignoring any admin override.
+ *
+ * Only for the two places where the shipped name IS the point: the settings
+ * dialog's own placeholder (what the admin is overriding), and the catalog's
+ * fallback. Everywhere else must resolve through the catalog, or a renamed
+ * provider silently reads under its shipped name.
+ *
+ * The local alias is deliberate: `integration-labels-via-catalog.grit` flags
+ * direct indexing of `providerDisplayNames`, and this is the sanctioned way
+ * through it.
+ */
+export function builtInProviderLabel(provider: SupportedProvider): string {
+  const labels: Record<SupportedProvider, string> = providerDisplayNames;
+  return labels[provider];
+}
+
 type IntegrationOverrides<Id extends string> = Partial<
-  Record<Id, IntegrationOverride>
+  Record<Id, IntegrationToggle>
 > | null;
 
 /** True when an admin has switched this catalog entry off. */
@@ -100,21 +159,12 @@ export function isIntegrationHidden<Id extends string>(
  * one, otherwise the built-in name.
  */
 export function integrationLabel<Id extends string>(
-  overrides: IntegrationOverrides<Id>,
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null,
   id: Id,
   fallback: string,
 ): string {
   const custom = overrides?.[id]?.displayName?.trim();
   return custom ? custom : fallback;
-}
-
-/** The admin's extra blurb for a catalog entry, or null when they set none. */
-export function integrationDescription<Id extends string>(
-  overrides: IntegrationOverrides<Id>,
-  id: Id,
-): string | null {
-  const custom = overrides?.[id]?.description?.trim();
-  return custom ? custom : null;
 }
 
 /**
@@ -123,22 +173,20 @@ export function integrationDescription<Id extends string>(
  * entries keep defaulting to visible.
  */
 export function pruneIntegrationOverrides<Id extends string>(
-  overrides: Partial<Record<Id, IntegrationOverride>>,
-): Partial<Record<Id, IntegrationOverride>> | null {
-  const pruned: Partial<Record<Id, IntegrationOverride>> = {};
+  overrides: Partial<Record<Id, ModelProviderOverride>>,
+): Partial<Record<Id, ModelProviderOverride>> | null {
+  const pruned: Partial<Record<Id, ModelProviderOverride>> = {};
   for (const [id, override] of Object.entries(overrides) as [
     Id,
-    IntegrationOverride | undefined,
+    ModelProviderOverride | undefined,
   ][]) {
     if (!override) continue;
     const displayName = override.displayName?.trim() || null;
-    const description = override.description?.trim() || null;
     const hidden = override.hidden === true;
-    if (!hidden && !displayName && !description) continue;
+    if (!hidden && !displayName) continue;
     pruned[id] = {
       ...(hidden ? { hidden: true } : {}),
       ...(displayName ? { displayName } : {}),
-      ...(description ? { description } : {}),
     };
   }
   return Object.keys(pruned).length > 0 ? pruned : null;

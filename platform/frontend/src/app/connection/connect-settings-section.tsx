@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
@@ -22,6 +21,7 @@ import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
@@ -73,6 +73,7 @@ export function ConnectSettingsSection() {
     Record<string, string>
   >({});
   const { data: providerApiKeys } = useLlmProviderApiKeys();
+  const providerCatalog = useModelProviderCatalog();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
   // the UI mirrors what end users see in the dropdowns elsewhere.
@@ -322,9 +323,9 @@ export function ConnectSettingsSection() {
                                 provider={provider as SupportedProvider}
                               />
                               <span className="truncate text-sm">
-                                {providerDisplayNames[
-                                  provider as SupportedProvider
-                                ] ?? provider}
+                                {providerCatalog.label(
+                                  provider as SupportedProvider,
+                                )}
                               </span>
                             </div>
                             {isPerUser ? (
@@ -474,7 +475,7 @@ export function ConnectSettingsSection() {
                 <MultiSelectCombobox
                   options={ALL_PROVIDER_IDS.map((p) => ({
                     value: p,
-                    label: providerDisplayNames[p],
+                    label: providerCatalog.label(p),
                     icon: <ProviderIcon provider={p} size={18} />,
                   }))}
                   value={shownProviders}

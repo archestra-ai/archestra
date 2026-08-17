@@ -55,7 +55,7 @@ describe("IntegrationSettingsDialog", () => {
     expect(screen.queryByTestId("channel-settings")).toBeNull();
   });
 
-  it("saves a turned-off entry and a renamed one, dropping untouched entries", async () => {
+  it("saves a turned-off entry, dropping untouched entries", async () => {
     const user = userEvent.setup();
     renderDialog();
 
@@ -63,15 +63,49 @@ describe("IntegrationSettingsDialog", () => {
     await user.click(
       screen.getByRole("switch", { name: "Make Slack available" }),
     );
-    await user.type(screen.getByLabelText("Email display name"), "Inbox");
     await user.click(screen.getByTestId("integration-settings-save"));
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(mutate.mock.calls[0][0]).toEqual({
-      messagingChannelOverrides: {
-        slack: { hidden: true },
-        email: { displayName: "Inbox" },
-      },
+      messagingChannelOverrides: { slack: { hidden: true } },
+    });
+  });
+
+  // Channels and connectors are toggle-only; only providers take a name.
+  it("offers no name field unless the catalog allows renaming", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByTestId("channel-settings"));
+
+    expect(screen.queryByLabelText("Slack display name")).toBeNull();
+  });
+
+  it("saves a renamed entry when the catalog allows renaming", async () => {
+    const user = userEvent.setup();
+    render(
+      <IntegrationSettingsDialog
+        field="modelProviderOverrides"
+        title="Model provider settings"
+        description="Admin only."
+        entityNamePlural="providers"
+        items={[{ id: "openai" as const, label: "OpenAI" }]}
+        overrides={null}
+        allowRename
+        testId="provider-settings"
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-settings"));
+    await user.type(
+      screen.getByLabelText("OpenAI display name"),
+      "OpenAI (approved)",
+    );
+    await user.click(screen.getByTestId("integration-settings-save"));
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(mutate.mock.calls[0][0]).toEqual({
+      modelProviderOverrides: { openai: { displayName: "OpenAI (approved)" } },
     });
   });
 
@@ -100,20 +134,26 @@ describe("IntegrationSettingsDialog", () => {
     expect(screen.getByTestId("integration-settings-save")).toBeDisabled();
   });
 
-  it("turns every entry off in one action", async () => {
+  // A five-row catalog reads at a glance, so it is rendered without the search
+  // box that the longer provider and connector catalogs need.
+  it("drops the search box for a compact catalog", async () => {
     const user = userEvent.setup();
-    renderDialog();
+    render(
+      <IntegrationSettingsDialog
+        field="messagingChannelOverrides"
+        title="Messaging channel settings"
+        description="Admin only."
+        entityNamePlural="channels"
+        items={ITEMS}
+        overrides={null}
+        compact
+        testId="channel-settings"
+      />,
+    );
 
     await user.click(screen.getByTestId("channel-settings"));
-    await user.click(screen.getByRole("button", { name: "Turn all off" }));
-    await user.click(screen.getByTestId("integration-settings-save"));
 
-    await waitFor(() => expect(mutate).toHaveBeenCalled());
-    expect(mutate.mock.calls[0][0]).toEqual({
-      messagingChannelOverrides: {
-        slack: { hidden: true },
-        email: { hidden: true },
-      },
-    });
+    expect(screen.queryByLabelText("Search channels")).toBeNull();
+    expect(screen.getByTestId("integration-settings-row-slack")).toBeVisible();
   });
 });

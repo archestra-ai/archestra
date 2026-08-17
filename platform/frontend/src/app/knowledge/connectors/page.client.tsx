@@ -352,7 +352,7 @@ function ConnectorsList() {
         <IntegrationSettingsDialog
           field="knowledgeConnectorOverrides"
           title="Connector settings"
-          description="Admin only — turn off the connector types your organization does not allow, and rename the ones it does. A turned-off type disappears from the create dialog and cannot be created."
+          description="Admin only — turn off the connector types your organization does not allow. A turned-off type disappears from the create dialog and cannot be created."
           entityNamePlural="connector types"
           items={connectorSettingsItems}
           overrides={connectorCatalog.overrides}
@@ -377,7 +377,7 @@ function ConnectorsList() {
                   <SelectItem key={type} value={type}>
                     <div className="flex items-center gap-2">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />
-                      <span>{connectorCatalog.label(type)}</span>
+                      <span>{CONNECTOR_TYPE_LABELS[type]}</span>
                     </div>
                   </SelectItem>
                 ))}

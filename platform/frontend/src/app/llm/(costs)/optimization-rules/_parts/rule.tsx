@@ -1,10 +1,6 @@
 /** The component to display an editable optimization rule */
 
-import {
-  providerDisplayNames,
-  type SupportedProvider,
-  SupportedProviders,
-} from "@archestra/shared";
+import { type SupportedProvider, SupportedProviders } from "@archestra/shared";
 import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";
@@ -25,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import { providerLogoUrl } from "@/lib/provider-logos";
 import type { Team } from "@/lib/teams/team.query";
@@ -57,10 +54,11 @@ export function ProviderSelect({
   onChange: (provider: SupportedProvider) => void;
   editable?: boolean;
 }) {
+  const providerCatalog = useModelProviderCatalog();
   if (!editable) {
     return (
       <Badge variant="outline" className="text-sm">
-        {providerDisplayNames[provider]}
+        {providerCatalog.label(provider)}
       </Badge>
     );
   }
@@ -75,7 +73,7 @@ export function ProviderSelect({
           options={providers.map((providerItem) => ({
             value: providerItem,
             icon: providerLogoUrl(providerItem),
-            name: providerDisplayNames[providerItem],
+            name: providerCatalog.label(providerItem),
           }))}
         />
       </SelectContent>

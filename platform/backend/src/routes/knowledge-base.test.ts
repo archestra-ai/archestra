@@ -860,9 +860,7 @@ describe("knowledge base routes", () => {
 
     test("rejects a connector type the organization turned off", async () => {
       await OrganizationModel.patch(organizationId, {
-        knowledgeConnectorOverrides: {
-          jira: { hidden: true, displayName: "Jira (retired)" },
-        },
+        knowledgeConnectorOverrides: { jira: { hidden: true } },
       });
 
       const response = await app.inject({
@@ -882,7 +880,7 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toContain("Jira (retired)");
+      expect(response.json().error.message).toContain("Jira");
       expect(response.json().error.message).toContain("turned off");
     });
 

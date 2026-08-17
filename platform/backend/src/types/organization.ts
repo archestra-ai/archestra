@@ -9,6 +9,9 @@ import {
   OrganizationThemeSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
+  StoredKnowledgeConnectorOverridesSchema,
+  StoredMessagingChannelOverridesSchema,
+  StoredModelProviderOverridesSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -341,9 +344,12 @@ const extendedFields = {
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
-  modelProviderOverrides: ModelProviderOverridesSchema.nullable(),
-  messagingChannelOverrides: MessagingChannelOverridesSchema.nullable(),
-  knowledgeConnectorOverrides: KnowledgeConnectorOverridesSchema.nullable(),
+  // The stored (lenient) shapes: a jsonb value written by an older build must
+  // not 500 the organization read.
+  modelProviderOverrides: StoredModelProviderOverridesSchema.nullable(),
+  messagingChannelOverrides: StoredMessagingChannelOverridesSchema.nullable(),
+  knowledgeConnectorOverrides:
+    StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),

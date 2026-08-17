@@ -931,9 +931,7 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
-    expect(message).toBe(
-      "Invalid API key: Failed to fetch Anthropic models: 401",
-    );
+    expect(message).toBe("Invalid API key: HTTP 401");
     expect(message).not.toContain("Could not reach");
   });
 
@@ -1002,7 +1000,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
     expect(message).toContain(
-      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: Failed to fetch Anthropic models: 404",
+      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: HTTP 404",
     );
     expect(message).toContain("verify it");
     expect(message).not.toContain("temporary provider issue");
@@ -1052,7 +1050,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
     expect(message).toContain(
-      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: Failed to fetch Anthropic models: 429",
+      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: HTTP 429",
     );
     expect(message).toContain("temporary provider issue");
     expect(message).not.toContain("Invalid API key");
@@ -1973,5 +1971,72 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
       url: `/api/llm-provider-api-keys/${keyId}`,
     });
     expect(removal.statusCode).toBe(200);
+  });
+});
+
+describe("validation errors name the provider the way the organization does", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const createOpenAiKey = () =>
+    app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Key",
+        provider: "openai",
+        apiKey: "sk-rejected",
+        scope: "personal",
+      },
+    });
+
+  test("uses the renamed provider and never its shipped name", async () => {
+    await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: { openai: { displayName: "Northwind Models" } },
+      },
+    });
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch OpenAI models: 429"),
+    );
+
+    const response = await createOpenAiKey();
+
+    const message = response.json().error.message;
+    expect(message).toContain("Northwind Models");
+    // The fetchers' own noun would be a second, contradicting name.
+    expect(message).not.toContain("OpenAI");
+    // Classification still keys off the raw message, so the 429 guidance survives.
+    expect(message).toContain("temporary provider issue");
+  });
+
+  test("falls back to the shipped name when nothing is renamed", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch OpenAI models: 429"),
+    );
+
+    const response = await createOpenAiKey();
+
+    expect(response.json().error.message).toContain("OpenAI");
   });
 });

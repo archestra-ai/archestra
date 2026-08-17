@@ -33,10 +33,9 @@ export function ConnectorUnassignedUsersAlert({
   const { hiddenEmail, noMatchingUser } = countUnassigned(
     userGroups?.groups ?? [],
   );
+  const sourceLabel = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
   const unresolved = hiddenEmail + noMatchingUser;
   if (unresolved === 0) return null;
-
-  const sourceLabel = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
 
   return (
     // Deliberately the neutral card variant: this is a steady state the admin

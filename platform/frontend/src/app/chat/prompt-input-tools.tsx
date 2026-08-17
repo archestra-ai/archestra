@@ -3,7 +3,6 @@
 import {
   type ContextWindowBreakdown,
   E2eTestId,
-  providerDisplayNames,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
@@ -49,6 +48,7 @@ import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -204,6 +204,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
+  const providerCatalog = useModelProviderCatalog();
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -220,7 +221,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].connect.signInTitle
     : `Sign in with ${
         providerToConnect
-          ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
+          ? providerCatalog.label(providerToConnect)
           : "subscription"
       }`;
 

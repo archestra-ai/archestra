@@ -26,7 +26,7 @@ vi.mock("./_components/use-trigger-statuses", () => ({
 import { usePathname, useSearchParams } from "next/navigation";
 
 function renderLayout(
-  overrides: Record<string, { hidden?: boolean; displayName?: string }> | null,
+  overrides: Record<string, { hidden?: boolean }> | null,
 ) {
   vi.mocked(useOrganization).mockReturnValue({
     data: { messagingChannelOverrides: overrides },
@@ -70,14 +70,6 @@ describe("messaging channels layout", () => {
     expect(screen.getByText("channel configuration")).toBeInTheDocument();
   });
 
-  it("uses the admin's own label for a renamed channel", () => {
-    renderLayout({ slack: { displayName: "Slack (corp)" } });
-
-    expect(screen.getByText(/Manage how agents are invoked/)).toHaveTextContent(
-      "Slack (corp)",
-    );
-  });
-
   // Every channel off used to leave a page describing an empty list, with the
   // index route redirecting onto a channel that then said it was turned off.
   it("collapses to a single explanation when every channel is off", () => {
@@ -105,9 +97,9 @@ describe("messaging channels layout", () => {
 
   it("explains a single turned-off channel reached by its own URL", () => {
     vi.mocked(usePathname).mockReturnValue("/messaging-channels/slack");
-    renderLayout({ slack: { hidden: true, displayName: "Slack (corp)" } });
+    renderLayout({ slack: { hidden: true } });
 
-    expect(screen.getByText("Slack (corp) is turned off")).toBeInTheDocument();
+    expect(screen.getByText("Slack is turned off")).toBeInTheDocument();
     expect(screen.queryByText("channel configuration")).not.toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
@@ -18,6 +18,7 @@ import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/conn
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -37,6 +38,7 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
   useConnector,
   useConnectorsPaginated,
@@ -84,8 +86,19 @@ function ConnectorsList() {
   const connectorTypeFilter = searchParams.get("connectorType") || "all";
   // M-Files is in beta: deployments that haven't opted in never see the type.
   const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  const connectorCatalog = useKnowledgeConnectorCatalog();
   const connectorTypeOptions = CONNECTOR_TYPE_OPTIONS.filter(
-    (type) => type !== "mfiles" || mfilesEnabled,
+    (type) =>
+      (type !== "mfiles" || mfilesEnabled) && !connectorCatalog.isHidden(type),
+  );
+  const connectorSettingsItems = useMemo(
+    () =>
+      (Object.keys(CONNECTOR_TYPE_LABELS) as ConnectorType[]).map((type) => ({
+        id: type,
+        label: CONNECTOR_TYPE_LABELS[type],
+        icon: <ConnectorTypeIcon type={type} className="h-[18px] w-[18px]" />,
+      })),
+    [],
   );
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
@@ -335,6 +348,17 @@ function ConnectorsList() {
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
+      extraActions={
+        <IntegrationSettingsDialog
+          field="knowledgeConnectorOverrides"
+          title="Connector settings"
+          description="Admin only — turn off the connector types your organization does not allow, and rename the ones it does. A turned-off type disappears from the create dialog and cannot be created."
+          entityNamePlural="connector types"
+          items={connectorSettingsItems}
+          overrides={connectorCatalog.overrides}
+          testId="knowledge-connector-page-settings"
+        />
+      }
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
@@ -353,7 +377,7 @@ function ConnectorsList() {
                   <SelectItem key={type} value={type}>
                     <div className="flex items-center gap-2">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />
-                      {CONNECTOR_TYPE_LABELS[type]}
+                      <span>{connectorCatalog.label(type)}</span>
                     </div>
                   </SelectItem>
                 ))}

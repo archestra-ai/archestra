@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  getShownProviders,
+  getConnectableProviders,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
@@ -70,8 +70,6 @@ type ConnectTarget = {
   agentType: AgentType;
 };
 
-const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
-
 export function LlmProxyConnectInstructionsDialog({
   proxy,
   onOpenChange,
@@ -88,7 +86,7 @@ export function LlmProxyConnectInstructionsDialog({
 
   if (!proxy) return null;
 
-  const providers = getShownProviders(organization) ?? ALL_PROVIDERS;
+  const providers = getConnectableProviders(organization);
 
   return (
     <ConnectDialog agent={proxy} open onOpenChange={onOpenChange}>

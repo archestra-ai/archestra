@@ -1,9 +1,16 @@
 "use client";
 
+import {
+  MESSAGING_CHANNEL_LABELS,
+  type MessagingChannelId,
+} from "@archestra/shared";
 import { Bot, Mail } from "lucide-react";
-import { useMemo } from "react";
+import { usePathname } from "next/navigation";
+import { type ReactNode, useMemo } from "react";
+import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils";
 import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 
@@ -47,6 +54,39 @@ function TabLabel({
   );
 }
 
+/** Tab icons, kept next to the labels the admin can override. */
+const CHANNEL_ICON_SRC = {
+  "ms-teams": "/icons/ms-teams.png",
+  slack: "/icons/slack.png",
+  telegram: "/icons/telegram.png",
+} as const;
+
+const CHANNEL_ICONS: Record<MessagingChannelId, ReactNode> = {
+  "ms-teams": (
+    <img
+      src={CHANNEL_ICON_SRC["ms-teams"]}
+      alt=""
+      className="h-[18px] w-[18px]"
+    />
+  ),
+  slack: (
+    <img src={CHANNEL_ICON_SRC.slack} alt="" className="h-[18px] w-[18px]" />
+  ),
+  telegram: (
+    <img src={CHANNEL_ICON_SRC.telegram} alt="" className="h-[18px] w-[18px]" />
+  ),
+  email: <Mail className="h-[18px] w-[18px]" />,
+  a2a: <Bot className="h-[18px] w-[18px]" />,
+};
+
+const CHANNEL_SETTINGS_ITEMS = (
+  Object.keys(MESSAGING_CHANNEL_LABELS) as MessagingChannelId[]
+).map((id) => ({
+  id,
+  label: MESSAGING_CHANNEL_LABELS[id],
+  icon: CHANNEL_ICONS[id],
+}));
+
 export default function AgentTriggersLayout({
   children,
 }: {
@@ -63,14 +103,20 @@ export default function AgentTriggersLayout({
     email: emailActive,
     a2a: a2aActive,
   } = useTriggerStatuses();
+  const channelCatalog = useMessagingChannelCatalog();
+  const pathname = usePathname();
+  const currentChannel = (
+    Object.keys(MESSAGING_CHANNEL_LABELS) as MessagingChannelId[]
+  ).find((id) => pathname === `/messaging-channels/${id}`);
 
   const tabs = useMemo(() => {
     const channelTabs = [
       {
+        id: "ms-teams" as const,
         label: (
           <TabLabel
-            iconSrc="/icons/ms-teams.png"
-            label="MS Teams"
+            iconSrc={CHANNEL_ICON_SRC["ms-teams"]}
+            label={channelCatalog.label("ms-teams")}
             active={msTeamsActive}
           />
         ),
@@ -78,10 +124,11 @@ export default function AgentTriggersLayout({
         active: msTeamsActive,
       },
       {
+        id: "slack" as const,
         label: (
           <TabLabel
-            iconSrc="/icons/slack.png"
-            label="Slack"
+            iconSrc={CHANNEL_ICON_SRC.slack}
+            label={channelCatalog.label("slack")}
             active={slackActive}
           />
         ),
@@ -92,10 +139,11 @@ export default function AgentTriggersLayout({
       ...(telegramAvailable
         ? [
             {
+              id: "telegram" as const,
               label: (
                 <TabLabel
-                  iconSrc="/icons/telegram.png"
-                  label="Telegram"
+                  iconSrc={CHANNEL_ICON_SRC.telegram}
+                  label={channelCatalog.label("telegram")}
                   active={telegramActive}
                 />
               ),
@@ -105,7 +153,14 @@ export default function AgentTriggersLayout({
           ]
         : []),
       {
-        label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
+        id: "email" as const,
+        label: (
+          <TabLabel
+            icon={Mail}
+            label={channelCatalog.label("email")}
+            active={emailActive}
+          />
+        ),
         href: "/messaging-channels/email",
         active: emailActive,
       },
@@ -115,11 +170,20 @@ export default function AgentTriggersLayout({
     return [
       ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
       {
-        label: <TabLabel icon={Bot} label="A2A" active={a2aActive} />,
+        id: "a2a" as const,
+        label: (
+          <TabLabel
+            icon={Bot}
+            label={channelCatalog.label("a2a")}
+            active={a2aActive}
+          />
+        ),
         href: "/messaging-channels/a2a",
         active: a2aActive,
       },
-    ];
+      // Channels the admins turned off leave the page entirely — their routes
+      // render a "turned off" notice, so a bookmark cannot walk back in.
+    ].filter((tab) => !channelCatalog.isHidden(tab.id));
   }, [
     msTeamsActive,
     slackActive,
@@ -127,6 +191,7 @@ export default function AgentTriggersLayout({
     telegramAvailable,
     emailActive,
     a2aActive,
+    channelCatalog,
   ]);
 
   if (canReadTriggers === false) {
@@ -136,10 +201,46 @@ export default function AgentTriggersLayout({
   return (
     <PageLayout
       title="Messaging Channels"
-      description={`Manage how agents are invoked through Slack, Microsoft Teams, ${telegramAvailable ? "Telegram, " : ""}email, and A2A`}
+      description={`Manage how agents are invoked through ${describeChannels(
+        // Catalog order, not tab order: the tabs re-sort as channels connect,
+        // and a sentence that reshuffles itself reads like a bug.
+        CHANNEL_SETTINGS_ITEMS.filter((item) =>
+          tabs.some((tab) => tab.id === item.id),
+        ).map((item) => channelCatalog.label(item.id)),
+      )}`}
       tabs={tabs}
+      actionButton={
+        <IntegrationSettingsDialog
+          field="messagingChannelOverrides"
+          title="Messaging channel settings"
+          description="Admin only — turn off the channels your organization does not allow, and rename the ones it does. A turned-off channel stops listening and disappears from this page."
+          entityNamePlural="channels"
+          items={CHANNEL_SETTINGS_ITEMS}
+          overrides={channelCatalog.overrides}
+          testId="messaging-channel-page-settings"
+        />
+      }
     >
-      {children}
+      {currentChannel && channelCatalog.isHidden(currentChannel) ? (
+        <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          <div className="font-medium text-foreground">
+            {channelCatalog.label(currentChannel)} is turned off
+          </div>
+          <p className="mt-1">
+            An administrator turned this channel off for your organization, so
+            it cannot be configured or used.
+          </p>
+        </div>
+      ) : (
+        children
+      )}
     </PageLayout>
   );
+}
+
+/** "Slack, Microsoft Teams and A2A" from the channels still on the page. */
+function describeChannels(labels: string[]): string {
+  if (labels.length === 0) return "no channels — every channel is turned off";
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }

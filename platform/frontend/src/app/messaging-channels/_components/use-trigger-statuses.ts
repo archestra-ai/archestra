@@ -3,6 +3,7 @@ import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
+import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useReachabilityMode } from "./use-reachability-mode";
 
@@ -17,6 +18,8 @@ export function useTriggerStatuses() {
   const { data: internalAgents, isLoading: agentsLoading } = useInternalAgents({
     enabled: true,
   });
+
+  const channelCatalog = useMessagingChannelCatalog();
 
   const hasLlmKey = chatApiKeys.length > 0;
   const [reachabilityMode] = useReachabilityMode();
@@ -55,15 +58,26 @@ export function useTriggerStatuses() {
   // step, so it's "active" whenever there's at least one agent to expose.
   const a2aActive = (internalAgents?.length ?? 0) > 0;
 
-  const triggers = [
-    { active: msTeamsActive, href: "/messaging-channels/ms-teams" },
-    { active: slackActive, href: "/messaging-channels/slack" },
-    { active: telegramActive, href: "/messaging-channels/telegram" },
-    { active: emailActive, href: "/messaging-channels/email" },
-    { active: a2aActive, href: "/messaging-channels/a2a" },
-  ] as const;
+  // A channel the admins turned off is not a landing target: the index route
+  // would otherwise redirect straight onto its "turned off" notice.
+  const triggers = (
+    [
+      { id: "ms-teams", active: msTeamsActive },
+      { id: "slack", active: slackActive },
+      { id: "telegram", active: telegramActive },
+      { id: "email", active: emailActive },
+      { id: "a2a", active: a2aActive },
+    ] as const
+  )
+    .filter(({ id }) => !channelCatalog.isHidden(id))
+    .map(({ id, active }) => ({
+      active,
+      href: `/messaging-channels/${id}`,
+    }));
   const firstActiveHref =
-    triggers.find((t) => t.active)?.href ?? triggers[0].href;
+    triggers.find((t) => t.active)?.href ??
+    triggers[0]?.href ??
+    "/messaging-channels/a2a";
 
   return {
     msTeams: msTeamsActive,

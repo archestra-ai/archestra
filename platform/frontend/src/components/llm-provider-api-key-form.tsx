@@ -28,6 +28,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
@@ -521,6 +522,8 @@ export function LlmProviderApiKeyForm({
   const hasUnresolvedBedrockRegion =
     isBedrock && Boolean(baseUrl) && bedrockRegionFromBaseUrl(baseUrl) === null;
 
+  const providerCatalog = useModelProviderCatalog();
+
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
@@ -952,13 +955,30 @@ export function LlmProviderApiKeyForm({
                             (!isOllamaProvider(key) ||
                               key === ollamaListedTransport),
                         )
+                        // Providers the admins turned off are not offered. The
+                        // one already selected stays in the list even when
+                        // hidden, so an existing key's disabled trigger still
+                        // renders its own provider.
+                        .filter(
+                          ([key]) =>
+                            key === provider ||
+                            !providerCatalog.isHidden(
+                              key as CreateLlmProviderApiKeyBody["provider"],
+                            ),
+                        )
                         .map(
                           ([key, config]) =>
                             [
                               key,
-                              key === ollamaListedTransport
-                                ? { ...config, name: "Ollama" }
-                                : config,
+                              {
+                                ...config,
+                                name:
+                                  key === ollamaListedTransport
+                                    ? "Ollama"
+                                    : providerCatalog.label(
+                                        key as CreateLlmProviderApiKeyBody["provider"],
+                                      ),
+                              },
                             ] as const,
                         )
                         .sort(([, a], [, b]) => a.name.localeCompare(b.name))

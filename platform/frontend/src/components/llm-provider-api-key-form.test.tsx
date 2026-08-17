@@ -7,9 +7,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   LlmProviderApiKeyForm,
@@ -122,6 +127,12 @@ beforeEach(() => {
   vi.mocked(useTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useTeams>);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
 });
 
 describe("LlmProviderApiKeyForm", () => {

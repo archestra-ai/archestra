@@ -1489,30 +1489,35 @@ class InteractionModel {
     // We filter in JS (much faster than SQL text scanning for the title/prompt checks)
     const INTERACTIONS_PER_SESSION = 20;
 
-    // Build the WHERE clause using Drizzle's sql template
-    const sessionCondition =
-      sessionKeys.length > 0
-        ? sql`session_id IN (${sql.join(
-            sessionKeys.map((k) => sql`${k}`),
-            sql`, `,
-          )})`
-        : null;
-
-    const uuidCondition =
+    // Per-key top-N via LATERAL instead of one `session_id IN (...) OR
+    // id IN (...)` query ranked with ROW_NUMBER(): the window form had to
+    // materialize and sort EVERY interaction of every listed session —
+    // request/response payloads included — before discarding all but the
+    // first N, which pushed busy organizations into statement timeout. The
+    // LATERAL branch is one (session_id, created_at DESC) index descent per
+    // key that stops after N rows; sessionless interaction ids are a separate
+    // primary-key lookup (each such row is its own "session", so N does not
+    // apply). A uuid key that matches a row owned by a *different* session is
+    // no longer fetched — the JS below grouped such rows under a key nobody
+    // asked for and never read them.
+    const sessionKeyList = sql.join(
+      sessionKeys.map((k) => sql`${k}`),
+      sql`, `,
+    );
+    const sessionlessBranch =
       uuidKeys.length > 0
-        ? sql`id IN (${sql.join(
-            uuidKeys.map((k) => sql`${k}::uuid`),
-            sql`, `,
-          )})`
-        : null;
+        ? sql`
+      UNION ALL
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             locked_chat_conversation_id
+      FROM interactions
+      WHERE id IN (${sql.join(
+        uuidKeys.map((k) => sql`${k}::uuid`),
+        sql`, `,
+      )})
+        AND session_id IS NULL`
+        : sql``;
 
-    const whereConditions = [sessionCondition, uuidCondition].filter(Boolean);
-    const whereClause =
-      whereConditions.length === 1
-        ? whereConditions[0]
-        : sql.join(whereConditions as SQL[], sql` OR `);
-
-    // Use ROW_NUMBER() to limit interactions per session.
     // thread_id is selected so the chosen tip can be reconstructed from deltas.
     const interactionsResult = await db.execute<{
       id: string;
@@ -1533,18 +1538,18 @@ class InteractionModel {
       -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent).
-      WITH ranked AS (
-        SELECT
-          id, session_id, thread_id, request, response, type, created_at,
-          locked_chat_conversation_id,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
+      SELECT t.id, t.session_id, t.thread_id, t.request, t.response, t.type,
+             t.created_at, t.locked_chat_conversation_id
+      FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
+      CROSS JOIN LATERAL (
+        SELECT id, session_id, thread_id, request, response, type, created_at,
+               locked_chat_conversation_id
         FROM interactions
-        WHERE ${whereClause}
-      )
-      SELECT id, session_id, thread_id, request, response, type, created_at,
-             locked_chat_conversation_id
-      FROM ranked
-      WHERE rn <= ${INTERACTIONS_PER_SESSION}
+        WHERE session_id = keys.key
+        ORDER BY created_at DESC, id DESC
+        LIMIT ${INTERACTIONS_PER_SESSION}
+      ) t
+      ${sessionlessBranch}
       ORDER BY session_id, created_at DESC, id DESC
     `);
 

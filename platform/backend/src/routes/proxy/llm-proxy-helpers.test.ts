@@ -1147,3 +1147,61 @@ describe("handleError", () => {
     );
   });
 });
+
+describe("handleError upstream marking", () => {
+  function makeReply() {
+    const replyShape = {
+      header: () => replyShape,
+      status: () => replyShape,
+      send: () => replyShape,
+      raw: { headersSent: false, write: () => true, end: () => {} },
+    };
+    return replyShape as unknown as FastifyReply;
+  }
+
+  const extractMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Internal server error";
+
+  function thrownFor(error: unknown): ApiError {
+    try {
+      handleError(error, makeReply(), extractMessage, false, () => undefined);
+    } catch (thrown) {
+      return thrown as ApiError;
+    }
+    throw new Error("handleError did not throw");
+  }
+
+  test("marks a relayed Bedrock 5xx (statusCode + responseBody shape) as upstream", () => {
+    // clients/bedrock-client.ts errors carry the provider's raw body as
+    // `responseBody` rather than a parsed `error` member; these relays used
+    // to be captured as crashes of ours.
+    const error = new Error(
+      "Bedrock API error (500): The system encountered an unexpected error during processing. Try your request again.",
+    );
+    (error as Error & { statusCode: number }).statusCode = 500;
+    (error as Error & { responseBody: string }).responseBody =
+      '{"message":"The system encountered an unexpected error during processing. Try your request again."}';
+
+    const thrown = thrownFor(error);
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("marks a status-less SDK connection failure as upstream alongside its 502 mapping", () => {
+    // The OpenAI SDK's APIConnectionError ("Connection error.") carries no
+    // HTTP status and no provider body — classified as a 502 relay, it must
+    // also be marked upstream so error tracking drops it.
+    const error = new Error("Connection error.");
+    error.name = "APIConnectionError";
+
+    const thrown = thrownFor(error);
+    expect(thrown.statusCode).toBe(502);
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("does not mark our own unclassified 500s as upstream", () => {
+    const thrown = thrownFor(new Error("something internal exploded"));
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).not.toBe(true);
+  });
+});

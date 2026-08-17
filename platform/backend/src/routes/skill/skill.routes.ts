@@ -717,7 +717,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetSkill,
         description: "Get a skill with its resource files",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        // UuidIdSchema (not z.string()): a non-uuid id — callers pass skill
+        // names here — used to flow into the model and fail in Postgres with
+        // "invalid input syntax for type uuid" as a 500. Reject at the
+        // boundary as a 400 instead; names are not valid skill ids.
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
@@ -739,7 +743,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Per-user activation counts for a skill over the last 30 days",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SkillUsageStatisticsSchema),
       },
     },
@@ -837,7 +841,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateSkill,
         description: "Update a skill's SKILL.md, resource files, and scope",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         body: SkillManifestUpdateSchema,
         response: constructResponseSchema(SkillDetailSchema),
       },
@@ -1008,7 +1012,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteSkill,
         description: "Delete a skill and its resource files",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -1032,7 +1036,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.RestoreSkill,
         description: "Restore a soft-deleted skill",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
@@ -1096,7 +1100,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "soft-deleted row is what stops the seeder recreating them on the " +
           "next restart. Restore wins a race.",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -1162,7 +1166,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Reset a built-in skill to its shipped default SKILL.md and resource files. Only applies to skills with sourceType `built_in`.",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
@@ -1218,7 +1222,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "(interval null) — a disconnected skill keeps its content and " +
           "provenance and becomes editable in the app.",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         body: z
           .object({
             interval: SkillGithubSyncIntervalSchema.optional().describe(

@@ -140,6 +140,16 @@ function isNonActionableError(error: unknown): boolean {
     return true;
   }
 
+  // The same deployment failures matched by message shape: several report
+  // paths re-wrap the runtime's error (or persist and re-surface its message),
+  // which loses the error name the set above matches on. The message prefix
+  // is stable — every McpServerDeploymentFailedError is built as
+  // "Deployment <name> failed: <reason>" (k8s-deployment.ts) — and describes
+  // the state of the user's container, not a crash of ours.
+  if (error instanceof Error && /^Deployment .+ failed: /.test(error.message)) {
+    return true;
+  }
+
   // Low-level connectivity failures that reach the handler unmapped: an
   // undici connect/headers/body timeout or a dropped connection from an
   // outbound fetch, or @fastify/reply-from's upstream-failure errors

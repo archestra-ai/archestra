@@ -39,6 +39,10 @@ import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import anthropicProxyRoutes from "./anthropic";
 import githubCopilotProxyRoutes from "./github-copilot";
 import openAiProxyRoutes from "./openai";
+import {
+  AnthropicModelsListResponseSchema,
+  toAnthropicModelsList,
+} from "./proxy-model-listing";
 
 async function buildApp(
   plugin:
@@ -522,5 +526,24 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     expect(response.statusCode).toBe(401);
     expect(fetchOpenAiModels).not.toHaveBeenCalled();
+  });
+});
+
+describe("toAnthropicModelsList display_name fallback", () => {
+  test("falls back to the model id when displayName is missing at runtime", () => {
+    // Rows built from a non-Anthropic-shaped upstream listing (base-URL
+    // override) can lack display_name; one bare row used to fail the whole
+    // response against AnthropicModelsListResponseSchema as a 500.
+    const models = [
+      { id: "claude-sonnet-5", provider: "anthropic" },
+      { id: "custom-model", displayName: "Custom", provider: "anthropic" },
+    ] as unknown as Parameters<typeof toAnthropicModelsList>[0];
+
+    const listed = toAnthropicModelsList(models);
+    expect(listed.data.map((m) => m.display_name)).toEqual([
+      "claude-sonnet-5",
+      "Custom",
+    ]);
+    expect(() => AnthropicModelsListResponseSchema.parse(listed)).not.toThrow();
   });
 });

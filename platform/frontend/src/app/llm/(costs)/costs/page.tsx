@@ -1357,7 +1357,10 @@ export default function StatisticsPage() {
                       colSpan={7}
                       className="text-center py-8 text-muted-foreground"
                     >
-                      No apps to report for the selected timeframe
+                      {/* Every app is listed regardless of activity — an app with
+                          none simply reports zeros — so an empty table means
+                          there are no apps, not none in this timeframe. */}
+                      No apps have been created yet
                     </TableCell>
                   </TableRow>
                 ) : (

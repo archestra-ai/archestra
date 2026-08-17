@@ -1,4 +1,7 @@
 import type {
+  KnowledgeConnectorOverrides,
+  MessagingChannelOverrides,
+  ModelProviderOverrides,
   OrganizationCustomFont,
   OrganizationTheme,
   SupportedProvider,
@@ -324,6 +327,27 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultProviderKeys: jsonb(
     "connection_default_provider_keys",
   ).$type<ConnectionDefaultProviderKeys>(),
+
+  /**
+   * Admin overrides of the built-in model-provider catalog, keyed by provider
+   * id. A `hidden` entry is switched off everywhere: the provider disappears
+   * from the pickers and the API refuses to create a key for it. The other
+   * fields only change how the provider reads. NULL / a missing key = the
+   * provider ships as-is, so providers added later default to visible.
+   */
+  modelProviderOverrides: jsonb(
+    "model_provider_overrides",
+  ).$type<ModelProviderOverrides>(),
+
+  /** Same, for the messaging channels on /messaging-channels. */
+  messagingChannelOverrides: jsonb(
+    "messaging_channel_overrides",
+  ).$type<MessagingChannelOverrides>(),
+
+  /** Same, for the knowledge connector types. */
+  knowledgeConnectorOverrides: jsonb(
+    "knowledge_connector_overrides",
+  ).$type<KnowledgeConnectorOverrides>(),
 
   /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,

@@ -70697,6 +70697,27 @@ export type GetOrganizationResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -71001,6 +71022,27 @@ export type UpdateAppearanceSettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -71181,6 +71223,27 @@ export type UpdateSecuritySettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -71356,6 +71419,27 @@ export type UpdateLlmSettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -71530,6 +71614,27 @@ export type UpdateMcpSettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -71703,6 +71808,27 @@ export type UpdateSkillsSettingsResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
@@ -71879,6 +72005,27 @@ export type UpdateAgentSettingsResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
@@ -72067,6 +72214,27 @@ export type UpdateConnectionSettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -72087,6 +72255,219 @@ export type UpdateConnectionSettingsResponses = {
 };
 
 export type UpdateConnectionSettingsResponse = UpdateConnectionSettingsResponses[keyof UpdateConnectionSettingsResponses];
+
+export type UpdateIntegrationSettingsData = {
+    body: {
+        modelProviderOverrides?: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides?: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides?: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/integration-settings';
+};
+
+export type UpdateIntegrationSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateIntegrationSettingsError = UpdateIntegrationSettingsErrors[keyof UpdateIntegrationSettingsErrors];
+
+export type UpdateIntegrationSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        analyticsInstanceId: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: EmbeddingDimensions | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultModelId: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        iconLogoDark: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
+        oauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
+        skillToolsEnabled: boolean;
+        appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
+    };
+};
+
+export type UpdateIntegrationSettingsResponse = UpdateIntegrationSettingsResponses[keyof UpdateIntegrationSettingsResponses];
 
 export type UpdateDefaultEnvironmentData = {
     body: {
@@ -72251,6 +72632,27 @@ export type UpdateDefaultEnvironmentResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
@@ -72428,6 +72830,27 @@ export type UpdateAuthSettingsResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
@@ -72608,6 +73031,27 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionDefaultProviderKeys: {
             [key: string]: string;
         } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -72779,6 +73223,27 @@ export type DropEmbeddingConfigResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
@@ -73214,6 +73679,27 @@ export type CompleteOnboardingResponses = {
         }> | null;
         connectionDefaultProviderKeys: {
             [key: string]: string;
+        } | null;
+        modelProviderOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        messagingChannelOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
+        } | null;
+        knowledgeConnectorOverrides: {
+            [key: string]: {
+                hidden?: boolean;
+                displayName?: string | null;
+                description?: string | null;
+            };
         } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;

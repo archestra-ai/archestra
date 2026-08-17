@@ -22,6 +22,7 @@ export * as archestraCatalogSdk from "./hey-api/clients/archestra-catalog/sdk.ge
 export * as archestraCatalogTypes from "./hey-api/clients/archestra-catalog/types.gen";
 export * from "./identity-provider";
 export * from "./incoming-email";
+export * from "./integration-overrides";
 export * from "./interactions";
 export * from "./knowledge-base";
 export * from "./labels";

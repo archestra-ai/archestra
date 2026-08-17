@@ -1,5 +1,8 @@
 import {
   EmbeddingDimensionsSchema,
+  KnowledgeConnectorOverridesSchema,
+  MessagingChannelOverridesSchema,
+  ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
@@ -338,6 +341,9 @@ const extendedFields = {
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  modelProviderOverrides: ModelProviderOverridesSchema.nullable(),
+  messagingChannelOverrides: MessagingChannelOverridesSchema.nullable(),
+  knowledgeConnectorOverrides: KnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
@@ -520,6 +526,20 @@ export const UpdateConnectionSettingsSchema = z.object({
         });
       }
     }),
+});
+
+/**
+ * Admin customization of the built-in integration catalogs. Each map is keyed
+ * by the catalog entry's id and only needs entries for the ones the admin
+ * actually changed; `null` clears every override for that catalog. Omitted
+ * fields are left untouched, so the three surfaces can be saved independently.
+ */
+export const UpdateIntegrationSettingsSchema = z.object({
+  modelProviderOverrides: ModelProviderOverridesSchema.nullable().optional(),
+  messagingChannelOverrides:
+    MessagingChannelOverridesSchema.nullable().optional(),
+  knowledgeConnectorOverrides:
+    KnowledgeConnectorOverridesSchema.nullable().optional(),
 });
 
 /**

@@ -1,11 +1,13 @@
 // Project-specific Biome (GritQL) lint plugin — white-labelling regression guard.
 //
-// Admins can rename the built-in integrations (model providers, messaging
-// channels, knowledge connectors) through the "Page settings" dialogs, and the
+// Admins can rename model providers through the "Page settings" dialog, and the
 // resolution lives in exactly one place per side: `shared/integration-overrides.ts`
-// for the rules, and the `useModelProviderCatalog` / `useMessagingChannelCatalog`
-// / `useKnowledgeConnectorCatalog` hooks in `frontend/src/lib/integration-overrides.ts`
-// for consumption.
+// for the rules, and `useModelProviderCatalog` in
+// `frontend/src/lib/integration-overrides.ts` for consumption.
+//
+// Only providers. Messaging channels and knowledge connectors are toggle-only —
+// each names a single external service, so there is no organization-specific
+// name to respect and indexing their label maps is correct.
 //
 // The failure mode this guards is drift, not a bug in that code: reading a
 // built-in name map directly renders the shipped name, silently ignoring the
@@ -24,23 +26,9 @@
 // a local alias or a comment-documented constant instead.
 language js
 
-or {
-  `providerDisplayNames[$id]` where {
-    register_diagnostic(
-      span = $id,
-      message = "Use the organization's own name for the provider: `useModelProviderCatalog().label(id)`. Indexing providerDisplayNames renders the shipped name and ignores an admin's rename."
-    )
-  },
-  `CONNECTOR_TYPE_LABELS[$id]` where {
-    register_diagnostic(
-      span = $id,
-      message = "Use the organization's own name for the connector type: `useKnowledgeConnectorCatalog().label(id)`. Indexing CONNECTOR_TYPE_LABELS renders the shipped name and ignores an admin's rename."
-    )
-  },
-  `MESSAGING_CHANNEL_LABELS[$id]` where {
-    register_diagnostic(
-      span = $id,
-      message = "Use the organization's own name for the channel: `useMessagingChannelCatalog().label(id)`. Indexing MESSAGING_CHANNEL_LABELS renders the shipped name and ignores an admin's rename."
-    )
-  }
+`providerDisplayNames[$id]` where {
+  register_diagnostic(
+    span = $id,
+    message = "Use the organization's own name for the provider: `useModelProviderCatalog().label(id)`. Indexing providerDisplayNames renders the shipped name and ignores an admin's rename."
+  )
 }

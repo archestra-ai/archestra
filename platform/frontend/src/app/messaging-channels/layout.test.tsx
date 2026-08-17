@@ -25,9 +25,7 @@ vi.mock("./_components/use-trigger-statuses", () => ({
 
 import { usePathname, useSearchParams } from "next/navigation";
 
-function renderLayout(
-  overrides: Record<string, { hidden?: boolean }> | null,
-) {
+function renderLayout(overrides: Record<string, { hidden?: boolean }> | null) {
   vi.mocked(useOrganization).mockReturnValue({
     data: { messagingChannelOverrides: overrides },
   } as unknown as ReturnType<typeof useOrganization>);

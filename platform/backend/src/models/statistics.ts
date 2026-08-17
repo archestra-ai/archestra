@@ -1679,9 +1679,19 @@ class StatisticsModel {
 
   /**
    * How often each app actually ran, from the app-runtime MCP log (keyed by app
-   * and indexed on it). `runs` counts `tools/list` handshakes — the app gateway
-   * lists its tools once per host opening the app — and `toolCalls` counts the
-   * tool calls its runtime then made.
+   * and indexed on it).
+   *
+   * `runs` counts `tools/list` handshakes. The app gateway lists its tools once
+   * per host opening the app and declares `listChanged: false`, so there is no
+   * re-list to double-count — one row per open. This is the figure the savings
+   * estimate multiplies, so it is the one that has to be clean.
+   *
+   * `toolCalls` counts `tools/call` rows. These include tool previews run from
+   * the authoring flow (`preview_app_tool` logs as the app too), so for an app
+   * under active development it reads a little high. It is an activity
+   * indicator, not an input to any cost figure, and the alternative — filtering
+   * on a synthesised tool-call id prefix — would break the first time that
+   * prefix changed.
    */
   private static async getAppRuntimeUsage(params: {
     timeframe: StatisticsTimeFrame;

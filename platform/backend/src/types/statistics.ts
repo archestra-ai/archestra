@@ -144,7 +144,11 @@ export const AppStatisticsSchema = z.object({
    * handshakes — one per host opening the app.
    */
   runs: z.number(),
-  /** MCP tool calls the app's runtime made (its non-LLM work). */
+  /**
+   * MCP tool calls the app's runtime made (its non-LLM work). Includes tool
+   * previews run while authoring the app, so an app under active development
+   * reads a little high. Nothing derived from it feeds a cost figure.
+   */
   toolCalls: z.number(),
   /**
    * What the same work would plausibly have cost as chat, estimated as

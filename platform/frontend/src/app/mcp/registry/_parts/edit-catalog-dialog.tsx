@@ -54,6 +54,12 @@ interface EditCatalogContentProps {
   onClose: () => void;
   /** When true, save does not close the dialog */
   keepOpenOnSave?: boolean;
+  /**
+   * Called once the update has landed. The setup wizard uses it to advance to
+   * the next step, so the user is not left on a screen whose CTA the success
+   * toast covers.
+   */
+  onSaved?: () => void;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
   /** Ref to imperatively trigger form submission */
@@ -75,6 +81,7 @@ export function EditCatalogContent({
   item,
   onClose,
   keepOpenOnSave = false,
+  onSaved,
   onDirtyChange,
   submitRef,
   footer,
@@ -116,6 +123,7 @@ export function EditCatalogContent({
       { id: item.id, data: updateData },
       {
         onSuccess: () => {
+          onSaved?.();
           if (!keepOpenOnSave) {
             onClose();
           }

@@ -121,12 +121,18 @@ function SetupWizard({ item }: { item: CatalogItem }) {
             item={item}
             onClose={() => {}}
             keepOpenOnSave
-            // One primary CTA: while the form is dirty it saves; once clean it
-            // advances the wizard. Discard is the secondary escape hatch.
+            // A save lands a success toast in the bottom-right corner, exactly
+            // where this step's sticky footer sits — so staying here would mean
+            // waiting out the toast before the CTA under it could be clicked.
+            // Saving is also the point at which this step is done, so move on.
+            onSaved={() => goToStep("test")}
+            // One primary CTA: while the form is dirty it saves and continues;
+            // once clean it just continues. Discard is the secondary escape
+            // hatch.
             footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => (
               <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
                 <div>
-                  {isDirty && (
+                  {(isDirty || isSaving) && (
                     <Button
                       variant="outline"
                       type="button"
@@ -137,16 +143,21 @@ function SetupWizard({ item }: { item: CatalogItem }) {
                     </Button>
                   )}
                 </div>
-                {isDirty ? (
-                  <Button
-                    type="submit"
-                    disabled={isSaving || hasBlockingErrors}
-                  >
-                    {isSaving ? "Saving..." : "Save Changes"}
+                {/* The form clears its dirty state as soon as the save is
+                    submitted, so `isSaving` has to be checked first — otherwise
+                    the button flips to the next-step CTA mid-save. */}
+                {isSaving ? (
+                  <Button type="submit" disabled>
+                    <span>Saving...</span>
+                  </Button>
+                ) : isDirty ? (
+                  <Button type="submit" disabled={hasBlockingErrors}>
+                    <span>Save & Continue</span>
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => goToStep("test")}>
-                    Test Connection
+                    <span>Test Connection</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 )}

@@ -650,16 +650,19 @@ export async function authenticatePassthroughProxyRequest(params: {
  * Failures allowed per (IP, credential) pair, per window, before that pair is
  * rejected. Sized for a client retrying one credential, not for a shared origin.
  */
-const RATE_LIMIT_MAX_FAILURES = config.llmProxy.authRateLimit.maxFailures;
+const RATE_LIMIT_MAX_FAILURES = 10;
 /**
  * Failures allowed from one IP across ALL credentials, per window, before that
  * IP is rejected. This is the anti-enumeration backstop, so it must stay well
  * above the per-credential threshold: a single misconfigured client should
- * exhaust its own bucket long before it can exhaust its origin's.
+ * exhaust its own bucket long before it can exhaust its origin's. Behind a
+ * reverse proxy or ingress with `ARCHESTRA_TRUST_PROXY` unset, every external
+ * request shares one `request.ip`, so this ceiling is deployment-wide — the
+ * recently-validated exemption below is what keeps working credentials out of
+ * its blast radius.
  */
-const RATE_LIMIT_MAX_FAILURES_PER_IP =
-  config.llmProxy.authRateLimit.maxFailuresPerIp;
-const RATE_LIMIT_WINDOW_MS = config.llmProxy.authRateLimit.windowMs;
+const RATE_LIMIT_MAX_FAILURES_PER_IP = 100;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 /**
  * How long a credential stays exempt from the IP-wide backstop after it
  * validates. Short enough that a revoked credential loses the exemption

@@ -2774,31 +2774,6 @@ const config = {
           300000,
         )
       : undefined,
-    /**
-     * Brute-force limits on FAILED virtual-key validations at the proxy. These
-     * count 401s only — a healthy client never touches them — and each is a
-     * fixed window: N failures within `windowMs` reject until the window ends.
-     *
-     * `maxFailuresPerIp` is the anti-enumeration backstop. Behind a reverse
-     * proxy or ingress with `ARCHESTRA_TRUST_PROXY` unset, every externally
-     * originated request shares one `request.ip`, so that ceiling is shared by
-     * the whole deployment; raise it if legitimate auth churn is large enough
-     * to reach it.
-     */
-    authRateLimit: {
-      maxFailures: parsePositiveInt(
-        process.env.ARCHESTRA_LLM_PROXY_AUTH_RATE_LIMIT_MAX_FAILURES,
-        10,
-      ),
-      maxFailuresPerIp: parsePositiveInt(
-        process.env.ARCHESTRA_LLM_PROXY_AUTH_RATE_LIMIT_MAX_FAILURES_PER_IP,
-        100,
-      ),
-      windowMs: parsePositiveInt(
-        process.env.ARCHESTRA_LLM_PROXY_AUTH_RATE_LIMIT_WINDOW_MS,
-        60_000,
-      ),
-    },
   },
   kb: {
     // BETA gate for the auto-sync-permissions connector visibility: the

@@ -150,8 +150,8 @@ jobs:
       # image is a deterministic function of the ./platform build context (base
       # images are digest-pinned in the Dockerfile and no build arg varies here),
       # so a matching git tree OID guarantees byte-identical build inputs. On a
-      # hit we do a registry-side manifest copy to the commit-SHA tag, so the
-      # test jobs' existing `:${sha}` pull contract is unchanged and no rebuild runs.
+      # hit we do a registry-side manifest copy to the commit-SHA e2e tag, so the
+      # test jobs' existing `:${sha}-e2e` pull contract is unchanged and no rebuild runs.
       # Registry path only: fork PRs have no OIDC/registry access and fall through
       # to the artifact build below.
       - name: Resolve platform image reuse
@@ -173,7 +173,18 @@ jobs:
           TREE_HASH=$(git ls-tree "HEAD:platform" | grep -v $'\te2e-tests$' | git hash-object --stdin)
           TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
           SLIM_TREE_TAG="${TREE_TAG}-slim"
-          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          # `-e2e` suffix, NOT the bare `:${sha}` tag: the staging deploy
+          # (on-commits-to-main -> deploy-dev-platform-images) publishes its
+          # image — built with `--build-arg VERSION=${sha}`, which bakes
+          # ARCHESTRA_VERSION and the Next.js deploymentId — under the bare
+          # commit-SHA tag, and the cluster pulls that tag by name. The e2e
+          # build omits the VERSION arg (deliberately, so the tree-hash reuse
+          # above stays deterministic), so writing it to the bare tag would
+          # clobber the deployed image with a `VERSION=dev` variant. The
+          # nightly scheduled run does exactly that for main's HEAD — hours
+          # after that commit was deployed — and any staging pod churn then
+          # pulls the dev-versioned image.
+          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}-e2e"
           SLIM_SHA_TAG="${SHA_TAG}-slim"
           echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "slim_tree_tag=${SLIM_TREE_TAG}" >> "${GITHUB_OUTPUT}"
@@ -212,11 +223,13 @@ jobs:
           # (A tree-tag REUSED image keeps whatever compression it was built with;
           # only fresh builds are guaranteed zstd.)
           outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
-          # Publish under both the commit SHA (what the shards pull) and the
-          # tree-OID tag, so a later run of the same ./platform tree reuses this
-          # image instead of rebuilding.
+          # Publish under both the commit-SHA e2e tag (what the shards pull;
+          # `-e2e` suffixed so it can never clobber the bare `:${sha}` tag the
+          # staging deploy publishes and the cluster pulls — see the reuse step
+          # above) and the tree-OID tag, so a later run of the same ./platform
+          # tree reuses this image instead of rebuilding.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
             ${{ steps.platform-reuse.outputs.tree_tag }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release
@@ -241,10 +254,10 @@ jobs:
           context: ${{ matrix.context }}
           push: "true"
           target: unified-slim
-          # Same dual-tag scheme as the full image: the SHA tag the K8s job
-          # pull, plus the tree-OID tag the reuse step checks.
+          # Same dual-tag scheme as the full image: the SHA e2e tag the K8s job
+          # pulls, plus the tree-OID tag the reuse step checks.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -447,7 +460,7 @@ jobs:
           # Trusted runs pull the -slim variant (no ~352MB dagger-engine.tar —
           # only the quickstart job consumes it); fork PRs load the full image from the
           # build artifact since only one variant travels as an artifact.
-          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
           # Trusted runs: the Kind node pulls the (public) registry image
           # itself when the pod schedules — no host pull, no ~77s kind-load.
@@ -630,7 +643,7 @@ jobs:
         uses: ./.github/actions/load-platform-image
         with:
           source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Start lite e2e stack
         env:
@@ -734,7 +747,7 @@ jobs:
         uses: ./.github/actions/load-platform-image
         with:
           source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images

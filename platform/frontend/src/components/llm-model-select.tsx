@@ -11,11 +11,16 @@ import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Layers, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  ModelCapabilityBadges,
+  ModelContextLengthIndicator,
+} from "@/components/model-capability-indicators";
 import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import type { ModelCapabilities } from "@/lib/llm-models.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerLogoUrl } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
@@ -38,6 +43,8 @@ export type LlmModelSelectOption = {
   isFree?: boolean;
   /** Provider's highest-quality ("recommended") model — sorted near the top. */
   isBest?: boolean;
+  /** Input modalities, tool support, and context shown in rich option rows. */
+  capabilities?: ModelCapabilities;
 };
 
 /** The provider's native model id, used for badge detection and ordering. */
@@ -94,15 +101,29 @@ export function LlmModelOptionLabel({
         className="shrink-0 rounded dark:invert"
       />
       <div className="min-w-0 flex-1 flex flex-col">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
             className={cn(
-              truncateModelName ? "truncate" : "whitespace-normal break-words",
+              "min-w-0 flex-1",
+              truncateModelName
+                ? "truncate"
+                : "basis-40 whitespace-normal break-words",
             )}
           >
             {option.model}
           </span>
           <ModelBadges option={option} />
+          {option.capabilities && (
+            <div className="ml-auto flex max-w-full shrink-0 items-center gap-2">
+              <ModelCapabilityBadges
+                capabilities={option.capabilities}
+                showTextInput
+              />
+              <ModelContextLengthIndicator
+                contextLength={option.capabilities.contextLength}
+              />
+            </div>
+          )}
         </div>
         {showPricing && (
           <div className="truncate text-xs text-muted-foreground">
@@ -305,7 +326,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
         ...visibleOptions.map((option) => ({
           value: option.value,
           label: option.model,
-          searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
+          searchText: `${providerDisplayNames[option.provider]} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
           content: (
             <LlmModelOptionLabel
               option={option}
@@ -348,8 +369,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
         ...visibleOptions.map((option) => ({
           value: option.value,
           label: option.model,
-          searchText: `${providerDisplayNames[option.provider]} ${option.model}`,
-          description: option.description,
+          searchText: `${providerDisplayNames[option.provider]} ${option.model} ${modelIdOf(option)} ${option.description ?? ""}`,
           content: (
             <LlmModelOptionLabel
               option={option}

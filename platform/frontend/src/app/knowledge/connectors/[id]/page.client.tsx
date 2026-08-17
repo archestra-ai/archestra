@@ -24,6 +24,7 @@ import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
+import { ConnectorEmbeddingModelNotice } from "@/app/knowledge/connectors/_parts/connector-embedding-model-notice";
 import { ConnectorMembersTable } from "@/app/knowledge/connectors/_parts/connector-members-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorUnassignedUsersAlert } from "@/app/knowledge/connectors/_parts/connector-unassigned-users-alert";
@@ -655,6 +656,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             )}
           </div>
         </div>
+
+        <ConnectorEmbeddingModelNotice
+          connectorType={connector.connectorType}
+        />
 
         {/* Visible on EVERY tab: an admin landing anywhere on the page
             learns about unassigned users without drilling into the Users

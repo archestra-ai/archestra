@@ -595,6 +595,7 @@ class OrganizationModel {
         org.defaultDiscoveredToolInvocationPolicy,
       defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
       rerankerModel: org.rerankerModel ?? null,
+      ocrModel: org.ocrModel ?? null,
       requireTwoFactor: org.requireTwoFactor,
       sessionMaxAgeSeconds: org.sessionMaxAgeSeconds,
       slimChatErrorUi: org.slimChatErrorUi,

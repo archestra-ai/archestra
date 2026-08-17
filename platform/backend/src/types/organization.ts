@@ -458,6 +458,8 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),
+  ocrChatApiKeyId: z.string().uuid().nullable().optional(),
+  ocrModel: z.string().nullable().optional(),
 });
 
 export const UpdateAuthSettingsSchema = z.object({

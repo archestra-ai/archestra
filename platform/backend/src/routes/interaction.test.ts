@@ -636,6 +636,65 @@ describe("interaction routes", () => {
     expect(response.json().pagination.total).toBe(4);
   });
 
+  test("derives the newest preview for long sessions and for sessionless interactions", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+
+    const make = (sessionId: string | null, text: string, second: number) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: text }],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        } as unknown as InsertInteraction["response"],
+        type: "openai:chatCompletions",
+        // Explicit distinct timestamps: the per-session window ranks by
+        // created_at and defaultNow() can tie within one millisecond.
+        createdAt: new Date(2020, 0, 1, 0, 0, second),
+      });
+
+    // More interactions than the per-session fetch window (20), so the
+    // preview provably comes from a top-N scan that keeps the NEWEST rows —
+    // the pre-LATERAL bug class was ranking/sort mistakes across big
+    // sessions timing out or picking stale rows.
+    for (let i = 0; i < 25; i++) {
+      await make("busy-session", `message ${i}`, i);
+    }
+    const solo = await make(null, "solo message", 30);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10&offset=0",
+    });
+    expect(response.statusCode).toBe(200);
+    const rows = response.json().data as Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+      lastUserMessagePreview: string | null;
+    }>;
+
+    const busy = rows.find((r) => r.sessionId === "busy-session");
+    expect(busy?.lastUserMessagePreview).toBe("message 24");
+
+    // A sessionless interaction is its own "session" and still gets a preview.
+    const soloRow = rows.find((r) => r.interactionId === solo.id);
+    expect(soloRow?.lastUserMessagePreview).toBe("solo message");
+  });
+
   test("hides an agent-less interaction from a non-agent-admin", async ({
     makeUser,
     makeMember,

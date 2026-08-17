@@ -436,6 +436,7 @@ export function handleError(
   }
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
+  let isClassifiedTransportFailure = false;
   if (!hasExplicitStatus) {
     if (isClientAbortError(error)) {
       // The proxy client disconnected and the disconnect was propagated to
@@ -449,6 +450,13 @@ export function handleError(
       const upstreamStatus = classifyTransientUpstreamError(error);
       if (upstreamStatus !== undefined) {
         statusCode = upstreamStatus;
+        // A status-less SDK connection/timeout failure ("Connection error.",
+        // "fetch failed", ETIMEDOUT) is by definition the upstream being
+        // unreachable, not a crash of ours — but it carries neither a parsed
+        // provider body nor response headers, so the provider-shape check
+        // below cannot mark it. Mark it here so error tracking drops the
+        // relay while clients still get the mapped 502/504.
+        isClassifiedTransportFailure = true;
       }
     }
   }
@@ -558,7 +566,10 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   const apiError = new ApiError(statusCode, errorMessage, internalCode);
-  apiError.upstream = isUpstreamProviderFailure || isUpstreamOverload;
+  apiError.upstream =
+    isUpstreamProviderFailure ||
+    isUpstreamOverload ||
+    isClassifiedTransportFailure;
   throw apiError;
 }
 
@@ -569,7 +580,16 @@ export function handleError(
  */
 function hasProviderHttpErrorShape(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return "error" in error || "headers" in error || "$metadata" in error;
+  return (
+    "error" in error ||
+    "headers" in error ||
+    "$metadata" in error ||
+    // The Bedrock client's non-OK errors carry the provider's raw body as
+    // `responseBody` (see clients/bedrock-client.ts) rather than a parsed
+    // `error` member — without this, a relayed Bedrock 500/502 was treated
+    // as a crash of ours.
+    "responseBody" in error
+  );
 }
 
 /**

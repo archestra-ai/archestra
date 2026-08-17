@@ -203,7 +203,11 @@ export function toAnthropicModelsList(models: ModelInfo[]) {
     data: models.map((model) => ({
       type: "model" as const,
       id: model.id,
-      display_name: model.displayName,
+      // ModelInfo types displayName as required, but rows built from
+      // non-Anthropic-shaped upstream listings can leave it undefined at
+      // runtime — the response schema requires a string, so a single bare
+      // row used to fail the whole listing with a serialization 500.
+      display_name: model.displayName ?? model.id,
       created_at: model.createdAt,
     })),
     has_more: false,

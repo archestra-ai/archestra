@@ -233,4 +233,14 @@ describe("classifyErrorForTracking", () => {
     expect(decision.tags?.secrets_backend_error).toHaveLength(200);
     expect(decision.tags?.secrets_backend_error).toMatch(/^500: x+$/);
   });
+  test("drops a deployment failure whose wrapper lost the error name", () => {
+    // Several report paths persist or re-wrap the runtime's
+    // McpServerDeploymentFailedError as a plain Error, losing the name the
+    // unreachable-server set matches on. The stable message prefix still
+    // identifies the user's container failing, not a crash of ours.
+    const rewrapped = new Error(
+      "Deployment mcp-example-server-abc123 failed: CrashLoopBackOff - back-off 10s restarting failed container",
+    );
+    expect(classifyErrorForTracking(rewrapped)).toEqual({ report: false });
+  });
 });

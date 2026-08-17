@@ -22,8 +22,10 @@ import {
 } from "./embedding-clients";
 import {
   EmbeddingConfigUnresolvableError,
+  OcrConfigUnresolvableError,
   RerankerConfigUnresolvableError,
 } from "./errors";
+import { providerSupportsPdfInput } from "./pdf-ocr";
 import { isNativeRerankModel } from "./native-rerank";
 
 export interface EmbeddingConfig {
@@ -61,6 +63,13 @@ type RerankerConfig = {
   | { kind: "llm"; llmModel: LLMModel }
   | { kind: "native-rerank"; apiKey: string | null; baseUrl: string | null }
 );
+
+/** Resolved OCR transcription config: a vision-capable chat LLM. */
+export interface OcrConfig {
+  modelName: string;
+  provider: SupportedProvider;
+  llmModel: LLMModel;
+}
 
 /**
  * Resolve the embedding configuration for an organization.
@@ -161,6 +170,56 @@ export async function resolveRerankerConfig(
     }),
     modelName,
     provider: resolved.provider,
+  };
+}
+
+/**
+ * Resolve the OCR transcription configuration for an organization.
+ * Returns null when OCR is not configured — the pair of key + model is the
+ * feature's only enable switch.
+ */
+export async function resolveOcrConfig(
+  organizationId: string,
+): Promise<OcrConfig | null> {
+  const org = await OrganizationModel.getById(organizationId);
+  if (!org?.ocrChatApiKeyId || !org.ocrModel) {
+    return null;
+  }
+
+  const resolved = await resolveApiKeyFromChatApiKey(org.ocrChatApiKeyId);
+  if (!resolved) {
+    // Configured but unresolvable (e.g. a credential that won't decrypt) is a
+    // real, diagnosable fault — distinct from "not configured" (null above).
+    // OCR is optional at ingest, so callers catch this and proceed without it.
+    logger.warn(
+      { organizationId, chatApiKeyId: org.ocrChatApiKeyId },
+      "[KB] OCR API key configured but secret could not be resolved",
+    );
+    throw new OcrConfigUnresolvableError();
+  }
+
+  // Save-time validation enforces this too, but the stored key's provider can
+  // drift after save (or predate the check) — never trust modality metadata
+  // for transport support.
+  if (!providerSupportsPdfInput(resolved.provider)) {
+    logger.warn(
+      { organizationId, provider: resolved.provider },
+      "[KB] OCR key provider cannot carry PDF input",
+    );
+    throw new OcrConfigUnresolvableError(
+      `The OCR credential's provider "${resolved.provider}" cannot accept PDF input. Reconfigure OCR with a supported provider, or clear it.`,
+    );
+  }
+
+  return {
+    modelName: org.ocrModel,
+    provider: resolved.provider,
+    llmModel: createDirectLLMModel({
+      provider: resolved.provider,
+      apiKey: resolved.apiKey ?? undefined,
+      modelName: org.ocrModel,
+      baseUrl: resolved.baseUrl,
+    }),
   };
 }
 

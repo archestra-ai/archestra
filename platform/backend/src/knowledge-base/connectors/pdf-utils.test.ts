@@ -69,6 +69,7 @@ describe("parsePdfBuffer", () => {
       text: "Hello contract",
       status: "ok",
       pageCount: 1,
+      pages: [{ pageNumber: 1, status: "text", text: "Hello contract" }],
     });
     expect(mockGetDocument).toHaveBeenCalledWith({
       data: expect.any(Buffer),
@@ -86,6 +87,10 @@ describe("parsePdfBuffer", () => {
       status: "no_text_layer",
       pageCount: 2,
       textlessPageCount: 2,
+      pages: [
+        { pageNumber: 1, status: "textless" },
+        { pageNumber: 2, status: "textless" },
+      ],
     });
   });
 
@@ -123,6 +128,10 @@ describe("parsePdfBuffer", () => {
       status: "parse_failed",
       pageCount: 2,
       failedPageCount: 2,
+      pages: [
+        { pageNumber: 1, status: "failed" },
+        { pageNumber: 2, status: "failed" },
+      ],
     });
     expect(result.error).toContain("page 1: page worker failed");
     expect(result.error).toContain("page 2: font decoder failed");
@@ -157,6 +166,10 @@ describe("parsePdfBuffer", () => {
       status: "partial",
       pageCount: 2,
       textlessPageCount: 1,
+      pages: [
+        { pageNumber: 1, status: "text", text: "Digitally generated page" },
+        { pageNumber: 2, status: "textless" },
+      ],
     });
     const warning = describePdfExtractionWarning(result);
     expect(warning).toContain("1 page yielded no text");
@@ -173,6 +186,10 @@ describe("parsePdfBuffer", () => {
       status: "partial",
       pageCount: 2,
       textlessPageCount: 1,
+      pages: [
+        { pageNumber: 1, status: "text", text: "Readable page" },
+        { pageNumber: 2, status: "textless" },
+      ],
     });
     const warning = describePdfExtractionWarning(result);
     expect(warning).toContain("1 page yielded no text");

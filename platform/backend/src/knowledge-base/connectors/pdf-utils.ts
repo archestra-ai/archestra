@@ -13,12 +13,26 @@ type PdfExtractionStatus =
   | "empty"
   | "parse_failed";
 
-interface PdfExtractionResult {
+/**
+ * Per-page outcome of a successful document parse. `text` holds the page's
+ * extracted text; `"textless"` pages parsed cleanly but yielded none (blank,
+ * image-only, or graphics-only); `"failed"` pages threw during extraction.
+ * Absent entirely when the document itself could not be parsed.
+ */
+export interface PdfPageOutcome {
+  pageNumber: number;
+  status: "text" | "textless" | "failed";
+  text?: string;
+}
+
+export interface PdfExtractionResult {
   text: string;
   status: PdfExtractionStatus;
   pageCount?: number;
   failedPageCount?: number;
   textlessPageCount?: number;
+  /** Ordered per-page outcomes; only present when the document parsed. */
+  pages?: PdfPageOutcome[];
   error?: string;
 }
 
@@ -104,6 +118,7 @@ export async function parsePdfBuffer(
 
     const pageTexts: string[] = [];
     const pageErrors: string[] = [];
+    const pages: PdfPageOutcome[] = [];
     let failedPageCount = 0;
     let textlessPageCount = 0;
 
@@ -119,6 +134,7 @@ export async function parsePdfBuffer(
 
           if (pageText.trim()) {
             pageTexts.push(pageText);
+            pages.push({ pageNumber, status: "text", text: pageText });
             continue;
           }
           // Conservatively record every successfully parsed textless page.
@@ -126,6 +142,7 @@ export async function parsePdfBuffer(
           // render operator list, which decodes image resources and is unsafe
           // for large or adversarial PDFs. The warning keeps that ambiguity.
           textlessPageCount++;
+          pages.push({ pageNumber, status: "textless" });
         } finally {
           // Release per-page text/font resources before moving on so large
           // PDFs do not accumulate every page until document destruction.
@@ -137,6 +154,7 @@ export async function parsePdfBuffer(
         }
       } catch (error) {
         failedPageCount++;
+        pages.push({ pageNumber, status: "failed" });
         pageErrors.push(
           `page ${pageNumber}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -155,6 +173,7 @@ export async function parsePdfBuffer(
         status: "parse_failed",
         pageCount,
         ...counts,
+        pages,
         error: summarizePageErrors(pageErrors),
       };
     }
@@ -164,6 +183,7 @@ export async function parsePdfBuffer(
         status: "no_text_layer",
         pageCount,
         ...counts,
+        pages,
       };
     }
     if (failedPageCount > 0 || textlessPageCount > 0) {
@@ -172,12 +192,13 @@ export async function parsePdfBuffer(
         status: "partial",
         pageCount,
         ...counts,
+        pages,
         ...(pageErrors.length > 0
           ? { error: summarizePageErrors(pageErrors) }
           : {}),
       };
     }
-    return { text, status: "ok", pageCount, ...counts };
+    return { text, status: "ok", pageCount, ...counts, pages };
   } catch (error) {
     return {
       text: "",

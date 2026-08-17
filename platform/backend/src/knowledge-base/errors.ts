@@ -138,6 +138,24 @@ export class RerankerConfigUnresolvableError extends KnowledgeBaseError {
 }
 
 /**
+ * The OCR configuration is set but cannot be used — the stored credential
+ * won't resolve, or the key's provider cannot accept PDF input. Non-fatal at
+ * ingest time (documents keep today's no-text skip); surfaced at save time.
+ */
+export class OcrConfigUnresolvableError extends KnowledgeBaseError {
+  readonly userMessage: string;
+
+  constructor(reason?: string) {
+    super("OCR configuration could not be resolved");
+    this.name = "OcrConfigUnresolvableError";
+    this.userMessage =
+      reason ??
+      "The OCR configuration could not be read — its stored credential may be invalid or could not be " +
+        "decrypted. Reconfigure OCR, or clear it.";
+  }
+}
+
+/**
  * Every search lane of a knowledge query hit the database statement timeout, so
  * there is nothing to merge and no results to return. Thrown only in that
  * all-lanes case: a partial timeout degrades silently to the surviving lanes'

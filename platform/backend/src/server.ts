@@ -753,6 +753,19 @@ export const createFastifyInstance = () =>
           this.log.error(logPayload, "HTTP request error occurred");
         }
 
+        // A throttling error that knows when it clears says so, so clients wait
+        // that long instead of guessing with their own escalating backoff.
+        // Headers cannot be added once a streaming reply has committed them.
+        const { retryAfterSeconds } = error;
+        if (
+          typeof retryAfterSeconds === "number" &&
+          Number.isFinite(retryAfterSeconds) &&
+          retryAfterSeconds > 0 &&
+          !reply.raw.headersSent
+        ) {
+          reply.header("retry-after", String(Math.ceil(retryAfterSeconds)));
+        }
+
         return reply.status(statusCode).send({
           error: {
             message,

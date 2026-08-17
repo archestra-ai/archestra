@@ -73,6 +73,8 @@ const FRIENDLY_MESSAGE_BY_TYPE: Partial<Record<ApiErrorType, string>> = {
   api_conflict_error:
     "This conflicts with the current state. Refresh and try again.",
   api_payload_too_large_error: "The uploaded content is too large.",
+  api_rate_limit_error:
+    "Too many requests were made in a short time. Please wait a moment and try again.",
   api_service_unavailable_error:
     "The service is temporarily unavailable. Please try again shortly.",
   api_internal_server_error:

@@ -119,10 +119,20 @@ const LOGS_TAB_BY_ID: Record<string, McpLogsTab> = {
 const TOOLS_PREVIEW_LIMIT = 6;
 
 export function McpCatalogItemPage({ id }: { id: string }) {
+  const router = useRouter();
   const { data: catalogItems, isPending } = useInternalMcpCatalog({});
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
 
-  if (isPending) {
+  // Deleting this server invalidates the catalog list, and the refetch lands
+  // long before the client-side navigation back to the registry has resolved
+  // its payload. For that window `item` is already gone while this route is
+  // still mounted — without the flag the page would answer with its "Server
+  // not found" empty state, flashing a 404 for a delete that just succeeded.
+  const [isLeavingAfterDelete, setIsLeavingAfterDelete] = useState(false);
+
+  // The row is never coming back, so keep the page in its loading state until
+  // the route actually changes.
+  if (isPending || (isLeavingAfterDelete && !item)) {
     return (
       <PageLayout
         title="MCP Server"
@@ -156,7 +166,15 @@ export function McpCatalogItemPage({ id }: { id: string }) {
     );
   }
 
-  return <CatalogItemDetails item={item} />;
+  return (
+    <CatalogItemDetails
+      item={item}
+      onDeleted={() => {
+        setIsLeavingAfterDelete(true);
+        router.push("/mcp/registry");
+      }}
+    />
+  );
 }
 
 function BackToRegistryLink() {
@@ -175,7 +193,14 @@ function BackToRegistryLink() {
   );
 }
 
-function CatalogItemDetails({ item }: { item: CatalogItem }) {
+function CatalogItemDetails({
+  item,
+  onDeleted,
+}: {
+  item: CatalogItem;
+  /** Owned by the page so it can suppress its not-found state on the way out. */
+  onDeleted: () => void;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -712,7 +737,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         <DeleteCatalogDialog
           item={deleteRequested ? item : null}
           onClose={() => setDeleteRequested(false)}
-          onDeleted={() => router.push("/mcp/registry")}
+          onDeleted={onDeleted}
         />
       </div>
     </PageLayout>

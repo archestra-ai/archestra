@@ -90,6 +90,7 @@ export async function resolveProxyModelsApiKey(params: {
       apiKey: resolved.apiKey,
       provider,
     });
+    await virtualKeyRateLimiter.recordSuccess({ credential: token });
     // Per-key extra headers (e.g. gateway RBAC headers) live on the parent
     // provider key, applied here the same way the inference path applies them.
     const providerKey = resolved.chatApiKeyId

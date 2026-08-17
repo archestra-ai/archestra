@@ -391,6 +391,9 @@ export async function handleLLMProxy<
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
       });
+      await virtualKeyRateLimiter.recordSuccess({
+        credential: passthroughVirtualKeyToken,
+      });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
@@ -527,6 +530,7 @@ export async function handleLLMProxy<
         rawApiKey,
         providerName,
       );
+      await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;

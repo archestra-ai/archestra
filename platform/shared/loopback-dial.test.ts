@@ -60,7 +60,14 @@ describe("loopback dial hygiene", () => {
     expect(isIP(new URL(DEFAULT_INTERNAL_API_BASE_URL).hostname)).toBe(4);
   });
 
-  it("has no source file dialling the platform's own API port by name", () => {
+  // Reads and scans ~3800 source files synchronously. Sub-second against a warm
+  // page cache, but vitest's 5s default is not a budget for that on a cold CI
+  // runner sharing its disk with the rest of the matrix — and because the three
+  // scanned trees are turbo inputs, this only runs on the PRs that touch them,
+  // where the checkout is coldest.
+  it("has no source file dialling the platform's own API port by name", {
+    timeout: 60_000,
+  }, () => {
     const platformRoot = resolve(import.meta.dirname, "..");
     const offenders: string[] = [];
 

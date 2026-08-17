@@ -136,8 +136,13 @@ function IntegrationSettingsForm<Id extends string>({
   const isDirty = JSON.stringify(draft) !== JSON.stringify(serverDraft);
   const hiddenCount = items.filter((item) => draft[item.id]?.hidden).length;
 
+  // Matches the admin's own label too, so a renamed entry is findable by the
+  // name their organization actually knows it by.
+  const query = search.trim().toLowerCase();
   const visibleItems = items.filter((item) =>
-    item.label.toLowerCase().includes(search.trim().toLowerCase()),
+    `${item.label} ${draft[item.id]?.displayName ?? ""}`
+      .toLowerCase()
+      .includes(query),
   );
 
   const patch = (id: Id, changes: Partial<DraftEntry>) =>
@@ -254,7 +259,6 @@ function IntegrationSettingsForm<Id extends string>({
         ) : (
           visibleItems.map((item) => {
             const entry = draft[item.id] ?? EMPTY_DRAFT_ENTRY;
-            const shown = !entry.hidden;
             return (
               <div
                 key={item.id}
@@ -275,7 +279,7 @@ function IntegrationSettingsForm<Id extends string>({
                   >
                     <Switch
                       id={`integration-visible-${item.id}`}
-                      checked={shown}
+                      checked={!entry.hidden}
                       onCheckedChange={(checked) =>
                         patch(item.id, { hidden: !checked })
                       }
@@ -293,7 +297,6 @@ function IntegrationSettingsForm<Id extends string>({
                     }
                     placeholder={item.label}
                     maxLength={MAX_INTEGRATION_DISPLAY_NAME_LENGTH}
-                    disabled={!shown}
                     className="text-sm"
                   />
                   <Input
@@ -304,7 +307,6 @@ function IntegrationSettingsForm<Id extends string>({
                     }
                     placeholder="Description (optional)"
                     maxLength={MAX_INTEGRATION_DESCRIPTION_LENGTH}
-                    disabled={!shown}
                     className="text-sm"
                   />
                 </div>

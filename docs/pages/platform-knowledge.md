@@ -150,7 +150,7 @@ A chat reranker scores passages by returning a JSON object, so Archestra asks th
 A scanned PDF has no text layer, so connectors cannot index it — the run reports it under "No text extracted". Configure Document OCR and syncs transcribe those pages with a vision model instead. The text becomes searchable like any other document.
 
 - **Key** — an API key on a provider that accepts PDF input: Anthropic, OpenAI, Gemini, Bedrock, Azure, OpenRouter, or vLLM.
-- **Model** — a vision-capable model from that provider. **Test connection** sends a synthetic PDF page to verify the pair works.
+- **Model** — a vision-capable model from that provider. Self-hosted models (a vLLM server, for example) sync without modality metadata: mark the model's image or PDF input modality in **LLM Providers > Models** to make it selectable. **Test connection** sends a synthetic PDF page to verify the pair works.
 
 OCR runs only on pages that yielded no text. A mixed document — a contract with a scanned signature page, for example — keeps its digital text and gets the scanned pages transcribed. Each transcribed page is one metered model call, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - OCR". A single document is capped at `ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT` pages (default 100); pages past the cap stay untranscribed and the run says so.
 

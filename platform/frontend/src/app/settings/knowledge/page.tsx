@@ -438,8 +438,7 @@ function OcrModelSelector({
   selectedKeyId: string | null;
 }) {
   const { data: apiKeys } = useAvailableLlmProviderApiKeys();
-  const { data: allModels, isPending: modelsLoading } =
-    useModelsWithApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useModelsWithApiKeys();
 
   const selectedProvider = useMemo(() => {
     if (!selectedKeyId || !apiKeys) return null;
@@ -488,7 +487,7 @@ function OcrModelSelector({
       }))}
       placeholder="Select vision model..."
       searchPlaceholder="Search vision models..."
-      emptyMessage="No vision-capable models synced for this key's provider."
+      emptyMessage="No vision-capable models for this key's provider. Mark your model's Image or PDF input modality in Model Providers > Models."
       className={cn("w-full")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -1219,6 +1218,16 @@ function KnowledgeSettingsContent() {
                       selectedKeyId={ocrChatApiKeyId}
                     />
                   </CardRow>
+                  <p className="text-sm text-muted-foreground sm:pl-28">
+                    Don't see your model?{" "}
+                    <Link
+                      href="/llm/models"
+                      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                    >
+                      Mark its image or PDF input modality
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </p>
                   {ocrConfigured && !ocrWasEnabled && (
                     <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-28">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />

@@ -16,6 +16,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  EmbeddingModelImageSupportNotice,
+  embeddingModelSupportsImages,
+} from "@/app/knowledge/_parts/embedding-model-image-support-notice";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -49,6 +53,7 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import {
@@ -392,7 +397,12 @@ function RerankerModelSelector({
   const rerankerItems = models.map((model) => ({
     value: model.id,
     model: model.displayName ?? model.id,
+    modelId: model.id,
     provider: model.provider,
+    description: model.displayName === model.id ? undefined : model.id,
+    capabilities: model.capabilities,
+    isFree: model.isFree,
+    isBest: model.isBest,
   }));
 
   return (
@@ -473,6 +483,7 @@ function TestConnectionIcon({ status }: { status: ConnectionStatus }) {
 
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
+  const { data: session } = useSession();
   const {
     data: apiKeys,
     isPending: areApiKeysPending,
@@ -540,6 +551,12 @@ function KnowledgeSettingsContent() {
     () => embeddingModels?.find((model) => model.id === embeddingModel) ?? null,
     [embeddingModels, embeddingModel],
   );
+  const selectedEmbeddingCatalogModel =
+    modelsWithApiKeys?.find(
+      (model) =>
+        model.modelId === embeddingModel &&
+        model.apiKeys.some((apiKey) => apiKey.id === embeddingChatApiKeyId),
+    ) ?? null;
   const selectedEmbeddingProvider =
     selectedEmbeddingApiKey?.provider ??
     selectedEmbeddingModel?.provider ??
@@ -547,6 +564,10 @@ function KnowledgeSettingsContent() {
   const embeddingEmptyMessage = selectedEmbeddingApiKey
     ? `No embedding models detected for "${selectedEmbeddingApiKey.name}".`
     : "Select an embedding API key first.";
+  const noticeDismissalScope =
+    organization?.id && session?.user.id
+      ? `${organization.id}:${session.user.id}`
+      : null;
 
   useEffect(() => {
     if (organization) {
@@ -741,7 +762,7 @@ function KnowledgeSettingsContent() {
       loadingFallback={<LoadingSpinner />}
     >
       <SettingsSectionStack>
-        <Card>
+        <Card id="embedding-configuration">
           <CardHeader>
             <CardTitle>Embedding Configuration</CardTitle>
             <CardDescription className="leading-relaxed">
@@ -778,8 +799,14 @@ function KnowledgeSettingsContent() {
                       onValueChange={(v) => setEmbeddingModel(v || null)}
                       options={(embeddingModels ?? []).map((model) => ({
                         value: model.id,
-                        model: model.id,
+                        model: model.displayName ?? model.id,
+                        modelId: model.id,
                         provider: model.provider,
+                        description:
+                          model.displayName === model.id ? undefined : model.id,
+                        capabilities: model.capabilities,
+                        isFree: model.isFree,
+                        isBest: model.isBest,
                         badge: model.embeddingDimensions
                           ? `${model.embeddingDimensions} dims`
                           : undefined,
@@ -814,6 +841,24 @@ function KnowledgeSettingsContent() {
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
                   </p>
+                  {embeddingModel &&
+                    selectedEmbeddingProvider &&
+                    noticeDismissalScope && (
+                      <EmbeddingModelImageSupportNotice
+                        modelId={embeddingModel}
+                        provider={selectedEmbeddingProvider}
+                        dismissalScope={noticeDismissalScope}
+                        supportsImages={
+                          selectedEmbeddingCatalogModel
+                            ? embeddingModelSupportsImages(
+                                selectedEmbeddingCatalogModel,
+                              )
+                            : null
+                        }
+                        showSettingsLink={false}
+                        className="sm:ml-28"
+                      />
+                    )}
                   {selectedEmbeddingProvider === "gemini" &&
                     selectedEmbeddingModel?.embeddingDimensions === 1536 && (
                       <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-28">

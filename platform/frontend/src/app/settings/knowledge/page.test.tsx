@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ModelCapabilities } from "@/lib/llm-models.query";
 
 // Radix Popper / floating-ui needs ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -81,6 +82,18 @@ let mockEmbeddingModels: Array<{
   provider: string;
   displayName: string;
   embeddingDimensions: 3072 | 1536 | 768 | null;
+  capabilities?: ModelCapabilities;
+  embeddingClientImageCapable?: boolean | null;
+  isFree?: boolean;
+  isBest?: boolean;
+}> = [];
+let mockLlmModels: Array<{
+  id: string;
+  provider: string;
+  displayName: string;
+  capabilities?: ModelCapabilities;
+  isFree?: boolean;
+  isBest?: boolean;
 }> = [];
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -96,14 +109,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: () => ({
-    data: [
-      { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },
-      {
-        id: "claude-3-opus",
-        provider: "anthropic",
-        displayName: "Claude 3 Opus",
-      },
-    ],
+    data: mockLlmModels,
     isPending: false,
   }),
   useEmbeddingModels: () => ({
@@ -113,8 +119,14 @@ vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: () => ({
     data: mockEmbeddingModels.map((m) => ({
       id: m.id,
+      modelId: m.id,
       provider: m.provider,
       embeddingDimensions: m.embeddingDimensions,
+      inputModalities: m.capabilities?.inputModalities ?? null,
+      embeddingClientImageCapable:
+        m.embeddingClientImageCapable === undefined
+          ? false
+          : m.embeddingClientImageCapable,
       apiKeys: mockApiKeys
         .filter((k) => k.provider === m.provider)
         .map((k) => ({ id: k.id })),
@@ -144,6 +156,7 @@ vi.mock("@/lib/auth/auth.query");
 import {
   useHasPermissions,
   useMissingPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
 
 vi.mock("@/lib/clients/auth/auth-client");
@@ -176,8 +189,41 @@ function getEmbeddingModelTrigger() {
   return modelTrigger;
 }
 
+function getRerankerModelTrigger() {
+  const modelTrigger = screen
+    .getAllByRole("combobox")
+    .find((el) => el.textContent?.includes("Select reranking model"));
+
+  if (!modelTrigger) {
+    throw new Error("Reranking model trigger not found");
+  }
+
+  return modelTrigger;
+}
+
+function makeCapabilities(
+  overrides: Partial<ModelCapabilities> = {},
+): ModelCapabilities {
+  return {
+    contextLength: 128000,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+    recommendedForAgents: true,
+    pricePerMillionInput: null,
+    pricePerMillionOutput: null,
+    isCustomPrice: false,
+    priceSource: "default",
+    pricePerMillionCacheRead: null,
+    pricePerMillionCacheWrite: null,
+    cachePriceSource: "default",
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   vi.mocked(useAppName).mockReturnValue("Archestra");
   mockUpdateKnowledgeSettings = vi.fn();
   mockOrganization = null;
@@ -189,6 +235,14 @@ beforeEach(() => {
       provider: "openai",
       displayName: "text-embedding-3-small",
       embeddingDimensions: 1536,
+    },
+  ];
+  mockLlmModels = [
+    { id: "gpt-4o", provider: "openai", displayName: "GPT-4o" },
+    {
+      id: "claude-3-opus",
+      provider: "anthropic",
+      displayName: "Claude 3 Opus",
     },
   ];
 
@@ -237,6 +291,9 @@ beforeEach(() => {
   vi.mocked(useMissingPermissions).mockReturnValue(
     [] as unknown as ReturnType<typeof useMissingPermissions>,
   );
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "test-user" } },
+  } as ReturnType<typeof useSession>);
 
   vi.mocked(authClient.useSession).mockReturnValue({
     data: {
@@ -388,6 +445,169 @@ describe("KnowledgeSettingsPage", () => {
           name: /Sync models and configure embedding dimensions/,
         }),
       ).toHaveAttribute("href", "/llm/models");
+    });
+  });
+
+  describe("model capability metadata", () => {
+    it("shows embedding model modalities and context in the dropdown", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Embedding Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [
+        {
+          id: "multimodal-embedding",
+          provider: "openai",
+          displayName: "Multimodal Embedding",
+          embeddingDimensions: 1536,
+          capabilities: makeCapabilities({
+            inputModalities: ["text", "image"],
+          }),
+          embeddingClientImageCapable: true,
+        },
+      ];
+      renderPage();
+
+      await user.click(getEmbeddingModelTrigger());
+
+      expect(screen.getByLabelText("Supports text input")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Supports vision (images)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("128,000 token context window"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows reranking model modalities and capabilities in the dropdown", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: "key-1",
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Reranking Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockLlmModels = [
+        {
+          id: "vision-reranker",
+          provider: "openai",
+          displayName: "Vision Reranker",
+          capabilities: makeCapabilities({
+            inputModalities: ["text", "image"],
+            supportsToolCalling: true,
+          }),
+        },
+      ];
+      renderPage();
+
+      await user.click(getRerankerModelTrigger());
+
+      expect(screen.getByLabelText("Supports text input")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Supports vision (images)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Supports tool calling"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("embedding image support note", () => {
+    it("shows a dismissible note inside the embedding settings card", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        id: "organization-1",
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "text-embedding-model",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Embedding Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [
+        {
+          id: "text-embedding-model",
+          provider: "openai",
+          displayName: "Text Embedding Model",
+          embeddingDimensions: 1536,
+          capabilities: makeCapabilities({
+            inputModalities: ["text"],
+            supportsToolCalling: null,
+          }),
+          embeddingClientImageCapable: false,
+        },
+      ];
+      renderPage();
+
+      const note = screen.getByRole("note");
+      expect(note.closest("#embedding-configuration")).toBeInTheDocument();
+      expect(
+        within(note).queryByRole("link", { name: "Embedding settings" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(note).getByRole("link", { name: "Learn more" }),
+      ).toBeInTheDocument();
+
+      await user.click(within(note).getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("does not show the note for an image-capable embedding model", () => {
+      mockOrganization = {
+        id: "organization-1",
+        embeddingChatApiKeyId: "key-1",
+        embeddingModel: "multimodal-embedding",
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Embedding Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockEmbeddingModels = [
+        {
+          id: "multimodal-embedding",
+          provider: "openai",
+          displayName: "Multimodal Embedding",
+          embeddingDimensions: 1536,
+          capabilities: makeCapabilities({
+            inputModalities: ["text", "image"],
+          }),
+          embeddingClientImageCapable: true,
+        },
+      ];
+      renderPage();
+
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
   });
 

@@ -152,6 +152,51 @@ describe("LlmModelSearchableSelect", () => {
     expect(screen.getByText("Latest")).toBeInTheDocument();
   });
 
+  it("renders model modalities, tool support, and context in option rows", async () => {
+    const user = userEvent.setup();
+    render(
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        options={[
+          {
+            value: "vision-model",
+            model: "Vision Model",
+            modelId: "vision-model-v1",
+            description: "vision-model-v1",
+            provider: "openai",
+            capabilities: {
+              contextLength: 128000,
+              inputModalities: ["text", "image"],
+              outputModalities: ["text"],
+              supportsToolCalling: true,
+              recommendedForAgents: true,
+              pricePerMillionInput: null,
+              pricePerMillionOutput: null,
+              isCustomPrice: false,
+              priceSource: "default",
+              pricePerMillionCacheRead: null,
+              pricePerMillionCacheWrite: null,
+              cachePriceSource: "default",
+            },
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(screen.getByLabelText("Supports text input")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Supports vision (images)"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Supports tool calling")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("128,000 token context window"),
+    ).toHaveTextContent("128K");
+    expect(screen.getAllByText("vision-model-v1")).toHaveLength(1);
+  });
+
   it("pins the routers to the top of the list", async () => {
     const user = userEvent.setup();
     render(

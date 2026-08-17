@@ -83,6 +83,11 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
           500: z.object({
             error: z.string(),
           }),
+          // Retryable: the sender redelivers, so a transient failure to read
+          // the channel's on/off switch defers the mail instead of guessing.
+          503: z.object({
+            error: z.string(),
+          }),
         },
       },
     },
@@ -139,7 +144,24 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // reaching agents, even while a provider subscription is still live.
       // Sits behind the rate limiter so an unauthenticated caller cannot spend
       // a database round-trip per request on it.
-      if ((await getHiddenMessagingChannels()).has("email")) {
+      //
+      // A failure to read the overrides answers 503 rather than letting the
+      // error surface as a 500: providers redeliver on 5xx, so an unreadable
+      // switch defers the message instead of guessing at the policy and
+      // delivering mail the organization may have turned off.
+      let emailTurnedOff: boolean;
+      try {
+        emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+      } catch (error) {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[IncomingEmail] Could not read messaging channel overrides",
+        );
+        return reply.status(503).send({
+          error: "Channel availability could not be determined — retry later",
+        });
+      }
+      if (emailTurnedOff) {
         logger.warn(
           "[IncomingEmail] Webhook called while the email channel is turned off",
         );
@@ -256,7 +278,12 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const provider = getEmailProvider();
 
-      if (!provider) {
+      // A turned-off channel must read as off everywhere, not just where it is
+      // configured: this endpoint also backs the agent connect instructions,
+      // which would otherwise hand out an address the webhook refuses.
+      const emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+
+      if (!provider || emailTurnedOff) {
         return reply.send({
           providerEnabled: false,
           emailAddress: null,
@@ -315,8 +342,13 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // The subscription itself is still reported — an admin needs to see what
+      // is left behind — but a turned-off channel is never "active", because
+      // the webhook it points at refuses every notification.
+      const emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+
       return reply.send({
-        isActive: status.isActive,
+        isActive: status.isActive && !emailTurnedOff,
         subscription: {
           id: status.id,
           subscriptionId: status.subscriptionId,

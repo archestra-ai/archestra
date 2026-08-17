@@ -58,26 +58,27 @@ export function useTriggerStatuses() {
   // step, so it's "active" whenever there's at least one agent to expose.
   const a2aActive = (internalAgents?.length ?? 0) > 0;
 
-  // A channel the admins turned off is not a landing target: the index route
-  // would otherwise redirect straight onto its "turned off" notice.
+  // Landing candidates are the channels that actually have a tab: one the
+  // admins turned off, or that this deployment never enabled, would otherwise
+  // be a redirect straight onto a dead page.
   const triggers = (
     [
-      { id: "ms-teams", active: msTeamsActive },
-      { id: "slack", active: slackActive },
-      { id: "telegram", active: telegramActive },
-      { id: "email", active: emailActive },
-      { id: "a2a", active: a2aActive },
+      { id: "ms-teams", active: msTeamsActive, available: true },
+      { id: "slack", active: slackActive, available: true },
+      { id: "telegram", active: telegramActive, available: telegramAvailable },
+      { id: "email", active: emailActive, available: true },
+      { id: "a2a", active: a2aActive, available: true },
     ] as const
   )
-    .filter(({ id }) => !channelCatalog.isHidden(id))
+    .filter(({ id, available }) => available && !channelCatalog.isHidden(id))
     .map(({ id, active }) => ({
       active,
       href: `/messaging-channels/${id}`,
     }));
+  // Null when every channel is off — there is nowhere to send anyone, so the
+  // index route stays put and renders the empty state instead.
   const firstActiveHref =
-    triggers.find((t) => t.active)?.href ??
-    triggers[0]?.href ??
-    "/messaging-channels/a2a";
+    triggers.find((t) => t.active)?.href ?? triggers[0]?.href ?? null;
 
   return {
     msTeams: msTeamsActive,

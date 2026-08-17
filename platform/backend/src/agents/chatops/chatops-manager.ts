@@ -303,6 +303,13 @@ export class ChatOpsManager {
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
     // allows that channel to carry.
+    //
+    // Deliberately fail-open, unlike the inbound email webhook: a webhook's
+    // sender retries, so deferring one delivery costs nothing, while this runs
+    // once at startup with no retry behind it — failing closed would take every
+    // chat channel offline until someone restarts or saves a config. The
+    // window is also narrow: a database the overrides cannot be read from is
+    // one the config loads above already failed on, leaving nothing to start.
     const hiddenChannels = await getHiddenMessagingChannels().catch((error) => {
       logger.error(
         { error: errorMessage(error) },

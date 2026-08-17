@@ -198,16 +198,25 @@ export default function AgentTriggersLayout({
     return null;
   }
 
+  // Every channel turned off: no tabs to show, nowhere for the index route to
+  // land, and no channel page worth rendering — so the page collapses to one
+  // explanation instead of a header describing an empty list.
+  const noChannels = tabs.length === 0;
+
   return (
     <PageLayout
       title="Messaging Channels"
-      description={`Manage how agents are invoked through ${describeChannels(
-        // Catalog order, not tab order: the tabs re-sort as channels connect,
-        // and a sentence that reshuffles itself reads like a bug.
-        CHANNEL_SETTINGS_ITEMS.filter((item) =>
-          tabs.some((tab) => tab.id === item.id),
-        ).map((item) => channelCatalog.label(item.id)),
-      )}`}
+      description={
+        noChannels
+          ? "Every messaging channel is turned off for this organization."
+          : `Manage how agents are invoked through ${describeChannels(
+              // Catalog order, not tab order: the tabs re-sort as channels
+              // connect, and a sentence that reshuffles itself reads like a bug.
+              CHANNEL_SETTINGS_ITEMS.filter((item) =>
+                tabs.some((tab) => tab.id === item.id),
+              ).map((item) => channelCatalog.label(item.id)),
+            )}`
+      }
       tabs={tabs}
       actionButton={
         <IntegrationSettingsDialog
@@ -221,16 +230,16 @@ export default function AgentTriggersLayout({
         />
       }
     >
-      {currentChannel && channelCatalog.isHidden(currentChannel) ? (
-        <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          <div className="font-medium text-foreground">
-            {channelCatalog.label(currentChannel)} is turned off
-          </div>
-          <p className="mt-1">
-            An administrator turned this channel off for your organization, so
-            it cannot be configured or used.
-          </p>
-        </div>
+      {noChannels ? (
+        <ChannelsOffNotice
+          title="No messaging channels are available"
+          body="An administrator turned every channel off for your organization. Agents can still be reached through the API."
+        />
+      ) : currentChannel && channelCatalog.isHidden(currentChannel) ? (
+        <ChannelsOffNotice
+          title={`${channelCatalog.label(currentChannel)} is turned off`}
+          body="An administrator turned this channel off for your organization, so it cannot be configured or used."
+        />
       ) : (
         children
       )}
@@ -238,9 +247,17 @@ export default function AgentTriggersLayout({
   );
 }
 
+function ChannelsOffNotice({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+      <div className="font-medium text-foreground">{title}</div>
+      <p className="mt-1">{body}</p>
+    </div>
+  );
+}
+
 /** "Slack, Microsoft Teams and A2A" from the channels still on the page. */
 function describeChannels(labels: string[]): string {
-  if (labels.length === 0) return "no channels — every channel is turned off";
   if (labels.length === 1) return labels[0];
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }

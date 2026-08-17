@@ -1,4 +1,3 @@
-export { extractAndIngestDocuments } from "./chat-document-extractor";
 export { connectorSyncService } from "./connector-sync";
 export { embeddingService } from "./embedder";
 export { findAccessTokensForUserCached } from "./group-token-cache";

@@ -134,8 +134,14 @@ describe("KnowledgePageLayout", () => {
     });
   });
 
-  describe("small team tier banner", () => {
-    it("renders the tier banner in the shared layout so every tab shows it", () => {
+  describe("small team tier notice", () => {
+    /**
+     * Knowledge pages are working surfaces, so the licensing notice is an
+     * icon beside the title rather than a block above the content: it stays
+     * reachable without interrupting every visit to a page whose licensing
+     * state has not changed.
+     */
+    it("offers the tier notice as a hover trigger, not a banner above the content", () => {
       vi.mocked(useSmallTeamTier).mockReturnValue({
         communicate: true,
         smallTeam: true,
@@ -146,18 +152,27 @@ describe("KnowledgePageLayout", () => {
       renderLayout();
 
       expect(
-        screen.getByText(/within the free tier for teams under 30 users/),
+        screen.getByRole("button", { name: /licensing for this feature/i }),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/within the free tier for teams under 30 users/),
+      ).not.toBeInTheDocument();
     });
   });
 
   describe("tabs", () => {
-    it("renders Connectors and Knowledge Bases tabs linking to their routes", () => {
+    it("renders Connectors, Files and Knowledge Bases tabs linking to their routes", () => {
       renderLayout();
 
       for (const link of screen.getAllByRole("link", { name: "Connectors" })) {
         expect(link).toHaveAttribute("href", "/knowledge/connectors");
       }
+      for (const link of screen.getAllByRole("link", { name: "Files" })) {
+        expect(link).toHaveAttribute("href", "/knowledge/files");
+      }
+      expect(
+        screen.getAllByRole("link", { name: "Files" }).length,
+      ).toBeGreaterThan(0);
       for (const link of screen.getAllByRole("link", {
         name: "Knowledge Bases",
       })) {

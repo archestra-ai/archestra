@@ -43,7 +43,6 @@ const mockCreateLLMModelForAgent = vi.hoisted(() => vi.fn());
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
 const mockFetchToolUiResource = vi.hoisted(() => vi.fn());
-const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
 // Unset (→ awaited falsy) by default so turns request reasoning summaries;
@@ -99,7 +98,6 @@ vi.mock("@/knowledge-base", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/knowledge-base")>();
   return {
     ...actual,
-    extractAndIngestDocuments: mockExtractAndIngestDocuments,
   };
 });
 
@@ -154,7 +152,6 @@ describe("POST /api/chat slim error payload", () => {
       mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
-      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockCompactMessagesForChat.mockImplementation(
         async ({ messages }: { messages: unknown[] }) => ({
           messages,
@@ -270,7 +267,6 @@ describe("POST /api/chat missing MCP connection enforcement", () => {
     mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
     mockGetChatMcpTools.mockResolvedValue({});
     mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
-    mockExtractAndIngestDocuments.mockResolvedValue(undefined);
     mockCompactMessagesForChat.mockImplementation(
       async ({ messages }: { messages: unknown[] }) => ({
         messages,
@@ -413,7 +409,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
-      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockCompactMessagesForChat.mockImplementation(
         async ({ messages }: { messages: unknown[] }) => ({
           messages,
@@ -2783,7 +2778,6 @@ describe("POST /api/chat handler composition", () => {
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
       mockFetchToolUiResource.mockResolvedValue(null);
-      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockCompactMessagesForChat.mockImplementation(
         async ({ messages }: { messages: unknown[] }) => ({
           messages,

@@ -113,10 +113,16 @@ export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
 export { default as kbContainerAclsTable } from "./kb-container-acl";
+export { default as kbDirectoriesTable } from "./kb-directory";
+export { default as kbDirectoryTeamsTable } from "./kb-directory-team";
 export { default as kbDocumentsTable } from "./kb-document";
 export { default as kbExternalGroupsTable } from "./kb-external-group";
 export { default as kbExternalUserGroupsTable } from "./kb-external-user-group";
+export { default as kbFilesTable } from "./kb-file";
+export { default as kbFileDocumentsTable } from "./kb-file-document";
+export { default as kbFileTeamsTable } from "./kb-file-team";
 export { default as kbMemberOverridesTable } from "./kb-member-override";
+export { default as kbUploadConnectorsTable } from "./kb-upload-connector";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,

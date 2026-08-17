@@ -45,6 +45,74 @@ class KbDocumentModel {
       .where(inArray(schema.kbDocumentsTable.id, ids));
   }
 
+  /**
+   * The connector a document belongs to, without returning any of its content.
+   *
+   * Needed to resolve a caller's `group:` / `container:` access tokens, which
+   * are scoped per connector — so the connector has to be known before the
+   * ACL-filtered read can be built. Deliberately returns only the id: this is
+   * metadata used to construct an authorization check, not a way to read a
+   * document around one.
+   */
+  static async findConnectorIdById(params: {
+    documentId: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ connectorId: schema.kbDocumentsTable.connectorId })
+      .from(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.id, params.documentId),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+        ),
+      );
+    return result?.connectorId ?? null;
+  }
+
+  /**
+   * Fetch a document only if the caller's ACL tokens intersect its audience.
+   *
+   * The ACL test runs in SQL (`?|`, the same overlap operator retrieval uses)
+   * rather than by reading the row and comparing in TypeScript, so an
+   * unauthorized document never materializes in the process at all. Returns
+   * null both for "no such document" and "not allowed to read it" — the caller
+   * cannot distinguish the two, which is the point.
+   *
+   * `bypassAcl` is for admin-equivalent callers who already bypass ACLs on the
+   * retrieval path; it must never be defaulted on.
+   */
+  static async findByIdForAcl(params: {
+    documentId: string;
+    organizationId: string;
+    userAcl: string[];
+    bypassAcl: boolean;
+  }): Promise<KbDocument | null> {
+    if (!params.bypassAcl && params.userAcl.length === 0) {
+      return null;
+    }
+    const d = schema.kbDocumentsTable;
+    const aclFilter = params.bypassAcl
+      ? undefined
+      : sql`${d.acl} ?| ARRAY[${sql.join(
+          params.userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        )}]`;
+
+    const [result] = await db
+      .select()
+      .from(d)
+      .where(
+        and(
+          eq(d.id, params.documentId),
+          eq(d.organizationId, params.organizationId),
+          aclFilter,
+        ),
+      );
+
+    return result ?? null;
+  }
+
   static async findByKnowledgeBase(params: {
     knowledgeBaseId: string;
     limit?: number;

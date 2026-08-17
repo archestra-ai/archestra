@@ -2528,6 +2528,21 @@ const config = {
    * runs commands, holds uploaded files, and materializes activated skills.
    * On when a Dagger runner host is configured, or `ARCHESTRA_CODE_RUNTIME_ENABLED`
    * is set with the orchestrator (Kubernetes) configured.   */
+  /**
+   * Knowledge file repository. Uploads are held as Postgres bytea, so the cap
+   * bounds a single request's memory as well as row size.
+   */
+  knowledgeFiles: {
+    maxUploadBytes: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_FILES_MAX_UPLOAD_BYTES,
+      25 * 1024 * 1024,
+    ),
+    /** Ceiling on how many files one directory selection expands to. */
+    maxFilesPerIndexRequest: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_FILES_MAX_FILES_PER_INDEX_REQUEST,
+      500,
+    ),
+  },
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
     cpuLimit: parsePositiveInt(

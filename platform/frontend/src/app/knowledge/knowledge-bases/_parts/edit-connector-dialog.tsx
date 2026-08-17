@@ -148,6 +148,14 @@ export function EditConnectorDialog({
   }, [open, connector, form]);
 
   const connectorType = connector.connectorType;
+  // Uploads-backed connectors have no credentials, schedule or config to edit,
+  // and the connectors list excludes them, so nothing can open this dialog for
+  // one. Bailing keeps that guarantee enforced rather than assumed — every
+  // config lookup below is keyed by a type this one has no entry for.
+  if (connectorType === "file_upload") {
+    return null;
+  }
+
   const typeLabel = getConnectorTypeLabel(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
@@ -313,9 +321,7 @@ export function EditConnectorDialog({
                 <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={getConnectorNamePlaceholder(
-                      connector.connectorType,
-                    )}
+                    placeholder={getConnectorNamePlaceholder(connectorType)}
                     {...field}
                   />
                 </FormControl>

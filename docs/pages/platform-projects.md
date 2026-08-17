@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,6 +23,8 @@ Start a project from the Projects page, or turn an existing chat into one with *
 When an agent saves a file in a project chat — a report, for example — it goes to the project. The project page lists them all, and every chat in the project can read them.
 
 You can add your own files too: drag and drop them onto the Files panel. Text and Markdown files are editable right in the panel.
+
+Not sure whether a file belongs in a chat, a project, or the knowledge base? See [Chat, Project, and Knowledge Files](./platform-knowledge#chat-project-and-knowledge-files).
 
 Every project has an `instructions.md` file, pinned at the top of the Files panel. Write the rules once, and every chat in the project follows them.
 

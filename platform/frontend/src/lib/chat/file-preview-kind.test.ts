@@ -39,8 +39,13 @@ describe("getFilePreviewKind", () => {
     expect(getFilePreviewKind("application/json", "a.json")).toBe("text");
   });
 
+  it("renders PDFs via the browser's own viewer", () => {
+    expect(getFilePreviewKind("application/pdf", "a.pdf")).toBe("pdf");
+    // Sniffed uploads often arrive as octet-stream; the extension decides.
+    expect(getFilePreviewKind("application/octet-stream", "a.pdf")).toBe("pdf");
+  });
+
   it("falls back to unsupported", () => {
-    expect(getFilePreviewKind("application/pdf", "a.pdf")).toBe("unsupported");
     expect(
       getFilePreviewKind(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

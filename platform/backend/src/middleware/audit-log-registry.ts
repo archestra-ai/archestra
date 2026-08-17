@@ -11,6 +11,8 @@ import EnvironmentResourceDefaultModel from "@/models/environment-resource-defau
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KbDirectoryModel from "@/models/kb-directory";
+import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
@@ -357,6 +359,42 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "knowledgeBase.purged",
     fetchById: (id, orgId) =>
       KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
+
+  // Knowledge file repository
+  "/api/knowledge-files": {
+    resourceType: "knowledgeFile",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  "/api/knowledge-files/:fileId": {
+    resourceType: "knowledgeFile",
+    resourceIdParam: "fileId",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  // Copying a chat attachment into the repository creates a file like the
+  // plain upload does; registered explicitly so the POST isn't dropped as a
+  // walk-up to the collection route.
+  "/api/knowledge-files/from-attachment": {
+    resourceType: "knowledgeFile",
+    action: "knowledgeFile.created",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  // Indexing rewrites a knowledge base's contents (and can create the base);
+  // the handler supplies the resource id and post-state itself because the
+  // response carries `knowledgeBaseId`, not `id`, and the result spans many
+  // files.
+  "/api/knowledge-files/index": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.updated",
+  },
+  "/api/knowledge-directories": {
+    resourceType: "knowledgeDirectory",
+    fetchById: (id, orgId) => KbDirectoryModel.findByIdForAudit(id, orgId),
+  },
+  "/api/knowledge-directories/:directoryId": {
+    resourceType: "knowledgeDirectory",
+    resourceIdParam: "directoryId",
+    fetchById: (id, orgId) => KbDirectoryModel.findByIdForAudit(id, orgId),
   },
 
   // Connectors

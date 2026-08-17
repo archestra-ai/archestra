@@ -77,6 +77,10 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   metadata: true,
   embeddingStatus: true,
   chunkCount: true,
+  // Re-indexing an uploaded file after it moved between directories has to
+  // carry the new grouping key, or the document keeps pointing at the
+  // directory it left.
+  containerKey: true,
 });
 
 export type KbDocument = z.infer<typeof SelectKbDocumentSchema>;

@@ -11,6 +11,8 @@ import EnvironmentResourceDefaultModel from "@/models/environment-resource-defau
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KbDirectoryModel from "@/models/kb-directory";
+import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
@@ -571,6 +573,31 @@ export const AUDIT_DECISIONS = {
   kbDocumentsTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
+  },
+  kbDirectoriesTable: {
+    audited: true,
+    model: KbDirectoryModel,
+  },
+  kbDirectoryTeamsTable: {
+    audited: false,
+    reason: "join table; the directory's audit snapshot carries its team ids",
+  },
+  kbFilesTable: {
+    audited: true,
+    model: KbFileModel,
+  },
+  kbFileTeamsTable: {
+    audited: false,
+    reason: "join table; the file's audit snapshot carries its team ids",
+  },
+  kbFileDocumentsTable: {
+    audited: false,
+    reason:
+      "derived link between a repository file and the documents indexed from it",
+  },
+  kbUploadConnectorsTable: {
+    audited: false,
+    reason: "internal plumbing; one hidden upload connector per knowledge base",
   },
   kbExternalGroupsTable: {
     audited: false,

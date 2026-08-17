@@ -325,6 +325,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Knowledge
   knowledgeSource: ["read", "query"],
   knowledgeSourceAutoSync: [],
+  // Members can see analyses and their results, but dispatching a run
+  // spends LLM budget across a whole grid, so running is an editor action.
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -1908,6 +1910,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
+
+  // Knowledge files. Reads are `knowledgeSource:read` like every other
+  // knowledge surface; indexing a file into a base changes what agents can
+  // retrieve, so it is an `update` rather than a read.
+  [RouteId.GetKnowledgeFiles]: { knowledgeSource: ["read"] },
+  [RouteId.GetKnowledgeFileContent]: { knowledgeSource: ["read"] },
+  [RouteId.GetKnowledgeDirectories]: { knowledgeSource: ["read"] },
+  [RouteId.UploadKnowledgeFile]: { knowledgeSource: ["create"] },
+  [RouteId.PromoteAttachmentToKnowledgeFile]: { knowledgeSource: ["create"] },
+  [RouteId.CreateKnowledgeDirectory]: { knowledgeSource: ["create"] },
+  [RouteId.IndexKnowledgeFiles]: { knowledgeSource: ["update"] },
+  [RouteId.UpdateKnowledgeFile]: { knowledgeSource: ["update"] },
+  [RouteId.UpdateKnowledgeDirectory]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteKnowledgeFile]: { knowledgeSource: ["delete"] },
+  [RouteId.DeleteKnowledgeDirectory]: { knowledgeSource: ["delete"] },
 };
 
 /**
@@ -1950,6 +1967,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Projects
   "/projects": { project: ["read"] },
   "/projects/[id]": { project: ["read"] },
+
+  // Knowledge files
+  "/knowledge/files": { knowledgeSource: ["read"] },
 
   // Agents
   "/agents": { agent: ["read"] },

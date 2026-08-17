@@ -92,6 +92,13 @@ export function FilePreview({
         </div>
       )}
       {kind === "html" && <HtmlPreview contentUrl={contentUrl} />}
+      {kind === "pdf" && (
+        <iframe
+          src={contentUrl}
+          title={file.name}
+          className="h-full min-h-[60vh] w-full"
+        />
+      )}
       {(kind === "text" || kind === "csv") && (
         <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
       )}

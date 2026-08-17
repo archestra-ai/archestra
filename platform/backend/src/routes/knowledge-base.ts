@@ -114,6 +114,7 @@ import {
   SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
+  UserSelectableConnectorTypeSchema,
 } from "@/types";
 
 const AssignedAgentSummarySchema = z.object({
@@ -656,6 +657,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             offset,
             search,
             connectorType,
+            // The uploads-backed connector is an implementation detail of the
+            // knowledge-files page, not something anyone configures here: it
+            // has no credentials, no schedule and nothing to sync from, and a
+            // delete button on it would strand every uploaded document behind
+            // it. Managed at /knowledge/files instead.
+            excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
             status,
@@ -758,7 +765,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: z.string().nullable().optional(),
           visibility: KnowledgeSourceVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
-          connectorType: ConnectorTypeSchema,
+          connectorType: UserSelectableConnectorTypeSchema,
           config: ConnectorConfigSchema,
           // optional: GitHub App connectors authenticate via a referenced
           // github_app_configs row instead of an inline secret

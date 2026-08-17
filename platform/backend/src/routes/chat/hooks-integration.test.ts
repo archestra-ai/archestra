@@ -12,7 +12,6 @@ import type { User } from "@/types";
 const mockCreateLLMModelForAgent = vi.hoisted(() => vi.fn());
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
-const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
 
@@ -80,7 +79,6 @@ vi.mock("@/knowledge-base", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/knowledge-base")>();
   return {
     ...actual,
-    extractAndIngestDocuments: mockExtractAndIngestDocuments,
   };
 });
 
@@ -133,7 +131,6 @@ describe("POST /api/chat lifecycle hooks", () => {
       });
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
-      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockCompactMessagesForChat.mockImplementation(
         async ({ messages }: { messages: unknown[] }) => ({
           messages,

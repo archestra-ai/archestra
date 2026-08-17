@@ -89,7 +89,6 @@ import {
   stripHookRunParts,
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
-import { extractAndIngestDocuments } from "@/knowledge-base";
 import {
   type KbChunkForQuoteCheck,
   verifyQuotes,
@@ -767,20 +766,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 lockedChatAudit,
                 stage: "via stream",
               }),
-          });
-        }
-
-        // Extract and ingest documents to agent's knowledge base (fire and forget)
-        // This runs asynchronously to avoid blocking the chat response
-        if (conversation.lockedChat) {
-          // KB ingestion would copy conversation documents into the agent's
-          // knowledge base in plaintext.
-        } else {
-          extractAndIngestDocuments(messages, agentId).catch((error) => {
-            logger.warn(
-              { error: error instanceof Error ? error.message : String(error) },
-              "[Chat] Background document ingestion failed",
-            );
           });
         }
 
@@ -2506,7 +2491,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Content-Type": safeMime,
         "Content-Disposition": `${disposition}; filename="${encodeURIComponent(attachment.originalName)}"`,
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; sandbox",
+        // `sandbox` blocks Chrome's PDF viewer outright — a sandboxed PDF
+        // response renders as a grey box — so PDFs get a narrower policy and
+        // the Files panel can actually preview them. PDF script runs inside
+        // the viewer plugin, isolated from the page and our origin.
+        "Content-Security-Policy":
+          safeMime === "application/pdf"
+            ? "frame-ancestors 'self'"
+            : "default-src 'none'; sandbox",
         "Cache-Control": "private, max-age=3600",
         "Content-Length": String(attachment.fileSize),
       });

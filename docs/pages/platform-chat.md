@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -79,6 +79,8 @@ Ollama models often run with a smaller context window than the model architectur
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
+
+[Chat, Project, and Knowledge Files](./platform-knowledge#chat-project-and-knowledge-files) compares all three places a file can live.
 
 You can attach any file type. Images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`) go straight to the model. Other files — a zip archive, for example — are saved to the chat's Files panel. When the agent has a code sandbox, those files are also staged there for the agent to process; without one, the agent can't read them and tells you so.
 

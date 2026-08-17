@@ -662,6 +662,17 @@ export const RouteId = {
   GetConnectorRun: "getConnectorRun",
 
   // Knowledge File Routes
+  GetKnowledgeFiles: "getKnowledgeFiles",
+  UploadKnowledgeFile: "uploadKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
+  DeleteKnowledgeFile: "deleteKnowledgeFile",
+  UpdateKnowledgeFile: "updateKnowledgeFile",
+  IndexKnowledgeFiles: "indexKnowledgeFiles",
+  GetKnowledgeDirectories: "getKnowledgeDirectories",
+  CreateKnowledgeDirectory: "createKnowledgeDirectory",
+  UpdateKnowledgeDirectory: "updateKnowledgeDirectory",
+  DeleteKnowledgeDirectory: "deleteKnowledgeDirectory",
+  PromoteAttachmentToKnowledgeFile: "promoteAttachmentToKnowledgeFile",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

@@ -2,6 +2,12 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { Info } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { useSmallTeamTier } from "@/lib/config/config.query";
 
 const SALES_EMAIL = "sales@archestra.ai";
@@ -14,9 +20,22 @@ interface SmallTeamTierBannerProps {
    * Organization); in that case the banner lists the features generically.
    */
   featureName?: string;
+  /**
+   * Render as an icon that reveals the notice on hover, instead of a block
+   * that sits above the page content.
+   *
+   * The full banner earns its space where licensing is the subject — the
+   * settings pages. On a working surface it is a standing interruption above
+   * every visit to a page whose licensing state has not changed, so those
+   * pages opt into this instead.
+   */
+  compact?: boolean;
 }
 
-export function SmallTeamTierBanner({ featureName }: SmallTeamTierBannerProps) {
+export function SmallTeamTierBanner({
+  featureName,
+  compact = false,
+}: SmallTeamTierBannerProps) {
   const tier = useSmallTeamTier();
 
   if (!tier || !tier.communicate) {
@@ -27,25 +46,55 @@ export function SmallTeamTierBanner({ featureName }: SmallTeamTierBannerProps) {
   const enabled = tier.smallTeam || tier.envFlag;
   const userWord = tier.userCount === 1 ? "user" : "users";
 
+  const copy = bannerCopy({ tier, featureName, enabled, userWord });
+
+  const links = (
+    <>
+      <a
+        href={`mailto:${SALES_EMAIL}`}
+        className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+      >
+        {SALES_EMAIL}
+      </a>{" "}
+      ·{" "}
+      <a
+        href={pricingUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+      >
+        Pricing
+      </a>
+    </>
+  );
+
+  if (compact) {
+    return (
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>
+          <button
+            type="button"
+            aria-label="Licensing for this feature"
+            className="inline-flex text-muted-foreground/70 transition-colors hover:text-foreground"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </HoverCardTrigger>
+        {/* Deliberately NOT pointer-events-none: the sales and pricing links
+            inside have to stay clickable. */}
+        <HoverCardContent align="start" className="w-80 text-sm">
+          <p className="leading-relaxed text-muted-foreground">
+            {copy} {links}
+          </p>
+        </HoverCardContent>
+      </HoverCard>
+    );
+  }
+
   return (
     <div className="mb-6 rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
       <p className="leading-relaxed">
-        {bannerCopy({ tier, featureName, enabled, userWord })}{" "}
-        <a
-          href={`mailto:${SALES_EMAIL}`}
-          className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
-        >
-          {SALES_EMAIL}
-        </a>{" "}
-        ·{" "}
-        <a
-          href={pricingUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
-        >
-          Pricing
-        </a>
+        {copy} {links}
       </p>
     </div>
   );

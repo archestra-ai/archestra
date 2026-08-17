@@ -660,6 +660,62 @@ describe("StatisticsModel.getSkillStatistics", () => {
     expect(row?.attributedCost).toBe(0);
   });
 
+  test("ignores another organization's turns in a colliding session id", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const [org, otherOrg] = await Promise.all([
+      makeOrganization(),
+      makeOrganization(),
+    ]);
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "scoped" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const activatedAt = new Date(Date.now() - 60_000);
+    const turnAt = new Date(Date.now() - 30_000);
+    await seedActivation({
+      skillId: skill.id,
+      userId: user.id,
+      sessionId: "collide",
+      contextTokens: 10,
+      createdAt: activatedAt,
+    });
+    await makeInteraction(agent.id, {
+      sessionId: "collide",
+      source: "chat",
+      cost: "0.2000000000",
+      createdAt: turnAt,
+    });
+    // A session id is caller-chosen, so another tenant reusing it must not be
+    // attributed to this skill.
+    await makeInteraction(foreignAgent.id, {
+      sessionId: "collide",
+      source: "chat",
+      cost: "40.0000000000",
+      createdAt: turnAt,
+    });
+
+    const result = await StatisticsModel.getSkillStatistics({
+      timeframe: "24h",
+      organizationId: org.id,
+      pagination: PAGE,
+      sortBy: "contextTokens",
+      sortDirection: "desc",
+    });
+
+    const row = result.data.find((entry) => entry.skillId === skill.id);
+    expect(row?.attributedRequests).toBe(1);
+    expect(row?.attributedCost).toBeCloseTo(0.2, 10);
+  });
+
   test("omits skills outside the caller's scope", async ({
     makeOrganization,
     makeUser,

@@ -1195,6 +1195,7 @@ class StatisticsModel {
       pageSkillIds.length > 0
         ? await StatisticsModel.getSkillAttributedSpend({
             timeframe,
+            organizationId,
             skillIds: pageSkillIds,
             eventFilters,
           })
@@ -1530,8 +1531,17 @@ class StatisticsModel {
    * with an IS NULL escape rather than an inner one: `interactions.profile_id` is
    * ON DELETE SET NULL, so an inner join would silently drop every interaction
    * whose agent has since been deleted — which for a build cost means an app
-   * quietly reporting less than it cost. An orphaned row names no organization,
-   * so it is kept rather than assigned to none.
+   * quietly reporting less than it cost.
+   *
+   * The escape has a cost of its own, worth stating: an orphaned row names no
+   * organization, so it counts for whichever organization's query its session id
+   * matches — potentially more than one. That needs a collision between a
+   * conversation uuid and another tenant's authoring session, so it trades a
+   * routine, silent undercount (any deleted agent) for a practically
+   * unreachable overcount. Removing the trade-off entirely means an
+   * `organization_id` snapshot on `interactions`, which is a new column plus a
+   * backfill on the platform's largest write-hot table — worth doing if this
+   * attribution ever carries billing weight, not for a reporting view.
    */
   private static organizationScopeConditions(organizationId: string): SQL[] {
     return [
@@ -1779,13 +1789,17 @@ class StatisticsModel {
    * join then takes every interaction of the session from that moment on — the
    * turns whose context actually carried the skill's block; earlier turns in the
    * same session did not, and are excluded.
+   *
+   * Restricted to the organization for the same reason as the app build spend:
+   * `session_id` is caller-chosen, so it is not a tenant boundary on its own.
    */
   private static async getSkillAttributedSpend(params: {
     timeframe: StatisticsTimeFrame;
+    organizationId: string;
     skillIds: string[];
     eventFilters: SQL[];
   }): Promise<Map<string, SkillAttributedSpend>> {
-    const { timeframe, skillIds, eventFilters } = params;
+    const { timeframe, organizationId, skillIds, eventFilters } = params;
     if (skillIds.length === 0) return new Map();
 
     const events = schema.skillUsageEventsTable;
@@ -1826,6 +1840,24 @@ class StatisticsModel {
           eq(interactions.sessionId, firstActivations.sessionId),
           gte(interactions.createdAt, firstActivations.firstActivatedAt),
           ...StatisticsModel.timeframeConditions(timeframe),
+        ),
+      )
+      // Same reason as getBuildSpendBySession: the join key is a caller-chosen
+      // session id, so it cannot stand alone as a tenant boundary. On the ON
+      // clause rather than in a WHERE, so a skill whose sessions have no
+      // matching interactions still returns its (zeroed) row.
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(interactions.profileId, schema.agentsTable.id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .where(
+        or(
+          isNull(interactions.id),
+          isNotNull(schema.agentsTable.id),
+          isNull(interactions.profileId),
         ),
       )
       .groupBy(firstActivations.skillId);

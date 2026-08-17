@@ -15,6 +15,11 @@ concurrency:
 jobs:
   add-banner:
     name: Add Archestra banner
+    # The banner is contributor onboarding for the public repo. In private
+    # mirrors (e.g. archestra-ai/archestra-private, where task-env sessions
+    # open their PRs) the GitHub App secrets don't exist, so the job could
+    # only ever fail red — skip it there.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       issues: write # edit issue body

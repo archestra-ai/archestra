@@ -364,6 +364,16 @@ describe("EditConnectorDialog - Perforce permission sync", () => {
       "https://archestra.ai/docs/platform-knowledge#perforce-auto-sync-permissions",
     );
 
+    // The edit-mode note and the requirement share one description. Two
+    // stacked description blocks under a single field read as a rendering bug.
+    const descriptions = adminPasswordItem.querySelectorAll(
+      '[data-slot="form-description"]',
+    );
+    expect(descriptions).toHaveLength(1);
+    expect(descriptions[0]).toHaveTextContent(
+      /Leave empty to keep the existing password\..*needs an account that can read the full protections table/,
+    );
+
     // The login ticket belongs to the content identity, which only needs read
     // on the depot paths — putting the admin requirement there would be wrong.
     const loginTicketItem = screen

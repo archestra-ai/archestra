@@ -12,6 +12,7 @@ import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import type { Skill } from "@/types";
 import { delegationToolArgsSchema } from "./delegation";
@@ -198,13 +199,22 @@ export async function handleSkillDelegation(
   // The caller's ancestor path, which the executor checks for cycles.
   const parentDelegationChain = context.delegationChain || context.agentId;
 
-  // dispatching the skill to its designated agent counts one use.
-  SkillModel.recordUsage({ skillId: skill.id, userId });
+  // The subagent's turns are recorded under this session, so it is also the key
+  // the activation's attributable spend is summed over.
+  const sessionId =
+    context.sessionId || context.conversationId || context.isolationKey;
+
+  // dispatching the skill to its designated agent counts one use. The designated
+  // agent's model is not resolved on this path (the executor picks it), so the
+  // block is measured on the default tokenizer.
+  SkillModel.recordUsage({
+    skillId: skill.id,
+    userId,
+    sessionId: sessionId ?? null,
+    contextTokens: measureSkillContextTokens({ block: activationBlock }),
+  });
 
   try {
-    const sessionId =
-      context.sessionId || context.conversationId || context.isolationKey;
-
     logger.info(
       {
         agentId,

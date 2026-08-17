@@ -916,6 +916,9 @@ async function makeInteraction(
       | "sessionId"
       | "cacheReadTokens"
       | "userId"
+      | "appId"
+      | "source"
+      | "createdAt"
     >
   > = {},
 ) {

@@ -35,6 +35,7 @@ import {
   neutralizeFrameTags,
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
+import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
@@ -297,23 +298,7 @@ const registry = defineArchestraTools([
       }
 
       const files = await SkillVersionModel.findFiles(version.id);
-      // a name-only load is an activation; file reads above don't count.
-      SkillModel.recordUsage({
-        skillId: skill.id,
-        userId: ctx.userId ?? null,
-      });
-      logger.info(
-        {
-          organizationId: ctx.organizationId,
-          skillName: skill.name,
-          version: version.version,
-          mounted,
-          fileCount: files.length,
-        },
-        "[Skills] Skill loaded",
-      );
-
-      return successResult(
+      const activationBlock =
         formatSkillActivation({
           skill: {
             name: skill.name,
@@ -334,8 +319,37 @@ const registry = defineArchestraTools([
                 organizationId: ctx.organizationId,
               })
             : null,
-        }) + agentDesignationNote(skill),
+        }) + agentDesignationNote(skill);
+
+      // a name-only load is an activation; file reads above don't count. No
+      // model is resolvable here (the gateway does not know which model will
+      // consume the result), so the block is measured on the default tokenizer.
+      const contextTokens = measureSkillContextTokens({
+        block: activationBlock,
+      });
+      SkillModel.recordUsage({
+        skillId: skill.id,
+        userId: ctx.userId ?? null,
+        sessionId:
+          context.sessionId ??
+          context.conversationId ??
+          context.isolationKey ??
+          null,
+        contextTokens,
+      });
+      logger.info(
+        {
+          organizationId: ctx.organizationId,
+          skillName: skill.name,
+          version: version.version,
+          mounted,
+          fileCount: files.length,
+          contextTokens,
+        },
+        "[Skills] Skill loaded",
       );
+
+      return successResult(activationBlock);
     },
   }),
   defineArchestraTool({

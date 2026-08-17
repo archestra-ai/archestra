@@ -66641,6 +66641,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66724,6 +66728,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -69997,6 +70002,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -70123,6 +70132,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -70598,6 +70608,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -70676,6 +70690,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -71310,6 +71325,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -71436,6 +71455,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -71800,6 +71820,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -71926,6 +71950,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -72290,6 +72315,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -72416,6 +72445,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -72780,6 +72810,10 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "authoringSessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -72906,6 +72940,7 @@
                     "latestVersion",
                     "enabled",
                     "locked",
+                    "authoringSessionId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -139957,6 +139992,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "appId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "sessionId": {
                                 "nullable": true,
                                 "type": "string"
@@ -140491,6 +140532,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -140563,6 +140605,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -141523,6 +141571,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -141595,6 +141644,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -142254,6 +142309,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -142326,6 +142382,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -142985,6 +143047,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -143057,6 +143120,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -143716,6 +143785,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -143788,6 +143858,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -144327,6 +144403,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -144399,6 +144476,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -144938,6 +145021,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -145010,6 +145094,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -147509,6 +147599,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -147581,6 +147672,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -150814,6 +150911,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -150886,6 +150984,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -151425,6 +151529,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -151497,6 +151602,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -152036,6 +152147,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -152108,6 +152220,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -152647,6 +152765,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -152719,6 +152838,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -153258,6 +153383,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -153330,6 +153456,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -153869,6 +154001,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -153941,6 +154074,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -154480,6 +154619,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -154552,6 +154692,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -155080,6 +155226,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -155152,6 +155299,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -155680,6 +155833,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -155752,6 +155906,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -156280,6 +156440,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -156352,6 +156513,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -156891,6 +157058,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -156963,6 +157131,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -157502,6 +157676,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -157574,6 +157749,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -158113,6 +158294,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -158185,6 +158367,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -160946,6 +161134,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -161018,6 +161207,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -163774,6 +163969,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -163846,6 +164042,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -166607,6 +166809,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -166679,6 +166882,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -167218,6 +167427,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -167290,6 +167500,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -168065,6 +168281,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -168137,6 +168354,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -169097,6 +169320,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -169169,6 +169393,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -170129,6 +170359,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -170201,6 +170432,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "appId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -171152,6 +171389,7 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
+                              "appId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -172796,6 +173034,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "appId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessionId": {
                           "nullable": true,
                           "type": "string"
@@ -173330,6 +173574,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -173402,6 +173647,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -174362,6 +174613,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -174434,6 +174686,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -175093,6 +175351,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -175165,6 +175424,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -175824,6 +176089,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -175896,6 +176162,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -176555,6 +176827,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -176627,6 +176900,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -177166,6 +177445,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -177238,6 +177518,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -177777,6 +178063,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -177849,6 +178136,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -180348,6 +180641,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -180420,6 +180714,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -183653,6 +183953,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -183725,6 +184026,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -184264,6 +184571,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -184336,6 +184644,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -184875,6 +185189,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -184947,6 +185262,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -185486,6 +185807,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -185558,6 +185880,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -186097,6 +186425,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -186169,6 +186498,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -186708,6 +187043,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -186780,6 +187116,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -187319,6 +187661,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -187391,6 +187734,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -187919,6 +188268,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -187991,6 +188341,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -188519,6 +188875,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -188591,6 +188948,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -189119,6 +189482,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -189191,6 +189555,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -189730,6 +190100,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -189802,6 +190173,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -190341,6 +190718,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -190413,6 +190791,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -190952,6 +191336,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -191024,6 +191409,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -193785,6 +194176,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -193857,6 +194249,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -196613,6 +197011,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -196685,6 +197084,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -199446,6 +199851,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -199518,6 +199924,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -200057,6 +200469,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -200129,6 +200542,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -200904,6 +201323,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -200976,6 +201396,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -201936,6 +202362,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -202008,6 +202435,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -202968,6 +203401,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -203040,6 +203474,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "appId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -203991,6 +204431,7 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
+                        "appId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -323800,6 +324241,929 @@
           "kind": "static",
           "permissions": [
             "llmCost:read"
+          ]
+        }
+      }
+    },
+    "/api/statistics/apps": {
+      "get": {
+        "operationId": "getAppStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated because app cardinality is unbounded. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "totalCost",
+                "buildCost",
+                "runtimeCost",
+                "runs",
+                "estimatedNetSavings",
+                "appName"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query",
+            "name": "sortDirection",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "appId": {
+                            "type": "string"
+                          },
+                          "appName": {
+                            "type": "string"
+                          },
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "buildRequests": {
+                            "type": "number"
+                          },
+                          "buildInputTokens": {
+                            "type": "number"
+                          },
+                          "buildOutputTokens": {
+                            "type": "number"
+                          },
+                          "buildCost": {
+                            "type": "number"
+                          },
+                          "buildSessionAppCount": {
+                            "type": "number"
+                          },
+                          "hasBuildSession": {
+                            "type": "boolean"
+                          },
+                          "runtimeLlmRequests": {
+                            "type": "number"
+                          },
+                          "runtimeInputTokens": {
+                            "type": "number"
+                          },
+                          "runtimeOutputTokens": {
+                            "type": "number"
+                          },
+                          "runtimeCost": {
+                            "type": "number"
+                          },
+                          "runs": {
+                            "type": "number"
+                          },
+                          "toolCalls": {
+                            "type": "number"
+                          },
+                          "estimatedChatEquivalentCost": {
+                            "type": "number"
+                          },
+                          "estimatedNetSavings": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "appId",
+                          "appName",
+                          "authorName",
+                          "createdAt",
+                          "buildRequests",
+                          "buildInputTokens",
+                          "buildOutputTokens",
+                          "buildCost",
+                          "buildSessionAppCount",
+                          "hasBuildSession",
+                          "runtimeLlmRequests",
+                          "runtimeInputTokens",
+                          "runtimeOutputTokens",
+                          "runtimeCost",
+                          "runs",
+                          "toolCalls",
+                          "estimatedChatEquivalentCost",
+                          "estimatedNetSavings"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "chatBaselineCostPerSession": {
+                      "type": "number"
+                    },
+                    "chatBaselineSessions": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination",
+                    "chatBaselineCostPerSession",
+                    "chatBaselineSessions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "app:read",
+            "llmCost:read"
+          ]
+        }
+      }
+    },
+    "/api/statistics/skills": {
+      "get": {
+        "operationId": "getSkillStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "attributedCost",
+                "contextTokens",
+                "activations",
+                "lastActivatedAt",
+                "skillName"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query",
+            "name": "sortDirection",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "skillId": {
+                            "type": "string"
+                          },
+                          "skillName": {
+                            "type": "string"
+                          },
+                          "activations": {
+                            "type": "number"
+                          },
+                          "distinctUsers": {
+                            "type": "number"
+                          },
+                          "contextTokens": {
+                            "type": "number"
+                          },
+                          "measuredActivations": {
+                            "type": "number"
+                          },
+                          "attributedSessions": {
+                            "type": "number"
+                          },
+                          "attributedRequests": {
+                            "type": "number"
+                          },
+                          "attributedInputTokens": {
+                            "type": "number"
+                          },
+                          "attributedOutputTokens": {
+                            "type": "number"
+                          },
+                          "attributedCost": {
+                            "type": "number"
+                          },
+                          "lastActivatedAt": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "skillId",
+                          "skillName",
+                          "activations",
+                          "distinctUsers",
+                          "contextTokens",
+                          "measuredActivations",
+                          "attributedSessions",
+                          "attributedRequests",
+                          "attributedInputTokens",
+                          "attributedOutputTokens",
+                          "attributedCost",
+                          "lastActivatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmCost:read",
+            "skill:read"
           ]
         }
       }

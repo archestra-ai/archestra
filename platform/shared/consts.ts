@@ -302,6 +302,16 @@ export const DELEGATION_BILLING_ENVIRONMENT_HEADER =
   "X-Archestra-Delegation-Environment-Id";
 
 /**
+ * MCP App whose runtime is making this LLM call (`archestra.llm.complete()`),
+ * set by the in-process app-runtime tool so the interaction records which app
+ * spent the tokens instead of collapsing into the shared App Runtime agent.
+ * Honored only over the loopback socket and only for an app of the executing
+ * agent's organization — external clients cannot use it to attribute spend to
+ * an app they do not own.
+ */
+export const APP_ID_HEADER = "X-Archestra-App-Id";
+
+/**
  * Header name for user ID.
  * Clients can pass this header to associate interactions with a specific user (by their Archestra user UUID).
  * Particularly useful for identifying which user was using the Archestra Chat.

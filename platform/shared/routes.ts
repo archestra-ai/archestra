@@ -796,7 +796,6 @@ export const RouteId = {
   AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
-
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

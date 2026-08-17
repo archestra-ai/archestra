@@ -560,6 +560,17 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         uploaderEmailById,
       });
 
+      // The audit hook cannot derive these itself: the response carries
+      // `knowledgeBaseId` (not `id`), and the outcome spans many files.
+      request.auditResourceId = { value: knowledgeBaseId };
+      request.auditAfter = {
+        knowledgeBaseId,
+        createdKnowledgeBase: Boolean(body.newKnowledgeBaseName),
+        fileIds,
+        indexed: result.indexed,
+        failures: result.failures,
+      };
+
       return { knowledgeBaseId, ...result };
     },
   );

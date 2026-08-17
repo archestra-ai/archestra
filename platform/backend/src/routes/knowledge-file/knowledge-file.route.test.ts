@@ -1,6 +1,8 @@
 import { HttpResponse, http } from "msw";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -532,6 +534,155 @@ describe("knowledge file routes", () => {
         payload: { fileIds: [fileId], knowledgeBaseId: foreignKnowledgeBaseId },
       });
       expect([400, 404]).toContain(response.statusCode);
+    });
+  });
+});
+
+/**
+ * The repository is admin-relevant state: who added, renamed, exposed, or
+ * removed a document is exactly what the org audit log exists to answer.
+ * These tests pin the registry wiring end to end — action names, resource
+ * ids, and non-empty before/after diffs.
+ */
+describe("knowledge file audit records", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    const actor = await makeUser();
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = actor;
+    });
+    registerAuditLogHook(app);
+    const { default: knowledgeFileRoutes } = await import(
+      "./knowledge-file.routes"
+    );
+    await app.register(knowledgeFileRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  // Audit rows are written fire-and-forget from the onResponse hook.
+  const settleAuditWrites = () =>
+    new Promise((resolve) => setTimeout(resolve, 50));
+
+  async function auditRows(resourceType: string) {
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType,
+      sortDirection: "asc",
+      limit: 50,
+      offset: 0,
+    });
+    return data;
+  }
+
+  test("the file lifecycle writes created/updated/deleted records with diffs", async () => {
+    const uploaded = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: {
+        filename: "policy.txt",
+        mimeType: "text/plain",
+        content: textFile("Data is stored in eu-west-1."),
+      },
+    });
+    const fileId = uploaded.json().id;
+    await app.inject({
+      method: "PATCH",
+      url: `/api/knowledge-files/${fileId}`,
+      payload: { filename: "renamed.txt" },
+    });
+    await app.inject({
+      method: "DELETE",
+      url: `/api/knowledge-files/${fileId}`,
+    });
+    await settleAuditWrites();
+
+    const rows = await auditRows("knowledgeFile");
+    expect(rows.map((row) => [row.action, row.outcome])).toEqual([
+      ["knowledgeFile.created", "success"],
+      ["knowledgeFile.updated", "success"],
+      ["knowledgeFile.deleted", "success"],
+    ]);
+    for (const row of rows) expect(row.resourceId).toBe(fileId);
+
+    const [created, updated, deleted] = rows;
+    // Snapshots carry metadata, never the file bytes.
+    expect(created.after).toMatchObject({ filename: "policy.txt" });
+    expect(created.after).not.toHaveProperty("data");
+    expect(updated.before).toMatchObject({ filename: "policy.txt" });
+    expect(updated.after).toMatchObject({ filename: "renamed.txt" });
+    expect(deleted.before).toMatchObject({ filename: "renamed.txt" });
+  });
+
+  test("the directory lifecycle writes created/updated/deleted records with diffs", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-directories",
+      payload: { name: "Contracts" },
+    });
+    const directoryId = created.json().id;
+    await app.inject({
+      method: "PATCH",
+      url: `/api/knowledge-directories/${directoryId}`,
+      payload: { name: "Vendor contracts" },
+    });
+    await app.inject({
+      method: "DELETE",
+      url: `/api/knowledge-directories/${directoryId}`,
+    });
+    await settleAuditWrites();
+
+    const rows = await auditRows("knowledgeDirectory");
+    expect(rows.map((row) => [row.action, row.resourceId])).toEqual([
+      ["knowledgeDirectory.created", directoryId],
+      ["knowledgeDirectory.updated", directoryId],
+      ["knowledgeDirectory.deleted", directoryId],
+    ]);
+    expect(rows[1].before).toMatchObject({ name: "Contracts" });
+    expect(rows[1].after).toMatchObject({ name: "Vendor contracts" });
+  });
+
+  test("indexing writes a knowledgeBase.updated record naming the base and files", async () => {
+    const uploaded = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: {
+        filename: "policy.txt",
+        mimeType: "text/plain",
+        content: textFile("Data is stored in eu-west-1."),
+      },
+    });
+    const fileId = uploaded.json().id;
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files/index",
+      payload: { fileIds: [fileId], newKnowledgeBaseName: "Vendor review" },
+    });
+    const knowledgeBaseId = response.json().knowledgeBaseId;
+    await settleAuditWrites();
+
+    const rows = await auditRows("knowledgeBase");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].action).toBe("knowledgeBase.updated");
+    expect(rows[0].resourceId).toBe(knowledgeBaseId);
+    // The handler-supplied post-state names the base, the files, and whether
+    // the base was created by this call.
+    expect(rows[0].after).toMatchObject({
+      knowledgeBaseId,
+      createdKnowledgeBase: true,
+      fileIds: [fileId],
+      indexed: 1,
+      failures: [],
     });
   });
 });

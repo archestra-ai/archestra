@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   GithubAuthConfigFields,
@@ -26,6 +26,12 @@ interface GithubConfigFieldsProps {
   hideOwner?: boolean;
   hideAuth?: boolean;
   hideRepositoryOptions?: boolean;
+  /**
+   * Extra line under the GitHub App configuration picker. App credentials are
+   * stored organization-wide instead of on this form, so requirements about
+   * what the App must be granted have no token field to sit under.
+   */
+  appConfigDescription?: ReactNode;
 }
 
 export function GithubConfigFields({
@@ -35,6 +41,7 @@ export function GithubConfigFields({
   hideOwner = false,
   hideAuth = false,
   hideRepositoryOptions = false,
+  appConfigDescription,
 }: GithubConfigFieldsProps) {
   const authMethod = form.watch(`${prefix}.authMethod`) as string | undefined;
   const githubAppConfigId = form.watch(`${prefix}.githubAppConfigId`) as
@@ -130,6 +137,7 @@ export function GithubConfigFields({
           }
           githubAppConfigs={githubAppConfigs}
           appConfigError={appConfigError}
+          appConfigDescription={appConfigDescription}
         />
       )}
 

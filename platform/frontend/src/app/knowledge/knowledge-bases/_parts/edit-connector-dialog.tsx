@@ -34,6 +34,8 @@ import { useFeature } from "@/lib/config/config.query";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
+  AutoSyncCredentialRequirement,
+  autoSyncRequirementSlot,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   connectorNeedsEmail,
@@ -43,7 +45,6 @@ import {
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
-  getPermissionSyncCredentialNote,
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -160,6 +161,30 @@ export function EditConnectorDialog({
     connectorType === "github" && authMethod === "github_app";
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
+  // Only the auto-sync visibility mirrors the source's access control, so the
+  // upstream-permission requirement is noise on any other visibility.
+  const autoSyncRequirement =
+    visibility === "auto-sync-permissions" ? (
+      <AutoSyncCredentialRequirement type={connectorType} />
+    ) : undefined;
+  // Sources whose credential is minted inside the customer's own workspace
+  // link to that workspace, taken from the URL field above.
+  const connectorInstanceUrl = form.watch("config.outlineUrl") as
+    | string
+    | undefined;
+  const requirementSlot = autoSyncRequirementSlot({
+    type: connectorType,
+    authMethod,
+    authMode,
+  });
+  const credentialRequirement =
+    requirementSlot === "credential" ? autoSyncRequirement : undefined;
+  const connectorFieldsRequirement =
+    requirementSlot === "connector-fields" ? autoSyncRequirement : undefined;
+  const permissionSyncRequirement =
+    requirementSlot === "permission-sync-fields"
+      ? autoSyncRequirement
+      : undefined;
   const {
     apiTokenHelpText,
     apiTokenLabel,
@@ -171,9 +196,9 @@ export function EditConnectorDialog({
     mode: "edit",
     authMethod,
     authMode,
+    autoSyncRequirementShown: Boolean(credentialRequirement),
+    instanceUrl: connectorInstanceUrl,
   });
-  const permissionSyncCredentialNote =
-    getPermissionSyncCredentialNote(connectorType);
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
@@ -379,6 +404,7 @@ export function EditConnectorDialog({
             form={form}
             mode="edit"
             emailRequired={emailRequired}
+            autoSyncRequirement={connectorFieldsRequirement}
           />
 
           {Boolean(apiTokenLabel) && (
@@ -403,15 +429,12 @@ export function EditConnectorDialog({
                     )}
                   </FormControl>
                   <FormDescription>
-                    Leave empty to keep existing credentials unchanged.
+                    <span>
+                      Leave empty to keep existing credentials unchanged.
+                    </span>{" "}
+                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
+                    {credentialRequirement}
                   </FormDescription>
-                  {apiTokenHelpText}
-                  {visibility === "auto-sync-permissions" &&
-                    permissionSyncCredentialNote && (
-                      <FormDescription>
-                        {permissionSyncCredentialNote}
-                      </FormDescription>
-                    )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -444,7 +467,11 @@ export function EditConnectorDialog({
 
           {visibility === "auto-sync-permissions" &&
             connectorType === "perforce" && (
-              <PerforcePermissionSyncFields form={form} mode="edit" />
+              <PerforcePermissionSyncFields
+                form={form}
+                mode="edit"
+                adminCredentialDescription={permissionSyncRequirement}
+              />
             )}
 
           <Collapsible>

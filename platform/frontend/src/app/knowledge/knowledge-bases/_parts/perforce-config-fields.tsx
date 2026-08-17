@@ -1,8 +1,7 @@
 "use client";
 
-import { DocsPage } from "@archestra/shared";
+import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   FormControl,
   FormDescription,
@@ -13,7 +12,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput } from "@/components/ui/secret-input";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { joinIfArray } from "./transform-config-array-fields";
 
 export function PerforceConfigFields({
@@ -84,10 +82,16 @@ export function PerforceConfigFields({
 export function PerforcePermissionSyncFields({
   form,
   mode,
+  adminCredentialDescription,
 }: {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
   form: UseFormReturn<any>;
   mode: "create" | "edit";
+  /**
+   * What the admin account needs in Perforce. Passed in rather than read here,
+   * so the per-connector requirement copy stays in one place.
+   */
+  adminCredentialDescription?: ReactNode;
 }) {
   return (
     <div className="space-y-4">
@@ -95,16 +99,7 @@ export function PerforcePermissionSyncFields({
         <p className="text-sm font-medium">Permission sync</p>
         <p className="text-muted-foreground text-sm">
           Mirrors each document&apos;s access from Perforce, using an
-          administrative account.{" "}
-          <ExternalDocsLink
-            href={getFrontendDocsUrl(
-              DocsPage.PlatformKnowledge,
-              "permission-sync",
-            )}
-            className="text-sm"
-          >
-            Learn more
-          </ExternalDocsLink>
+          administrative account.
         </p>
       </div>
       <FormField
@@ -152,9 +147,18 @@ export function PerforcePermissionSyncFields({
                 {...field}
               />
             </FormControl>
-            {mode === "edit" && (
+            {/*
+             * One description, never two stacked: the requirement describes the
+             * account rather than the value in the box — on edit this field is
+             * normally left blank, and an admin fixing privileges upstream does
+             * not retype the password.
+             */}
+            {(mode === "edit" || adminCredentialDescription) && (
               <FormDescription>
-                Leave empty to keep the existing password.
+                {mode === "edit" ? (
+                  <span>Leave empty to keep the existing password.</span>
+                ) : null}{" "}
+                {adminCredentialDescription}
               </FormDescription>
             )}
             <FormMessage />

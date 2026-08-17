@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {
   FormControl,
@@ -40,7 +41,15 @@ export const DEFAULT_GDRIVE_AUTH_MODE = "service_account";
 export function GoogleDriveAuthFields({
   form,
   prefix = "config",
-}: GoogleDriveConfigFieldsProps) {
+  authModeDescription,
+}: GoogleDriveConfigFieldsProps & {
+  /**
+   * Auto-sync requirement line, passed by the dialogs only in the individual
+   * ("One Google account") mode: that mode pastes no credential, so the mode
+   * picker itself is the closest thing to a credential input on the form.
+   */
+  authModeDescription?: ReactNode;
+}) {
   const appName = useAppName();
   const oauth = useFeature("kbGoogleDriveOAuth");
   // Left undefined for a connector predating auth modes. Those still infer the
@@ -96,7 +105,8 @@ export function GoogleDriveAuthFields({
               {authMode === "service_account" &&
                 "The service account sees only what has been shared with its own email address — every folder, by hand, forever."}
               {!authMode &&
-                "This connector predates auth modes and still works out its identity from the credential it holds. Pick a mode to state it explicitly."}
+                "This connector predates auth modes and still works out its identity from the credential it holds. Pick a mode to state it explicitly."}{" "}
+              {authModeDescription}
             </FormDescription>
             <FormMessage />
           </FormItem>

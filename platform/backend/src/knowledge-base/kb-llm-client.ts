@@ -25,8 +25,8 @@ import {
   OcrConfigUnresolvableError,
   RerankerConfigUnresolvableError,
 } from "./errors";
-import { providerSupportsPdfInput } from "./pdf-ocr";
 import { isNativeRerankModel } from "./native-rerank";
+import { providerSupportsPdfInput } from "./pdf-ocr";
 
 export interface EmbeddingConfig {
   /**

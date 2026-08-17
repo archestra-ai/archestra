@@ -22,12 +22,14 @@ import {
 import { afterEach, describe, expect, test } from "@/test";
 import {
   EmbeddingConfigUnresolvableError,
+  OcrConfigUnresolvableError,
   RerankerConfigUnresolvableError,
 } from "./errors";
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
   resolveEmbeddingConfig,
+  resolveOcrConfig,
   resolveRerankerConfig,
 } from "./kb-llm-client";
 
@@ -468,6 +470,99 @@ describe("resolveRerankerConfig", () => {
     // degrades; save blocks on it).
     await expect(resolveRerankerConfig(org.id)).rejects.toBeInstanceOf(
       RerankerConfigUnresolvableError,
+    );
+  });
+});
+
+describe("resolveOcrConfig", () => {
+  test("returns null when the organization has no OCR pair configured", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    expect(await resolveOcrConfig(org.id)).toBeNull();
+  });
+
+  test("resolves a direct LLM model for an allowlisted provider", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Vision Key",
+      provider: "anthropic",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+    mockGetSecretValue.mockResolvedValueOnce("sk-ant-api-key");
+
+    const result = await resolveOcrConfig(org.id);
+
+    expect(result).toMatchObject({
+      modelName: "claude-sonnet-5",
+      provider: "anthropic",
+    });
+    expect(mockCreateDirectLLMModel).toHaveBeenCalledWith({
+      provider: "anthropic",
+      apiKey: "sk-ant-api-key",
+      modelName: "claude-sonnet-5",
+      baseUrl: "https://api.anthropic.com",
+    });
+  });
+
+  test("rejects a provider whose transport cannot carry PDF input", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Native Ollama",
+      provider: "ollama-native",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "llava",
+    });
+    mockGetSecretValue.mockResolvedValueOnce("unused");
+
+    await expect(resolveOcrConfig(org.id)).rejects.toThrow(
+      OcrConfigUnresolvableError,
+    );
+  });
+
+  test("throws when the configured credential cannot be resolved", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Broken Key",
+      provider: "anthropic",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+    mockGetSecretValue.mockResolvedValueOnce(null);
+
+    await expect(resolveOcrConfig(org.id)).rejects.toThrow(
+      OcrConfigUnresolvableError,
     );
   });
 });

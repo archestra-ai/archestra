@@ -25,6 +25,24 @@ export interface PdfPageOutcome {
   text?: string;
 }
 
+/**
+ * What the optional OCR pass did to a document's textless pages. Attached to
+ * the extraction result by `extractPdfText` (pdf-ocr.ts) so the skip/warning
+ * descriptions can tell an admin whether OCR ran, what it recovered, and what
+ * stopped it.
+ */
+export interface OcrOutcome {
+  transcribedPageCount: number;
+  /** Textless pages OCR attempted but could not transcribe. */
+  failedPageCount: number;
+  /** Textless pages never attempted because a limit stopped OCR first. */
+  skippedPageCount: number;
+  /** Which limit stopped scheduling, when skippedPageCount > 0. */
+  skippedBy?: "document-page-cap" | "run-page-budget" | "sync-deadline";
+  /** Summary of the first failure, for run diagnostics. */
+  failureSummary?: string;
+}
+
 export interface PdfExtractionResult {
   text: string;
   status: PdfExtractionStatus;
@@ -33,6 +51,8 @@ export interface PdfExtractionResult {
   textlessPageCount?: number;
   /** Ordered per-page outcomes; only present when the document parsed. */
   pages?: PdfPageOutcome[];
+  /** Present when an OCR pass ran over the document's textless pages. */
+  ocr?: OcrOutcome;
   error?: string;
 }
 
@@ -50,7 +70,7 @@ export function describePdfEmptyText(
       return undefined;
     case "no_text_layer": {
       const details = describeEmptyPages(result);
-      return `PDF has ${result.pageCount} page(s) but no extractable text layer${details ? ` (${details})` : ""}`;
+      return `PDF has ${result.pageCount} page(s) but no extractable text layer${details ? ` (${details})` : ""}${describeFailedOcr(result)}`;
     }
     case "empty":
       return "PDF contains no pages";
@@ -67,6 +87,7 @@ export function describePdfExtractionWarning(
   result: PdfExtractionResult,
 ): string | undefined {
   if (result.status !== "partial") return undefined;
+  const ocrSuffix = describeOcrSummary(result.ocr);
 
   if (result.failedPageCount) {
     const causes = [
@@ -75,10 +96,15 @@ export function describePdfExtractionWarning(
     if (result.textlessPageCount) {
       causes.push(describeTextlessPages(result.textlessPageCount));
     }
-    return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.`;
+    return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.${ocrSuffix}`;
   }
   if (result.textlessPageCount) {
-    return `PDF ${describeTextlessPages(result.textlessPageCount)}. Text from the other pages was indexed.`;
+    return `PDF ${describeTextlessPages(result.textlessPageCount)}. Text from the other pages was indexed.${ocrSuffix}`;
+  }
+  if (ocrSuffix) {
+    // Every originally-textless page was transcribed but some pages had
+    // failed extraction, or vice versa — surface the OCR contribution.
+    return ocrSuffix.trim();
   }
   return undefined;
 }
@@ -248,6 +274,51 @@ function summarizePageErrors(errors: string[]): string {
   const shown = errors.slice(0, 3);
   const remainder = errors.length - shown.length;
   return `${shown.join("; ")}${remainder > 0 ? `; and ${remainder} more` : ""}`;
+}
+
+/** " ; OCR ..." suffix for a document whose OCR pass recovered nothing. */
+function describeFailedOcr(result: PdfExtractionResult): string {
+  const ocr = result.ocr;
+  if (!ocr || ocr.transcribedPageCount > 0) return "";
+  const attempted = ocr.failedPageCount + ocr.skippedPageCount;
+  const cause = ocr.failureSummary
+    ? `: ${ocr.failureSummary}`
+    : ocr.skippedBy
+      ? ` (stopped by ${describeOcrLimit(ocr.skippedBy)})`
+      : "";
+  return `; OCR could not transcribe any of the ${attempted} textless page(s)${cause}`;
+}
+
+/** Sentence describing a partially-successful OCR pass, appended to warnings. */
+function describeOcrSummary(ocr: OcrOutcome | undefined): string {
+  if (!ocr) return "";
+  const attempted =
+    ocr.transcribedPageCount + ocr.failedPageCount + ocr.skippedPageCount;
+  const parts = [
+    `OCR transcribed ${ocr.transcribedPageCount} of ${attempted} textless page(s)`,
+  ];
+  if (ocr.failedPageCount > 0) {
+    parts.push(
+      `${ocr.failedPageCount} could not be transcribed${ocr.failureSummary ? ` (${ocr.failureSummary})` : ""}`,
+    );
+  }
+  if (ocr.skippedPageCount > 0 && ocr.skippedBy) {
+    parts.push(
+      `${ocr.skippedPageCount} skipped by the ${describeOcrLimit(ocr.skippedBy)}`,
+    );
+  }
+  return ` ${parts.join("; ")}.`;
+}
+
+function describeOcrLimit(limit: NonNullable<OcrOutcome["skippedBy"]>): string {
+  switch (limit) {
+    case "document-page-cap":
+      return "per-document OCR page cap";
+    case "run-page-budget":
+      return "sync run's OCR page budget";
+    case "sync-deadline":
+      return "sync run's time budget";
+  }
 }
 
 function describeEmptyPages(result: PdfExtractionResult): string {

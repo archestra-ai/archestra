@@ -2873,6 +2873,17 @@ const config = {
     contextualRetrievalEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED ===
       "true",
+    /**
+     * Ceiling on how many textless pages of a single PDF the OCR pass will
+     * transcribe. Each page is one vision-model request billed against the
+     * organization's configured OCR model, so this bounds the worst-case cost
+     * of one document (a 500-page scan stops at this many pages and the
+     * document is indexed with an honest partial-extraction warning).
+     */
+    ocrMaxPagesPerDocument: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT,
+      100,
+    ),
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,

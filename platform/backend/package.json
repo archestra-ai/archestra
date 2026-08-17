@@ -72,6 +72,7 @@
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/sso": "catalog:",
+    "@cantoo/pdf-lib": "^2.8.1",
     "@chonkiejs/core": "^0.0.7",
     "@crawlee/cheerio": "3.14.1",
     "@fastify/cors": "^11.1.0",

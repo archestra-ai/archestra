@@ -1559,12 +1559,13 @@ export function LlmProviderApiKeyForm({
                       ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope.`
                       : "When multiple keys exist for the same provider and scope, the primary key is preferred."}
                   </span>{" "}
-                  {/* The mechanism, which the sentence above only implies:
-                      key resolution sorts a scope's keys by primary first,
-                      then oldest. */}
+                  {/* The mechanism, which the sentence above only implies: key
+                      resolution takes the conversation's pinned key, then the
+                      agent's configured one, and only then falls through a
+                      scope's keys — primary first, oldest after. */}
                   <span>
-                    Requests that don't name a key use it; with no primary set,
-                    the oldest one is used.
+                    Chats and agents without a key of their own fall back to it;
+                    with no primary set, the oldest key is used.
                   </span>
                 </p>
               </div>

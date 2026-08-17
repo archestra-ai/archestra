@@ -860,10 +860,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Discover actual scopes from the OAuth server (like desktop app does)
-        const { configuredScopes, discoveredScopes, scopesToUse } =
-          await resolveOAuthScopesForAuthorization({
-            oauthConfig,
-          });
+        const resolvedScopes = await resolveOAuthScopesForAuthorization({
+          oauthConfig,
+        });
+        const { configuredScopes, discoveredScopes } = resolvedScopes;
+        // Mutable: a successful dynamic registration may narrow this to the
+        // scope set the server actually granted the client (RFC 7591).
+        let scopesToUse = resolvedScopes.scopesToUse;
 
         fastify.log.info(
           {
@@ -944,40 +947,125 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // If we don't have client credentials and registration endpoint is available, try dynamic registration
         let registrationResult: Record<string, unknown> | undefined;
+        let registrationError: string | undefined;
         if (!clientId && registrationEndpoint) {
+          const registrationMetadata = {
+            client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
+            redirect_uris: [redirectUri],
+            grant_types: ["authorization_code", "refresh_token"],
+            response_types: ["code"],
+            // SEP-837: OIDC servers default an omitted application_type to
+            // "web", which then rejects the localhost-style redirect URIs a
+            // self-hosted deployment uses. Non-OIDC servers ignore it.
+            application_type: "native" as const,
+          };
           try {
             fastify.log.info(
               { registrationEndpoint },
               "Attempting dynamic client registration",
             );
-            registrationResult = await registerOAuthClient(
-              registrationEndpoint,
-              {
-                client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
-                redirect_uris: [redirectUri],
-                grant_types: ["authorization_code", "refresh_token"],
-                response_types: ["code"],
-                // SEP-837: OIDC servers default an omitted application_type to
-                // "web", which then rejects the localhost-style redirect URIs a
-                // self-hosted deployment uses. Non-OIDC servers ignore it.
-                application_type: "native",
-                scope: scopesToUse.join(" "),
-              },
-            );
+            let registeredWithoutScope = false;
+            try {
+              registrationResult = await registerOAuthClient(
+                registrationEndpoint,
+                {
+                  ...registrationMetadata,
+                  scope: scopesToUse.join(" "),
+                },
+              );
+            } catch (error) {
+              // Servers that restrict which scopes dynamically registered
+              // clients may request reject the whole registration when the
+              // requested list has gone stale (e.g. an auth server that
+              // migrated to a granular scope scheme). Retry with the scopes
+              // the server currently advertises, so the resulting token
+              // carries real API scopes.
+              fastify.log.warn(
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                  scopes: scopesToUse,
+                },
+                "Dynamic registration with configured scopes failed, retrying with advertised scopes",
+              );
+              const advertisedScopes =
+                configuredScopes.length > 0
+                  ? await discoverScopes(
+                      oauthConfig.server_url,
+                      oauthConfig.supports_resource_metadata || false,
+                      [],
+                      {
+                        authServerUrl: oauthConfig.auth_server_url,
+                        resourceMetadataUrl: oauthConfig.resource_metadata_url,
+                        wellKnownUrl: oauthConfig.well_known_url,
+                      },
+                    )
+                  : []; // scopes already came from discovery; nothing new to try
+              if (
+                advertisedScopes.length > 0 &&
+                advertisedScopes.join(" ") !== scopesToUse.join(" ")
+              ) {
+                try {
+                  registrationResult = await registerOAuthClient(
+                    registrationEndpoint,
+                    {
+                      ...registrationMetadata,
+                      scope: advertisedScopes.join(" "),
+                    },
+                  );
+                  scopesToUse = advertisedScopes;
+                } catch (retryError) {
+                  fastify.log.warn(
+                    {
+                      error:
+                        retryError instanceof Error
+                          ? retryError.message
+                          : String(retryError),
+                    },
+                    "Dynamic registration with advertised scopes failed, retrying without scope",
+                  );
+                }
+              }
+              if (!registrationResult) {
+                // Last resort: RFC 7591 makes `scope` optional — let the
+                // server assign its default scope set instead of dead-ending
+                // the install.
+                registrationResult = await registerOAuthClient(
+                  registrationEndpoint,
+                  registrationMetadata,
+                );
+                registeredWithoutScope = true;
+              }
+            }
 
             clientId = registrationResult?.client_id as string;
             clientSecret = registrationResult?.client_secret as
               | string
               | undefined;
 
+            // RFC 7591: a `scope` in the registration response is the scope
+            // set the client is allowed to use. Prefer it for the
+            // authorization request so we don't ask for scopes the server
+            // just told us this client cannot have.
+            const grantedScope = registrationResult?.scope;
+            if (typeof grantedScope === "string" && grantedScope.trim()) {
+              scopesToUse = grantedScope.split(/\s+/).filter(Boolean);
+            } else if (registeredWithoutScope) {
+              // The explicit scope list was rejected and the server did not
+              // report what it granted: send no scope at all and let the
+              // server apply the client's default scope set.
+              scopesToUse = [];
+            }
+
             fastify.log.info(
-              { client_id: clientId },
+              { client_id: clientId, scopes: scopesToUse },
               "Dynamic registration successful",
             );
           } catch (error) {
+            registrationError =
+              error instanceof Error ? error.message : String(error);
             fastify.log.warn(
               {
-                error: error instanceof Error ? error.message : String(error),
+                error: registrationError,
                 stack: error instanceof Error ? error.stack : undefined,
               },
               "Dynamic registration failed, continuing with default client_id",
@@ -990,7 +1078,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!clientId) {
           throw new ApiError(
             400,
-            "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+            registrationError
+              ? `No client ID available: dynamic client registration failed (${registrationError}). Configure a client_id in the catalog item or fix the OAuth scope configuration.`
+              : "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
           );
         }
 
@@ -1017,7 +1107,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authUrl.searchParams.set("code_challenge", codeChallenge);
         authUrl.searchParams.set("code_challenge_method", "S256");
         authUrl.searchParams.set("state", state);
-        authUrl.searchParams.set("scope", scopesToUse.join(" "));
+        // An empty scope list means "let the server apply the client's
+        // default scope set" — omit the parameter rather than sending scope=""
+        if (scopesToUse.length > 0) {
+          authUrl.searchParams.set("scope", scopesToUse.join(" "));
+        }
         authUrl.searchParams.set("redirect_uri", redirectUri);
 
         // RFC 8707: Include resource parameter for audience binding

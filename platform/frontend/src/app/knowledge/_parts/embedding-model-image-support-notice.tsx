@@ -33,25 +33,54 @@ export function EmbeddingModelImageSupportNotice({
   const modelKey = `${provider}/${modelId}`;
   const storageKey = `${DISMISSED_MODEL_STORAGE_PREFIX}:${dismissalScope}`;
   const dismissalId = `${storageKey}:${modelKey}`;
-  const [dismissedId, setDismissedId] = useState(() =>
-    readDismissedModelKey(storageKey) === modelKey ? dismissalId : null,
-  );
+  const [dismissalState, setDismissalState] = useState<{
+    id: string;
+    fingerprint: string | null;
+    dismissed: boolean;
+  } | null>(null);
 
   useEffect(() => {
-    const storedModelKey = readDismissedModelKey(storageKey);
-    if (storedModelKey && storedModelKey !== modelKey) {
-      clearDismissedModelKey(storageKey);
-      setDismissedId(null);
-      return;
-    }
-    setDismissedId(storedModelKey === modelKey ? dismissalId : null);
+    let cancelled = false;
+    getModelFingerprint(modelKey)
+      .then((fingerprint) => {
+        if (cancelled) return;
+        const storedFingerprint = readDismissedModelFingerprint(storageKey);
+        if (storedFingerprint && storedFingerprint !== fingerprint) {
+          clearDismissedModelFingerprint(storageKey);
+        }
+        setDismissalState({
+          id: dismissalId,
+          fingerprint,
+          dismissed: storedFingerprint === fingerprint,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDismissalState({
+            id: dismissalId,
+            fingerprint: null,
+            dismissed: false,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [dismissalId, modelKey, storageKey]);
 
-  if (supportsImages !== false || dismissedId === dismissalId) return null;
+  if (
+    supportsImages !== false ||
+    dismissalState?.id !== dismissalId ||
+    dismissalState.dismissed
+  ) {
+    return null;
+  }
 
   const handleDismiss = () => {
-    writeDismissedModelKey(storageKey, modelKey);
-    setDismissedId(dismissalId);
+    if (dismissalState.fingerprint) {
+      writeDismissedModelFingerprint(storageKey, dismissalState.fingerprint);
+    }
+    setDismissalState({ ...dismissalState, dismissed: true });
   };
 
   return (
@@ -109,7 +138,7 @@ export function embeddingModelSupportsImages(
   );
 }
 
-function readDismissedModelKey(storageKey: string): string | null {
+function readDismissedModelFingerprint(storageKey: string): string | null {
   if (typeof window === "undefined") return null;
   try {
     return localStorage.getItem(storageKey);
@@ -118,18 +147,31 @@ function readDismissedModelKey(storageKey: string): string | null {
   }
 }
 
-function writeDismissedModelKey(storageKey: string, modelKey: string) {
+function writeDismissedModelFingerprint(
+  storageKey: string,
+  fingerprint: string,
+) {
   try {
-    localStorage.setItem(storageKey, modelKey);
+    localStorage.setItem(storageKey, fingerprint);
   } catch {
     // Keep the in-memory dismissal when browser storage is unavailable.
   }
 }
 
-function clearDismissedModelKey(storageKey: string) {
+function clearDismissedModelFingerprint(storageKey: string) {
   try {
     localStorage.removeItem(storageKey);
   } catch {
     // A blocked storage backend is already equivalent to no persisted dismissal.
   }
+}
+
+async function getModelFingerprint(modelKey: string) {
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(modelKey),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }

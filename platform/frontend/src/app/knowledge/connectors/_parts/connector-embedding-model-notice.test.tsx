@@ -1,7 +1,7 @@
 import { DocsPage, getDocsUrl } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -16,6 +16,18 @@ const EMBEDDING_MODEL_ID = "text-embedding-model";
 
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal("crypto", {
+    subtle: {
+      digest: vi.fn(
+        async (_algorithm: AlgorithmIdentifier, data: BufferSource) => {
+          const bytes = ArrayBuffer.isView(data)
+            ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+            : new Uint8Array(data);
+          return Uint8Array.from(bytes, (byte) => byte ^ 0xff).buffer;
+        },
+      ),
+    },
+  });
   vi.mocked(useOrganization).mockReturnValue({
     data: {
       id: "organization-1",
@@ -28,8 +40,12 @@ beforeEach(() => {
   } as ReturnType<typeof useSession>);
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("ConnectorEmbeddingModelNotice", () => {
-  it("shows a quiet note with settings and documentation links for a text-only model", () => {
+  it("shows a quiet note with settings and documentation links for a text-only model", async () => {
     mockEmbeddingModel({
       inputModalities: ["text"],
       embeddingClientImageCapable: false,
@@ -37,7 +53,7 @@ describe("ConnectorEmbeddingModelNotice", () => {
 
     render(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
-    expect(screen.getByRole("note")).toBeInTheDocument();
+    expect(await screen.findByRole("note")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent(
       "openai/text-embedding-model handles text only",
@@ -54,7 +70,7 @@ describe("ConnectorEmbeddingModelNotice", () => {
     );
   });
 
-  it("warns when model metadata declares images but its embedding client cannot send them", () => {
+  it("warns when model metadata declares images but its embedding client cannot send them", async () => {
     mockEmbeddingModel({
       inputModalities: ["text", "image"],
       embeddingClientImageCapable: false,
@@ -62,7 +78,7 @@ describe("ConnectorEmbeddingModelNotice", () => {
 
     render(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
-    expect(screen.getByRole("note")).toBeInTheDocument();
+    expect(await screen.findByRole("note")).toBeInTheDocument();
   });
 
   it("renders nothing for image-capable embedding models", () => {
@@ -103,13 +119,19 @@ describe("ConnectorEmbeddingModelNotice", () => {
     const { unmount } = render(
       <ConnectorEmbeddingModelNotice connectorType="gdrive" />,
     );
-    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    await user.click(await screen.findByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    const storedFingerprint = localStorage.getItem(localStorage.key(0) ?? "");
+    expect(storedFingerprint).toMatch(/^[0-9a-f]+$/);
+    expect(storedFingerprint).not.toContain(EMBEDDING_MODEL_ID);
 
     unmount();
     const { rerender } = render(
       <ConnectorEmbeddingModelNotice connectorType="gdrive" />,
     );
+    await waitFor(() => {
+      expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(2);
+    });
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
 
     vi.mocked(useOrganization).mockReturnValue({
@@ -126,7 +148,7 @@ describe("ConnectorEmbeddingModelNotice", () => {
     });
     rerender(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
-    expect(screen.getByRole("note")).toBeInTheDocument();
+    expect(await screen.findByRole("note")).toBeInTheDocument();
   });
 
   it("does not show on connectors that cannot ingest images", () => {
@@ -146,14 +168,14 @@ describe("ConnectorEmbeddingModelNotice", () => {
     const { rerender } = render(
       <ConnectorEmbeddingModelNotice connectorType="gdrive" />,
     );
-    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    await user.click(await screen.findByRole("button", { name: "Dismiss" }));
 
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-2" } },
     } as ReturnType<typeof useSession>);
     rerender(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
-    expect(screen.getByRole("note")).toBeInTheDocument();
+    expect(await screen.findByRole("note")).toBeInTheDocument();
   });
 });
 

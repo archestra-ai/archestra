@@ -564,7 +564,7 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      const note = screen.getByRole("note");
+      const note = await screen.findByRole("note");
       expect(note.closest("#embedding-configuration")).toBeInTheDocument();
       expect(
         within(note).queryByRole("link", { name: "Embedding settings" }),

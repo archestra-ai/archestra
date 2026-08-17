@@ -53,6 +53,7 @@ export * from "./kb-external-user-group";
 export * from "./knowledge-base";
 export * from "./knowledge-base-connector";
 export * from "./knowledge-connector";
+export * from "./knowledge-file";
 export * from "./label";
 export * from "./limit";
 export * from "./llm-oauth-client";

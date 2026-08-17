@@ -662,6 +662,17 @@ export const RouteId = {
   GetConnectorRun: "getConnectorRun",
 
   // Knowledge File Routes
+  GetKnowledgeFiles: "getKnowledgeFiles",
+  UploadKnowledgeFile: "uploadKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
+  DeleteKnowledgeFile: "deleteKnowledgeFile",
+  UpdateKnowledgeFile: "updateKnowledgeFile",
+  IndexKnowledgeFiles: "indexKnowledgeFiles",
+  GetKnowledgeDirectories: "getKnowledgeDirectories",
+  CreateKnowledgeDirectory: "createKnowledgeDirectory",
+  UpdateKnowledgeDirectory: "updateKnowledgeDirectory",
+  DeleteKnowledgeDirectory: "deleteKnowledgeDirectory",
+  PromoteAttachmentToKnowledgeFile: "promoteAttachmentToKnowledgeFile",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
@@ -785,6 +796,8 @@ export const RouteId = {
   AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
+
+  // Batch analysis
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

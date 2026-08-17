@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleFileSections,
+  attachmentIdFromUrl,
   type ConversationFileItem,
   deleteTargetFor,
   persistentFilesSection,
@@ -146,5 +147,40 @@ describe("deleteTargetFor", () => {
       kind: "artifact",
     });
     expect(deleteTargetFor(fileItem("project"))).toEqual({ kind: "artifact" });
+  });
+});
+
+describe("attachmentIdFromUrl", () => {
+  const id = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+  it("reads the id out of an attachment byte url", () => {
+    expect(attachmentIdFromUrl(`/api/chat/attachments/${id}/content`)).toBe(id);
+  });
+
+  it("reads it from an absolute url, and past a query string", () => {
+    expect(
+      attachmentIdFromUrl(
+        `https://app.example.com/api/chat/attachments/${id}/content`,
+      ),
+    ).toBe(id);
+    expect(attachmentIdFromUrl(`/api/chat/attachments/${id}/content?v=2`)).toBe(
+      id,
+    );
+  });
+
+  it("returns null for anything that is not a chat attachment", () => {
+    // A sandbox artifact and an inline image are both file parts too; neither
+    // can be promoted, so neither may yield an id.
+    expect(attachmentIdFromUrl("/api/skill-sandbox/artifacts/g1")).toBeNull();
+    expect(
+      attachmentIdFromUrl("data:image/png;base64,iVBORw0KGgo="),
+    ).toBeNull();
+    expect(attachmentIdFromUrl("")).toBeNull();
+  });
+
+  it("rejects a path segment that is not a uuid", () => {
+    expect(
+      attachmentIdFromUrl("/api/chat/attachments/not-a-uuid/content"),
+    ).toBeNull();
   });
 });

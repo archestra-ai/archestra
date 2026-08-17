@@ -160,6 +160,27 @@ Saving the configuration for the first time resets every connector's sync checkp
 
 A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
 
+## Knowledge Files
+
+Knowledge Files is a repository for documents you upload directly — a signed contract that arrived by email, for example. A connector pulls from a source system; here you bring the file yourself. Open **Knowledge > Files**.
+
+Upload PDF, Word, Markdown, CSV, JSON, HTML or plain text. The text is read at upload, and a file that cannot be read is refused right there — so nothing lands in the repository that would retrieve nothing later. A scanned PDF is accepted when [Document OCR](#document-ocr) is configured; its pages are transcribed when the file is indexed.
+
+Directories group documents and are flat — no sub-directories. Every document and directory has an audience: **Organization**, **Teams**, or **Only me**. Visibility follows the document into retrieval, so sharing a Knowledge Base with an agent does not widen who can read what is inside it.
+
+Uploading stores a document; indexing makes it retrievable. Select documents or whole directories, choose **Add to knowledge base**, and pick an existing base or create one from the selection.
+
+A file attached to a chat belongs to that conversation. To keep it, save it to the repository — from the attachment in the message, or from the Files panel, where you can select several at once. You choose the name, directory and visibility as you save, and can index it in one step.
+
+### Use Case: Vendor Security Reviews
+
+A security analyst reviews vendor documents that arrive by email.
+
+1. Upload the questionnaires and SOC 2 reports into a **Vendor contracts** directory, scoped to the security team.
+2. Select the directory and add it to a **Vendor security review** Knowledge Base.
+3. Assign that base to the review agent.
+4. Ask the agent which vendors store customer data outside the EU. Every answer cites the document it came from.
+
 ## Assigning to an Agent
 
 An agent — or an [MCP Gateway](/docs/platform-mcp-gateway) — reaches knowledge through the **Tools & Knowledge Sources** setting in its dialog, which has two modes:

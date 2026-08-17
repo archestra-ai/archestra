@@ -34,7 +34,13 @@ export function KnowledgePageLayout({
   return (
     <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
       <PageLayout
-        title={title}
+        title={
+          <span className="flex items-center gap-2">
+            {title}
+            <SmallTeamTierBanner compact featureName="Knowledge" />
+          </span>
+        }
+        documentTitle={title}
         description={description}
         tabs={KNOWLEDGE_TABS}
         actionButton={
@@ -51,7 +57,6 @@ export function KnowledgePageLayout({
           </div>
         }
       >
-        <SmallTeamTierBanner featureName="Knowledge" />
         {!isKnowledgeBaseConfigured ? (
           <EmbeddingRequiredPlaceholder />
         ) : (
@@ -67,5 +72,6 @@ export function KnowledgePageLayout({
 // bare /knowledge redirect page).
 const KNOWLEDGE_TABS = [
   { label: "Connectors", href: "/knowledge/connectors" },
+  { label: "Files", href: "/knowledge/files" },
   { label: "Knowledge Bases", href: "/knowledge/knowledge-bases" },
 ];

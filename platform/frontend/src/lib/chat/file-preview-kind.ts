@@ -4,6 +4,7 @@ export type FilePreviewKind =
   | "image"
   | "text"
   | "csv"
+  | "pdf"
   | "unsupported";
 
 /** Image mimes the backend serves inline; only these can render via <img>. */
@@ -35,6 +36,9 @@ export function getFilePreviewKind(
     return "html";
   }
   if (INLINE_IMAGE_MIMES.has(mime)) return "image";
+  // Rendered via an iframe pointing at the byte endpoint, which serves PDFs
+  // inline — the browser's own viewer does the work.
+  if (mime === "application/pdf" || lowerName.endsWith(".pdf")) return "pdf";
   if (mime === "text/csv" || lowerName.endsWith(".csv")) return "csv";
   if (mime.startsWith("text/") || mime === "application/json") return "text";
   // Sniffing short plain-text files often yields application/octet-stream,

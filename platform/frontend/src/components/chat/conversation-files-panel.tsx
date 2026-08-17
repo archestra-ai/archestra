@@ -5,6 +5,7 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
 import {
+  BookPlus,
   Check,
   Copy,
   Download,
@@ -21,6 +22,7 @@ import {
   InstructionsRow,
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
+import { SaveToKnowledgeDialog } from "@/components/chat/save-to-knowledge-dialog";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import {
@@ -114,6 +116,10 @@ export function ConversationFilesPanel({
   const [editing, setEditing] = useState(false);
   const editingRef = useRef(false);
   editingRef.current = editing;
+  /** The attachments being copied into the knowledge repository, if any. */
+  const [savingToKnowledge, setSavingToKnowledge] = useState<
+    ConversationFileItem[]
+  >([]);
   // Only .md/.txt files the viewer can manage are editable; attachments and the
   // in-memory artifact never are. `canManageFiles` is the same gate as Delete.
   const selectedEditable =
@@ -281,6 +287,11 @@ export function ConversationFilesPanel({
           selectedId={selectedId}
           onOpen={openFile}
           onRequestDelete={requestDelete}
+          onRequestSaveToKnowledge={setSavingToKnowledge}
+          // Attachments only: generated outputs and project files are already
+          // persisted outside this conversation, so copying them would just
+          // make a second, diverging copy.
+          canSaveToKnowledge={(item) => item.source === "attachment"}
           leading={
             showInstructions ? (
               <InstructionsRow
@@ -350,6 +361,22 @@ export function ConversationFilesPanel({
                     <span className="sr-only">Edit {selected.name}</span>
                   </button>
                 )}
+                {/* Attachments only: a chat attachment is the one kind of file
+                    here that has no life outside this conversation. Generated
+                    outputs and project files are already persisted elsewhere. */}
+                {selected.source === "attachment" && (
+                  <button
+                    type="button"
+                    onClick={() => setSavingToKnowledge([selected])}
+                    title={`Save ${selected.name} to knowledge`}
+                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <BookPlus className="h-4 w-4" />
+                    <span className="sr-only">
+                      Save {selected.name} to knowledge
+                    </span>
+                  </button>
+                )}
                 {canManageFiles && (
                   <button
                     type="button"
@@ -412,6 +439,17 @@ export function ConversationFilesPanel({
       )}
 
       {deleteDialog}
+
+      {savingToKnowledge.length > 0 && (
+        <SaveToKnowledgeDialog
+          open
+          onOpenChange={(next) => !next && setSavingToKnowledge([])}
+          attachments={savingToKnowledge.map((file) => ({
+            id: file.id,
+            name: file.name,
+          }))}
+        />
+      )}
     </div>
   );
 

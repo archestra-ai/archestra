@@ -28,6 +28,7 @@ export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as invitationRoutes } from "./invitation";
 export { default as k8sCapabilitiesRoutes } from "./k8s-capabilities";
 export { default as knowledgeBaseRoutes } from "./knowledge-base";
+export { default as knowledgeFileRoutes } from "./knowledge-file/knowledge-file.routes";
 export { default as limitsRoutes } from "./limits";
 export { default as llmOauthClientsRoutes } from "./llm-oauth-clients";
 export { default as llmProviderApiKeyRoutes } from "./llm-provider-api-keys";

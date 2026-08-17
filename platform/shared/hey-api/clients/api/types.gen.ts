@@ -13276,7 +13276,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         }>;
     };
     path?: never;
@@ -14828,7 +14828,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         }>;
     };
 };
@@ -55577,7 +55577,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -56228,7 +56228,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         /**
          * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.
          */
@@ -56314,7 +56314,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -56788,7 +56788,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -57144,7 +57144,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -57603,7 +57603,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -57892,7 +57892,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         }>;
         pagination: {
             currentPage: number;
@@ -58089,7 +58089,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
     };
 };
 
@@ -59614,6 +59614,992 @@ export type GetConnectorRunResponses = {
 };
 
 export type GetConnectorRunResponse = GetConnectorRunResponses[keyof GetConnectorRunResponses];
+
+export type GetKnowledgeFilesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        directoryId?: string;
+        search?: string;
+    };
+    url: '/api/knowledge-files';
+};
+
+export type GetKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeFilesError = GetKnowledgeFilesErrors[keyof GetKnowledgeFilesErrors];
+
+export type GetKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            directoryId: string | null;
+            visibility: string;
+            filename: string;
+            mimeType: string;
+            sizeBytes: number;
+            contentHash: string;
+            uploadedBy: string | null;
+            createdAt: string;
+            knowledgeBases: Array<{
+                id: string;
+                name: string;
+            }>;
+            teamIds: Array<string>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetKnowledgeFilesResponse = GetKnowledgeFilesResponses[keyof GetKnowledgeFilesResponses];
+
+export type UploadKnowledgeFileData = {
+    body: {
+        visibility?: 'org-wide' | 'team-scoped' | 'private';
+        teamIds?: Array<string>;
+        filename: string;
+        mimeType: string;
+        content: string;
+        directoryId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files';
+};
+
+export type UploadKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UploadKnowledgeFileError = UploadKnowledgeFileErrors[keyof UploadKnowledgeFileErrors];
+
+export type UploadKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        directoryId: string | null;
+        visibility: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        contentHash: string;
+        uploadedBy: string | null;
+        createdAt: string;
+        knowledgeBases: Array<{
+            id: string;
+            name: string;
+        }>;
+        teamIds: Array<string>;
+    };
+};
+
+export type UploadKnowledgeFileResponse = UploadKnowledgeFileResponses[keyof UploadKnowledgeFileResponses];
+
+export type PromoteAttachmentToKnowledgeFileData = {
+    body: {
+        visibility?: 'org-wide' | 'team-scoped' | 'private';
+        teamIds?: Array<string>;
+        attachmentId: string;
+        filename?: string;
+        directoryId?: string | null;
+        knowledgeBaseId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/from-attachment';
+};
+
+export type PromoteAttachmentToKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PromoteAttachmentToKnowledgeFileError = PromoteAttachmentToKnowledgeFileErrors[keyof PromoteAttachmentToKnowledgeFileErrors];
+
+export type PromoteAttachmentToKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        directoryId: string | null;
+        visibility: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        contentHash: string;
+        uploadedBy: string | null;
+        createdAt: string;
+        knowledgeBases: Array<{
+            id: string;
+            name: string;
+        }>;
+        teamIds: Array<string>;
+    };
+};
+
+export type PromoteAttachmentToKnowledgeFileResponse = PromoteAttachmentToKnowledgeFileResponses[keyof PromoteAttachmentToKnowledgeFileResponses];
+
+export type GetKnowledgeFileContentData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-files/{fileId}/content';
+};
+
+export type GetKnowledgeFileContentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteKnowledgeFileData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-files/{fileId}';
+};
+
+export type DeleteKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteKnowledgeFileError = DeleteKnowledgeFileErrors[keyof DeleteKnowledgeFileErrors];
+
+export type DeleteKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteKnowledgeFileResponse = DeleteKnowledgeFileResponses[keyof DeleteKnowledgeFileResponses];
+
+export type UpdateKnowledgeFileData = {
+    body: {
+        filename?: string;
+        directoryId?: string | null;
+        visibility?: 'org-wide' | 'team-scoped' | 'private';
+        teamIds?: Array<string>;
+    };
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-files/{fileId}';
+};
+
+export type UpdateKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateKnowledgeFileError = UpdateKnowledgeFileErrors[keyof UpdateKnowledgeFileErrors];
+
+export type UpdateKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        directoryId: string | null;
+        visibility: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        contentHash: string;
+        uploadedBy: string | null;
+        createdAt: string;
+        knowledgeBases: Array<{
+            id: string;
+            name: string;
+        }>;
+        teamIds: Array<string>;
+    };
+};
+
+export type UpdateKnowledgeFileResponse = UpdateKnowledgeFileResponses[keyof UpdateKnowledgeFileResponses];
+
+export type IndexKnowledgeFilesData = {
+    body: {
+        fileIds?: Array<string>;
+        directoryIds?: Array<string>;
+        knowledgeBaseId?: string;
+        newKnowledgeBaseName?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/index';
+};
+
+export type IndexKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type IndexKnowledgeFilesError = IndexKnowledgeFilesErrors[keyof IndexKnowledgeFilesErrors];
+
+export type IndexKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        knowledgeBaseId: string;
+        indexed: number;
+        failures: Array<{
+            fileId: string;
+            error: string;
+        }>;
+    };
+};
+
+export type IndexKnowledgeFilesResponse = IndexKnowledgeFilesResponses[keyof IndexKnowledgeFilesResponses];
+
+export type GetKnowledgeDirectoriesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories';
+};
+
+export type GetKnowledgeDirectoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeDirectoriesError = GetKnowledgeDirectoriesErrors[keyof GetKnowledgeDirectoriesErrors];
+
+export type GetKnowledgeDirectoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        visibility: string;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        teamIds: Array<string>;
+        fileCount: number;
+    }>;
+};
+
+export type GetKnowledgeDirectoriesResponse = GetKnowledgeDirectoriesResponses[keyof GetKnowledgeDirectoriesResponses];
+
+export type CreateKnowledgeDirectoryData = {
+    body: {
+        visibility?: 'org-wide' | 'team-scoped' | 'private';
+        teamIds?: Array<string>;
+        name: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories';
+};
+
+export type CreateKnowledgeDirectoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateKnowledgeDirectoryError = CreateKnowledgeDirectoryErrors[keyof CreateKnowledgeDirectoryErrors];
+
+export type CreateKnowledgeDirectoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        visibility: string;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        teamIds: Array<string>;
+        fileCount: number;
+    };
+};
+
+export type CreateKnowledgeDirectoryResponse = CreateKnowledgeDirectoryResponses[keyof CreateKnowledgeDirectoryResponses];
+
+export type DeleteKnowledgeDirectoryData = {
+    body?: never;
+    path: {
+        directoryId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-directories/{directoryId}';
+};
+
+export type DeleteKnowledgeDirectoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteKnowledgeDirectoryError = DeleteKnowledgeDirectoryErrors[keyof DeleteKnowledgeDirectoryErrors];
+
+export type DeleteKnowledgeDirectoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteKnowledgeDirectoryResponse = DeleteKnowledgeDirectoryResponses[keyof DeleteKnowledgeDirectoryResponses];
+
+export type UpdateKnowledgeDirectoryData = {
+    body: {
+        name?: string;
+        visibility?: 'org-wide' | 'team-scoped' | 'private';
+        teamIds?: Array<string>;
+    };
+    path: {
+        directoryId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-directories/{directoryId}';
+};
+
+export type UpdateKnowledgeDirectoryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateKnowledgeDirectoryError = UpdateKnowledgeDirectoryErrors[keyof UpdateKnowledgeDirectoryErrors];
+
+export type UpdateKnowledgeDirectoryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        visibility: string;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        teamIds: Array<string>;
+        fileCount: number;
+    };
+};
+
+export type UpdateKnowledgeDirectoryResponse = UpdateKnowledgeDirectoryResponses[keyof UpdateKnowledgeDirectoryResponses];
 
 export type GetLimitsData = {
     body?: never;

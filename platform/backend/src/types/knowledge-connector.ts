@@ -20,8 +20,10 @@ const SALESFORCE = z.literal("salesforce");
 const WEB_CRAWLER = z.literal("web_crawler");
 const PERFORCE = z.literal("perforce");
 const MFILES = z.literal("mfiles");
+/** Internal: backs uploaded knowledge files. Never user-selectable. */
+const FILE_UPLOAD = z.literal("file_upload");
 
-export const ConnectorTypeSchema = z.union([
+const USER_SELECTABLE_CONNECTOR_TYPES = [
   JIRA,
   CONFLUENCE,
   GITHUB,
@@ -39,6 +41,27 @@ export const ConnectorTypeSchema = z.union([
   WEB_CRAWLER,
   PERFORCE,
   MFILES,
+] as const;
+
+/**
+ * What a user may ask the API to CREATE. `file_upload` is excluded on purpose:
+ * it is an internal connector the knowledge-files page creates implicitly, at
+ * most one per knowledge base, so accepting it from a client would break that
+ * invariant and put an unconfigurable entry in the connector dialog.
+ *
+ * Read schemas use `ConnectorTypeSchema` below, which does include it — an
+ * uploads-backed connector is a real row that has to be listable.
+ */
+export const UserSelectableConnectorTypeSchema = z.union(
+  USER_SELECTABLE_CONNECTOR_TYPES,
+);
+export type UserSelectableConnectorType = z.infer<
+  typeof UserSelectableConnectorTypeSchema
+>;
+
+export const ConnectorTypeSchema = z.union([
+  ...USER_SELECTABLE_CONNECTOR_TYPES,
+  FILE_UPLOAD,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 

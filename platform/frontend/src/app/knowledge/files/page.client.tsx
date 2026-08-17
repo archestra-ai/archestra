@@ -394,7 +394,7 @@ export default function KnowledgeFilesPage() {
   return (
     <KnowledgePageLayout
       title="Files"
-      description="Documents uploaded directly to Archestra. Add them to a knowledge base to make them retrievable by your agents."
+      description="Documents uploaded directly — no connector needed. Add them to a knowledge base to make them retrievable by your agents."
       createLabel="Upload"
       onCreateClick={() => setUploadOpen(true)}
       // Only at the top level: directories are flat, so inside one there is no

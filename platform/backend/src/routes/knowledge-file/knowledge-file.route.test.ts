@@ -165,6 +165,87 @@ describe("knowledge file routes", () => {
     });
   });
 
+  describe("team-scoped visibility", () => {
+    test("a team-scoped file is visible to team members and invisible to others", async ({
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, user.id, {
+        name: "Security",
+      });
+      const member = await makeUser({ email: "member@test.com" });
+      await makeTeamMember(team.id, member.id);
+      const outsider = await makeUser({ email: "outsider@test.com" });
+
+      const uploaded = await upload({
+        filename: "soc2-report.txt",
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+      expect(uploaded.statusCode).toBe(200);
+      const fileId = uploaded.json().id;
+
+      await bootAs(member, organizationId);
+      const asMember = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+      expect(asMember.json().data).toHaveLength(1);
+
+      await bootAs(outsider, organizationId);
+      const asOutsider = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+      expect(asOutsider.json().data).toHaveLength(0);
+
+      // Content, too: the EXISTS team-membership subquery guards the byte
+      // route the same way it guards the listing.
+      const content = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-files/${fileId}/content`,
+      });
+      expect(content.statusCode).toBe(404);
+    });
+
+    test("editing a team-scoped file without touching teams keeps its team audience", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, user.id, { name: "Legal" });
+      // The fixture does not auto-add the creator; a team-scoped file is
+      // visible only to members, its uploader included.
+      await makeTeamMember(team.id, user.id);
+      const uploaded = await upload({
+        filename: "retainer.txt",
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+      const fileId = uploaded.json().id;
+
+      // The PATCH the edit dialog sends when only the name changed: the
+      // seeded team list rides along unchanged.
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: `/api/knowledge-files/${fileId}`,
+        payload: {
+          filename: "retainer-2026.txt",
+          visibility: "team-scoped",
+          teamIds: [team.id],
+        },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(renamed.json().teamIds).toEqual([team.id]);
+
+      const listed = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+      expect(listed.json().data[0].teamIds).toEqual([team.id]);
+    });
+  });
+
   describe("directories", () => {
     test("deleting a directory keeps its files, at the root", async () => {
       const directory = await app.inject({

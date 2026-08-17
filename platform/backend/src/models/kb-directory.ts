@@ -53,6 +53,15 @@ class KbDirectoryModel {
     }));
   }
 
+  /** Files currently in a directory — for single-directory responses. */
+  static async countFiles(directoryId: string): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.kbFilesTable)
+      .where(eq(schema.kbFilesTable.directoryId, directoryId));
+    return row?.total ?? 0;
+  }
+
   static async findById(params: {
     id: string;
     organizationId: string;

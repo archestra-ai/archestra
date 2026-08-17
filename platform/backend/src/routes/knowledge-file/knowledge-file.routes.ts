@@ -376,7 +376,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .header("X-Content-Type-Options", "nosniff")
         .header(
           "Content-Disposition",
-          `${disposition}; filename="${encodeURIComponent(file.filename)}"`,
+          // RFC 6266: an ASCII fallback plus the UTF-8 form modern clients
+          // prefer, so non-ASCII filenames survive the download intact.
+          `${disposition}; filename="${file.filename.replace(/[^\x20-\x7e]|"/g, "_")}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
         );
       // `sandbox` would block Chrome's PDF viewer outright, so PDFs get a
       // narrower policy; everything else keeps the strict one. PDF script runs
@@ -630,11 +632,11 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!directory) throw new ApiError(404, "Directory not found");
 
-      return {
-        ...directory,
-        teamIds: await KbDirectoryModel.findTeamIds(directory.id),
-        fileCount: 0,
-      };
+      const [teamIds, fileCount] = await Promise.all([
+        KbDirectoryModel.findTeamIds(directory.id),
+        KbDirectoryModel.countFiles(directory.id),
+      ]);
+      return { ...directory, teamIds, fileCount };
     },
   );
 

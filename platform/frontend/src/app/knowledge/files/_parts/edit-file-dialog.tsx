@@ -51,7 +51,7 @@ export function EditFileDialog({
     setFilename(file.filename);
     setDirectoryId(file.directoryId ?? ROOT_VALUE);
     setVisibility(file.visibility as KnowledgeFileVisibility);
-    setTeamIds([]);
+    setTeamIds(file.teamIds ?? []);
   }, [open, file]);
 
   const canSubmit =

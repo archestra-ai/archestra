@@ -107,12 +107,14 @@ import {
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  type AccumulatedToolCall,
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
   canonicalizeCommonMessageToolNames,
   handleError,
   normalizeToolCallsForPolicy,
+  planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
@@ -1688,7 +1690,17 @@ async function handleStreaming<
     let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
       null;
 
+    let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+
     if (toolCalls.length > 0) {
+      rewrittenToolCalls = planDispatchRewrites({
+        supported: streamAdapter.formatToolCallsSSE !== undefined,
+        toolCalls,
+        enabledToolNames,
+        canonicalizeToolName,
+        providerName,
+      });
+
       logger.info(
         {
           toolCallCount: toolCalls.length,
@@ -1697,8 +1709,15 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
+      // Policies are evaluated against the rewritten calls, which
+      // `normalizeToolCallsForPolicy` unwraps straight back to the same
+      // targets — so a repaired call faces exactly the gate a `run_tool`
+      // dispatch the model wrote itself would have faced.
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
+        normalizeToolCallsForPolicy(
+          rewrittenToolCalls ?? toolCalls,
+          canonicalizeToolName,
+        ),
         agent.id,
         {
           teamIds: teamIds ?? [],
@@ -1753,7 +1772,23 @@ async function handleStreaming<
       // already hung up must not read at all — the write would go to a closed
       // socket and the reconstructed turn would claim a delivery.
       if (!reply.raw.destroyed) {
-        const allEvents = streamAdapter.getRawToolCallEvents();
+        // A repaired batch replaces the buffered events wholesale: the raw
+        // fragments still name the tool the model called directly, which is the
+        // call the client cannot execute. `state.toolCalls` is updated to match
+        // what actually went out, so the persisted interaction and
+        // `toProviderResponse()` describe the turn the client saw rather than
+        // the one the model first wrote.
+        const allEvents =
+          rewrittenToolCalls && streamAdapter.formatToolCallsSSE
+            ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
+            : streamAdapter.getRawToolCallEvents();
+        if (rewrittenToolCalls) {
+          streamAdapter.state.toolCalls.splice(
+            0,
+            streamAdapter.state.toolCalls.length,
+            ...rewrittenToolCalls,
+          );
+        }
         if (allEvents.length > 0) {
           ensureStreamHeaders();
           for (const event of allEvents) {
@@ -2126,9 +2161,29 @@ async function handleNonStreaming<
   );
 
   // Evaluate tool invocation policies
+  let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
   if (toolCalls.length > 0) {
+    rewrittenToolCalls = planDispatchRewrites({
+      supported: responseAdapter.withRewrittenToolCalls !== undefined,
+      toolCalls: toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        arguments: JSON.stringify(toolCall.arguments),
+      })),
+      enabledToolNames,
+      canonicalizeToolName,
+      providerName,
+    });
+
     const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
+      normalizeToolCallsForPolicy(
+        rewrittenToolCalls ??
+          toolCalls.map((toolCall) => ({
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          })),
+        canonicalizeToolName,
+      ),
       agent.id,
       {
         teamIds: teamIds ?? [],
@@ -2238,6 +2293,14 @@ async function handleNonStreaming<
 
   // Tool calls allowed (or no tool calls) - return response.
   // `usage` (corrected for zero-input above) is reused here.
+  //
+  // Computed once: a translator adapter that rewrites remembers the inner
+  // (logged) shape it produced, so `getLoggedResponse` below must observe the
+  // same call that produced the client response.
+  const clientResponse =
+    rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+      ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+      : responseAdapter.getOriginalResponse();
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
@@ -2296,9 +2359,11 @@ async function handleNonStreaming<
       processedRequest: request,
       // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
       // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
-      response:
-        responseAdapter.getLoggedResponse?.() ??
-        responseAdapter.getOriginalResponse(),
+      //
+      // A repaired batch logs what the client actually received. `getLoggedResponse`
+      // still wins where it exists: those adapters log a different wire shape on
+      // purpose, and after a rewrite they hand back that shape's rewritten form.
+      response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
       actualModel,
       baselineModel,
       usage,
@@ -2320,7 +2385,45 @@ async function handleNonStreaming<
     );
   }
 
-  return reply.send(responseAdapter.getOriginalResponse());
+  return reply.send(clientResponse);
+}
+
+/**
+ * Plan the dispatch-mode repair for one turn's tool calls, and record it when
+ * there is one. Shared by the streaming and non-streaming paths so the two
+ * surfaces stay in step.
+ *
+ * `supported` is the adapter's ability to re-emit the rewritten calls in its
+ * own wire format; without it the repair could never reach the client, so that
+ * provider keeps the pre-existing refusal-with-steer behavior.
+ */
+function planDispatchRewrites(params: {
+  supported: boolean;
+  toolCalls: AccumulatedToolCall[];
+  enabledToolNames: Set<string>;
+  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
+  providerName: string;
+}): AccumulatedToolCall[] | null {
+  if (!params.supported) {
+    return null;
+  }
+
+  const rewritten = planDispatchModeToolCallRewrites({
+    toolCalls: params.toolCalls,
+    enabledToolNames: params.enabledToolNames,
+    canonicalizeToolName: params.canonicalizeToolName,
+  });
+
+  if (rewritten) {
+    logger.info(
+      {
+        toolNames: params.toolCalls.map((toolCall) => toolCall.name),
+        provider: params.providerName,
+      },
+      "Re-addressing direct tool calls through run_tool (dispatch mode)",
+    );
+  }
+  return rewritten;
 }
 
 function normalizeVirtualKeyCandidate(

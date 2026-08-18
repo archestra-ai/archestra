@@ -44,11 +44,15 @@ describe("csvField", () => {
     expect(csvField('a,"b"\nc')).toBe('"a,""b""\nc"');
   });
 
-  it("neutralizes leading formula characters", () => {
+  it("neutralizes leading formula characters, even behind whitespace", () => {
     expect(csvField("=SUM(A1)")).toBe("'=SUM(A1)");
     expect(csvField("+1")).toBe("'+1");
     expect(csvField("@cmd")).toBe("'@cmd");
     expect(csvField("-2")).toBe("'-2");
+    // Spreadsheets skip leading whitespace before formula detection.
+    expect(csvField("  =SUM(A1)")).toBe("'  =SUM(A1)");
+    // The \r also forces RFC 4180 quoting; the apostrophe lands inside.
+    expect(csvField("\r=1+1")).toBe(`"'\r=1+1"`);
   });
 });
 

@@ -16,6 +16,13 @@ import { ApiError, type BatchAnalysisRun } from "@/types";
 export async function startBatchAnalysisRun(params: {
   analysisId: string;
   organizationId: string;
+  /**
+   * A single cell to reset to pending before the outstanding set is computed.
+   * Used by retry, and deliberately executed only after the single-flight
+   * check: resetting wipes the cell's flag and human sign-off, so it must
+   * never happen on a dispatch that is then refused.
+   */
+  resetCell?: { rowId: string; columnKey: string };
 }): Promise<BatchAnalysisRun> {
   const analysis = await BatchAnalysisModel.findById({
     analysisId: params.analysisId,
@@ -44,6 +51,13 @@ export async function startBatchAnalysisRun(params: {
       400,
       `Analysis exceeds the maximum of ${config.batchAnalysis.maxRowsPerAnalysis} rows`,
     );
+  }
+
+  if (params.resetCell) {
+    const cell = await BatchAnalysisModel.resetCell(params.resetCell);
+    if (!cell) {
+      throw new ApiError(404, "Cell not found");
+    }
   }
 
   const columnKeys = analysis.columns.map((column) => column.key);
@@ -133,24 +147,12 @@ export async function retryBatchAnalysisCell(params: {
     throw new ApiError(404, "Row not found on this analysis");
   }
 
-  // Refuse BEFORE resetting: resetCell wipes the answer's flag and human
-  // sign-off, so it must not run when the dispatch below would be refused
-  // anyway (an active run already owns the grid).
-  const running = await BatchAnalysisModel.findRunningRun(params.analysisId);
-  if (running) {
-    throw new ApiError(409, "A run is already in progress for this analysis");
-  }
-
-  const cell = await BatchAnalysisModel.resetCell({
-    rowId: params.rowId,
-    columnKey: params.columnKey,
-  });
-  if (!cell) {
-    throw new ApiError(404, "Cell not found");
-  }
-
+  // The reset rides inside the run start, after its single-flight check —
+  // resetting wipes the cell's flag and human sign-off, so a dispatch that is
+  // refused (a concurrent run won the race) must leave the cell untouched.
   return startBatchAnalysisRun({
     analysisId: params.analysisId,
     organizationId: params.organizationId,
+    resetCell: { rowId: params.rowId, columnKey: params.columnKey },
   });
 }

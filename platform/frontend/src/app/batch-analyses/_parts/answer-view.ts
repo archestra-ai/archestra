@@ -53,7 +53,15 @@ export function computeVisibleRows(params: {
         .toLowerCase();
       if (!haystack.includes(query)) return false;
     }
-    if (filter.flag && !cells.some((cell) => cell?.flag === filter.flag)) {
+    if (
+      filter.flag &&
+      !columns.some(
+        (column, index) =>
+          // Same gating as rendering: a stale flag on a column that opted out
+          // of triage is invisible, so it must not make a row match either.
+          column.flag === true && cells[index]?.flag === filter.flag,
+      )
+    ) {
       return false;
     }
     if (filter.verifiedOnly) {

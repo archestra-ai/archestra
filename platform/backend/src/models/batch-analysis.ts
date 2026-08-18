@@ -353,35 +353,56 @@ class BatchAnalysisModel {
         }
       }
 
-      const updated: BatchAnalysisCell[] = [];
-      for (const entry of params.entries) {
-        const [cell] = await tx
+      // Two bulk UPDATEs (verify set, unverify set) instead of one per entry:
+      // a 500-entry request must not hold the transaction open across 500
+      // round trips. The `status = 'done'` predicate is re-asserted inside the
+      // UPDATE — a concurrent retry can flip a cell off `done` between the
+      // validation read above and here, and a sign-off must never land on a
+      // cell that no longer holds the answer it was given for. A short row
+      // count → the whole batch rolls back.
+      const updated = new Map<string, BatchAnalysisCell>();
+      for (const verified of [true, false]) {
+        const group = params.entries.filter(
+          (entry) => entry.verified === verified,
+        );
+        if (group.length === 0) continue;
+        const cells = await tx
           .update(schema.batchAnalysisCellsTable)
           .set(
-            entry.verified
+            verified
               ? { verifiedBy: params.userId, verifiedAt: new Date() }
               : { verifiedBy: null, verifiedAt: null },
           )
           .where(
             and(
-              eq(schema.batchAnalysisCellsTable.rowId, entry.rowId),
-              eq(schema.batchAnalysisCellsTable.columnKey, entry.columnKey),
-              // Re-asserted inside the UPDATE: a concurrent retry can flip the
-              // cell off `done` between the validation read above and here, and
-              // a sign-off must never land on a cell that no longer holds the
-              // answer it was given for. Zero rows → the whole batch rolls back.
+              or(
+                ...group.map((entry) =>
+                  and(
+                    eq(schema.batchAnalysisCellsTable.rowId, entry.rowId),
+                    eq(
+                      schema.batchAnalysisCellsTable.columnKey,
+                      entry.columnKey,
+                    ),
+                  ),
+                ),
+              ),
               eq(schema.batchAnalysisCellsTable.status, "done"),
             ),
           )
           .returning();
-        if (!cell) {
+        if (cells.length !== group.length) {
           throw new CellVerificationError(
-            `Cell ${entry.columnKey} on row ${entry.rowId} changed while verifying; retry after the grid settles`,
+            "A cell changed while verifying; retry after the grid settles",
           );
         }
-        updated.push(cell as BatchAnalysisCell);
+        for (const cell of cells as BatchAnalysisCell[]) {
+          updated.set(`${cell.rowId}:${cell.columnKey}`, cell);
+        }
       }
-      return updated;
+      return params.entries.map(
+        (entry) =>
+          updated.get(`${entry.rowId}:${entry.columnKey}`) as BatchAnalysisCell,
+      );
     });
   }
 

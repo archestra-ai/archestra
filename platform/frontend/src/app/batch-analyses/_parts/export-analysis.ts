@@ -132,7 +132,9 @@ export function csvField(value: string): string {
 }
 
 function neutralizeFormula(value: string): string {
-  return /^[=+\-@\t]/.test(value) ? `'${value}` : value;
+  // Spreadsheets skip leading whitespace and control characters before
+  // deciding a cell is a formula, so the guard must too.
+  return /^[\s\u0000-\u001f]*[=+\-@\t]/.test(value) ? `'${value}` : value;
 }
 
 function exportBaseName(name: string): string {

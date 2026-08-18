@@ -118,10 +118,11 @@ function serializeGrid(params: {
   let omitted = 0;
 
   for (const row of params.rows) {
+    const rowRefs: string[] = [];
     const cellLines = params.analysis.columns.map((column) => {
       const key = `${row.id}:${column.key}`;
       const cell = cellsByRowAndColumn.get(key);
-      if (cell?.status === "done") validRefs.add(key);
+      if (cell?.status === "done") rowRefs.push(key);
       const flag = cell?.flag ? ` (flag: ${cell.flag})` : "";
       const value =
         cell?.status === "done"
@@ -136,6 +137,9 @@ function serializeGrid(params: {
     }
     budget -= block.length + 1;
     lines.push(block);
+    // Only rows the model actually received are citable — a reference to an
+    // omitted row would be "validated" against text that was never sent.
+    for (const key of rowRefs) validRefs.add(key);
   }
   if (omitted > 0) {
     lines.push(

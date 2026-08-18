@@ -1,3 +1,5 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=every flagged FOREIGN KEY and non-concurrent index targets a table created empty in this same file (batch_analyses, batch_analysis_rows, batch_analysis_cells, batch_analysis_runs, batch_analysis_team), so each constraint validates against zero rows and each index builds instantly; the pre-existing tables referenced (agents, team, user, kb_documents, kb_files) are only read for the FK check.
 CREATE TABLE "batch_analysis_cells" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"row_id" uuid NOT NULL,

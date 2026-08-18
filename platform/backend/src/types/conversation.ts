@@ -111,7 +111,12 @@ export const SelectConversationSchema = createSelectSchema(
       .object({
         id: z.string(),
         name: z.string(),
-        systemPrompt: z.string().nullable(),
+        /**
+         * Only populated on detail reads (findById); list rows omit it so a
+         * roster of large custom prompts doesn't ride along on every sidebar
+         * refresh.
+         */
+        systemPrompt: z.string().nullable().optional(),
         agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
         toolExposureMode: ToolExposureModeSchema,
         llmApiKeyId: z.string().nullable(),

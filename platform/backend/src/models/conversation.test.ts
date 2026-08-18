@@ -162,6 +162,64 @@ describe("ConversationModel", () => {
     expect(conversations.every((c) => Array.isArray(c.messages))).toBe(true);
   });
 
+  test("findAll omits the agent's system prompt; findById keeps it", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Prompted Agent",
+      teams: [],
+      systemPrompt: "A very long custom prompt",
+    });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Prompted Conversation",
+    });
+
+    // List rows carry only identity/config refs — shipping every agent's
+    // prompt on each sidebar refresh is the payload problem being pinned here.
+    const [listed] = await ConversationModel.findAll(user.id, org.id);
+    expect(listed.agent?.id).toBe(agent.id);
+    expect(listed.agent).not.toHaveProperty("systemPrompt");
+
+    // The detail read still serves it (compaction and prompt-aware flows).
+    const found = await ConversationModel.findById({
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    expect(found?.agent?.systemPrompt).toBe("A very long custom prompt");
+  });
+
+  test("findAll bounds the non-search listing", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Bulk Agent", teams: [] });
+
+    // One over the cap; newest conversations win.
+    for (let i = 0; i < 251; i++) {
+      await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: `Conversation ${i}`,
+      });
+    }
+
+    const conversations = await ConversationModel.findAll(user.id, org.id);
+    expect(conversations).toHaveLength(250);
+  });
+
   test("findAll reports unread once a message lands after the conversation was read", async ({
     makeUser,
     makeOrganization,

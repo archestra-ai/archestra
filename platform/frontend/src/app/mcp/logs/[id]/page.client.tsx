@@ -41,7 +41,6 @@ export function McpToolCallDetailPage({
 }: {
   initialData?: {
     mcpToolCall: archestraApiTypes.GetMcpToolCallResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -60,7 +59,6 @@ function McpToolCallDetail({
 }: {
   initialData?: {
     mcpToolCall: archestraApiTypes.GetMcpToolCallResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -74,9 +72,7 @@ function McpToolCallDetail({
     initialData: initialData?.mcpToolCall,
   });
 
-  const { data: agents } = useProfiles({
-    initialData: initialData?.agents,
-  });
+  const { data: agents } = useProfiles();
 
   if (isPending) {
     return <LoadingSpinner />;

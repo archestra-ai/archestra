@@ -17,32 +17,20 @@ export default async function ChatPageServer({
   const id = (await params).id;
   let initialData: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   } = {
     interaction: undefined,
-    agents: [],
   };
   try {
     const headers = await getServerApiHeaders();
-    const [interactionResponse, agentsResponse] = await Promise.all([
-      archestraApiSdk.getInteraction({
-        headers,
-        path: { interactionId: id },
-      }),
-      archestraApiSdk.getAllAgents({
-        headers,
-        query: { excludeBuiltIn: true },
-      }),
-    ]);
+    const interactionResponse = await archestraApiSdk.getInteraction({
+      headers,
+      path: { interactionId: id },
+    });
     if (interactionResponse.error) {
       handleApiError(interactionResponse.error);
     }
-    if (agentsResponse.error) {
-      handleApiError(agentsResponse.error);
-    }
     initialData = {
       interaction: interactionResponse.data,
-      agents: agentsResponse.data || [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

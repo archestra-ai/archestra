@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import LlmProxyLogsPageServer from "./page";
 
-// The interactions prefetch used to serialize ~10 full LLM request/response
-// bodies into the RSC payload that no client code read — enough to OOM the
-// platform container on a busy instance (T-1015). This pins the server
-// component to prefetching the agents list only.
+// This server component used to prefetch data that only bloated the RSC
+// payload: first ~10 full LLM request/response bodies that no client code
+// read — enough to OOM the platform container on a busy instance (T-1015) —
+// and later the whole agent roster for a filter dropdown the client refetches
+// anyway. It pins the server component to prefetching nothing at all.
 
 const getAllAgents = vi.hoisted(() => vi.fn());
 const getInteractions = vi.hoisted(() => vi.fn());
@@ -29,13 +30,13 @@ vi.mock("./page.client", () => ({
 }));
 
 describe("LlmProxyLogsPageServer (T-1015)", () => {
-  it("prefetches only the agents list — never the interactions list", async () => {
+  it("prefetches nothing server-side — no interactions, no agent roster", async () => {
     getAllAgents.mockResolvedValue({ data: [] });
     getInteractions.mockResolvedValue({ data: { data: [] } });
 
-    await LlmProxyLogsPageServer();
+    LlmProxyLogsPageServer();
 
-    expect(getAllAgents).toHaveBeenCalledTimes(1);
+    expect(getAllAgents).not.toHaveBeenCalled();
     expect(getInteractions).not.toHaveBeenCalled();
   });
 });

@@ -17,32 +17,20 @@ export default async function McpToolCallDetailPageServer({
   const id = (await params).id;
   let initialData: {
     mcpToolCall: archestraApiTypes.GetMcpToolCallResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   } = {
     mcpToolCall: undefined,
-    agents: [],
   };
   try {
     const headers = await getServerApiHeaders();
-    const [mcpToolCallResponse, agentsResponse] = await Promise.all([
-      archestraApiSdk.getMcpToolCall({
-        headers,
-        path: { mcpToolCallId: id },
-      }),
-      archestraApiSdk.getAllAgents({
-        headers,
-        query: { excludeBuiltIn: true },
-      }),
-    ]);
+    const mcpToolCallResponse = await archestraApiSdk.getMcpToolCall({
+      headers,
+      path: { mcpToolCallId: id },
+    });
     if (mcpToolCallResponse.error) {
       handleApiError(mcpToolCallResponse.error);
     }
-    if (agentsResponse.error) {
-      handleApiError(agentsResponse.error);
-    }
     initialData = {
       mcpToolCall: mcpToolCallResponse.data,
-      agents: agentsResponse.data || [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

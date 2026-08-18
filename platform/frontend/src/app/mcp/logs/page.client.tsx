@@ -73,7 +73,6 @@ export default function McpGatewayLogsPage({
 }: {
   initialData?: {
     mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   return (
@@ -90,7 +89,6 @@ function McpToolCallsTable({
 }: {
   initialData?: {
     mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   const router = useRouter();
@@ -193,7 +191,6 @@ function McpToolCallsTable({
   });
 
   const { data: agents } = useProfiles({
-    initialData: initialData?.agents,
     filters: { agentTypes: ["agent", "mcp_gateway"] },
   });
 

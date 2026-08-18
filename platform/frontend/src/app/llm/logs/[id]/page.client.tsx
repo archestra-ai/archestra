@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useProfiles } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
 
@@ -34,7 +35,6 @@ export function ChatPage({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -53,7 +53,6 @@ function LogDetail({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -66,6 +65,8 @@ function LogDetail({
     interactionId: id,
     initialData: initialData?.interaction,
   });
+
+  const { data: agents } = useProfiles();
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -87,9 +88,7 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents?.find(
-    (a) => a.id === interaction.profileId,
-  );
+  const agent = agents?.find((a) => a.id === interaction.profileId);
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();

@@ -114,29 +114,17 @@ function getSessionDisplayData(session: SessionData) {
   };
 }
 
-export default function LlmProxyLogsPage({
-  initialData,
-}: {
-  initialData?: {
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
-  };
-}) {
+export default function LlmProxyLogsPage() {
   return (
     <div>
       <ErrorBoundary>
-        <SessionsTable initialData={initialData} />
+        <SessionsTable />
       </ErrorBoundary>
     </div>
   );
 }
 
-function SessionsTable({
-  initialData,
-}: {
-  initialData?: {
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
-  };
-}) {
+function SessionsTable() {
   const router = useRouter();
   const { searchParams, pageIndex, pageSize, offset, updateQueryParams } =
     useDataTableQueryParams();
@@ -247,7 +235,6 @@ function SessionsTable({
   });
 
   const { data: agents } = useProfiles({
-    initialData: initialData?.agents,
     filters: { agentTypes: ["agent", "llm_proxy"] },
   });
 

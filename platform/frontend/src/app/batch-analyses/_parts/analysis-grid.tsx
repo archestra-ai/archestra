@@ -1,6 +1,7 @@
 "use client";
 
-import "react-data-grid/lib/styles.css";
+// The grid's stylesheet is imported by the route (`[id]/page.tsx`), not here:
+// the tailwind postcss config cannot process CSS imports under vitest.
 import { AlertCircle, FileText, Loader2, Quote, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import {

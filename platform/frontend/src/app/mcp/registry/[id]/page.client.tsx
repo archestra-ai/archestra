@@ -56,6 +56,7 @@ import {
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  useAutoModeAgents,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
@@ -334,7 +335,11 @@ function CatalogItemDetails({
     });
 
   const connectionsCount = allServersForCatalog.length;
-  const agentUsageCount = deriveAgentUsage(allServersForCatalog).total;
+  const { data: autoModeAgents } = useAutoModeAgents();
+  const agentUsageCount = deriveAgentUsage({
+    serversForCatalog: allServersForCatalog,
+    autoModeAgents,
+  }).total;
 
   const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
     { label: "Overview", href: tabHref("overview") },
@@ -521,7 +526,10 @@ function CatalogItemDetails({
     >
       <div className="space-y-4">
         {effectiveTab === "usage" && (
-          <McpServerUsageTab serversForCatalog={allServersForCatalog} />
+          <McpServerUsageTab
+            serversForCatalog={allServersForCatalog}
+            autoModeAgents={autoModeAgents}
+          />
         )}
 
         {effectiveTab === "overview" && (

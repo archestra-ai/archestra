@@ -63209,6 +63209,93 @@ export type McpServerProxyPostResponses = {
     200: unknown;
 };
 
+export type GetMcpServerAutoModeAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server/auto_mode_agents';
+};
+
+export type GetMcpServerAutoModeAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpServerAutoModeAgentsError = GetMcpServerAutoModeAgentsErrors[keyof GetMcpServerAutoModeAgentsErrors];
+
+export type GetMcpServerAutoModeAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        scope: 'personal' | 'team' | 'org';
+        ownerEmail: string | null;
+    }>;
+};
+
+export type GetMcpServerAutoModeAgentsResponse = GetMcpServerAutoModeAgentsResponses[keyof GetMcpServerAutoModeAgentsResponses];
+
 export type GetMcpServersData = {
     body?: never;
     path?: never;
@@ -63333,13 +63420,6 @@ export type GetMcpServersResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -63489,13 +63569,6 @@ export type InstallMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -63717,13 +63790,6 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerEmail: string | null;
         }>;
-        autoModeAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -63864,13 +63930,6 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerEmail: string | null;
         }>;
-        autoModeAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -63995,13 +64054,6 @@ export type RestoreMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -64416,13 +64468,6 @@ export type ReinstallMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';

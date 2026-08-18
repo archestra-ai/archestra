@@ -2,6 +2,7 @@ import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, mustExist, test } from "@/test";
+import AgentModel from "./agent";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerModel, {
   // SPDX-SnippetBegin
@@ -278,7 +279,7 @@ describe("McpServerModel", () => {
       );
     });
 
-    test("decorates servers with the org's auto-mode agents only when an organizationId is passed", async ({
+    test("auto-mode agents are served org-wide, not embedded per server", async ({
       makeOrganization,
       makeAgent,
       makeInternalMcpCatalog,
@@ -299,26 +300,23 @@ describe("McpServerModel", () => {
       const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
       const server = await makeMcpServer({ catalogId: catalog.id });
 
-      // findAll with the viewing org → the auto-mode agent is surfaced.
-      const withOrg = await McpServerModel.findAll(undefined, true, org.id);
-      const found = mustExist(withOrg.find((s) => s.id === server.id));
-      expect(found.autoModeAgents).toEqual([
+      // The org-wide set comes from one place — the set is identical for
+      // every server, so embedding it per row repeated the whole roster.
+      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+        org.id,
+      ]);
+      expect(byOrg.get(org.id)).toEqual([
         expect.objectContaining({ id: autoAgent.id, name: "Auto Agent" }),
       ]);
 
-      // findById with the viewing org → same decoration.
+      // Server rows no longer carry the roster.
+      const withOrg = await McpServerModel.findAll(undefined, true, org.id);
+      const found = mustExist(withOrg.find((s) => s.id === server.id));
+      expect(found).not.toHaveProperty("autoModeAgents");
       const single = mustExist(
         await McpServerModel.findById(server.id, undefined, true, org.id),
       );
-      expect(single.autoModeAgents).toEqual([
-        expect.objectContaining({ id: autoAgent.id, name: "Auto Agent" }),
-      ]);
-
-      // Opt-in: without an org the decoration is skipped (stays empty), so
-      // existing callers are unaffected.
-      const withoutOrg = await McpServerModel.findAll(undefined, true);
-      const foundNoOrg = mustExist(withoutOrg.find((s) => s.id === server.id));
-      expect(foundNoOrg.autoModeAgents).toEqual([]);
+      expect(single).not.toHaveProperty("autoModeAgents");
     });
 
     test("attributes same-named personal agents to their owners", async ({
@@ -350,13 +348,15 @@ describe("McpServerModel", () => {
         authorId: bob.id,
       });
       const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      const server = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
-      const servers = await McpServerModel.findAll(undefined, true, org.id);
-      const found = mustExist(servers.find((s) => s.id === server.id));
+      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+        org.id,
+      ]);
 
       expect(
-        found.autoModeAgents
+        byOrg
+          .get(org.id)
           ?.map((agent) => ({
             name: agent.name,
             scope: agent.scope,
@@ -395,12 +395,13 @@ describe("McpServerModel", () => {
         accessAllTools: true,
       });
       const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      const server = await makeMcpServer({ catalogId: catalog.id });
+      await makeMcpServer({ catalogId: catalog.id });
 
-      const servers = await McpServerModel.findAll(undefined, true, org.id);
-      const found = mustExist(servers.find((s) => s.id === server.id));
+      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+        org.id,
+      ]);
 
-      expect(found.autoModeAgents).toEqual([
+      expect(byOrg.get(org.id)).toEqual([
         expect.objectContaining({ name: "Shared Gateway", ownerEmail: null }),
       ]);
     });

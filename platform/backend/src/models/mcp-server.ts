@@ -32,7 +32,6 @@ import { catalogInEnvironmentPredicate } from "@/services/environments/environme
 import type {
   InsertMcpServer,
   McpServer,
-  McpServerAgentUsage,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -44,7 +43,6 @@ import type {
 } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
-import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -509,22 +507,14 @@ class McpServerModel {
       await AgentToolModel.getAssignedAgentDetailsForMcpServers([
         ...serversMap.keys(),
       ]);
-    // Auto-mode agents belong to the viewing org and can reach every server, so
-    // the same set decorates each one. Skipped when the caller omits an org
-    // (e.g. background/admin sweeps that do not render the registry card).
-    let autoModeAgents: McpServerAgentUsage[] = [];
-    if (organizationId) {
-      const autoModeAgentsByOrg =
-        await AgentModel.getAutoModeAgentDetailsByOrganizations([
-          organizationId,
-        ]);
-      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
-    }
+    // Auto-mode agents (implicit access to all tools) are deliberately NOT
+    // decorated here: the set is org-wide and identical for every server, so
+    // embedding it repeated the whole roster once per row. It is served once
+    // by GET /api/mcp_server/auto_mode_agents instead.
 
     return servers.map((server) => ({
       ...server,
       assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
-      autoModeAgents,
     }));
   }
 
@@ -1059,14 +1049,6 @@ class McpServerModel {
       McpServerUserModel.getUserDetailsForMcpServer(id),
       AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
     ]);
-    let autoModeAgents: McpServerAgentUsage[] = [];
-    if (organizationId) {
-      const autoModeAgentsByOrg =
-        await AgentModel.getAutoModeAgentDetailsByOrganizations([
-          organizationId,
-        ]);
-      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
-    }
 
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
@@ -1092,7 +1074,6 @@ class McpServerModel {
       teamDetails,
       secretStorageType,
       assignedAgents: assignedAgentsByServer.get(id) ?? [],
-      autoModeAgents,
     };
   }
 

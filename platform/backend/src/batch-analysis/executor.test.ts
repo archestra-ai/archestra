@@ -79,6 +79,45 @@ describe("executeRow", () => {
     row = created;
   });
 
+  test("omits the sampling temperature for thinking-by-default models", async () => {
+    // Anthropic 400s the whole row ("temperature may only be set to 1 when
+    // thinking is enabled or in adaptive mode") if the executor pins 0.
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      provider: "anthropic",
+      modelName: "claude-sonnet-5",
+      apiKey: "sk-ant-test",
+      baseUrl: null,
+      chatApiKeyId: "key-row-1",
+    } as Awaited<ReturnType<typeof resolveAgentLlmOrDefault>>);
+    vi.mocked(generateTaggedText).mockResolvedValue(
+      JSON.stringify({
+        effective_date: { value: "2026-01-01", quote: "effective 2026-01-01" },
+        has_sso: { value: "yes", quote: "SSO is supported via SAML" },
+      }),
+    );
+
+    await executeRow({ analysis, row, columns });
+
+    expect(generateTaggedText).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: undefined }),
+    );
+  });
+
+  test("keeps temperature 0 for conventional models", async () => {
+    vi.mocked(generateTaggedText).mockResolvedValue(
+      JSON.stringify({
+        effective_date: { value: "2026-01-01", quote: "effective 2026-01-01" },
+        has_sso: { value: "yes", quote: "SSO is supported via SAML" },
+      }),
+    );
+
+    await executeRow({ analysis, row, columns });
+
+    expect(generateTaggedText).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: 0 }),
+    );
+  });
+
   test("routes a Responses-API-only model by its catalogued surface", async () => {
     // GitHub Copilot's codex models reject /chat/completions; which surface a
     // model needs lives on the synced model row. Without this lookup the run

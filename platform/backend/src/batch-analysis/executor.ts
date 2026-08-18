@@ -1,4 +1,8 @@
-import { providerHasMultipleSurfaces } from "@archestra/shared";
+import {
+  anthropicThinksByDefault,
+  providerHasMultipleSurfaces,
+} from "@archestra/shared";
+import { APICallError } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
@@ -133,11 +137,11 @@ export async function executeRow(params: {
       }),
       // Extraction, not composition — low temperature keeps repeat runs over the
       // same source comparable, which matters when a grid is re-run.
-      temperature: 0,
+      temperature: extractionTemperature(llm.provider, llm.modelName),
       maxOutputTokens: 4096,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = describeModelCallError(error);
     logger.warn(
       { rowId: row.id, analysisId: analysis.id, error: message },
       "[BatchAnalysis] Model call failed for row",
@@ -221,4 +225,51 @@ function buildCitations(params: {
 
 function failAll(columnKeys: string[], error: string): CellOutcome[] {
   return columnKeys.map((columnKey) => ({ columnKey, ok: false, error }));
+}
+
+/**
+ * A provider error's HTTP statusText alone ("Bad Request") tells the user
+ * nothing actionable. When the SDK preserved the response body, surface the
+ * provider's own message with it.
+ */
+function describeModelCallError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!APICallError.isInstance(error) || !error.responseBody) {
+    return message;
+  }
+  let detail: string | undefined;
+  try {
+    const parsed = JSON.parse(error.responseBody) as {
+      error?: { message?: string };
+    };
+    detail = parsed.error?.message;
+  } catch {
+    detail = error.responseBody;
+  }
+  if (!detail || detail === message) return message;
+  return `${message} — ${detail.slice(0, 300)}`;
+}
+
+/**
+ * Reasoning models reject an explicit sampling temperature outright —
+ * Anthropic 400s with "temperature may only be set to 1 when thinking is
+ * enabled or in adaptive mode" on its thinking-by-default generations, and
+ * OpenAI's reasoning generations 400 on any value but the default. For those,
+ * omit the knob; everywhere else keep 0 for run-to-run comparability.
+ */
+function extractionTemperature(
+  provider: string,
+  modelName: string,
+): number | undefined {
+  if (provider === "anthropic" && anthropicThinksByDefault(modelName)) {
+    return undefined;
+  }
+  const id = modelName.toLowerCase();
+  if (
+    provider === "openai" &&
+    (/^o\d/.test(id) || (id.startsWith("gpt-5") && !id.includes("gpt-5-chat")))
+  ) {
+    return undefined;
+  }
+  return 0;
 }

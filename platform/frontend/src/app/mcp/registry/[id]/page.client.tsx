@@ -61,6 +61,7 @@ import {
   useMcpInstallationStatusCacheSync,
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
@@ -77,6 +78,7 @@ import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem } from "../_parts/mcp-server-card";
+import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
@@ -225,6 +227,8 @@ function CatalogItemDetails({
 
   const { data: allMcpServers } = useMcpServers();
   const deploymentStatuses = useMcpDeploymentStatuses();
+  const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
+  const itemIssues = issuesByCatalog.get(item.id);
   useMcpInstallationStatusCacheSync();
   const { data: tools = [] } = useCatalogTools(item.id);
 
@@ -534,6 +538,16 @@ function CatalogItemDetails({
 
         {effectiveTab === "overview" && (
           <div className="space-y-4">
+            {/* Outstanding issue, explained — same notice as the registry's
+                Needs-attention tab, so the diagnosis reads identically. */}
+            {itemIssues && itemIssues.length > 0 && (
+              <McpServerIssueNotice
+                item={item}
+                issues={itemIssues}
+                servers={allServersForCatalog}
+                hideName
+              />
+            )}
             {/* Capabilities + details */}
             <div className="grid items-start gap-4 lg:grid-cols-3">
               {/* Tools the server exposes */}

@@ -526,25 +526,36 @@ export function McpLogsContent({
         <TabsContent value="logs" className={contentTabClassName}>
           <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="flex flex-col gap-2 flex-1 min-h-0">
-              {isDeploymentFailed && currentDeploymentStatus?.error && (
-                <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 flex-shrink-0">
-                  <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive/15 text-destructive flex-shrink-0">
-                    <span className="text-sm font-bold">✕</span>
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-destructive">
-                      Deployment failed
-                    </p>
-                    <p className="text-sm text-destructive/80 break-words">
-                      {currentDeploymentStatus.error}
-                    </p>
-                  </div>
-                  {onReinstall && serverId && (
+              <div className="flex items-center justify-between flex-shrink-0">
+                <h3 className="text-sm font-semibold">
+                  Pod Logs
+                  {currentDeploymentStatus?.podName && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      for {currentDeploymentStatus.podName}
+                    </span>
+                  )}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {!autoScroll && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={scrollToBottom}
+                      className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    >
+                      <ArrowDown className="mr-2 h-3 w-3" />
+                      Scroll to Bottom
+                    </Button>
+                  )}
+                  {/* The installation card above already says Failed and why;
+                      the fix sits here beside the evidence instead of in a
+                      third status panel. */}
+                  {isDeploymentFailed && onReinstall && serverId && (
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={isReinstalling}
-                      className="flex-shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10"
                       onClick={async () => {
                         setIsReinstalling(true);
                         try {
@@ -562,28 +573,6 @@ export function McpLogsContent({
                     </Button>
                   )}
                 </div>
-              )}
-              <div className="flex items-center justify-between flex-shrink-0">
-                <h3 className="text-sm font-semibold">
-                  Pod Logs
-                  {currentDeploymentStatus?.podName && (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      for {currentDeploymentStatus.podName}
-                    </span>
-                  )}
-                </h3>
-                {!autoScroll && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={scrollToBottom}
-                    className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                  >
-                    <ArrowDown className="mr-2 h-3 w-3" />
-                    Scroll to Bottom
-                  </Button>
-                )}
               </div>
 
               <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
@@ -766,37 +755,17 @@ function InstanceSelector({
     .slice(0, 2)
     .toUpperCase();
 
-  const accent = isFailed
-    ? "bg-destructive"
-    : isRunning
-      ? "bg-emerald-500"
-      : /* SPDX-SnippetBegin */
-        /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
-        /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
-        isIdleOrWaking
-        ? "bg-muted-foreground"
-        : /* SPDX-SnippetEnd */ "bg-amber-500";
-
   const hasMultiple = installs.length > 1;
 
   const card = (
     <div
-      className={`group relative w-full rounded-lg border transition-all duration-200 ${
-        isFailed
-          ? "border-destructive/30 bg-destructive/[0.02]"
-          : "border-border/60 bg-card"
-      } ${
+      className={`group relative w-full rounded-lg border border-border/60 bg-card transition-all duration-200 ${
         hasMultiple
           ? "cursor-pointer hover:border-border hover:shadow-sm data-[state=open]:border-foreground/30 data-[state=open]:shadow-md"
           : ""
       }`}
       data-state={open ? "open" : "closed"}
     >
-      {/* Hairline accent, top */}
-      <span
-        className={`absolute left-4 right-4 top-0 h-px ${accent} opacity-60`}
-      />
-
       <div className="flex items-stretch">
         {/* Identity block */}
         <div className="flex items-center gap-3 min-w-0 flex-1 pl-4 pr-3 py-3">
@@ -823,6 +792,14 @@ function InstanceSelector({
                 }`}
               >
                 {stateLabel}
+              </span>
+            )}
+            {isFailed && selectedStatus?.error && (
+              <span
+                className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
+                title={selectedStatus.error}
+              >
+                {selectedStatus.error}
               </span>
             )}
           </div>

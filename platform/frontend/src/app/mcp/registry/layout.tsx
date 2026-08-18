@@ -1,22 +1,37 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
 
 type McpRegistryLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
+  /**
+   * How many servers the viewer must act on, shown on the root's
+   * "Needs attention" tab. Reported by the list page, which owns the live
+   * deployment-status subscription the count depends on.
+   */
+  setAttentionCount: (count: number) => void;
 };
 
 const McpRegistryLayoutContext = createContext<McpRegistryLayoutContextType>({
   setActionButton: () => {},
+  setAttentionCount: () => {},
 });
 
 export function useSetMcpRegistryAction() {
   return useContext(McpRegistryLayoutContext).setActionButton;
 }
+
+export function useSetMcpRegistryAttentionCount() {
+  return useContext(McpRegistryLayoutContext).setAttentionCount;
+}
+
+/** Query param selecting the root's Needs-attention tab. */
+export const MCP_REGISTRY_TAB_PARAM = "tab";
+export const MCP_REGISTRY_ATTENTION_TAB = "attention";
 
 export default function McpCatalogLayout({
   children,
@@ -25,9 +40,23 @@ export default function McpCatalogLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMainRegistry = pathname === "/mcp/registry";
+  // Tab hrefs carry the list's other params (search, labels) so PageLayout's
+  // exact-match active check works and switching tabs keeps the filters.
+  const rootTabHref = (tab: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab) params.set(MCP_REGISTRY_TAB_PARAM, tab);
+    else params.delete(MCP_REGISTRY_TAB_PARAM);
+    const qs = params.toString();
+    return qs ? `/mcp/registry?${qs}` : "/mcp/registry";
+  };
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const contextValue = useMemo(() => ({ setActionButton }), []);
+  const [attentionCount, setAttentionCount] = useState(0);
+  const contextValue = useMemo(
+    () => ({ setActionButton, setAttentionCount }),
+    [],
+  );
 
   const registrySubPath = pathname.startsWith("/mcp/registry/")
     ? pathname.slice("/mcp/registry/".length)
@@ -82,6 +111,30 @@ export default function McpCatalogLayout({
           </>
         }
         actionButton={registryActionButton ?? pageActionButton}
+        tabs={
+          isMainRegistry
+            ? [
+                { label: "All servers", href: rootTabHref(null) },
+                {
+                  label: (
+                    <span className="flex items-center gap-1.5">
+                      <span>Needs attention</span>
+                      {attentionCount > 0 && (
+                        <span
+                          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-destructive-foreground tabular-nums"
+                          data-testid="mcp-registry-attention-tab-count"
+                        >
+                          {attentionCount}
+                        </span>
+                      )}
+                    </span>
+                  ),
+                  href: rootTabHref(MCP_REGISTRY_ATTENTION_TAB),
+                  testId: "mcp-registry-attention-tab",
+                },
+              ]
+            : []
+        }
       >
         {children}
       </PageLayout>

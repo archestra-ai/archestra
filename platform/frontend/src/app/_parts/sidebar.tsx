@@ -40,6 +40,7 @@ import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
+import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,8 @@ interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
+  /** Trailing live count, e.g. MCP servers needing attention. */
+  countBadge?: React.ReactNode;
   /**
    * Pages whose permissions gate this item, for items whose `url` isn't in
    * `requiredPagePermissionsMap` (e.g. a landing page that redirects between
@@ -294,6 +297,7 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/registry"),
         dotKey: "nav:mcp-registry",
+        countBadge: <McpRegistryAttentionBadge />,
       },
       {
         title: "MCP Gateways",
@@ -426,6 +430,7 @@ const NavPrimary = ({
               {item.badgeLabel ?? "New"}
             </Badge>
           )}
+          {item.countBadge}
           {item.dotKey && (
             <OnboardingDot
               visible={unseenDotKeys.has(item.dotKey)}

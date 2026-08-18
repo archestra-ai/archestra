@@ -103,7 +103,7 @@ export function CellDetailSheet({
             <Badge variant="outline">
               {column.format === "exact_quote" ? "exact quote" : column.format}
             </Badge>
-            {cell?.flag && (
+            {column.flag === true && cell?.flag && (
               <Badge variant="outline" className="gap-1.5">
                 <span
                   className={`h-2 w-2 rounded-full ${CELL_FLAG_META[cell.flag].dotClass}`}

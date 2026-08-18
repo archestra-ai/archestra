@@ -133,6 +133,14 @@ export async function retryBatchAnalysisCell(params: {
     throw new ApiError(404, "Row not found on this analysis");
   }
 
+  // Refuse BEFORE resetting: resetCell wipes the answer's flag and human
+  // sign-off, so it must not run when the dispatch below would be refused
+  // anyway (an active run already owns the grid).
+  const running = await BatchAnalysisModel.findRunningRun(params.analysisId);
+  if (running) {
+    throw new ApiError(409, "A run is already in progress for this analysis");
+  }
+
   const cell = await BatchAnalysisModel.resetCell({
     rowId: params.rowId,
     columnKey: params.columnKey,

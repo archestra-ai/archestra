@@ -10,6 +10,7 @@ import {
   retryBatchAnalysisCell,
   startBatchAnalysisRun,
 } from "@/batch-analysis/runner";
+import { BATCH_ANALYSIS_TEMPLATES } from "@/batch-analysis/templates";
 import {
   AgentModel,
   BatchAnalysisModel,
@@ -78,6 +79,29 @@ const BatchAnalysisDetailSchema = z.object({
 });
 
 const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/batch-analysis-templates",
+    {
+      schema: {
+        operationId: RouteId.GetBatchAnalysisTemplates,
+        description:
+          "List the predefined column templates an analysis can start from",
+        tags: ["Batch Analysis"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              description: z.string(),
+              columns: BatchAnalysisColumnsSchema,
+            }),
+          ),
+        ),
+      },
+    },
+    async () => BATCH_ANALYSIS_TEMPLATES,
+  );
+
   fastify.get(
     "/api/batch-analyses",
     {
@@ -211,6 +235,21 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await BatchAnalysisModel.deleteCellsForRemovedColumns({
         analysisId,
         keptColumnKeys: body.columns.map((column) => column.key),
+      });
+
+      // A column that opted OUT of triage keeps its answers but loses its
+      // stored flags — the configuration no longer promises a classification.
+      const nowFlagged = new Map(
+        body.columns.map((column) => [column.key, column.flag === true]),
+      );
+      await BatchAnalysisModel.clearFlagsForColumns({
+        analysisId,
+        columnKeys: existing.columns
+          .filter(
+            (column) =>
+              column.flag === true && nowFlagged.get(column.key) === false,
+          )
+          .map((column) => column.key),
       });
 
       return {

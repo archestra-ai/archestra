@@ -261,6 +261,7 @@ class BatchAnalysisModel {
         rowId: schema.batchAnalysisCellsTable.rowId,
         columnKey: schema.batchAnalysisCellsTable.columnKey,
         verifiedBy: schema.batchAnalysisCellsTable.verifiedBy,
+        verifiedAt: schema.batchAnalysisCellsTable.verifiedAt,
       })
       .from(schema.batchAnalysisCellsTable)
       .innerJoin(
@@ -278,7 +279,12 @@ class BatchAnalysisModel {
       );
 
     const entries = rows
-      .map((row) => `${row.rowId}:${row.columnKey}:${row.verifiedBy ?? ""}`)
+      .map(
+        (row) =>
+          // verifiedAt is part of the identity: re-verifying the same cell by
+          // the same reviewer is still a state change worth a differing digest.
+          `${row.rowId}:${row.columnKey}:${row.verifiedBy ?? ""}:${row.verifiedAt?.toISOString() ?? ""}`,
+      )
       .sort();
     return {
       id: analysis.id,
@@ -360,9 +366,19 @@ class BatchAnalysisModel {
             and(
               eq(schema.batchAnalysisCellsTable.rowId, entry.rowId),
               eq(schema.batchAnalysisCellsTable.columnKey, entry.columnKey),
+              // Re-asserted inside the UPDATE: a concurrent retry can flip the
+              // cell off `done` between the validation read above and here, and
+              // a sign-off must never land on a cell that no longer holds the
+              // answer it was given for. Zero rows → the whole batch rolls back.
+              eq(schema.batchAnalysisCellsTable.status, "done"),
             ),
           )
           .returning();
+        if (!cell) {
+          throw new CellVerificationError(
+            `Cell ${entry.columnKey} on row ${entry.rowId} changed while verifying; retry after the grid settles`,
+          );
+        }
         updated.push(cell as BatchAnalysisCell);
       }
       return updated;
@@ -429,6 +445,34 @@ class BatchAnalysisModel {
    * totals, so "12/15 cells" would never reach 15 again after removing a
    * column.
    */
+  /**
+   * Null the stored triage flags for columns that opted OUT of flagging. The
+   * answers stand — only the classification is withdrawn, matching what the
+   * column configuration now promises.
+   */
+  static async clearFlagsForColumns(params: {
+    analysisId: string;
+    columnKeys: string[];
+  }): Promise<void> {
+    if (params.columnKeys.length === 0) return;
+    const rowIds = db
+      .select({ id: schema.batchAnalysisRowsTable.id })
+      .from(schema.batchAnalysisRowsTable)
+      .where(eq(schema.batchAnalysisRowsTable.analysisId, params.analysisId));
+    await db
+      .update(schema.batchAnalysisCellsTable)
+      .set({ flag: null })
+      .where(
+        and(
+          inArray(schema.batchAnalysisCellsTable.rowId, rowIds),
+          inArray(
+            schema.batchAnalysisCellsTable.columnKey,
+            params.columnKeys,
+          ),
+        ),
+      );
+  }
+
   static async deleteCellsForRemovedColumns(params: {
     analysisId: string;
     keptColumnKeys: string[];

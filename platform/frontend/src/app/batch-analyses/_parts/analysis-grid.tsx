@@ -127,7 +127,10 @@ export function AnalysisGrid({
             </span>
           ),
           renderCell: ({ row }) => (
-            <CellContent cell={cellFor(cellsByRowAndColumn, row, column.key)} />
+            <CellContent
+              cell={cellFor(cellsByRowAndColumn, row, column.key)}
+              flagEnabled={column.flag === true}
+            />
           ),
         }),
       ),
@@ -366,7 +369,14 @@ function SourceCell({
  * and the whole point of the table is being able to see which is which at a
  * glance across hundreds of rows.
  */
-function CellContent({ cell }: { cell: Cell | undefined }) {
+function CellContent({
+  cell,
+  flagEnabled,
+}: {
+  cell: Cell | undefined;
+  /** Stale flags can outlive a column's opt-out; render only when promised. */
+  flagEnabled: boolean;
+}) {
   if (!cell || cell.status === "pending") {
     return <span className="text-muted-foreground text-xs">—</span>;
   }
@@ -388,7 +398,7 @@ function CellContent({ cell }: { cell: Cell | undefined }) {
   }
   return (
     <span className="flex items-start gap-1">
-      {cell.flag && (
+      {flagEnabled && cell.flag && (
         <span
           title={CELL_FLAG_META[cell.flag].label}
           className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CELL_FLAG_META[cell.flag].dotClass}`}

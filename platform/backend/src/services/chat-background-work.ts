@@ -1,26 +1,22 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import logger from "@/logging";
-import { ConversationModel, MessageModel } from "@/models";
-import ActiveChatRunModel from "@/models/chat-active-run";
+import { ConversationModel } from "@/models";
 import McpGatewayTaskModel from "@/models/mcp-gateway-task";
 import { runToolCallMaybeTask } from "@/routes/mcp-gateway/tasks";
+import { conversationWakeService } from "@/services/conversation-wake";
 import type { McpGatewayTask } from "@/types/mcp-gateway-task";
-import {
-  broadcastConversationUpdated,
-  broadcastConversationWake,
-} from "@/websocket";
+import { trackBackgroundWork } from "@/utils/background-work";
 
 /**
  * Background work harness for chat conversations.
  *
  * Lets the model hand long-running work (today: subagent delegations) to a
  * durable MCP gateway task and keep control of the conversation. When the
- * task settles, the service persists a harness notification message (role
- * `user`, marked via metadata) once the conversation is idle and pushes a
- * `conversation_wake` websocket event. A client viewing the conversation
- * submits that notification as an ordinary turn — the model "regains control"
- * through the completely normal streaming path, so approvals, tool cards, and
- * persistence all behave exactly like a user-typed message.
+ * task settles, the service composes a harness notification and hands it
+ * to `conversationWakeService`, which persists it (role `user`, marked via
+ * metadata), pushes a `conversation_wake` websocket event, and guarantees a
+ * wake turn runs: a viewing browser resubmits it as an ordinary streaming
+ * turn, and with no browser around the wake service runs the turn headlessly.
  *
  * Durability: the conversation linkage and delivery context live ON the task
  * row (`conversation_id`, `context`), so delivery never depends on in-process
@@ -39,9 +35,6 @@ import {
  * extension's default 30-minute row TTL by design.
  */
 const BACKGROUND_DELEGATION_TTL_MS = 24 * 60 * 60 * 1000;
-
-const IDLE_POLL_INTERVAL_MS = 750;
-const IDLE_WAIT_DEADLINE_MS = 15 * 60_000;
 
 interface SpawnDelegationParams {
   conversationId: string;
@@ -110,16 +103,21 @@ class ChatBackgroundWorkService {
         targetAgentName: params.targetAgentName,
       },
       onSettled: ({ taskId }) => {
-        void this.deliverSettledTask({
-          taskId,
-          agentId: params.agentId,
-          principal,
-        }).catch((error) => {
-          logger.error(
-            { err: error, taskId, conversationId: params.conversationId },
-            "Failed to deliver a settled background task to its conversation",
-          );
-        });
+        // Registered as background work so graceful shutdown (and the test
+        // harness's teardown) can drain an in-flight delivery — it now spans
+        // the wake grace window and possibly a whole headless turn.
+        trackBackgroundWork(
+          this.deliverSettledTask({
+            taskId,
+            agentId: params.agentId,
+            principal,
+          }).catch((error) => {
+            logger.error(
+              { err: error, taskId, conversationId: params.conversationId },
+              "Failed to deliver a settled background task to its conversation",
+            );
+          }),
+        );
       },
       execute: async (signal) => {
         const res = await executeA2AMessage({
@@ -247,109 +245,34 @@ class ChatBackgroundWorkService {
     /** Used for broadcast scoping only if the owner lookup comes up empty. */
     fallbackUserId: string | null;
   }): Promise<void> {
-    // Guard every notification write: a deleted conversation has nowhere to
-    // deliver to, and a locked chat's messages are encrypted under a
-    // browser-held key this server-side path can never obtain — writing
-    // without it would silently downgrade the conversation's encryption.
-    const lockInfo = await ConversationModel.getLockedChatKeyInfo(
-      params.conversationId,
-    );
-    if (!lockInfo) {
-      logger.warn(
-        { conversationId: params.conversationId, taskId: params.taskId },
-        "Conversation for a settled background task no longer exists; dropping delivery",
-      );
-      return;
-    }
-    if (lockInfo.lockedChat) {
-      logger.warn(
-        { conversationId: params.conversationId, taskId: params.taskId },
-        "Refusing to deliver a background task notification into a locked chat",
-      );
-      return;
-    }
-
-    await this.waitForConversationIdle(params.conversationId);
-
-    const messageId = `bg-task-${params.taskId}`;
     const headline =
       params.status === "completed"
         ? `[Background task completed] Subagent "${params.agentName}" finished.`
         : `[Background task failed] Subagent "${params.agentName}" failed.`;
-    const text = `${headline}\n\n${params.resultText}\n\n(Relay the outcome to the user, connecting it to what they originally asked for.)`;
-    const metadata = {
-      backgroundTask: {
-        taskId: params.taskId,
-        status: params.status,
-        agentName: params.agentName,
-        toolName: params.toolName,
-      },
-    };
-
-    await MessageModel.create({
+    const delivered = await conversationWakeService.deliver({
       conversationId: params.conversationId,
-      role: "user",
-      content: {
-        id: messageId,
-        role: "user",
-        parts: [{ type: "text", text }],
-        metadata,
+      messageId: `bg-task-${params.taskId}`,
+      text: `${headline}\n\n${params.resultText}\n\n(Relay the outcome to the user, connecting it to what they originally asked for.)`,
+      metadata: {
+        backgroundTask: {
+          taskId: params.taskId,
+          status: params.status,
+          agentName: params.agentName,
+          toolName: params.toolName,
+        },
       },
+      fallbackUserId: params.fallbackUserId,
     });
-
-    const owner = await ConversationModel.getOwner(params.conversationId);
-    const ownerUserId = owner?.userId ?? params.fallbackUserId;
-    if (!ownerUserId || !owner?.organizationId) {
-      // Persisted but not broadcastable — the notification waits in the
-      // thread for the next open.
-      logger.warn(
-        { conversationId: params.conversationId, taskId: params.taskId },
-        "Could not resolve a conversation owner for the background task wake broadcast",
-      );
-      return;
-    }
-    broadcastConversationUpdated(
-      ownerUserId,
-      owner.organizationId,
-      params.conversationId,
-    );
-    broadcastConversationWake(ownerUserId, owner.organizationId, {
-      conversationId: params.conversationId,
-      messageId,
-      text,
-      metadata,
-    });
-
-    logger.info(
-      {
-        conversationId: params.conversationId,
-        taskId: params.taskId,
-        status: params.status,
-      },
-      "Delivered background task notification to conversation",
-    );
-  }
-
-  /**
-   * Wait until the conversation has no running chat turn, so the injected
-   * notification can never interleave with an in-flight run's persistence.
-   * After the deadline the notification is delivered anyway — it will be
-   * picked up whenever the conversation is next opened.
-   */
-  private async waitForConversationIdle(conversationId: string): Promise<void> {
-    const deadline = Date.now() + IDLE_WAIT_DEADLINE_MS;
-    while (Date.now() < deadline) {
-      const running =
-        await ActiveChatRunModel.findRunningByConversation(conversationId);
-      if (!running) return;
-      await new Promise((resolve) =>
-        setTimeout(resolve, IDLE_POLL_INTERVAL_MS),
+    if (delivered) {
+      logger.info(
+        {
+          conversationId: params.conversationId,
+          taskId: params.taskId,
+          status: params.status,
+        },
+        "Delivered background task notification to conversation",
       );
     }
-    logger.warn(
-      { conversationId },
-      "Conversation stayed busy past the idle-wait deadline; delivering the background task notification anyway",
-    );
   }
 }
 

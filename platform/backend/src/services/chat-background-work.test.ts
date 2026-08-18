@@ -4,8 +4,9 @@ import db, { schema } from "@/database";
 import { ConversationModel, MessageModel } from "@/models";
 import McpGatewayTaskModel from "@/models/mcp-gateway-task";
 import { chatBackgroundWork } from "@/services/chat-background-work";
+import { conversationWakeService } from "@/services/conversation-wake";
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: vi.fn(),
@@ -23,8 +24,18 @@ const executeMock = vi.mocked(executeA2AMessage);
  * their content key only exists in the owner's browser.
  */
 describe("chat background work", () => {
+  const originalTimings = { ...conversationWakeService.timings };
   beforeEach(() => {
     executeMock.mockReset();
+    // Shrink the wake grace/poll windows so headless fallbacks run (and
+    // finish) within the test instead of lingering as background work.
+    conversationWakeService.timings.idlePollMs = 10;
+    conversationWakeService.timings.idleWaitDeadlineMs = 2_000;
+    conversationWakeService.timings.headlessGraceMs = 40;
+    conversationWakeService.timings.headlessGracePollMs = 10;
+  });
+  afterEach(() => {
+    Object.assign(conversationWakeService.timings, originalTimings);
   });
 
   async function makeConversation(ctx: {
@@ -74,12 +85,25 @@ describe("chat background work", () => {
     });
 
     let resolveRun: (v: Awaited<ReturnType<typeof executeA2AMessage>>) => void;
-    executeMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveRun = resolve;
-        }),
-    );
+    executeMock.mockImplementation((execParams) => {
+      if (execParams.messages !== undefined) {
+        // The headless wake turn (prepared history, no current turn).
+        return Promise.resolve({
+          messageId: "wake-1",
+          text: "relayed to the user",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "wake-1",
+            role: "assistant",
+            parts: [{ type: "text", text: "relayed to the user" }],
+          },
+        } as Awaited<ReturnType<typeof executeA2AMessage>>);
+      }
+      // The detached delegation itself.
+      return new Promise((resolve) => {
+        resolveRun = resolve;
+      });
+    });
 
     const spawned = await chatBackgroundWork.spawnDelegation(
       spawnParams({
@@ -113,14 +137,21 @@ describe("chat background work", () => {
       responseUiMessage: { id: "m1", role: "assistant", parts: [] },
     } as Awaited<ReturnType<typeof executeA2AMessage>>);
 
+    // Notification persists first; with no browser claiming the wake turn
+    // within the grace window, the headless fallback answers it.
     await expect
-      .poll(async () => {
-        const messages = await MessageModel.findByConversation(conversation.id);
-        return messages.length;
-      })
-      .toBe(1);
+      .poll(
+        async () => {
+          const messages = await MessageModel.findByConversation(
+            conversation.id,
+          );
+          return messages.length;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(2);
 
-    const [notification] = await MessageModel.findByConversation(
+    const [notification, reply] = await MessageModel.findByConversation(
       conversation.id,
     );
     expect(notification.role).toBe("user");
@@ -132,6 +163,13 @@ describe("chat background work", () => {
       toolName: "agent__research_bot",
     });
     expect(notification.content.parts[0].text).toContain("the findings");
+    // The headless turn saw the full history ending with the notification.
+    const wakeCall = executeMock.mock.calls.find(
+      ([p]) => p.messages !== undefined,
+    );
+    expect(wakeCall).toBeDefined();
+    expect(reply.role).toBe("assistant");
+    expect(reply.content.parts[0].text).toBe("relayed to the user");
   });
 
   test("a delegation finishing inside the threshold returns its result inline with no task row or notification", async ({
@@ -328,17 +366,30 @@ describe("chat background work", () => {
       context: { kind: "delegation", targetAgentName: "Research Bot" },
     });
 
+    executeMock.mockResolvedValue({
+      messageId: "wake-1",
+      text: "sorry, it died",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "wake-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "sorry, it died" }],
+      },
+    } as Awaited<ReturnType<typeof executeA2AMessage>>);
+
     const swept = await mcpGatewayTaskReaper.sweep();
     expect(swept.failed).toBe(1);
 
     const messages = await MessageModel.findByConversation(conversation.id);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(messages[0].content.metadata.backgroundTask).toMatchObject({
       taskId: task.id,
       status: "failed",
       agentName: "Research Bot",
     });
     expect(messages[0].content.parts[0].text).toContain("failed");
+    // The wake turn ran headlessly (the reaper has no browser to lean on).
+    expect(messages[1].role).toBe("assistant");
   });
 
   test("an expired plain gateway task (no linkage) is reaped without any delivery", async ({

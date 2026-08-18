@@ -3725,6 +3725,7 @@ export type VllmChatCompletionRequestInput = {
     chat_template_kwargs?: {
         [key: string]: unknown;
     };
+    reasoning_effort?: string | null;
 };
 
 export type VllmChatCompletionResponseInput = {
@@ -4052,6 +4053,7 @@ export type OllamaChatCompletionRequestInput = {
     stop?: string | Array<string>;
     seed?: number | null;
     n?: number | null;
+    reasoning_effort?: string | null;
 };
 
 export type OllamaChatCompletionResponseInput = {
@@ -9613,6 +9615,7 @@ export type VllmChatCompletionRequest = {
     chat_template_kwargs?: {
         [key: string]: unknown;
     };
+    reasoning_effort?: string | null;
 };
 
 export type VllmChatCompletionResponse = {
@@ -9940,6 +9943,7 @@ export type OllamaChatCompletionRequest = {
     stop?: string | Array<string>;
     seed?: number | null;
     n?: number | null;
+    reasoning_effort?: string | null;
 };
 
 export type OllamaChatCompletionResponse = {
@@ -60931,6 +60935,7 @@ export type GetLlmModelsResponses = {
             inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
+            supportsReasoningEffort: boolean | null;
             recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
@@ -61120,6 +61125,7 @@ export type GetModelsWithApiKeysResponses = {
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
+        supportsReasoningEffort: boolean | null;
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -61294,6 +61300,7 @@ export type UpdateModelResponses = {
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
+        supportsReasoningEffort: boolean | null;
         supportedEndpoints: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;

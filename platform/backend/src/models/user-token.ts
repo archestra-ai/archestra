@@ -82,22 +82,38 @@ class UserTokenModel {
 
     // Create token record. onConflictDoNothing makes the UNIQUE(org, user) constraint race-safe:
     // concurrent first-time creates no longer 500, the loser just gets no row back.
-    const [token] = await db
-      .insert(schema.userTokensTable)
-      .values({
-        userId,
-        organizationId,
-        name,
-        secretId: secret.id,
-        tokenStart,
-      })
-      .onConflictDoNothing({
-        target: [
-          schema.userTokensTable.organizationId,
-          schema.userTokensTable.userId,
-        ],
-      })
-      .returning();
+    let token: SelectUserToken | undefined;
+    try {
+      [token] = await db
+        .insert(schema.userTokensTable)
+        .values({
+          userId,
+          organizationId,
+          name,
+          secretId: secret.id,
+          tokenStart,
+        })
+        .onConflictDoNothing({
+          target: [
+            schema.userTokensTable.organizationId,
+            schema.userTokensTable.userId,
+          ],
+        })
+        .returning();
+    } catch (error) {
+      // Insert failed outright (e.g. a foreign-key violation for a userId with
+      // no users row). The secret we minted references no token, so delete it
+      // before rethrowing -- otherwise it leaks.
+      await secretManager()
+        .deleteSecret(secret.id)
+        .catch((cleanupError) =>
+          logger.error(
+            { userId, organizationId, secretId: secret.id, cleanupError },
+            "UserTokenModel.create: failed to clean up secret after insert failure",
+          ),
+        );
+      throw error;
+    }
 
     if (!token) {
       // Lost the race: the secret we minted now references no token, so delete it before surfacing

@@ -20,6 +20,7 @@ import {
   getAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
+import { isServiceAccountUserId } from "@/auth/utils";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -310,11 +311,15 @@ export async function selectMCPGatewayToken(
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
   const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
 
+  // Synthetic principals ("system" for internal/public email security modes,
+  // "service-account:<id>" for service-account callers) have no users row, so
+  // they can never own a personal user token — attempting to create one fails
+  // on the user_id foreign key. They fall back to org/team tokens below.
+  const isSyntheticUser = userId === "system" || isServiceAccountUserId(userId);
+
   // 1. Always try to get/create a personal user token first
   // This ensures userId is available in the token for global catalog tools
-  // Skip when userId is "system" (e.g., internal/public email security modes)
-  // since "system" is not a real user and cannot have a user token
-  if (userId !== "system") {
+  if (!isSyntheticUser) {
     // Ensure user has a token (creates one if missing)
     const userToken = await UserTokenModel.ensureUserToken(
       userId,
@@ -343,9 +348,9 @@ export async function selectMCPGatewayToken(
   // Get all team tokens for this organization
   const tokens = await TeamTokenModel.findAll(organizationId);
 
-  // 2. System user has no team memberships so it can never match a team token.
-  //    Fall back to the organization token to preserve tool access.
-  if (userId === "system") {
+  // 2. Synthetic principals have no team memberships so they can never match a
+  //    team token. Fall back to the organization token to preserve tool access.
+  if (isSyntheticUser) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
       const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);

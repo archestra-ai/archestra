@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Pencil, Play, Plus } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Pencil, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -17,6 +17,10 @@ import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
 import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
 import {
+  downloadAnalysisCsv,
+  downloadAnalysisXlsx,
+} from "@/app/batch-analyses/_parts/export-analysis";
+import {
   type PreviewableSourceText,
   SourceTextDialog,
 } from "@/app/batch-analyses/_parts/source-text-dialog";
@@ -31,6 +35,12 @@ import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   type BatchAnalysisDetail,
@@ -199,6 +209,40 @@ export default function BatchAnalysisDetailPage() {
       backLink={<BackToAnalysesLink />}
       actionButton={
         <div className="flex shrink-0 gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={rows.length === 0}>
+                <Download className="mr-1 h-4 w-4" />
+                <span>Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadAnalysisCsv({
+                    analysisName: analysis.name,
+                    columns: analysis.columns,
+                    rows: visibleRows,
+                    cellsByRowAndColumn,
+                  })
+                }
+              >
+                <span>CSV (current view)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadAnalysisXlsx({
+                    analysisName: analysis.name,
+                    columns: analysis.columns,
+                    rows: visibleRows,
+                    cellsByRowAndColumn,
+                  })
+                }
+              >
+                <span>Excel (current view)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <PermissionButton
             permissions={{ batchAnalysis: ["update"] }}
             variant="outline"
@@ -339,6 +383,7 @@ export default function BatchAnalysisDetailPage() {
         column={analysis.columns.find((c) => c.key === selected?.columnKey)}
         cell={selectedCell}
         onViewSource={(file) => setPreviewFile(file)}
+        onViewSourceText={(source) => setPreviewText(source)}
         // A controlled sheet has no trigger to give focus back to, so Radix
         // would drop it on <body> and the grid's keyboard navigation would go
         // dead. Hand focus back to the active cell instead.

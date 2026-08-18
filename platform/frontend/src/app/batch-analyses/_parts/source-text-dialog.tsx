@@ -1,5 +1,6 @@
 "use client";
 
+import { splitOnQuote } from "@/components/chat/file-preview";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,8 @@ import {
 export type PreviewableSourceText = {
   label: string;
   text: string;
+  /** A verbatim span to highlight and scroll to. */
+  highlightQuote?: string;
 };
 
 /**
@@ -38,9 +41,37 @@ export function SourceTextDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="overflow-y-auto px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm">{source.text}</p>
+          <SourceBody
+            text={source.text}
+            highlightQuote={source.highlightQuote}
+          />
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SourceBody({
+  text,
+  highlightQuote,
+}: {
+  text: string;
+  highlightQuote?: string;
+}) {
+  const parts = highlightQuote ? splitOnQuote(text, highlightQuote) : null;
+  if (!parts) {
+    return <p className="whitespace-pre-wrap text-sm">{text}</p>;
+  }
+  return (
+    <p className="whitespace-pre-wrap text-sm">
+      {parts.before}
+      <mark
+        ref={(el) => el?.scrollIntoView({ block: "center" })}
+        className="rounded-sm bg-yellow-200 px-0.5 dark:bg-yellow-500/40"
+      >
+        {parts.match}
+      </mark>
+      {parts.after}
+    </p>
   );
 }

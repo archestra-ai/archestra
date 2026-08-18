@@ -15,6 +15,8 @@ export type PreviewableDocument = {
   name: string;
   mimeType: string;
   contentUrl: string;
+  /** A verbatim span to locate and highlight in the preview. */
+  highlightQuote?: string;
 };
 
 /**
@@ -58,7 +60,7 @@ export function FilePreviewDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col">
-          <FilePreview file={file} />
+          <FilePreview file={file} highlightQuote={file.highlightQuote} />
         </div>
       </DialogContent>
     </Dialog>

@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
+import type { PreviewableSourceText } from "@/app/batch-analyses/_parts/source-text-dialog";
 import type { PreviewableDocument } from "@/components/files/file-preview-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -51,6 +52,7 @@ export function CellDetailSheet({
   column,
   cell,
   onViewSource,
+  onViewSourceText,
   onCloseAutoFocus,
 }: {
   analysisId: string;
@@ -61,6 +63,8 @@ export function CellDetailSheet({
   cell: Cell | undefined;
   /** Called with the row's source file; the parent owns the preview dialog. */
   onViewSource?: (file: PreviewableDocument) => void;
+  /** Called with a pasted-text source; the parent owns the text dialog. */
+  onViewSourceText?: (source: PreviewableSourceText) => void;
   /** Radix close-focus hook; the parent uses it to hand focus back to the grid. */
   onCloseAutoFocus?: (event: Event) => void;
 }) {
@@ -153,17 +157,55 @@ export function CellDetailSheet({
           {citations.length > 0 && (
             <section className="space-y-2">
               <SectionLabel>Supporting text</SectionLabel>
-              {citations.map((citation) => (
-                <figure
-                  key={citation.quote}
-                  className="flex gap-2 rounded-md bg-muted/50 p-3"
-                >
-                  <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <blockquote className="text-sm leading-relaxed">
-                    {citation.quote}
-                  </blockquote>
-                </figure>
-              ))}
+              {citations.map((citation, index) => {
+                const openInSource = row.sourceFile
+                  ? onViewSource &&
+                    (() =>
+                      row.sourceFile &&
+                      onViewSource({
+                        name: row.sourceFile.filename,
+                        mimeType: row.sourceFile.mimeType,
+                        contentUrl: `/api/knowledge-files/${row.sourceFile.id}/content`,
+                        highlightQuote: citation.quote,
+                      }))
+                  : row.source.type === "inline_text"
+                    ? onViewSourceText &&
+                      (() =>
+                        row.source.type === "inline_text" &&
+                        onViewSourceText({
+                          label: row.label,
+                          text: row.source.text,
+                          highlightQuote: citation.quote,
+                        }))
+                    : undefined;
+                return (
+                  <figure
+                    // biome-ignore lint/suspicious/noArrayIndexKey: citations are static per cell render
+                    key={`${index}-${citation.quote.slice(0, 24)}`}
+                    className="flex gap-2 rounded-md bg-muted/50 p-3"
+                  >
+                    <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    {openInSource ? (
+                      // Click-through: land in the source with this quote
+                      // located, so an odd answer is checked in seconds.
+                      <blockquote className="text-sm leading-relaxed">
+                        <button
+                          type="button"
+                          className="text-left underline-offset-4 hover:underline"
+                          title="View in source"
+                          onClick={openInSource}
+                        >
+                          {citation.quote}
+                        </button>
+                      </blockquote>
+                    ) : (
+                      <blockquote className="text-sm leading-relaxed">
+                        {citation.quote}
+                      </blockquote>
+                    )}
+                  </figure>
+                );
+              })}
             </section>
           )}
 

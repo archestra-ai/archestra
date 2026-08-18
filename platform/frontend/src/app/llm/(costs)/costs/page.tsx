@@ -58,6 +58,7 @@ import {
   useTeamStatistics,
   useUserStatistics,
 } from "@/lib/statistics.query";
+import { formatStatisticsAxisLabel } from "./format-axis-label";
 
 /**
  * Reusable tooltip component for cost charts.
@@ -258,15 +259,8 @@ export default function StatisticsPage() {
     }
   }, []);
 
-  // Format timestamp for display based on timeframe
   const formatTimestamp = useCallback(
-    (timestamp: string) => {
-      const date = new Date(timestamp);
-      if (timeframe === "1h" || timeframe === "24h") {
-        return format(date, "HH:mm");
-      }
-      return format(date, "MMM d");
-    },
+    (timestamp: string) => formatStatisticsAxisLabel(timestamp, timeframe),
     [timeframe],
   );
 

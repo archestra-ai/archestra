@@ -806,6 +806,46 @@ describe("ModelModel", () => {
       expect(after?.customPricePerMillionInput).toBeNull();
       expect(after?.customPricePerMillionOutput).toBeNull();
     });
+
+    test("resets custom limit overrides on full refresh", async () => {
+      const created = await ModelModel.create({
+        externalId: "openai/full-custom-limits",
+        provider: "openai",
+        modelId: "full-custom-limits",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(created.id, {
+        customContextLength: 32000,
+        customOutputLength: 4096,
+      });
+
+      await ModelModel.bulkUpsertFull([
+        {
+          externalId: "openai/full-custom-limits",
+          provider: "openai",
+          modelId: "full-custom-limits",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          contextLength: 128000,
+          outputLength: 16384,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      // Same contract as the custom prices above: a full refresh puts the row
+      // back to what the provider says, so an override that would keep
+      // shadowing the freshly synced numbers has to go with them.
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "full-custom-limits",
+      );
+      expect(after?.customContextLength).toBeNull();
+      expect(after?.customOutputLength).toBeNull();
+      expect(after?.contextLength).toBe(128000);
+      expect(after?.outputLength).toBe(16384);
+    });
   });
 
   describe("delete", () => {

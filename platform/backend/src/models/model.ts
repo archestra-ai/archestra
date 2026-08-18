@@ -536,6 +536,12 @@ class ModelModel {
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,
               customPricePerMillionCacheWrite: sql`NULL`,
+              // Reset with the custom prices beside them: this path exists to
+              // put a row back to what the provider says, and leaving an
+              // admin-set window in place would keep overriding exactly the
+              // column the refresh just replaced.
+              customContextLength: sql`NULL`,
+              customOutputLength: sql`NULL`,
               discoveredViaLlmProxy: sql`false`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,

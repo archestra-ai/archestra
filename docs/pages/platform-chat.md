@@ -76,6 +76,24 @@ Use **Compact now** in the panel to summarize earlier turns before auto-compacti
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
 
+### Background Tasks
+
+The agent can hand long-running work to a subagent and keep talking to you. Ask for a deep research pass, for example, and the agent starts it in the background instead of going silent. When the subagent finishes, the result lands back in the conversation as a small chip and the agent picks it up from there.
+
+Background tasks survive a closed tab. With no tab open, the platform runs the follow-up turn on the server, so the answer is waiting when you return. Several tasks can run in parallel. The agent can list them and cancel one on request; you can cancel a running task from its tool card.
+
+Background delegation needs a [subagent](/docs/platform-built-in-subagents) the agent can delegate to. It is not available in locked chats.
+
+### Scheduled Wakeups
+
+The agent can schedule its own future turns in the current conversation. Say "remind me at 5pm to file the expense report" and the conversation wakes up at 5pm, with full context, and acts on it — whether or not you have a tab open. A recurring schedule works too: "summarize my unread mail every morning at 9".
+
+A wakeup appears in the conversation as a chip when it fires. The agent can list a conversation's wakeups and cancel them. Recurring wakeups fire at most every 5 minutes, and a conversation holds at most 10.
+
+For a recurring check — watch a deploy dashboard, for example — ask for a quiet wakeup. A quiet check that finds nothing collapses to one muted line and does not mark the conversation unread. Only real findings surface.
+
+Wakeups are managed with the same `scheduledTask` permission as [Scheduled Tasks](/docs/platform-projects#scheduled-tasks). They are not available in locked chats.
+
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.

@@ -21,6 +21,24 @@ type ModelRow = {
   customOutputLength: number | null;
 };
 
+/**
+ * A model whose id no other row shares. Two providers can serve the same id
+ * (`gpt-4o` under OpenAI and Azure, say), and both the row locator and the
+ * "Edit <id>" button would then match twice.
+ */
+function pickUniqueModel(
+  models: ModelRow[],
+  predicate: (model: ModelRow) => boolean = () => true,
+): ModelRow | undefined {
+  const idCounts = new Map<string, number>();
+  for (const model of models) {
+    idCounts.set(model.modelId, (idCounts.get(model.modelId) ?? 0) + 1);
+  }
+  return models.find(
+    (model) => idCounts.get(model.modelId) === 1 && predicate(model),
+  );
+}
+
 test.describe("Model context and output limits", () => {
   test("sets and clears a model's limits from the Models page", async ({
     page,
@@ -28,9 +46,10 @@ test.describe("Model context and output limits", () => {
     getModels,
   }) => {
     const models: ModelRow[] = await (await getModels(request)).json();
-    // Any model with no override yet: the test restores it by clearing, so it
-    // must not start out carrying one.
-    const model = models.find(
+    // No override yet: the test restores the model by clearing, so it must not
+    // start out carrying one.
+    const model = pickUniqueModel(
+      models,
       (row) =>
         row.customContextLength === null && row.customOutputLength === null,
     );
@@ -41,9 +60,9 @@ test.describe("Model context and output limits", () => {
     // Narrow to one row so the assertions below cannot read another model's
     // cells, and so the row survives pagination.
     await page.getByPlaceholder(/search models/i).fill(model.modelId);
-    // Exact matches throughout: the search is a substring filter, and an id
-    // like `gpt-4o` also matches `gpt-4o-mini`, whose row would then answer
-    // the assertions below.
+    // Exact matches throughout: the search is a substring filter, so an id
+    // like `gpt-4o` also brings up `gpt-4o-mini`, whose row would otherwise
+    // answer the assertions below.
     const row = page
       .getByRole("row")
       .filter({ has: page.getByText(model.modelId, { exact: true }) });
@@ -99,7 +118,7 @@ test.describe("Model context and output limits", () => {
     getModels,
   }) => {
     const models: ModelRow[] = await (await getModels(request)).json();
-    const model = models[0];
+    const model = pickUniqueModel(models);
     test.skip(!model, "No models in this environment");
     if (!model) return;
 

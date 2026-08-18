@@ -1,53 +1,57 @@
 "use client";
 
-import { LayoutTemplate } from "lucide-react";
+import { ChevronDown, LayoutTemplate } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   type BatchAnalysisTemplate,
   useBatchAnalysisTemplates,
 } from "@/lib/batch-analysis/batch-analysis.query";
 
 /**
- * A strip of predefined column sets. Selection only hands the template to the
- * caller — the wizard replaces its draft columns with it, the edit dialog
- * appends — so the picker itself stays stateless.
+ * A dropdown of predefined column sets. Picking is an action, not a value —
+ * the wizard replaces its draft columns with the pick, the edit dialog
+ * appends — so a menu (repeatable, stateless) fits better than a Select.
  */
 export function TemplatePicker({
   onPick,
-  compact,
 }: {
   onPick: (template: BatchAnalysisTemplate) => void;
-  /** Single-row scroll strip for dialogs rather than the two-column grid. */
-  compact?: boolean;
 }) {
   const { data: templates = [] } = useBatchAnalysisTemplates();
   if (templates.length === 0) return null;
 
   return (
-    <div
-      className={
-        compact
-          ? "flex gap-2 overflow-x-auto pb-1"
-          : "grid grid-cols-1 gap-2 sm:grid-cols-2"
-      }
-    >
-      {templates.map((template) => (
-        <button
-          key={template.id}
-          type="button"
-          className={`flex items-start gap-2.5 rounded-md border p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent ${
-            compact ? "min-w-56 shrink-0" : ""
-          }`}
-          onClick={() => onPick(template)}
-        >
-          <LayoutTemplate className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0">
-            <span className="block font-medium text-sm">{template.name}</span>
-            <span className="line-clamp-2 block text-muted-foreground text-xs">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2">
+          <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
+          <span>Choose a template</span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-80 w-96 overflow-y-auto"
+      >
+        {templates.map((template) => (
+          <DropdownMenuItem
+            key={template.id}
+            className="flex-col items-start gap-0.5"
+            onSelect={() => onPick(template)}
+          >
+            <span className="font-medium text-sm">{template.name}</span>
+            <span className="line-clamp-2 text-muted-foreground text-xs">
               {template.description} · {template.columns.length} columns
             </span>
-          </span>
-        </button>
-      ))}
-    </div>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

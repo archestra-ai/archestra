@@ -251,7 +251,6 @@ export default function NewBatchAnalysisPage() {
                   every question afterwards.
                 </p>
                 <TemplatePicker
-                  compact
                   onPick={(template) =>
                     form.setValue(
                       "columns",

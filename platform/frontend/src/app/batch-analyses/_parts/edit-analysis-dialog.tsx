@@ -172,7 +172,6 @@ export function EditAnalysisDialog({
               existing answers stay attached to their columns.
             </p>
             <TemplatePicker
-              compact
               onPick={(template) =>
                 form.setValue(
                   "columns",

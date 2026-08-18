@@ -606,7 +606,9 @@ function SkillsList() {
 
             {selectedSkills.length > 0 && (
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-                <span className="text-sm font-medium">
+                {/* Announced on change, so ticking rows is audible to a
+                    screen reader rather than only visible. */}
+                <span aria-live="polite" className="text-sm font-medium">
                   {selectedSkills.length}{" "}
                   {selectedSkills.length === 1 ? "skill" : "skills"} selected
                 </span>

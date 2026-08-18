@@ -1036,7 +1036,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional()
             .describe(
               "People to share with by name. Only meaningful for " +
-                "`scope = personal`; ignored for team/org skills.",
+                "`scope = personal`; ignored for team/org skills. Unlike the " +
+                "single-skill update, omitting it revokes existing grants " +
+                "rather than keeping them: this sets one visibility across " +
+                "the whole selection, so a per-skill grant list would " +
+                "survive as a difference the request just asked to remove.",
             ),
         }),
         response: constructResponseSchema(BulkSkillOutcomeSchema),
@@ -2130,6 +2134,10 @@ async function loadBulkSkillContext(params: {
  * resource id, and the snapshot has to be derived from the request body, which
  * `fetchById` never sees. Soft-deleted rows are included so a bulk delete's
  * "after" side still names what it removed rather than going empty.
+ *
+ * Assigning this to `auditBefore` bypasses the hook's sanitizer, which is safe
+ * here: the snapshot is ids, names, scopes and a deleted flag, with nothing
+ * secret in it.
  */
 async function buildBulkSkillAuditSnapshot(params: {
   skillIds: string[];

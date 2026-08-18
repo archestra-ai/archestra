@@ -80989,7 +80989,7 @@ export type BulkUpdateSkillsVisibilityData = {
          */
         teamIds?: Array<string>;
         /**
-         * People to share with by name. Only meaningful for `scope = personal`; ignored for team/org skills.
+         * People to share with by name. Only meaningful for `scope = personal`; ignored for team/org skills. Unlike the single-skill update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-skill grant list would survive as a difference the request just asked to remove.
          */
         userIds?: Array<string>;
     };

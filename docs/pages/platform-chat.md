@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-17
+lastUpdated: 2026-08-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,9 @@ Reasoning models think before answering by default. A Low/Medium/High control si
 
 Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Medium is the default, matching what these models do on their own, so a chat only changes behaviour when you ask it to.
 
-The control appears only on models that take a reasoning level. Today that is Gemini 3 and newer, Flash and Pro alike.
+The control appears only on models that take a reasoning level: Gemini 3 and newer, the OpenAI GPT-5 and o-series models, and the Claude models that already reason.
+
+Self-hosted models count too. A model you serve with vLLM or Ollama shows the control when Archestra can tell it reasons — Ollama reports that itself, and for vLLM the model registry answers. Sync your models after upgrading if a model you expect is missing it.
 
 ### Available Commands
 

@@ -3,13 +3,14 @@
 import {
   E2eTestId,
   fromThinkingEffortOption,
-  supportsThinkingEffort,
+  modelSupportsThinkingEffort,
   type ThinkingEffortOption,
   type ThinkingEffortSetting,
   toThinkingEffortOption,
 } from "@archestra/shared";
-import { ChevronDownIcon } from "lucide-react";
+import { BrainIcon } from "lucide-react";
 import { memo, useMemo } from "react";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,10 +70,18 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
   const { data: models } = useLlmModels({ apiKeyId: apiKeyId ?? undefined });
 
   // The picker deals in row ids; the capability rules read the provider's model
-  // name, so the selected row has to be resolved before either can be applied.
+  // name — and, for a self-hosted server, the row's own verdict on whether the
+  // model reasons — so the selected row has to be resolved before any of it can
+  // be applied.
   const supported = useMemo(() => {
     const model = models?.find((m) => m.dbId === selectedModel);
-    return model ? supportsThinkingEffort(model.provider, model.id) : false;
+    return model
+      ? modelSupportsThinkingEffort({
+          provider: model.provider,
+          modelId: model.id,
+          supportsReasoningEffort: model.capabilities?.supportsReasoningEffort,
+        })
+      : false;
   }, [models, selectedModel]);
 
   const current = toThinkingEffortOption(value);
@@ -84,22 +93,22 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        disabled={disabled}
-        aria-label="Reasoning depth"
-        data-testid={E2eTestId.ChatThinkingEffortSelector}
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full px-2",
-          "text-xs font-medium whitespace-nowrap text-muted-foreground",
-          "outline-none transition-colors hover:bg-muted hover:text-foreground",
-          "focus-visible:ring-2 focus-visible:ring-ring",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          "data-[state=open]:bg-muted data-[state=open]:text-foreground",
-          className,
-        )}
-      >
-        {selected?.label ?? current}
-        <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
+      {/* The toolbar's own control, not a lookalike: every selector beside it
+          (agent, model) is a PromptInputButton, so height, radius, type scale
+          and — the part a hand-rolled trigger always drifts on — the hover,
+          focus-visible and disabled states all come from one place. The brain
+          is the same glyph reasoning carries in the message stream, and it
+          does the job a chevron would: nothing else in this toolbar has one. */}
+      <DropdownMenuTrigger asChild>
+        <PromptInputButton
+          disabled={disabled}
+          aria-label="Reasoning depth"
+          data-testid={E2eTestId.ChatThinkingEffortSelector}
+          className={cn("min-w-0", className)}
+        >
+          <BrainIcon />
+          <span className="truncate">{selected?.label ?? current}</span>
+        </PromptInputButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuRadioGroup
@@ -109,7 +118,11 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
           }
         >
           {OPTIONS.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
+            <DropdownMenuRadioItem
+              key={option.value}
+              value={option.value}
+              className="items-start [&>span:first-child]:mt-[3px]"
+            >
               <span className="flex flex-col gap-0.5">
                 <span>{option.label}</span>
                 <span className="text-xs text-muted-foreground">

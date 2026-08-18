@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { supportsThinkingEffort } from "./thinking-effort-support";
+import {
+  modelSupportsThinkingEffort,
+  supportsThinkingEffort,
+} from "./thinking-effort-support";
 
 describe("supportsThinkingEffort", () => {
   test.each([
@@ -33,5 +36,72 @@ describe("supportsThinkingEffort", () => {
     // here is the provider's doing, not the id's.
     expect(supportsThinkingEffort(provider, "claude-opus-5")).toBe(false);
     expect(supportsThinkingEffort(provider, "gpt-5.2")).toBe(false);
+  });
+});
+
+describe("modelSupportsThinkingEffort", () => {
+  test("a self-hosted model is decided by its row, not its id", () => {
+    // The same weights under a name no rule could recognize: only the row says
+    // whether this deployment reasons.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "vllm",
+        modelId: "Qwen/Qwen3.8-27B",
+        supportsReasoningEffort: true,
+      }),
+    ).toBe(true);
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "ollama",
+        modelId: "ops-team-finetune:latest",
+        supportsReasoningEffort: true,
+      }),
+    ).toBe(true);
+  });
+
+  test.each([
+    false,
+    null,
+    undefined,
+  ])("a self-hosted row of %s keeps the control hidden", (supportsReasoningEffort) => {
+    // Only `true` opens it: an unwanted depth is an error on this class of
+    // server, while a missed one leaves the composer as it was.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "vllm",
+        modelId: "Qwen/Qwen3.8-27B",
+        supportsReasoningEffort,
+      }),
+    ).toBe(false);
+  });
+
+  test("ollama-native stays out even when the model thinks", () => {
+    // Its wire field is a boolean, so all three depths would be one behavior.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "ollama-native",
+        modelId: "Qwen/Qwen3.8-27B",
+        supportsReasoningEffort: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("a vendor model ignores the column and keeps its id rule", () => {
+    // A wrong row must not be able to switch the control on for a model whose
+    // vendor would reject the field, nor off for one that takes it.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "openai",
+        modelId: "gpt-4o",
+        supportsReasoningEffort: true,
+      }),
+    ).toBe(false);
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "anthropic",
+        modelId: "claude-opus-5",
+        supportsReasoningEffort: false,
+      }),
+    ).toBe(true);
   });
 });

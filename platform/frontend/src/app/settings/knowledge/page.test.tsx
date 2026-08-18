@@ -210,6 +210,7 @@ function makeCapabilities(
     inputModalities: ["text"],
     outputModalities: ["text"],
     supportsToolCalling: true,
+    supportsReasoningEffort: null,
     recommendedForAgents: true,
     pricePerMillionInput: null,
     pricePerMillionOutput: null,

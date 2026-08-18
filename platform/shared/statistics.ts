@@ -84,6 +84,8 @@ export function getStatisticsBucketIntervalMinutes(
     case "12m":
       return MINUTES_PER_WEEK;
     case "all":
+      // Nominal: all-time series are aggregated by calendar month, whose real
+      // width varies. Only the order of magnitude is read off this value.
       return MINUTES_PER_MONTH;
     default:
       return MINUTES_PER_HOUR;

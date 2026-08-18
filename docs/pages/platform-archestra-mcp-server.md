@@ -2010,6 +2010,7 @@ Required RBAC permission: `scheduledTask:create`
 | `cron` | `string` | No | 5-part cron expression for a recurring wakeup (e.g. '0 9 * * 1-5'). Mutually exclusive with `at`. |
 | `timezone` | `string` | No | IANA timezone the schedule is evaluated in (default UTC). Set it whenever the user names a local time. |
 | `name` | `string` | No | Short label; derived from the prompt when omitted. |
+| `quiet` | `boolean` | No | Monitor mode (recommended for recurring checks): when a wake turn finds nothing noteworthy, its reply collapses to a muted line and the user is not notified — only real findings surface. |
 
 ##### Output
 
@@ -2024,6 +2025,7 @@ Required RBAC permission: `scheduledTask:create`
 | `wakeup.runAt` | `string \| null` | Yes | The one-shot fire time (ISO), null for recurring wakeups. |
 | `wakeup.timezone` | `string` | Yes | IANA timezone the schedule is evaluated in. |
 | `wakeup.enabled` | `boolean` | Yes | False once a one-shot has fired or the wakeup was disabled. |
+| `wakeup.quiet` | `boolean` | Yes | Monitor mode: no-change replies collapse to a muted line. |
 | `wakeup.lastFiredAt` | `string \| null` | Yes | When the wakeup last fired, null if never. |
 
 #### list_scheduled_wakeups
@@ -2045,6 +2047,7 @@ This tool takes no arguments.
 | `wakeups[].runAt` | `string \| null` | Yes | The one-shot fire time (ISO), null for recurring wakeups. |
 | `wakeups[].timezone` | `string` | Yes | IANA timezone the schedule is evaluated in. |
 | `wakeups[].enabled` | `boolean` | Yes | False once a one-shot has fired or the wakeup was disabled. |
+| `wakeups[].quiet` | `boolean` | Yes | Monitor mode: no-change replies collapse to a muted line. |
 | `wakeups[].lastFiredAt` | `string \| null` | Yes | When the wakeup last fired, null if never. |
 
 #### cancel_scheduled_wakeup

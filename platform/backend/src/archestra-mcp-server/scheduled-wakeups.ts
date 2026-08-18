@@ -43,7 +43,9 @@ const MAX_ENABLED_WAKEUPS_PER_CONVERSATION = 10;
 const MAX_ONE_SHOT_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
 
 const WakeupSchema = z.object({
-  wakeupId: z.string().describe("The wakeup's id (for cancel_scheduled_wakeup)."),
+  wakeupId: z
+    .string()
+    .describe("The wakeup's id (for cancel_scheduled_wakeup)."),
   name: z.string().describe("Short human-readable label."),
   prompt: z.string().describe("What the wakeup turn will be asked to do."),
   recurring: z
@@ -61,13 +63,18 @@ const WakeupSchema = z.object({
   enabled: z
     .boolean()
     .describe("False once a one-shot has fired or the wakeup was disabled."),
+  quiet: z
+    .boolean()
+    .describe("Monitor mode: no-change replies collapse to a muted line."),
   lastFiredAt: z
     .string()
     .nullable()
     .describe("When the wakeup last fired, null if never."),
 });
 
-function resolveWakeupCaller(context: ArchestraContext):
+function resolveWakeupCaller(
+  context: ArchestraContext,
+):
   | { conversationId: string; userId: string; agentId: string }
   | { error: ReturnType<typeof errorResult> } {
   const userId = context.userId ?? context.tokenAuth?.userId;
@@ -83,7 +90,11 @@ function resolveWakeupCaller(context: ArchestraContext):
       ),
     };
   }
-  return { conversationId: context.conversationId, userId, agentId: context.agentId };
+  return {
+    conversationId: context.conversationId,
+    userId,
+    agentId: context.agentId,
+  };
 }
 
 /**
@@ -123,6 +134,7 @@ function toWakeupOutput(row: {
   runAt: Date | null;
   timezone: string;
   enabled: boolean;
+  quiet: boolean;
   lastExecutedAt: Date | null;
 }) {
   return {
@@ -134,6 +146,7 @@ function toWakeupOutput(row: {
     runAt: row.runAt ? row.runAt.toISOString() : null,
     timezone: row.timezone,
     enabled: row.enabled,
+    quiet: row.quiet,
     lastFiredAt: row.lastExecutedAt ? row.lastExecutedAt.toISOString() : null,
   };
 }
@@ -177,6 +190,12 @@ const registry = defineArchestraTools([
           .max(120)
           .optional()
           .describe("Short label; derived from the prompt when omitted."),
+        quiet: z
+          .boolean()
+          .optional()
+          .describe(
+            "Monitor mode (recommended for recurring checks): when a wake turn finds nothing noteworthy, its reply collapses to a muted line and the user is not notified — only real findings surface.",
+          ),
       })
       .strict(),
     outputSchema: z.object({ wakeup: WakeupSchema }),
@@ -229,9 +248,7 @@ const registry = defineArchestraTools([
             return errorResult("The wakeup time must be in the future.");
           }
           if (parsed.getTime() - now > MAX_ONE_SHOT_HORIZON_MS) {
-            return errorResult(
-              "The wakeup time must be within the next year.",
-            );
+            return errorResult("The wakeup time must be within the next year.");
           }
           runAt = parsed;
         } else if (args.cron !== undefined) {
@@ -256,6 +273,7 @@ const registry = defineArchestraTools([
           conversationId: caller.conversationId,
           timezone,
           enabled: true,
+          quiet: args.quiet ?? false,
           actorUserId: caller.userId,
         });
 
@@ -318,12 +336,13 @@ const registry = defineArchestraTools([
       const caller = resolveWakeupCaller(context);
       if ("error" in caller) return caller.error;
       try {
-        const cancelled =
-          await ScheduleTriggerModel.deleteForConversationActor({
+        const cancelled = await ScheduleTriggerModel.deleteForConversationActor(
+          {
             id: args.wakeupId,
             conversationId: caller.conversationId,
             actorUserId: caller.userId,
-          });
+          },
+        );
         return structuredSuccessResult(
           { cancelled },
           cancelled

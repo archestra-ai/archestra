@@ -20,6 +20,7 @@ export type WakeNotification =
   | {
       kind: "scheduledWakeup";
       recurring: boolean;
+      quiet: boolean;
       label: string;
     };
 
@@ -53,11 +54,42 @@ export function getWakeNotification(message: {
     return {
       kind: "scheduledWakeup",
       recurring: scheduledWakeup.data.recurring,
+      quiet: scheduledWakeup.data.quiet === true,
       label: scheduledWakeup.data.name,
     };
   }
 
   return null;
+}
+
+/** Whether a message is a quiet wake's no-change assistant reply. */
+export function isQuietWakeReply(message: {
+  role: string;
+  metadata?: unknown;
+}): boolean {
+  return (
+    message.role === "assistant" &&
+    typeof message.metadata === "object" &&
+    message.metadata !== null &&
+    (message.metadata as Record<string, unknown>).quietWake === true
+  );
+}
+
+/**
+ * One muted line for a quiet monitor check that found nothing — the wake
+ * notification and its sentinel reply collapse into this.
+ */
+export function QuietWakeLine({ label }: { label: string }) {
+  return (
+    <div className="mb-4 flex justify-center">
+      <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/70">
+        <AlarmClock className="h-3 w-3" />
+        <span>
+          Checked <span className="font-medium">{label}</span> — no change
+        </span>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -70,8 +102,7 @@ export function WakeNotificationChip({
   notification: WakeNotification;
 }) {
   const failed =
-    notification.kind === "backgroundTask" &&
-    notification.status === "failed";
+    notification.kind === "backgroundTask" && notification.status === "failed";
   const Icon = notification.kind === "backgroundTask" ? Zap : AlarmClock;
   return (
     <div className="mb-4 flex justify-center">

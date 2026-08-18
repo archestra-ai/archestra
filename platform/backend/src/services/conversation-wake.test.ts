@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, vi } from "vitest";
+import db, { schema } from "@/database";
 import {
   ConversationChatErrorModel,
   ConversationModel,
@@ -122,6 +124,86 @@ describe("conversation wake service", () => {
       conversation.id,
     );
     expect(running).toBeNull();
+  });
+
+  test("a quiet wake whose reply leads with the sentinel is stamped and leaves the conversation read", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const { conversation } = await makeConversation({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    });
+    executeMock.mockResolvedValue({
+      messageId: "wake-1",
+      text: "[NO_CHANGE] all quiet on the deploy front",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "wake-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "[NO_CHANGE] all quiet" }],
+      },
+    } as Awaited<ReturnType<typeof executeA2AMessage>>);
+
+    await conversationWakeService.deliver({
+      ...wakeParams(conversation.id),
+      quiet: true,
+    });
+
+    const messages = await MessageModel.findByConversation(conversation.id);
+    expect(messages).toHaveLength(2);
+    expect(messages[1].content.metadata?.quietWake).toBe(true);
+    // The quiet pair must not light the unread indicator.
+    const [row] = await db
+      .select({
+        lastReadAt: schema.conversationsTable.lastReadAt,
+        lastMessageAt: schema.conversationsTable.lastMessageAt,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(row.lastReadAt).not.toBeNull();
+    expect((row.lastReadAt as Date).getTime()).toBeGreaterThanOrEqual(
+      (row.lastMessageAt as Date).getTime(),
+    );
+  });
+
+  test("a quiet wake whose reply has real findings renders normally (no stamp, unread preserved)", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const { conversation } = await makeConversation({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    });
+    executeMock.mockResolvedValue({
+      messageId: "wake-1",
+      text: "The deploy broke: 3 pods are crashlooping.",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "wake-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "The deploy broke." }],
+      },
+    } as Awaited<ReturnType<typeof executeA2AMessage>>);
+
+    await conversationWakeService.deliver({
+      ...wakeParams(conversation.id),
+      quiet: true,
+    });
+
+    const messages = await MessageModel.findByConversation(conversation.id);
+    expect(messages).toHaveLength(2);
+    expect(messages[1].content.metadata?.quietWake).toBeUndefined();
+    const [row] = await db
+      .select({ lastReadAt: schema.conversationsTable.lastReadAt })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    // A real finding leaves the conversation unread.
+    expect(row.lastReadAt).toBeNull();
   });
 
   test("a stop request aborts the headless turn as cancelled without an error card", async ({

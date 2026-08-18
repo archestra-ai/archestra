@@ -77193,6 +77193,7 @@ export type GetScheduleTriggersResponses = {
             runAt: string | null;
             conversationId: string | null;
             timezone: string;
+            quiet: boolean;
             enabled: boolean;
             actorUserId: string;
             lastExecutedAt: string | null;
@@ -77316,6 +77317,7 @@ export type CreateScheduleTriggerResponses = {
         runAt: string | null;
         conversationId: string | null;
         timezone: string;
+        quiet: boolean;
         enabled: boolean;
         actorUserId: string;
         lastExecutedAt: string | null;
@@ -77509,6 +77511,7 @@ export type GetScheduleTriggerResponses = {
         runAt: string | null;
         conversationId: string | null;
         timezone: string;
+        quiet: boolean;
         enabled: boolean;
         actorUserId: string;
         lastExecutedAt: string | null;
@@ -77625,6 +77628,7 @@ export type UpdateScheduleTriggerResponses = {
         runAt: string | null;
         conversationId: string | null;
         timezone: string;
+        quiet: boolean;
         enabled: boolean;
         actorUserId: string;
         lastExecutedAt: string | null;
@@ -77733,6 +77737,7 @@ export type EnableScheduleTriggerResponses = {
         runAt: string | null;
         conversationId: string | null;
         timezone: string;
+        quiet: boolean;
         enabled: boolean;
         actorUserId: string;
         lastExecutedAt: string | null;
@@ -77841,6 +77846,7 @@ export type DisableScheduleTriggerResponses = {
         runAt: string | null;
         conversationId: string | null;
         timezone: string;
+        quiet: boolean;
         enabled: boolean;
         actorUserId: string;
         lastExecutedAt: string | null;

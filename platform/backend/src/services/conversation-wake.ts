@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@archestra/shared";
-import { ChatErrorCode } from "@archestra/shared";
+import { ChatErrorCode, QUIET_WAKE_SENTINEL } from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import logger from "@/logging";
@@ -54,6 +54,13 @@ interface ConversationWakeParams {
   metadata: Record<string, unknown>;
   /** Broadcast scoping fallback when the owner lookup comes up empty. */
   fallbackUserId?: string | null;
+  /**
+   * Monitor-mode wake: when the headless reply leads with the no-change
+   * sentinel, the reply is stamped `quietWake` (the pair collapses in the
+   * UI) and the conversation is not left unread. A browser-claimed turn
+   * renders normally — the user was watching anyway.
+   */
+  quiet?: boolean;
 }
 
 class ConversationWakeService {
@@ -142,6 +149,7 @@ class ConversationWakeService {
       conversationId: params.conversationId,
       ownerUserId,
       organizationId: owner.organizationId,
+      quiet: params.quiet === true,
     });
     return true;
   }
@@ -157,6 +165,7 @@ class ConversationWakeService {
     conversationId: string;
     ownerUserId: string;
     organizationId: string;
+    quiet: boolean;
   }): Promise<void> {
     const deadline = Date.now() + this.timings.headlessGraceMs;
     while (Date.now() < deadline) {
@@ -175,8 +184,9 @@ class ConversationWakeService {
     conversationId: string;
     ownerUserId: string;
     organizationId: string;
+    quiet: boolean;
   }): Promise<void> {
-    const { conversationId, ownerUserId, organizationId } = params;
+    const { conversationId, ownerUserId, organizationId, quiet } = params;
 
     const conversation = await ConversationModel.findByIdInOrganization({
       id: conversationId,
@@ -288,17 +298,38 @@ class ConversationWakeService {
         abortSignal: abortController.signal,
       });
 
+      // Monitor mode: a reply leading with the no-change sentinel collapses
+      // to a muted line and leaves the conversation read.
+      const isQuietNoChange =
+        quiet && result.text.trimStart().startsWith(QUIET_WAKE_SENTINEL);
       await MessageModel.create({
         conversationId,
         role: "assistant",
-        content: result.responseUiMessage,
+        content: isQuietNoChange
+          ? {
+              ...result.responseUiMessage,
+              metadata: {
+                ...(result.responseUiMessage.metadata as
+                  | Record<string, unknown>
+                  | undefined),
+                quietWake: true,
+              },
+            }
+          : result.responseUiMessage,
       });
+      if (isQuietNoChange) {
+        await ConversationModel.markRead({
+          id: conversationId,
+          userId: ownerUserId,
+          organizationId,
+        });
+      }
       await activeChatRunService.markTerminal({
         runId: run.id,
         status: "completed",
       });
       logger.info(
-        { conversationId, runId: run.id },
+        { conversationId, runId: run.id, quietNoChange: isQuietNoChange },
         "Headless wake turn completed",
       );
     } catch (error) {

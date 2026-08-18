@@ -193,7 +193,6 @@ describe("handleScheduleTriggerRunExecution", () => {
     expect(mockWakeDeliver).not.toHaveBeenCalled();
   });
 
-
   test("executes A2A message and marks run as success", async ({
     makeOrganization,
     makeUser,

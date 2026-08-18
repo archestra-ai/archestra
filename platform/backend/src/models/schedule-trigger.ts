@@ -430,6 +430,7 @@ function triggerColumns() {
     runAt: schema.scheduleTriggersTable.runAt,
     conversationId: schema.scheduleTriggersTable.conversationId,
     timezone: schema.scheduleTriggersTable.timezone,
+    quiet: schema.scheduleTriggersTable.quiet,
     enabled: schema.scheduleTriggersTable.enabled,
     actorUserId: schema.scheduleTriggersTable.actorUserId,
     lastExecutedAt: schema.scheduleTriggersTable.lastExecutedAt,

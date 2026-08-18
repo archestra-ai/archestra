@@ -50,6 +50,13 @@ const scheduleTriggersTable = pgTable(
       { onDelete: "cascade" },
     ),
     timezone: text("timezone").notNull(),
+    /**
+     * Quiet (monitor-mode) wakeup: the wake turn is told to lead its reply
+     * with the no-change sentinel when nothing noteworthy happened, and such
+     * replies collapse to a muted line without marking the conversation
+     * unread. Only meaningful for conversation-targeted wakeups.
+     */
+    quiet: boolean("quiet").notNull().default(false),
     enabled: boolean("enabled").notNull().default(true),
     actorUserId: text("actor_user_id")
       .notNull()

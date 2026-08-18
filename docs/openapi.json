@@ -301466,6 +301466,9 @@
                           "timezone": {
                             "type": "string"
                           },
+                          "quiet": {
+                            "type": "boolean"
+                          },
                           "enabled": {
                             "type": "boolean"
                           },
@@ -301539,6 +301542,7 @@
                           "runAt",
                           "conversationId",
                           "timezone",
+                          "quiet",
                           "enabled",
                           "actorUserId",
                           "lastExecutedAt",
@@ -301939,6 +301943,9 @@
                     "timezone": {
                       "type": "string"
                     },
+                    "quiet": {
+                      "type": "boolean"
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -302012,6 +302019,7 @@
                     "runAt",
                     "conversationId",
                     "timezone",
+                    "quiet",
                     "enabled",
                     "actorUserId",
                     "lastExecutedAt",
@@ -302329,6 +302337,9 @@
                     "timezone": {
                       "type": "string"
                     },
+                    "quiet": {
+                      "type": "boolean"
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -302402,6 +302413,7 @@
                     "runAt",
                     "conversationId",
                     "timezone",
+                    "quiet",
                     "enabled",
                     "actorUserId",
                     "lastExecutedAt",
@@ -302759,6 +302771,9 @@
                     "timezone": {
                       "type": "string"
                     },
+                    "quiet": {
+                      "type": "boolean"
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -302832,6 +302847,7 @@
                     "runAt",
                     "conversationId",
                     "timezone",
+                    "quiet",
                     "enabled",
                     "actorUserId",
                     "lastExecutedAt",
@@ -303423,6 +303439,9 @@
                     "timezone": {
                       "type": "string"
                     },
+                    "quiet": {
+                      "type": "boolean"
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -303496,6 +303515,7 @@
                     "runAt",
                     "conversationId",
                     "timezone",
+                    "quiet",
                     "enabled",
                     "actorUserId",
                     "lastExecutedAt",
@@ -303813,6 +303833,9 @@
                     "timezone": {
                       "type": "string"
                     },
+                    "quiet": {
+                      "type": "boolean"
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -303886,6 +303909,7 @@
                     "runAt",
                     "conversationId",
                     "timezone",
+                    "quiet",
                     "enabled",
                     "actorUserId",
                     "lastExecutedAt",

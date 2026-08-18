@@ -1,0 +1,1 @@
+ALTER TABLE "schedule_triggers" ADD COLUMN "quiet" boolean DEFAULT false NOT NULL;

@@ -633,10 +633,18 @@ export const ChatScheduledWakeupMetadataSchema = z.object({
   runId: z.string(),
   name: z.string(),
   recurring: z.boolean(),
+  /** Monitor-mode wakeup: no-change replies collapse to a muted line. */
+  quiet: z.boolean().optional(),
 });
 export type ChatScheduledWakeupMetadata = z.infer<
   typeof ChatScheduledWakeupMetadataSchema
 >;
+
+/**
+ * Leading sentinel a quiet wakeup's reply carries when nothing noteworthy
+ * happened. Backend detection and frontend rendering both key off it.
+ */
+export const QUIET_WAKE_SENTINEL = "[NO_CHANGE]";
 
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
@@ -662,6 +670,11 @@ export const ChatMessageMetadataSchema = z
     backgroundTask: ChatBackgroundTaskMetadataSchema.optional(),
     /** Harness wake notification for a scheduled wakeup firing. */
     scheduledWakeup: ChatScheduledWakeupMetadataSchema.optional(),
+    /**
+     * Stamped on a quiet wakeup's assistant reply that led with the
+     * no-change sentinel — the pair renders as one muted line.
+     */
+    quietWake: z.literal(true).optional(),
   })
   .passthrough();
 

@@ -1,4 +1,8 @@
-import { ChatErrorCode, type ChatErrorResponse } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  type ChatErrorResponse,
+  QUIET_WAKE_SENTINEL,
+} from "@archestra/shared";
 import {
   type A2AExecuteResult,
   executeA2AMessage,
@@ -137,9 +141,11 @@ export async function handleScheduleTriggerRunExecution(
             runId: run.id,
             name: trigger.name,
             recurring: trigger.runAt === null,
+            quiet: trigger.quiet,
           },
         },
         fallbackUserId: actor.id,
+        quiet: trigger.quiet,
       });
       if (!delivered) {
         throw new Error(
@@ -269,9 +275,12 @@ export async function handleScheduleTriggerRunExecution(
  * from so it reacts rather than treating it as a fresh user question.
  */
 function buildScheduledWakeupText(trigger: ScheduleTrigger): string {
+  const quietInstruction = trigger.quiet
+    ? ` This is a QUIET monitor check: if nothing noteworthy changed, start your reply with the exact text ${QUIET_WAKE_SENTINEL} followed by a one-line status — it will be collapsed. If something DID change, reply normally without the sentinel.`
+    : "";
   return (
     `[Scheduled wakeup] ${trigger.name}\n\n${trigger.messageTemplate}\n\n` +
-    "(This scheduled check-in was set up earlier in this conversation. Act on it now and report anything noteworthy to the user.)"
+    `(This scheduled check-in was set up earlier in this conversation. Act on it now and report anything noteworthy to the user.${quietInstruction})`
   );
 }
 

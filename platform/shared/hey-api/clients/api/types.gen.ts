@@ -15893,6 +15893,91 @@ export type GetMemberDefaultAgentResponses = {
 
 export type GetMemberDefaultAgentResponse = GetMemberDefaultAgentResponses[keyof GetMemberDefaultAgentResponses];
 
+export type UpdateMemberDefaultAgentData = {
+    body: {
+        defaultAgentId: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/members/default-agent';
+};
+
+export type UpdateMemberDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMemberDefaultAgentError = UpdateMemberDefaultAgentErrors[keyof UpdateMemberDefaultAgentErrors];
+
+export type UpdateMemberDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        defaultAgentId: string | null;
+    };
+};
+
+export type UpdateMemberDefaultAgentResponse = UpdateMemberDefaultAgentResponses[keyof UpdateMemberDefaultAgentResponses];
+
 export type GetMemberDefaultModelData = {
     body?: never;
     path?: never;

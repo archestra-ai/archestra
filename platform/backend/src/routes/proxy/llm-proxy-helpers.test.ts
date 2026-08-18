@@ -84,6 +84,7 @@ import {
   calculateInteractionCosts,
   handleError,
   normalizeToolCallsForPolicy,
+  planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
@@ -105,6 +106,181 @@ describe("toSpanUserInfo", () => {
 
   test.each([null, undefined])("returns null for %s input", (input) => {
     expect(toSpanUserInfo(input)).toBeNull();
+  });
+});
+
+// --------------------------------------------------------------------------
+// planDispatchModeToolCallRewrites
+// --------------------------------------------------------------------------
+describe("planDispatchModeToolCallRewrites", () => {
+  const DISPATCH_PAIR = new Set([
+    "archestra__search_tools",
+    "archestra__run_tool",
+  ]);
+
+  test("re-addresses a direct call to run_tool, preserving id and arguments", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        {
+          id: "call_1",
+          name: "gh-developer-agent__pull_request_read",
+          arguments: '{"pullNumber":7}',
+        },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+
+    expect(result).toEqual([
+      {
+        id: "call_1",
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "gh-developer-agent__pull_request_read",
+          tool_args: { pullNumber: 7 },
+        }),
+      },
+    ]);
+  });
+
+  test("rewrites only the direct calls in a mixed batch, keeping order", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        {
+          id: "a",
+          name: "archestra__search_tools",
+          arguments: '{"query":"pr"}',
+        },
+        { id: "b", name: "gh__read", arguments: "{}" },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+
+    expect(result?.map((call) => [call.id, call.name])).toEqual([
+      ["a", "archestra__search_tools"],
+      ["b", "archestra__run_tool"],
+    ]);
+  });
+
+  // Two calls at the same tool is the shape the original report showed; both
+  // must be repaired, not deduplicated — they carry different arguments.
+  test("rewrites repeated calls at the same tool independently", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        { id: "a", name: "gh__read", arguments: '{"n":1}' },
+        { id: "b", name: "gh__read", arguments: '{"n":2}' },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(JSON.parse(result?.[0].arguments ?? "{}").tool_args).toEqual({
+      n: 1,
+    });
+    expect(JSON.parse(result?.[1].arguments ?? "{}").tool_args).toEqual({
+      n: 2,
+    });
+  });
+
+  // `full` exposure: a tool missing from the list really is disabled there, and
+  // run_tool is not the answer — the existing refusal must stand.
+  test("returns null when the tool list carries no dispatch pair", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [{ id: "a", name: "gh__read", arguments: "{}" }],
+        enabledToolNames: new Set(["gh__write"]),
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null when search_tools is present without run_tool", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [{ id: "a", name: "gh__read", arguments: "{}" }],
+        enabledToolNames: new Set(["archestra__search_tools"]),
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null when every call is already directly callable", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [
+          { id: "a", name: "archestra__search_tools", arguments: "{}" },
+        ],
+        enabledToolNames: DISPATCH_PAIR,
+      }),
+    ).toBeNull();
+  });
+
+  test("does not wrap a genuine run_tool dispatch a second time", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [
+          {
+            id: "a",
+            name: "archestra__run_tool",
+            arguments: '{"tool_name":"gh__read","tool_args":{}}',
+          },
+        ],
+        enabledToolNames: DISPATCH_PAIR,
+      }),
+    ).toBeNull();
+  });
+
+  // `tool_args` has to be an object; anything else cannot be re-wrapped
+  // faithfully, so the call is left for the existing steer rather than
+  // dispatched in a shape the model did not ask for.
+  test.each([
+    ["unparsable arguments", "not json"],
+    ["a JSON array", "[1,2]"],
+    ["a JSON scalar", '"hello"'],
+  ])("leaves a call with %s untouched", (_label, args) => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [{ id: "a", name: "gh__read", arguments: args }],
+        enabledToolNames: DISPATCH_PAIR,
+      }),
+    ).toBeNull();
+  });
+
+  // `run_tool` expands a bare Archestra short name to its built-in, so
+  // dispatching one would run a different — and policy-bypassed — tool than the
+  // model named. Refusing is the safe outcome.
+  test("leaves a name that collides with an Archestra short name untouched", () => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [
+          {
+            id: "a",
+            name: "read_file",
+            arguments: '{"file_path":"/etc/passwd"}',
+          },
+        ],
+        enabledToolNames: DISPATCH_PAIR,
+      }),
+    ).toBeNull();
+  });
+
+  test("treats empty arguments as an empty object", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [{ id: "a", name: "gh__read", arguments: "" }],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+    expect(JSON.parse(result?.[0].arguments ?? "{}")).toEqual({
+      tool_name: "gh__read",
+      tool_args: {},
+    });
+  });
+
+  test("canonicalizes a client-decorated name before dispatching it", () => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [{ id: "a", name: "mcp__gw__gh__read", arguments: "{}" }],
+      enabledToolNames: DISPATCH_PAIR,
+      canonicalizeToolName: (name) => name.replace("mcp__gw__", ""),
+    });
+    expect(JSON.parse(result?.[0].arguments ?? "{}").tool_name).toBe(
+      "gh__read",
+    );
   });
 });
 

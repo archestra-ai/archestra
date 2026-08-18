@@ -963,6 +963,36 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return reason ? [reason] : [];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): BedrockResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    const outputMessage = this.response.output?.message;
+    if (!outputMessage?.content) return this.response;
+    let next = 0;
+    const content = outputMessage.content.map((block) => {
+      if (!isToolUseBlock(block)) return block;
+      const rewritten = toolCalls[next++];
+      if (!rewritten) return block;
+      return {
+        ...block,
+        toolUse: {
+          ...block.toolUse,
+          name: rewritten.name,
+          input: parseArgs(rewritten.arguments),
+        },
+      };
+    });
+    return {
+      ...this.response,
+      output: {
+        ...this.response.output,
+        message: { ...outputMessage, content },
+      },
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -1339,6 +1369,62 @@ class BedrockStreamAdapter
       }
     }
 
+    return result;
+  }
+
+  formatToolCallsSSE(
+    toolCalls: StreamAccumulatorState["toolCalls"],
+  ): Uint8Array[] {
+    // The planner rewrites 1:1 in order, so each rewritten call reuses the
+    // contentBlockIndex of the tool_use block it replaces — those blocks were
+    // held, never streamed, so the indices are free. Same three-frame shape as
+    // a live tool_use block; input rides as one whole JSON string delta.
+    const heldBlockIndices: number[] = [];
+    for (const rawEvent of this.state.rawToolCallEvents) {
+      const event = rawEvent as BedrockStreamEventWithRaw;
+      if (
+        "contentBlockStart" in event &&
+        event.contentBlockStart?.start &&
+        "toolUse" in event.contentBlockStart.start &&
+        event.contentBlockStart.contentBlockIndex !== undefined
+      ) {
+        heldBlockIndices.push(event.contentBlockStart.contentBlockIndex);
+      }
+    }
+    const result: Uint8Array[] = [];
+    toolCalls.forEach((toolCall, position) => {
+      const contentBlockIndex =
+        heldBlockIndices[position] ??
+        (heldBlockIndices.length > 0
+          ? Math.max(...heldBlockIndices) + 1 + position
+          : position);
+      result.push(
+        encodeEventStreamMessage("contentBlockStart", {
+          contentBlockIndex,
+          start: {
+            toolUse: { toolUseId: toolCall.id, name: toolCall.name },
+          },
+        }),
+        encodeEventStreamMessage("contentBlockDelta", {
+          contentBlockIndex,
+          delta: { toolUse: { input: toolCall.arguments } },
+        }),
+        encodeEventStreamMessage("contentBlockStop", { contentBlockIndex }),
+      );
+    });
+
+    // The buffered terminal events (messageStop, metadata) travel with the
+    // tool events on the normal path, so they must follow here as well.
+    for (const finalEvent of this.bedrockState.pendingFinalEvents) {
+      const event = finalEvent as BedrockStreamEventWithRaw;
+      if (event.__rawBytes) {
+        result.push(event.__rawBytes);
+      } else if ("messageStop" in event && event.messageStop) {
+        result.push(encodeEventStreamMessage("messageStop", event.messageStop));
+      } else if ("metadata" in event && event.metadata) {
+        result.push(encodeEventStreamMessage("metadata", event.metadata));
+      }
+    }
     return result;
   }
 
@@ -1959,3 +2045,17 @@ export const bedrockAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/** Rewritten arguments arrive as the JSON string the model emitted; this wire
+ * shape carries them as an object. A repaired call always parses (the planner
+ * refuses to rewrite otherwise), so the fallback is defensive only. */
+function parseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}

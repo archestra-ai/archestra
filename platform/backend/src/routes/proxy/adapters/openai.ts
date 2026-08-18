@@ -977,6 +977,31 @@ export class OpenAIResponseAdapter
     return reason ? [reason] : [];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): OpenAiResponse {
+    const choice = this.response.choices[0];
+    return {
+      ...this.response,
+      choices: [
+        {
+          ...choice,
+          message: {
+            ...choice.message,
+            tool_calls: toolCalls.map((toolCall) => ({
+              id: toolCall.id,
+              type: "function" as const,
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              },
+            })),
+          },
+        },
+      ],
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -1211,6 +1236,39 @@ export class OpenAIStreamAdapter
           delta: {
             role: "assistant",
             content: text,
+          },
+          finish_reason: null,
+        },
+      ],
+    };
+    return [`data: ${JSON.stringify(chunk)}\n\n`];
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // One chunk carrying every call, complete: name and the whole argument
+    // string in a single delta. The wire format allows it (arguments are
+    // concatenated across deltas, and one delta is a valid degenerate case),
+    // and it keeps the rewrite from having to reproduce the upstream's
+    // fragmentation. `index` is the call's position, which is what clients
+    // accumulate by.
+    const chunk: OpenAiStreamChunk = {
+      id: this.state.responseId,
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model: this.state.model,
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: toolCalls.map((toolCall, index) => ({
+              index,
+              id: toolCall.id,
+              type: "function" as const,
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              },
+            })),
           },
           finish_reason: null,
         },

@@ -138,6 +138,11 @@ class OpenrouterResponseAdapter
   toRefusalResponse(refusalMessage: string, contentMessage: string) {
     return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
   }
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ) {
+    return this.delegate.withRewrittenToolCalls(toolCalls);
+  }
 }
 
 class OpenrouterStreamAdapter
@@ -170,6 +175,9 @@ class OpenrouterStreamAdapter
   }
   formatCompleteTextSSE(text: string) {
     return this.delegate.formatCompleteTextSSE(text);
+  }
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]) {
+    return this.delegate.formatToolCallsSSE(toolCalls);
   }
   formatEndSSE() {
     return this.delegate.formatEndSSE();

@@ -233,7 +233,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<TeamStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are not agent admins
@@ -280,28 +279,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange = parseCustomStatisticsTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -400,7 +378,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<AgentStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -449,28 +426,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange = parseCustomStatisticsTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -541,7 +497,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<ModelStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -580,28 +535,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange = parseCustomStatisticsTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -911,7 +845,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<CostSavingsStatistics> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -968,28 +901,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange = parseCustomStatisticsTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),

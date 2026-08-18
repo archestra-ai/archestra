@@ -1413,7 +1413,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Point it at a static private mirror when your cluster cannot pull from Docker Hub.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE`** - Same-namespace Role used to remove runtime-created MCP resources on uninstall.
-  - The chart sets this automatically when it creates orchestrator RBAC.
+  - The chart creates and sets a dedicated Role when it manages orchestrator RBAC.
   - With external RBAC, use a readable Role with the same name in every runtime namespace.
   - Delete each external Role during uninstall to remove its runtime resources.
 

@@ -97,7 +97,11 @@ describe("parseBatchAnalysisResult", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.answers.get("seats")).toEqual({ value: "250", quote: null, flag: null });
+    expect(result.answers.get("seats")).toEqual({
+      value: "250",
+      quote: null,
+      flag: null,
+    });
   });
 
   test("strips a markdown code fence around the JSON", () => {

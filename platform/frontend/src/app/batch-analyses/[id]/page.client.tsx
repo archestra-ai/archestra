@@ -1,6 +1,14 @@
 "use client";
 
-import { ArrowLeft, Download, Loader2, Pencil, Play, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Play,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -13,6 +21,7 @@ import {
   EMPTY_ANSWER_FILTER,
   isFilterActive,
 } from "@/app/batch-analyses/_parts/answer-view";
+import { AskGridPanel } from "@/app/batch-analyses/_parts/ask-grid-panel";
 import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
 import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
@@ -89,6 +98,7 @@ export default function BatchAnalysisDetailPage() {
   const params = useParams<{ id: string }>();
   const analysisId = params.id;
   const [addRowsOpen, setAddRowsOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
   const [previewText, setPreviewText] = useState<PreviewableSourceText>();
   const [rowPendingDelete, setRowPendingDelete] = useState<Row | null>(null);
@@ -209,6 +219,14 @@ export default function BatchAnalysisDetailPage() {
       backLink={<BackToAnalysesLink />}
       actionButton={
         <div className="flex shrink-0 gap-2">
+          <Button
+            variant="outline"
+            disabled={rows.length === 0}
+            onClick={() => setAskOpen(true)}
+          >
+            <MessageSquare className="mr-1 h-4 w-4" />
+            <span>Ask</span>
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" disabled={rows.length === 0}>
@@ -423,6 +441,30 @@ export default function BatchAnalysisDetailPage() {
         open={editOpen}
         onOpenChange={setEditOpen}
         analysis={analysis}
+      />
+      <AskGridPanel
+        analysisId={analysisId}
+        open={askOpen}
+        onOpenChange={setAskOpen}
+        rows={rows}
+        columns={analysis.columns}
+        onReference={(rowId, columnKey) => {
+          const row = rows.find((candidate) => candidate.id === rowId);
+          if (!row) return;
+          // Jump the grid to the cited cell when it is in the current view…
+          const rowIdx = visibleRows.findIndex(
+            (candidate) => candidate.id === rowId,
+          );
+          const colIdx = analysis.columns.findIndex(
+            (candidate) => candidate.key === columnKey,
+          );
+          if (rowIdx >= 0 && colIdx >= 0) {
+            // +1 for the frozen source column.
+            gridRef.current?.scrollToCell({ idx: colIdx + 1, rowIdx });
+          }
+          // …and open its detail sheet either way.
+          setSelected({ row, columnKey });
+        }}
       />
     </PageLayout>
   );

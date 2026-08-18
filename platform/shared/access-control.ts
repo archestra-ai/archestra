@@ -1948,6 +1948,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RetryBatchAnalysisCell]: { batchAnalysis: ["execute"] },
   [RouteId.VerifyBatchAnalysisCells]: { batchAnalysis: ["update"] },
   [RouteId.GetBatchAnalysisTemplates]: { batchAnalysis: ["read"] },
+  // `chat:read` gates spending the agent's configured LLM key — the same gate
+  // every other resolveAgentLlmOrDefault path sits behind.
+  [RouteId.AskBatchAnalysis]: { batchAnalysis: ["read"], chat: ["read"] },
 
   // Knowledge files. Reads are `knowledgeSource:read` like every other
   // knowledge surface; indexing a file into a base changes what agents can

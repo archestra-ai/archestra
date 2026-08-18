@@ -90379,6 +90379,323 @@
         }
       }
     },
+    "/api/batch-analyses/{analysisId}/chat": {
+      "post": {
+        "operationId": "askBatchAnalysis",
+        "tags": [
+          "Batch Analysis"
+        ],
+        "description": "Ask a one-shot question about the extracted grid; the answer cites the cells it relied on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`batchAnalysis:read`: View batch analyses and their results\n`chat:read`: View and access chat conversations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "analysisId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": {
+                      "type": "string"
+                    },
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "rowId": {
+                            "type": "string"
+                          },
+                          "columnKey": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "rowId",
+                          "columnKey"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "answer",
+                    "references"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "batchAnalysis:read",
+            "chat:read"
+          ]
+        }
+      }
+    },
     "/api/batch-analyses/{analysisId}/cells/verification": {
       "patch": {
         "operationId": "verifyBatchAnalysisCells",
@@ -145361,7 +145678,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -145973,7 +146291,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -147006,7 +147325,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -147738,7 +148058,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -148470,7 +148791,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -149202,7 +149524,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -149814,7 +150137,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -150426,7 +150750,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -152998,7 +153323,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -156304,7 +156630,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -156916,7 +157243,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -157528,7 +157856,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -158140,7 +158469,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -158752,7 +159082,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -159364,7 +159695,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -159976,7 +160308,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -160577,7 +160910,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -161178,7 +161512,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -161779,7 +162114,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -162391,7 +162727,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -163003,7 +163340,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -163615,7 +163953,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -166449,7 +166788,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -169278,7 +169618,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -172112,7 +172453,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -172724,7 +173066,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -173572,7 +173915,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -174605,7 +174949,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -175638,7 +175983,8 @@
                                   "knowledge:ocr",
                                   "app:llm_complete",
                                   "app:recording_enhancement",
-                                  "batch_analysis:cell"
+                                  "batch_analysis:cell",
+                                  "batch_analysis:chat"
                                 ]
                               },
                               "authMethod": {
@@ -176922,7 +177268,8 @@
                 "knowledge:ocr",
                 "app:llm_complete",
                 "app:recording_enhancement",
-                "batch_analysis:cell"
+                "batch_analysis:cell",
+                "batch_analysis:chat"
               ]
             },
             "in": "query",
@@ -177045,7 +177392,8 @@
                               "knowledge:ocr",
                               "app:llm_complete",
                               "app:recording_enhancement",
-                              "batch_analysis:cell"
+                              "batch_analysis:cell",
+                              "batch_analysis:chat"
                             ]
                           },
                           "sources": {
@@ -177075,7 +177423,8 @@
                                 "knowledge:ocr",
                                 "app:llm_complete",
                                 "app:recording_enhancement",
-                                "batch_analysis:cell"
+                                "batch_analysis:cell",
+                                "batch_analysis:chat"
                               ]
                             }
                           },
@@ -178232,7 +178581,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -178844,7 +179194,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -179877,7 +180228,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -180609,7 +180961,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -181341,7 +181694,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -182073,7 +182427,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -182685,7 +183040,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -183297,7 +183653,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -185869,7 +186226,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -189175,7 +189533,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -189787,7 +190146,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -190399,7 +190759,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -191011,7 +191372,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -191623,7 +191985,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -192235,7 +192598,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -192847,7 +193211,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -193448,7 +193813,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -194049,7 +194415,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -194650,7 +195017,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -195262,7 +195630,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -195874,7 +196243,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -196486,7 +196856,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -199320,7 +199691,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -202149,7 +202521,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -204983,7 +205356,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -205595,7 +205969,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -206443,7 +206818,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -207476,7 +207852,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {
@@ -208509,7 +208886,8 @@
                             "knowledge:ocr",
                             "app:llm_complete",
                             "app:recording_enhancement",
-                            "batch_analysis:cell"
+                            "batch_analysis:cell",
+                            "batch_analysis:chat"
                           ]
                         },
                         "authMethod": {

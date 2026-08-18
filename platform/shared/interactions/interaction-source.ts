@@ -28,6 +28,7 @@ export const InteractionSourceSchema = z.enum([
   "app:llm_complete",
   "app:recording_enhancement",
   "batch_analysis:cell",
+  "batch_analysis:chat",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -66,6 +67,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "app:llm_complete": { label: "App LLM Completion" },
   "app:recording_enhancement": { label: "App Recording Enhancement" },
   "batch_analysis:cell": { label: "Batch Analysis" },
+  "batch_analysis:chat": { label: "Batch Analysis Chat" },
 };
 
 /**

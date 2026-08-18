@@ -6,6 +6,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { askGrid } from "@/batch-analysis/grid-chat";
+import { resolveBatchAnalysisModel } from "@/batch-analysis/llm";
 import {
   retryBatchAnalysisCell,
   startBatchAnalysisRun,
@@ -491,6 +493,68 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
         rowId,
         columnKey,
       });
+    },
+  );
+
+  fastify.post(
+    "/api/batch-analyses/:analysisId/chat",
+    {
+      schema: {
+        operationId: RouteId.AskBatchAnalysis,
+        description:
+          "Ask a one-shot question about the extracted grid; the answer cites the cells it relied on",
+        tags: ["Batch Analysis"],
+        params: AnalysisParamsSchema,
+        body: z.object({ question: z.string().trim().min(1).max(2000) }),
+        response: constructResponseSchema(
+          z.object({
+            answer: z.string(),
+            references: z.array(
+              z.object({ rowId: z.string(), columnKey: z.string() }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request) => {
+      const { analysisId } = request.params;
+      await assertAnalysisVisible(request, analysisId);
+      const analysis = await BatchAnalysisModel.findById({
+        analysisId,
+        organizationId: request.organizationId,
+      });
+      if (!analysis) throw new ApiError(404, "Analysis not found");
+
+      const agent = await AgentModel.findById(analysis.agentId);
+      if (!agent) {
+        throw new ApiError(409, "Analysis agent no longer exists");
+      }
+      const resolvedModel = await resolveBatchAnalysisModel({
+        agent,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        source: "batch_analysis:chat",
+      });
+      if (!resolvedModel.ok) {
+        throw new ApiError(409, resolvedModel.error);
+      }
+
+      const rows = await BatchAnalysisModel.findRows(analysisId);
+      const cells = await BatchAnalysisModel.findCellsByRows(
+        rows.map((row) => row.id),
+      );
+      const result = await askGrid({
+        model: resolvedModel.model,
+        temperature: resolvedModel.temperature,
+        question: request.body.question,
+        analysis,
+        rows,
+        cells,
+      });
+      if (!result.ok) {
+        throw new ApiError(502, result.error);
+      }
+      return { answer: result.answer, references: result.references };
     },
   );
 

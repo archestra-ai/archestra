@@ -8,6 +8,7 @@ import {
   Globe,
   LayoutGrid,
   Mail,
+  MessageSquare,
   Minimize2,
   Route,
   ShieldCheck,
@@ -143,6 +144,7 @@ function getSourceIcon({
     "app:llm_complete": <LayoutGrid className="h-3 w-3 shrink-0" />,
     "app:recording_enhancement": <Sparkles className="h-3 w-3 shrink-0" />,
     "batch_analysis:cell": <Table className="h-3 w-3 shrink-0" />,
+    "batch_analysis:chat": <MessageSquare className="h-3 w-3 shrink-0" />,
   };
 
   return sourceIcon[source];

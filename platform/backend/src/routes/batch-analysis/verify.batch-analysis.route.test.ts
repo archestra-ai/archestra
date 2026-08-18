@@ -148,9 +148,7 @@ describe("cell verification", () => {
     });
     const detailCell = detail
       .json()
-      .cells.find(
-        (c: { columnKey: string }) => c.columnKey === "topic",
-      );
+      .cells.find((c: { columnKey: string }) => c.columnKey === "topic");
     expect(detailCell.verifiedByName).toBe(user.name);
 
     const unverified = await app.inject({

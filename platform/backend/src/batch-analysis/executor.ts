@@ -1,21 +1,15 @@
-import {
-  anthropicThinksByDefault,
-  providerHasMultipleSurfaces,
-} from "@archestra/shared";
 import { APICallError } from "ai";
-import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
-import ModelModel from "@/models/model";
 import type {
-  BatchAnalysisCellFlag,
   BatchAnalysis,
+  BatchAnalysisCellFlag,
   BatchAnalysisCitation,
   BatchAnalysisColumn,
   BatchAnalysisRow,
 } from "@/types";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
-import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import { resolveBatchAnalysisModel } from "./llm";
 import {
   BATCH_ANALYSIS_RESULT_TAG,
   buildBatchAnalysisSystemPrompt,
@@ -89,41 +83,16 @@ export async function executeRow(params: {
     return { outcomes: failAll(columnKeys, "Analysis agent no longer exists") };
   }
 
-  const llm = await resolveAgentLlmOrDefault({
+  const resolvedModel = await resolveBatchAnalysisModel({
     agent,
     organizationId: analysis.organizationId,
     userId: analysis.createdBy,
-  });
-
-  if (isApiKeyRequired(llm.provider, llm.apiKey)) {
-    return {
-      outcomes: failAll(
-        columnKeys,
-        `No API key configured for provider ${llm.provider}`,
-      ),
-    };
-  }
-
-  // Providers that serve one catalog over two wire formats (GitHub Copilot)
-  // record each model's surface on the synced model row; without it a
-  // Responses-API-only model (codex) is sent to /chat/completions and the
-  // provider rejects the call. Same lookup createLLMModelForAgent does.
-  const supportedEndpoints = providerHasMultipleSurfaces(llm.provider)
-    ? ((await ModelModel.findByProviderAndModelId(llm.provider, llm.modelName))
-        ?.supportedEndpoints ?? null)
-    : null;
-
-  const model = createLLMModel({
-    provider: llm.provider,
-    apiKey: llm.apiKey,
-    modelName: llm.modelName,
-    baseUrl: llm.baseUrl,
-    agentId: agent.id,
-    userId: analysis.createdBy,
     source: "batch_analysis:cell",
-    chatApiKeyId: llm.chatApiKeyId,
-    supportedEndpoints,
   });
+  if (!resolvedModel.ok) {
+    return { outcomes: failAll(columnKeys, resolvedModel.error) };
+  }
+  const { model } = resolvedModel;
 
   let raw: string | null;
   try {
@@ -139,7 +108,7 @@ export async function executeRow(params: {
       }),
       // Extraction, not composition — low temperature keeps repeat runs over the
       // same source comparable, which matters when a grid is re-run.
-      temperature: extractionTemperature(llm.provider, llm.modelName),
+      temperature: resolvedModel.temperature,
       maxOutputTokens: 4096,
     });
   } catch (error) {
@@ -253,28 +222,4 @@ function describeModelCallError(error: unknown): string {
   }
   if (!detail || detail === message) return message;
   return `${message} — ${detail.slice(0, 300)}`;
-}
-
-/**
- * Reasoning models reject an explicit sampling temperature outright —
- * Anthropic 400s with "temperature may only be set to 1 when thinking is
- * enabled or in adaptive mode" on its thinking-by-default generations, and
- * OpenAI's reasoning generations 400 on any value but the default. For those,
- * omit the knob; everywhere else keep 0 for run-to-run comparability.
- */
-function extractionTemperature(
-  provider: string,
-  modelName: string,
-): number | undefined {
-  if (provider === "anthropic" && anthropicThinksByDefault(modelName)) {
-    return undefined;
-  }
-  const id = modelName.toLowerCase();
-  if (
-    provider === "openai" &&
-    (/^o\d/.test(id) || (id.startsWith("gpt-5") && !id.includes("gpt-5-chat")))
-  ) {
-    return undefined;
-  }
-  return 0;
 }

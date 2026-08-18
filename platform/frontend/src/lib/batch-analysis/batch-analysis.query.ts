@@ -12,6 +12,7 @@ const {
   addBatchAnalysisRows,
   deleteBatchAnalysisRow,
   startBatchAnalysisRun,
+  askBatchAnalysis,
   getBatchAnalysisTemplates,
   retryBatchAnalysisCell,
   verifyBatchAnalysisCells,
@@ -183,6 +184,22 @@ export function useRetryBatchAnalysisCell(analysisId: string) {
         queryKey: ["batch-analyses", analysisId],
       });
       toast.success("Cell queued for retry");
+    },
+  });
+}
+
+export function useAskBatchAnalysis(analysisId: string) {
+  return useMutation({
+    mutationFn: async (question: string) => {
+      const { data, error } = await askBatchAnalysis({
+        path: { analysisId },
+        body: { question },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
     },
   });
 }

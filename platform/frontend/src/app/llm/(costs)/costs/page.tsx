@@ -172,9 +172,9 @@ export default function StatisticsPage() {
     );
     if (success) {
       setTimeframe(data);
-      const customRange = parseCustomTimeframe(data);
-      setCustomFrom(customRange?.from);
-      setCustomTo(customRange?.to);
+      const customRange = parseCustomStatisticsTimeframe(data);
+      setCustomFrom(customRange?.startTime);
+      setCustomTo(customRange?.endTime);
     } else {
       setTimeframe("1h");
       setCustomFrom(undefined);
@@ -1322,28 +1322,4 @@ function StatisticsTablePanel({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-function parseCustomTimeframe(timeframe: StatisticsTimeFrame):
-  | {
-      from: Date;
-      to: Date;
-    }
-  | undefined {
-  if (!timeframe.startsWith("custom:")) {
-    return undefined;
-  }
-
-  const [from, to] = timeframe.replace("custom:", "").split("_");
-  if (!from || !to) {
-    return undefined;
-  }
-
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
-  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-    return undefined;
-  }
-
-  return { from: fromDate, to: toDate };
 }

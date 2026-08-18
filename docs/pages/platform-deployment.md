@@ -102,7 +102,6 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
-  --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
 ```
@@ -220,7 +219,7 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 
 **Kubernetes Settings**:
 
-- `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace)
+- `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace). Create a custom namespace before installing; the chart grants the platform ServiceAccount access to it.
 - `archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster` - Use in-cluster configuration (recommended when running inside K8s)
 - `archestra.orchestrator.kubernetes.clusterDomain` - Kubernetes cluster DNS domain for internal service URL construction (default: cluster.local)
 - `archestra.orchestrator.kubernetes.kubeconfig.enabled` - Enable mounting kubeconfig from a secret
@@ -456,26 +455,37 @@ When the worker is disabled (`archestra.worker.enabled: false`), background jobs
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
 - `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
-For external PostgreSQL (recommended for production):
+For external PostgreSQL, store the complete connection URL in a Kubernetes
+Secret. This keeps credentials out of shell history and Helm release values.
+The example below expects `archestra-database` to contain a `url` key:
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set postgresql.enabled=false \
-  --set postgresql.external_database_url=postgresql://user:password@host:5432/database \
-  --wait
+```yaml
+postgresql:
+  enabled: false
+
+archestra:
+  envWithValueFrom:
+    - name: ARCHESTRA_DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: archestra-database
+          key: url
+  migrationJob:
+    envWithValueFrom:
+      - name: ARCHESTRA_DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: archestra-database
+            key: url
 ```
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
 The bundled PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The bundled instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
 
-During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band.
+During Helm upgrades, the chart runs `node ./scripts/migrate-with-lock.mjs` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band. This also disables migrations during web pod startup.
 
-For external Postgres, the simplest setup is a complete `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
+Alternatively, set `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
 
 If your deployment intentionally keeps the password in a separate Secret and uses `ARCHESTRA_DATABASE_URL=postgresql://user:$(PGPASSWORD)@host:5432/database`, provide `PGPASSWORD` to the migration Job through chart values:
 
@@ -689,6 +699,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Format: `postgresql://user:password@host:5432/database`
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
+
+- **`ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP`** - Runs database migrations before backend startup.
+  - Default: `true`
+  - Set to `false` only when your deployment pipeline applies migrations before rollout.
 
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
@@ -1376,6 +1390,34 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
 - **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
   - Default: `600`
   - Set to `0` to disable.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED`** - Offers idle hibernation on this deployment. Hibernation is a beta feature and ships off by default.
+  - Default: unset (falls back to the `ARCHESTRA_BETA` master switch)
+  - Set to `true` to offer the feature; an explicit `false` keeps it off even with `ARCHESTRA_BETA` on.
+  - Organizations still enable it in **Settings > MCP**; it requires an Enterprise license.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`** - How long an MCP server pod can sit unused before the platform hibernates it, with nonzero values floored at 120 seconds so servers are never hibernated between normal consecutive tool calls.
+  - Default: `1800` (30 minutes)
+  - Sets the idle window only. Enable hibernation in **Settings > MCP**; it requires an Enterprise license.
+  - Set to `0` to disable hibernation platform-wide, regardless of the organization setting.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without calling the container registry.
+  - Default: `true`
+  - Only runs while idle hibernation is enabled; set to `false` to stop pre-pulling and keep hibernation.
+  - The DaemonSet takes a pod slot on every node the MCP servers can be scheduled on.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE`** - Image for the pre-pull DaemonSet's own containers.
+  - Default: `docker.io/library/busybox:1.36-musl`.
+  - The image must provide a statically linked `/bin/busybox`. The DaemonSet copies it into MCP images that may use another libc.
+  - Independent of the MCP server base image on purpose, so a pinned or custom base image cannot break pre-pulling.
+  - Point it at a static private mirror when your cluster cannot pull from Docker Hub.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP`** - Same-namespace Helm anchor used to remove runtime-created MCP resources on uninstall. The chart sets this automatically.
+
+- **`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`** - Names the cluster objects Archestra creates for itself outside the chart, such as the image pre-pull DaemonSet.
+  - Default: injected by the Helm chart. Set it by hand only when you deploy without the chart.
+  - Two releases can then share a namespace without fighting over one object.
+  - When it is unset, those objects are not created at all.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   and,
   asc,
@@ -6,13 +7,12 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   ne,
   notInArray,
-  isNotNull,
   or,
   sql,
 } from "drizzle-orm";
-import { createHash } from "node:crypto";
 import db, { schema } from "@/database";
 import type {
   BatchAnalysis,
@@ -495,10 +495,7 @@ class BatchAnalysisModel {
       .where(
         and(
           inArray(schema.batchAnalysisCellsTable.rowId, rowIds),
-          inArray(
-            schema.batchAnalysisCellsTable.columnKey,
-            params.columnKeys,
-          ),
+          inArray(schema.batchAnalysisCellsTable.columnKey, params.columnKeys),
         ),
       );
   }
@@ -866,7 +863,6 @@ class BatchAnalysisModel {
 }
 
 export default BatchAnalysisModel;
-
 
 /** Above this many verified cells the audit snapshot keeps only the digest. */
 const VERIFICATION_AUDIT_MAP_LIMIT = 200;

@@ -215,7 +215,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, user, headers, organizationId }, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -224,7 +224,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         user.id,
         isMcpServerAdmin,
-        organizationId,
       );
 
       if (!server) {

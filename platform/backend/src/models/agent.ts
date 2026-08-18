@@ -48,8 +48,8 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import {
   type Agent,
   type AgentScope,
-  type AgentToolRef,
   type AgentScopeFilter,
+  type AgentToolRef,
   type AgentType,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,

@@ -997,7 +997,6 @@ class McpServerModel {
     id: string,
     userId?: string,
     isMcpServerAdmin?: boolean,
-    organizationId?: string,
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {

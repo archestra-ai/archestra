@@ -119,7 +119,10 @@ describe("McpServerUsageTab", () => {
 
   it("explains the empty case instead of rendering a bare table", () => {
     render(
-      <McpServerUsageTab serversForCatalog={[server([])]} autoModeAgents={[]} />,
+      <McpServerUsageTab
+        serversForCatalog={[server([])]}
+        autoModeAgents={[]}
+      />,
     );
 
     expect(

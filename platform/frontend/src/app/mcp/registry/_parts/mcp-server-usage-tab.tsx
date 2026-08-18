@@ -31,7 +31,9 @@ export function McpServerUsageTab({
 }: {
   serversForCatalog: McpServerFromApi[];
   /** Org-wide auto-mode roster, fetched once by the parent (useAutoModeAgents). */
-  autoModeAgents: archestraApiTypes.GetMcpServerAutoModeAgentsResponses["200"] | undefined;
+  autoModeAgents:
+    | archestraApiTypes.GetMcpServerAutoModeAgentsResponses["200"]
+    | undefined;
 }) {
   const { all, assigned, autoOnly } = deriveAgentUsage({
     serversForCatalog,

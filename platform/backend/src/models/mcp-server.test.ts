@@ -314,7 +314,7 @@ describe("McpServerModel", () => {
       const found = mustExist(withOrg.find((s) => s.id === server.id));
       expect(found).not.toHaveProperty("autoModeAgents");
       const single = mustExist(
-        await McpServerModel.findById(server.id, undefined, true, org.id),
+        await McpServerModel.findById(server.id, undefined, true),
       );
       expect(single).not.toHaveProperty("autoModeAgents");
     });

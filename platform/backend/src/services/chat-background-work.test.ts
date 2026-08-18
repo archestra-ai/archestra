@@ -345,6 +345,148 @@ describe("chat background work", () => {
     );
   });
 
+  test("a task that outlives its TTL delivers exactly once: the settle owns it if it wins, the reaper if it flipped first", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const { user, org, agent, conversation } = await makeConversation({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    });
+
+    let resolveRun: (v: Awaited<ReturnType<typeof executeA2AMessage>>) => void;
+    executeMock.mockImplementation((execParams) => {
+      if (execParams.messages !== undefined) {
+        // Headless wake turns.
+        return Promise.resolve({
+          messageId: "wake",
+          text: "ack",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "wake",
+            role: "assistant",
+            parts: [{ type: "text", text: "ack" }],
+          },
+        } as Awaited<ReturnType<typeof executeA2AMessage>>);
+      }
+      return new Promise((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+
+    const spawned = await chatBackgroundWork.spawnDelegation(
+      spawnParams({
+        conversationId: conversation.id,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    );
+    if (spawned.kind !== "task") throw new Error("expected a detached task");
+
+    // The task outlives its TTL while genuinely still running…
+    await db
+      .update(schema.mcpGatewayTasksTable)
+      .set({ expiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(schema.mcpGatewayTasksTable.id, spawned.taskId));
+    // …and the reaper flips it to failed and delivers the failure (plus the
+    // headless wake reply).
+    const swept = await mcpGatewayTaskReaper.sweep();
+    expect(swept.failed).toBe(1);
+    const afterReaper = await MessageModel.findByConversation(conversation.id);
+    expect(afterReaper).toHaveLength(2);
+    expect(afterReaper[0].content.metadata.backgroundTask.status).toBe(
+      "failed",
+    );
+
+    // The live execution then finishes anyway. Its settle write loses to the
+    // reaper's, so it must deliver NOTHING — no second notification.
+    // biome-ignore lint/style/noNonNullAssertion: assigned synchronously by the mock
+    resolveRun!({
+      messageId: "late",
+      text: "late result",
+      finishReason: "stop",
+      responseUiMessage: { id: "late", role: "assistant", parts: [] },
+    } as Awaited<ReturnType<typeof executeA2AMessage>>);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+      2,
+    );
+  });
+
+  test("a task settling after its TTL but before the reaper still delivers its real outcome", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const { user, org, agent, conversation } = await makeConversation({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    });
+
+    let resolveRun: (v: Awaited<ReturnType<typeof executeA2AMessage>>) => void;
+    executeMock.mockImplementation((execParams) => {
+      if (execParams.messages !== undefined) {
+        return Promise.resolve({
+          messageId: "wake",
+          text: "ack",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "wake",
+            role: "assistant",
+            parts: [{ type: "text", text: "ack" }],
+          },
+        } as Awaited<ReturnType<typeof executeA2AMessage>>);
+      }
+      return new Promise((resolve) => {
+        resolveRun = resolve;
+      });
+    });
+
+    const spawned = await chatBackgroundWork.spawnDelegation(
+      spawnParams({
+        conversationId: conversation.id,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    );
+    if (spawned.kind !== "task") throw new Error("expected a detached task");
+
+    // Expired, but the reaper has not swept yet — the settle write still
+    // wins the row, so the outcome is delivered (client-facing reads would
+    // already refuse this row; delivery must not use their expiry filter).
+    await db
+      .update(schema.mcpGatewayTasksTable)
+      .set({ expiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(schema.mcpGatewayTasksTable.id, spawned.taskId));
+    // biome-ignore lint/style/noNonNullAssertion: assigned synchronously by the mock
+    resolveRun!({
+      messageId: "late",
+      text: "the late findings",
+      finishReason: "stop",
+      responseUiMessage: { id: "late", role: "assistant", parts: [] },
+    } as Awaited<ReturnType<typeof executeA2AMessage>>);
+
+    await expect
+      .poll(
+        async () =>
+          (await MessageModel.findByConversation(conversation.id)).length,
+        { timeout: 5_000 },
+      )
+      .toBe(2);
+    const [notification] = await MessageModel.findByConversation(
+      conversation.id,
+    );
+    expect(notification.content.metadata.backgroundTask.status).toBe(
+      "completed",
+    );
+    expect(notification.content.parts[0].text).toContain("the late findings");
+  });
+
   test("the reaper delivers a failure notification for an expired linked task", async ({
     makeUser,
     makeOrganization,

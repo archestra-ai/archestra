@@ -97,6 +97,7 @@ import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
 import renderServiceRoutes from "@/services/apps/app-recording-render-service";
 import {
@@ -1691,6 +1692,14 @@ function registerWebServerShutdown(
             { error },
             "Failed to fail in-flight A2A task runs",
           );
+        }),
+        // Give tracked fire-and-forget work (a background-task wake delivery
+        // finishing its writes, for example) a chance to complete — bounded
+        // by the surrounding race, so long-tail work is abandoned rather
+        // than stalling shutdown. beginShutdown() above already stops such
+        // work from starting a new headless turn.
+        drainBackgroundWork().catch((error) => {
+          fastify.log.error({ error }, "Failed to drain background work");
         }),
       ]),
       new Promise<void>((resolve) =>

@@ -45,9 +45,12 @@ import {
 interface ConversationWakeParams {
   conversationId: string;
   /**
-   * Stable message content id (e.g. `bg-task-<taskId>`) — the persistence
-   * layer dedups by it, so a browser resubmitting the same notification can
-   * never double-persist it.
+   * Stable message content id (e.g. `bg-task-<taskId>`). The write below
+   * does NOT dedup by it — each event delivers exactly once by ownership
+   * (task-settle wins, reaper rows, one run per trigger fire). The stable id
+   * is for the BROWSER path: a client resubmitting the notification through
+   * POST /api/chat carries this id, and the chat route's persistence dedups
+   * it against the already-persisted row.
    */
   messageId: string;
   text: string;

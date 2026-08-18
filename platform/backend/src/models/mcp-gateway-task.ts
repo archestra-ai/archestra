@@ -77,6 +77,13 @@ export default class McpGatewayTaskModel {
     taskId: string;
     agentId: string;
     principal: string;
+    /**
+     * Serve the row even past its expiry. Client-facing reads must NOT set
+     * this (expired rows answer not-found by design); the harness settle
+     * path does — a delegation that finishes after its TTL still owns its
+     * outcome and must deliver it.
+     */
+    includeExpired?: boolean;
   }): Promise<McpGatewayTask | null> {
     const [row] = await db
       .select()
@@ -86,7 +93,9 @@ export default class McpGatewayTaskModel {
           eq(schema.mcpGatewayTasksTable.id, params.taskId),
           eq(schema.mcpGatewayTasksTable.agentId, params.agentId),
           eq(schema.mcpGatewayTasksTable.principal, params.principal),
-          gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
+          params.includeExpired
+            ? undefined
+            : gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),
       )
       .limit(1);

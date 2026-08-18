@@ -104,7 +104,13 @@ class ChatBackgroundWorkService {
         kind: params.kind ?? "delegation",
         targetAgentName: params.targetAgentName,
       },
-      onSettled: ({ taskId }) => {
+      onSettled: ({ taskId, settled }) => {
+        if (!settled) {
+          // Another writer owns the outcome: a cancel (deliberately silent)
+          // or the reaper (which delivers the failure itself). Delivering
+          // here too would double-notify the conversation.
+          return;
+        }
         // Registered as background work so graceful shutdown (and the test
         // harness's teardown) can drain an in-flight delivery — it now spans
         // the wake grace window and possibly a whole headless turn.
@@ -181,17 +187,19 @@ class ChatBackgroundWorkService {
     agentId: string;
     principal: string;
   }): Promise<void> {
-    // The row is the source of truth — a concurrent cancel may have won over
-    // the in-process outcome.
+    // Only reached when OUR settle write won the row (see onSettled), so the
+    // outcome is ours to deliver — including for a task that ran past its
+    // TTL, which client-facing reads would already refuse.
     const task = await McpGatewayTaskModel.getForPrincipal({
       taskId: params.taskId,
       agentId: params.agentId,
       principal: params.principal,
+      includeExpired: true,
     });
     if (!task) {
       logger.warn(
         { taskId: params.taskId },
-        "Settled background task row not found (expired?); dropping delivery",
+        "Settled background task row not found (purged?); dropping delivery",
       );
       return;
     }

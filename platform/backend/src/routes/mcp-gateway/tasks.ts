@@ -129,11 +129,13 @@ export async function runToolCallMaybeTask(params: {
   context?: McpGatewayTaskContext;
   /**
    * Fired once after the detached continuation has attempted to settle the
-   * row (completed, failed, or a concurrent cancel won). Fires only when the
-   * call actually became a task. The row is the source of truth — callers
-   * must re-read it rather than trust any in-process outcome.
+   * row. Fires only when the call actually became a task. `settled` reports
+   * whether THIS continuation's write won the row — false means another
+   * writer (a cancel, or the reaper failing an expired row) already owns the
+   * outcome, and its delivery path owns any follow-up. Exactly one party
+   * sees ownership, so delivery can never happen twice for one row.
    */
-  onSettled?: (params: { taskId: string }) => void;
+  onSettled?: (params: { taskId: string; settled: boolean }) => void;
 }): Promise<Record<string, unknown>> {
   const {
     eligible,
@@ -219,11 +221,21 @@ export async function runToolCallMaybeTask(params: {
       };
     }
 
+    // Whether this continuation's write won the row (false: a concurrent
+    // cancel or the reaper got there first, or the write itself failed —
+    // either way the outcome is not ours to deliver).
+    let settled = false;
     try {
       if (outcome.kind === "completed") {
-        await McpGatewayTaskModel.completeIfWorking(task.id, outcome.result);
+        settled = await McpGatewayTaskModel.completeIfWorking(
+          task.id,
+          outcome.result,
+        );
       } else {
-        await McpGatewayTaskModel.failIfWorking(task.id, outcome.error);
+        settled = await McpGatewayTaskModel.failIfWorking(
+          task.id,
+          outcome.error,
+        );
       }
     } catch (error) {
       logger.error(
@@ -233,7 +245,7 @@ export async function runToolCallMaybeTask(params: {
     } finally {
       mcpGatewayTaskRunner.release(task.id);
       try {
-        onSettled?.({ taskId: task.id });
+        onSettled?.({ taskId: task.id, settled });
       } catch (error) {
         logger.error(
           { agentId, taskId: task.id, toolName, err: error },

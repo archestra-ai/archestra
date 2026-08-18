@@ -131,6 +131,7 @@ import {
   Xai,
   Zhipuai,
 } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { msTeamsWebhookRoutes } from "./routes/chatops";
@@ -1691,6 +1692,14 @@ function registerWebServerShutdown(
             { error },
             "Failed to fail in-flight A2A task runs",
           );
+        }),
+        // Give tracked fire-and-forget work (a background-task wake delivery
+        // finishing its writes, for example) a chance to complete — bounded
+        // by the surrounding race, so long-tail work is abandoned rather
+        // than stalling shutdown. beginShutdown() above already stops such
+        // work from starting a new headless turn.
+        drainBackgroundWork().catch((error) => {
+          fastify.log.error({ error }, "Failed to drain background work");
         }),
       ]),
       new Promise<void>((resolve) =>

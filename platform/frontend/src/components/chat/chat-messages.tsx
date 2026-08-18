@@ -56,6 +56,12 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import {
+  getWakeNotification,
+  isQuietWakeReply,
+  QuietWakeLine,
+  WakeNotificationChip,
+} from "@/components/chat/background-task-notification";
+import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
@@ -634,6 +640,47 @@ export function ChatMessages({
               }
 
               const { message, messageIndex: idx } = item;
+
+              // A quiet monitor check's no-change reply collapses into the
+              // muted line its notification renders (below) — but only when
+              // that notification actually precedes it; a reply orphaned by
+              // filtering renders normally rather than vanishing.
+              if (
+                isQuietWakeReply(message) &&
+                getWakeNotification(messages[idx - 1] ?? { role: "" })?.kind ===
+                  "scheduledWakeup"
+              ) {
+                return <div key={message.id || idx} className="hidden" />;
+              }
+
+              // Harness wake notifications (settled background tasks,
+              // scheduled wakeups) carry their payload as a user-role text
+              // part (for the model); the human sees a chip instead of a
+              // user bubble.
+              const wakeNote = getWakeNotification(message);
+              if (wakeNote) {
+                // Quiet wake whose reply led with the no-change sentinel:
+                // the pair renders as one muted line.
+                if (
+                  wakeNote.kind === "scheduledWakeup" &&
+                  wakeNote.quiet &&
+                  isQuietWakeReply(messages[idx + 1] ?? { role: "" })
+                ) {
+                  return (
+                    <QuietWakeLine
+                      key={message.id || idx}
+                      label={wakeNote.label}
+                    />
+                  );
+                }
+                return (
+                  <WakeNotificationChip
+                    key={message.id || idx}
+                    notification={wakeNote}
+                  />
+                );
+              }
+
               const isDimmed =
                 editingMessageIndex !== -1 && idx > editingMessageIndex;
 

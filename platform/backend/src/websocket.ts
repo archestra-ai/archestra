@@ -1060,6 +1060,25 @@ class WebSocketService {
       },
     );
   }
+
+  broadcastConversationWake(
+    ownerUserId: string,
+    organizationId: string,
+    payload: {
+      conversationId: string;
+      messageId: string;
+      text: string;
+      metadata: Record<string, unknown>;
+    },
+  ): void {
+    if (!this.wss) return;
+    this.sendToClients({ type: "conversation_wake", payload }, (client) => {
+      const ctx = this.clientContexts.get(client);
+      return (
+        ctx?.userId === ownerUserId && ctx.organizationId === organizationId
+      );
+    });
+  }
 }
 
 const websocketService = new WebSocketService();
@@ -1092,6 +1111,28 @@ export function broadcastConversationUpdated(
     ownerUserId,
     organizationId,
     conversationId,
+  );
+}
+
+/**
+ * Ask clients viewing a conversation to hand control back to the model: a
+ * background task settled and its notification message is persisted. Scoped
+ * to the owner's (user, org) like conversation_updated.
+ */
+export function broadcastConversationWake(
+  ownerUserId: string,
+  organizationId: string,
+  payload: {
+    conversationId: string;
+    messageId: string;
+    text: string;
+    metadata: Record<string, unknown>;
+  },
+): void {
+  websocketService.broadcastConversationWake(
+    ownerUserId,
+    organizationId,
+    payload,
   );
 }
 

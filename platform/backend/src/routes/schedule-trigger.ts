@@ -400,6 +400,18 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Conversation-targeted wakeups (schedule_wakeup tool) are one-shot or
+      // cron rows under a cron-XOR-runAt CHECK this cron-only surface cannot
+      // express: writing a cron onto a runAt row would violate the CHECK
+      // (a raw 500), and validation would reject the row's own null cron.
+      // They are managed from their conversation; deleting here still works.
+      if (existing.conversationId) {
+        throw new ApiError(
+          400,
+          "This scheduled task is a conversation wakeup — manage it from its chat conversation",
+        );
+      }
+
       const cronExpression = body.cronExpression ?? existing.cronExpression;
       const timezone = body.timezone ?? existing.timezone;
       const messageTemplate = body.messageTemplate ?? existing.messageTemplate;

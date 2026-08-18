@@ -1,7 +1,8 @@
-import { and, eq, gt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   McpGatewayTask,
+  McpGatewayTaskContext,
   McpGatewayTaskStatus,
 } from "@/types/mcp-gateway-task";
 
@@ -21,6 +22,8 @@ export default class McpGatewayTaskModel {
     principal: string;
     toolName: string;
     ttlMs: number;
+    conversationId?: string;
+    context?: McpGatewayTaskContext;
   }): Promise<McpGatewayTask> {
     const [row] = await db
       .insert(schema.mcpGatewayTasksTable)
@@ -30,9 +33,34 @@ export default class McpGatewayTaskModel {
         toolName: params.toolName,
         status: "working",
         expiresAt: new Date(Date.now() + params.ttlMs),
+        conversationId: params.conversationId ?? null,
+        context: params.context ?? null,
       })
       .returning();
     return row;
+  }
+
+  /**
+   * Harness tasks tied to a chat conversation, newest first, scoped to the
+   * caller's principal — same isolation rule as getForPrincipal, but listing
+   * includes settled (even already-expired) rows so recent outcomes stay
+   * visible to `list_background_tasks`.
+   */
+  static async listForConversation(params: {
+    conversationId: string;
+    principal: string;
+  }): Promise<McpGatewayTask[]> {
+    return db
+      .select()
+      .from(schema.mcpGatewayTasksTable)
+      .where(
+        and(
+          eq(schema.mcpGatewayTasksTable.conversationId, params.conversationId),
+          eq(schema.mcpGatewayTasksTable.principal, params.principal),
+        ),
+      )
+      .orderBy(desc(schema.mcpGatewayTasksTable.createdAt))
+      .limit(50);
   }
 
   /**
@@ -44,6 +72,13 @@ export default class McpGatewayTaskModel {
     taskId: string;
     agentId: string;
     principal: string;
+    /**
+     * Serve the row even past its expiry. Client-facing reads must NOT set
+     * this (expired rows answer not-found by design); the harness settle
+     * path does — a delegation that finishes after its TTL still owns its
+     * outcome and must deliver it.
+     */
+    includeExpired?: boolean;
   }): Promise<McpGatewayTask | null> {
     const [row] = await db
       .select()
@@ -53,7 +88,9 @@ export default class McpGatewayTaskModel {
           eq(schema.mcpGatewayTasksTable.id, params.taskId),
           eq(schema.mcpGatewayTasksTable.agentId, params.agentId),
           eq(schema.mcpGatewayTasksTable.principal, params.principal),
-          gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
+          params.includeExpired
+            ? undefined
+            : gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),
       )
       .limit(1);
@@ -103,6 +140,12 @@ export default class McpGatewayTaskModel {
   static async cancelForPrincipal(params: {
     taskId: string;
     principal: string;
+    /**
+     * Additionally require the task to belong to this conversation — the
+     * chat tool's scope. The HTTP cancel route omits it (principal-only, its
+     * historical contract).
+     */
+    conversationId?: string;
   }): Promise<boolean> {
     const updated = await db
       .update(schema.mcpGatewayTasksTable)
@@ -111,6 +154,12 @@ export default class McpGatewayTaskModel {
         and(
           eq(schema.mcpGatewayTasksTable.id, params.taskId),
           eq(schema.mcpGatewayTasksTable.principal, params.principal),
+          params.conversationId
+            ? eq(
+                schema.mcpGatewayTasksTable.conversationId,
+                params.conversationId,
+              )
+            : undefined,
           eq(schema.mcpGatewayTasksTable.status, "working"),
           gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),
@@ -130,9 +179,12 @@ export default class McpGatewayTaskModel {
    * running one. The `working` guard means a still-live execution that
    * settles concurrently wins exactly as it does against cancellation.
    * Idempotent and replica-safe; every backend pod may sweep.
+   *
+   * Returns the flipped rows (not a count) so the reaper can deliver a
+   * failure notification for harness tasks that carry a conversation link.
    */
-  static async failExpired(): Promise<number> {
-    const updated = await db
+  static async failExpired(): Promise<McpGatewayTask[]> {
+    return db
       .update(schema.mcpGatewayTasksTable)
       .set({
         status: "failed",
@@ -148,8 +200,7 @@ export default class McpGatewayTaskModel {
           lte(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),
       )
-      .returning({ id: schema.mcpGatewayTasksTable.id });
-    return updated.length;
+      .returning();
   }
 
   /**

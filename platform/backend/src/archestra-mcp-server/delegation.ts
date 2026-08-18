@@ -18,12 +18,24 @@ import {
   ToolModel,
 } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
+import { chatBackgroundWork } from "@/services/chat-background-work";
 import type { Agent } from "@/types";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({
   message: z.string().trim().min(1, "message is required."),
+  background: z
+    .boolean()
+    .optional()
+    .describe(
+      "Run this delegation as a background task instead of waiting for the result. " +
+        "Returns immediately with a task id; the subagent's result arrives later in this " +
+        "conversation as a [Background task ...] notification message, at which point you " +
+        "regain control and can react to it. Use for long-running work (research, reports, " +
+        "multi-step jobs) so you can keep helping the user meanwhile. You can start several " +
+        "background delegations in parallel.",
+    ),
 });
 
 // The canonical delegation input schema, reused for Auto-mode synthesized
@@ -112,12 +124,16 @@ export async function getAgentTools(context: {
     "Fetched agent delegation tools from database",
   );
 
-  // Convert DB tools to MCP Tool format
+  // Convert DB tools to MCP Tool format. The input schema is always the
+  // canonical delegation schema, not the row's persisted `parameters`: rows
+  // minted before `background` existed would otherwise advertise a surface
+  // without it forever (the dispatch path validates against the canonical
+  // schema either way).
   return accessibleTools.map((t) =>
     buildDelegationToolDescriptor({
       name: t.tool.name,
       targetAgent: t.targetAgent,
-      inputSchema: t.tool.parameters as Tool["inputSchema"],
+      inputSchema: DELEGATION_INPUT_JSON_SCHEMA as Tool["inputSchema"],
     }),
   );
 }
@@ -184,6 +200,59 @@ export async function handleDelegation(
   // The caller's ancestor path, which the executor checks for cycles. A root
   // caller carries no chain yet, so it is the first hop.
   const parentDelegationChain = context.delegationChain || context.agentId;
+
+  // Background mode: hand the child run to the chat background-work harness
+  // and return the task handle to the model immediately. Only meaningful when
+  // a persisted conversation exists to deliver the result back into.
+  if (args?.background === true) {
+    if (!context.conversationId || !isRealUser) {
+      return errorResult(
+        "Background delegation requires an interactive chat conversation. Re-run without background: true.",
+      );
+    }
+    try {
+      const spawned = await chatBackgroundWork.spawnDelegation({
+        conversationId: context.conversationId,
+        // biome-ignore lint/style/noNonNullAssertion: guarded above by the agentId check
+        agentId: context.agentId!,
+        targetAgentId: target.id,
+        targetAgentName: target.name,
+        toolName,
+        message,
+        // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
+        userId: userId!,
+        organizationId,
+        sessionId:
+          context.sessionId || context.conversationId || context.isolationKey,
+        parentDelegationChain,
+        // Same billing/trust semantics as the synchronous path below.
+        callerEnvironmentId: environmentId,
+        parentContextIsTrusted: context.contextIsTrusted,
+      });
+      if (spawned.kind === "inline") {
+        // The child finished before the detach threshold — return its result
+        // directly, exactly like a synchronous delegation.
+        return successResult(spawned.resultText);
+      }
+      logger.info(
+        { agentId, targetAgentId: target.id, taskId: spawned.taskId },
+        "Started background agent delegation",
+      );
+      return successResult(
+        `Background task started (taskId: ${spawned.taskId}). Subagent "${target.name}" is working on it now. ` +
+          `The result will arrive in this conversation as a [Background task ...] notification message — ` +
+          `do NOT wait or poll for it. Tell the user what you kicked off and continue helping them.`,
+      );
+    } catch (error) {
+      logger.error(
+        { error, agentId, targetAgentId: target.id },
+        "Failed to start background agent delegation",
+      );
+      return errorResult(
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    }
+  }
 
   try {
     // Use sessionId from context, or fall back to the conversation/execution

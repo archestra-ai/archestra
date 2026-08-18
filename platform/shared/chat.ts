@@ -607,6 +607,45 @@ export type ChatOpenedAppMetadata = z.infer<typeof ChatOpenedAppMetadataSchema>;
 export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
 export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
 
+/**
+ * Marks a harness wake notification for a settled background task (a
+ * delegation or skill run started with `background: true`). Messages carrying
+ * this metadata are persisted with `role: "user"` but rendered as a centered
+ * chip instead of a user bubble.
+ */
+export const ChatBackgroundTaskMetadataSchema = z.object({
+  taskId: z.string(),
+  status: z.enum(["completed", "failed"]),
+  agentName: z.string(),
+  toolName: z.string(),
+});
+export type ChatBackgroundTaskMetadata = z.infer<
+  typeof ChatBackgroundTaskMetadataSchema
+>;
+
+/**
+ * Marks a harness wake notification fired by a scheduled wakeup
+ * (`schedule_wakeup` tool): a one-shot reminder or a recurring check-in
+ * delivered back into the conversation it was created in.
+ */
+export const ChatScheduledWakeupMetadataSchema = z.object({
+  triggerId: z.string(),
+  runId: z.string(),
+  name: z.string(),
+  recurring: z.boolean(),
+  /** Monitor-mode wakeup: no-change replies collapse to a muted line. */
+  quiet: z.boolean().optional(),
+});
+export type ChatScheduledWakeupMetadata = z.infer<
+  typeof ChatScheduledWakeupMetadataSchema
+>;
+
+/**
+ * Leading sentinel a quiet wakeup's reply carries when nothing noteworthy
+ * happened. Backend detection and frontend rendering both key off it.
+ */
+export const QUIET_WAKE_SENTINEL = "[NO_CHANGE]";
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
   .object({
@@ -627,6 +666,15 @@ export const ChatMessageMetadataSchema = z
      * transcript shows.
      */
     sandboxCommand: z.literal(true).optional(),
+    /** Harness wake notification for a settled background task. */
+    backgroundTask: ChatBackgroundTaskMetadataSchema.optional(),
+    /** Harness wake notification for a scheduled wakeup firing. */
+    scheduledWakeup: ChatScheduledWakeupMetadataSchema.optional(),
+    /**
+     * Stamped on a quiet wakeup's assistant reply that led with the
+     * no-change sentinel — the pair renders as one muted line.
+     */
+    quietWake: z.literal(true).optional(),
   })
   .passthrough();
 

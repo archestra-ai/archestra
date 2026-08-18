@@ -132,7 +132,10 @@ class ScheduleTriggerModel {
       .insert(schema.scheduleTriggersTable)
       .values({
         ...parsed,
-        cronExpression: normalizeCronExpression(parsed.cronExpression),
+        cronExpression:
+          parsed.cronExpression != null
+            ? normalizeCronExpression(parsed.cronExpression)
+            : null,
         timezone: normalizeTimezone(parsed.timezone),
       })
       .returning();
@@ -149,7 +152,10 @@ class ScheduleTriggerModel {
       .set({
         ...data,
         ...(data.cronExpression !== undefined && {
-          cronExpression: normalizeCronExpression(data.cronExpression),
+          cronExpression:
+            data.cronExpression != null
+              ? normalizeCronExpression(data.cronExpression)
+              : null,
         }),
         ...(data.timezone !== undefined && {
           timezone: normalizeTimezone(data.timezone),
@@ -205,6 +211,19 @@ class ScheduleTriggerModel {
 
     const dueTriggers: ScheduleTrigger[] = [];
     for (const trigger of enabledTriggers) {
+      // One-shot triggers (`runAt`, no cron): due once their time has passed
+      // and they have never fired. They must not fall through to the cron
+      // branch — its catch would silently skip a null expression forever.
+      if (trigger.runAt !== null) {
+        if (trigger.lastExecutedAt === null && trigger.runAt <= now) {
+          dueTriggers.push(trigger);
+        }
+        continue;
+      }
+      if (trigger.cronExpression === null) {
+        // Unreachable under the cron-or-run-at CHECK; never silently skip.
+        continue;
+      }
       try {
         const cron = new Cron(normalizeCronExpression(trigger.cronExpression), {
           mode: "5-part",
@@ -222,6 +241,72 @@ class ScheduleTriggerModel {
     }
 
     return dueTriggers;
+  }
+
+  /**
+   * Wakeup triggers targeting a chat conversation, newest first. Scoped to
+   * the actor who created them — the same caller-owns-it rule as background
+   * tasks.
+   */
+  static async listForConversation(params: {
+    conversationId: string;
+    actorUserId: string;
+  }): Promise<ScheduleTrigger[]> {
+    return db
+      .select()
+      .from(schema.scheduleTriggersTable)
+      .where(
+        and(
+          eq(
+            schema.scheduleTriggersTable.conversationId,
+            params.conversationId,
+          ),
+          eq(schema.scheduleTriggersTable.actorUserId, params.actorUserId),
+        ),
+      )
+      .orderBy(desc(schema.scheduleTriggersTable.createdAt));
+  }
+
+  /**
+   * Delete a wakeup trigger the caller owns on the given conversation, in one
+   * guarded statement — the (conversation, actor) match IS the authorization,
+   * mirroring cancelForPrincipal on background tasks.
+   */
+  static async deleteForConversationActor(params: {
+    id: string;
+    conversationId: string;
+    actorUserId: string;
+  }): Promise<boolean> {
+    const deleted = await db
+      .delete(schema.scheduleTriggersTable)
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.id, params.id),
+          eq(
+            schema.scheduleTriggersTable.conversationId,
+            params.conversationId,
+          ),
+          eq(schema.scheduleTriggersTable.actorUserId, params.actorUserId),
+        ),
+      )
+      .returning({ id: schema.scheduleTriggersTable.id });
+    return deleted.length > 0;
+  }
+
+  /** Enabled wakeup triggers on a conversation (the per-conversation cap). */
+  static async countEnabledForConversation(
+    conversationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.scheduleTriggersTable)
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.conversationId, conversationId),
+          eq(schema.scheduleTriggersTable.enabled, true),
+        ),
+      );
+    return row?.count ?? 0;
   }
 
   static async markExecuted(id: string, now: Date): Promise<void> {
@@ -342,7 +427,10 @@ function triggerColumns() {
     projectId: schema.scheduleTriggersTable.projectId,
     messageTemplate: schema.scheduleTriggersTable.messageTemplate,
     cronExpression: schema.scheduleTriggersTable.cronExpression,
+    runAt: schema.scheduleTriggersTable.runAt,
+    conversationId: schema.scheduleTriggersTable.conversationId,
     timezone: schema.scheduleTriggersTable.timezone,
+    quiet: schema.scheduleTriggersTable.quiet,
     enabled: schema.scheduleTriggersTable.enabled,
     actorUserId: schema.scheduleTriggersTable.actorUserId,
     lastExecutedAt: schema.scheduleTriggersTable.lastExecutedAt,

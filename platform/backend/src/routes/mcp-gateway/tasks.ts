@@ -1,7 +1,10 @@
 import config from "@/config";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
-import type { McpGatewayTask } from "@/types/mcp-gateway-task";
+import type {
+  McpGatewayTask,
+  McpGatewayTaskContext,
+} from "@/types/mcp-gateway-task";
 import { COMPLETE_RESULT_TYPE } from "./protocol";
 
 /**
@@ -115,6 +118,24 @@ export async function runToolCallMaybeTask(params: {
   toolName: string;
   execute: (signal: AbortSignal) => Promise<Record<string, unknown>>;
   thresholdMs?: number;
+  /** Row lifetime override; defaults to the extension's TASK_TTL_MS. */
+  ttlMs?: number;
+  /**
+   * Harness linkage: chat conversation the settled outcome is delivered back
+   * into, plus the delivery context. Persisted on the row so any replica —
+   * including the reaper — can deliver without in-process state.
+   */
+  conversationId?: string;
+  context?: McpGatewayTaskContext;
+  /**
+   * Fired once after the detached continuation has attempted to settle the
+   * row. Fires only when the call actually became a task. `settled` reports
+   * whether THIS continuation's write won the row — false means another
+   * writer (a cancel, or the reaper failing an expired row) already owns the
+   * outcome, and its delivery path owns any follow-up. Exactly one party
+   * sees ownership, so delivery can never happen twice for one row.
+   */
+  onSettled?: (params: { taskId: string; settled: boolean }) => void;
 }): Promise<Record<string, unknown>> {
   const {
     eligible,
@@ -123,6 +144,10 @@ export async function runToolCallMaybeTask(params: {
     toolName,
     execute,
     thresholdMs = taskSyncThresholdMs(),
+    ttlMs = TASK_TTL_MS,
+    conversationId,
+    context,
+    onSettled,
   } = params;
 
   const controller = new AbortController();
@@ -149,7 +174,9 @@ export async function runToolCallMaybeTask(params: {
     agentId,
     principal,
     toolName,
-    ttlMs: TASK_TTL_MS,
+    ttlMs,
+    conversationId,
+    context,
   });
   mcpGatewayTaskRunner.register(task.id, controller);
 
@@ -194,11 +221,21 @@ export async function runToolCallMaybeTask(params: {
       };
     }
 
+    // Whether this continuation's write won the row (false: a concurrent
+    // cancel or the reaper got there first, or the write itself failed —
+    // either way the outcome is not ours to deliver).
+    let settled = false;
     try {
       if (outcome.kind === "completed") {
-        await McpGatewayTaskModel.completeIfWorking(task.id, outcome.result);
+        settled = await McpGatewayTaskModel.completeIfWorking(
+          task.id,
+          outcome.result,
+        );
       } else {
-        await McpGatewayTaskModel.failIfWorking(task.id, outcome.error);
+        settled = await McpGatewayTaskModel.failIfWorking(
+          task.id,
+          outcome.error,
+        );
       }
     } catch (error) {
       logger.error(
@@ -207,6 +244,14 @@ export async function runToolCallMaybeTask(params: {
       );
     } finally {
       mcpGatewayTaskRunner.release(task.id);
+      try {
+        onSettled?.({ taskId: task.id, settled });
+      } catch (error) {
+        logger.error(
+          { agentId, taskId: task.id, toolName, err: error },
+          "onSettled callback for a background MCP task threw",
+        );
+      }
     }
   })();
 
@@ -292,7 +337,9 @@ function buildCreateTaskResult(task: McpGatewayTask): Record<string, unknown> {
     task: {
       taskId: task.id,
       status: task.status,
-      ttlMs: TASK_TTL_MS,
+      // Report the row's actual lifetime — harness tasks may override the
+      // default TTL.
+      ttlMs: Math.max(0, task.expiresAt.getTime() - task.createdAt.getTime()),
       pollIntervalMs: TASK_POLL_INTERVAL_MS,
       createdAt: task.createdAt.toISOString(),
     },

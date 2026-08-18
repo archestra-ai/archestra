@@ -264,6 +264,58 @@ describe("skill delegation (agent-designated skills)", () => {
     expect(params.parentDelegationChain).toBe(context.agentId);
   });
 
+  test("background: true detaches the skill run into a conversation-linked background task", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, target, context } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const { ConversationModel } = await import("@/models");
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: organization.id,
+      // biome-ignore lint/style/noNonNullAssertion: setup always sets agentId
+      agentId: context.agentId!,
+      title: "bg skill",
+    });
+    // Never settles inside the detach threshold, so the run becomes a task.
+    mockExecuteA2AMessage.mockReturnValue(new Promise(() => {}));
+
+    const result = await executeArchestraTool(
+      `${SKILL_TOOL_PREFIX}deep_research`,
+      { message: "find prior art for widgets", background: true },
+      { ...context, conversationId: conversation.id },
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result)).toContain("Background task started");
+    // The subagent still receives the rendered activation block.
+    const params = mockExecuteA2AMessage.mock.calls[0][0];
+    expect(params.agentId).toBe(target.id);
+    expect(params.message).toContain("Research thoroughly. Cite sources.");
+    // The task row carries the harness linkage with the skill kind.
+    const McpGatewayTaskModel = (await import("@/models/mcp-gateway-task"))
+      .default;
+    const rows = await McpGatewayTaskModel.listForConversation({
+      conversationId: conversation.id,
+      principal: `user:${user.id}`,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].context).toEqual({
+      kind: "skill",
+      targetAgentName: "Research Bot",
+    });
+    // Abort so no detached execution outlives the test.
+    const { mcpGatewayTaskRunner } = await import("@/routes/mcp-gateway/tasks");
+    mcpGatewayTaskRunner.abort(rows[0].id);
+  });
+
   test("refuses dispatch for an unknown skill slug and for automated runs", async ({
     makeOrganization,
     makeUser,

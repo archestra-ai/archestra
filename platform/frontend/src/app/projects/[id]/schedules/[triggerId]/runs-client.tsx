@@ -56,7 +56,12 @@ export function ProjectScheduleRunsClient() {
           {trigger && (
             <p className="mt-1 text-sm text-muted-foreground">
               {trigger.agent?.name ?? "Default agent"} ·{" "}
-              {formatCronSchedule(trigger.cronExpression)} · {trigger.timezone}
+              {trigger.cronExpression ? (
+                <span>{formatCronSchedule(trigger.cronExpression)}</span>
+              ) : (
+                <span>One-time</span>
+              )}{" "}
+              · {trigger.timezone}
             </p>
           )}
         </div>

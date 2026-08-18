@@ -146,7 +146,13 @@ export function cohereResponseToOpenai(
 ): OpenAiResponse {
   const text =
     response.message.content
-      ?.filter((block) => block.type === "text")
+      // Explicit guard: the block union has an open fallback variant for
+      // upstream block types we don't model (thinking, citations, ...), so a
+      // bare `block.type === "text"` no longer narrows.
+      ?.filter(
+        (block): block is { type: "text"; text: string } =>
+          block.type === "text" && typeof block.text === "string",
+      )
       .map((block) => block.text)
       .join("") ?? "";
   const promptTokens =

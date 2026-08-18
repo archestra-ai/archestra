@@ -140,6 +140,31 @@ const STATEMENT_TIMEOUT_MESSAGE =
   "canceling statement due to statement timeout";
 
 /**
+ * SQLSTATE class 53 (insufficient resources): the database server is out of
+ * some capacity — disk, memory, or connection slots — mapped to stable,
+ * low-cardinality names used to fingerprint occurrences in error tracking.
+ *
+ * @see https://www.postgresql.org/docs/current/errcodes-appendix.html
+ */
+const RESOURCE_EXHAUSTION_PG_CODES: ReadonlyMap<string, string> = new Map([
+  ["53000", "insufficient_resources"],
+  ["53100", "disk_full"],
+  ["53200", "out_of_memory"],
+  ["53300", "too_many_connections"],
+  ["53400", "configuration_limit_exceeded"],
+]);
+
+/**
+ * Message suffix PostgreSQL renders (via strerror) when a server-side write
+ * fails on a full disk, e.g. "could not write init file: No space left on
+ * device". Some of these reports reach the client without a SQLSTATE (raised
+ * during connection startup rather than query execution), leaving the message
+ * as the only signal. Long and specific enough that query parameters the ORM
+ * interpolates into the wrapper message cannot plausibly trigger it.
+ */
+const NO_SPACE_LEFT_MESSAGE = "No space left on device";
+
+/**
  * Determine whether a database error is transient (i.e. retrying may succeed).
  *
  * Checks the error itself and, for DrizzleQueryError wrappers, recursively
@@ -179,6 +204,49 @@ export function isDbStatementTimeoutError(error: unknown, depth = 0): boolean {
   if (cause) return isDbStatementTimeoutError(cause, depth + 1);
 
   return false;
+}
+
+/**
+ * Resolve a database error caused by the server running out of a resource
+ * (SQLSTATE class 53: disk full, out of memory, too many connections) to a
+ * stable, low-cardinality code, or null for anything else.
+ *
+ * Deliberately NOT part of {@link isTransientDbError}: a server that is out
+ * of disk or memory will not recover within the retry budget, and retrying
+ * only adds load. Like statement timeouts, these are surfaced solely so error
+ * tracking can group one capacity incident under one stable fingerprint —
+ * the ORM wraps each failure per-query as "Failed query: <sql>", which
+ * otherwise fragments the incident into a new issue per SQL statement.
+ */
+export function getDbResourceExhaustionErrorCode(
+  error: unknown,
+  depth = 0,
+): string | null {
+  if (!(error instanceof Error)) return null;
+  if (depth > MAX_CAUSE_DEPTH) return null;
+
+  const errorCode = (error as Error & { code?: string }).code;
+  const mapped = errorCode
+    ? RESOURCE_EXHAUSTION_PG_CODES.get(errorCode)
+    : undefined;
+  if (mapped) return mapped;
+
+  // Disk-full reports raised outside query execution (connection startup)
+  // carry no SQLSTATE — the strerror suffix is the only signal.
+  if (error.message.includes(NO_SPACE_LEFT_MESSAGE)) return "disk_full";
+
+  if (error instanceof AggregateError) {
+    for (const subError of error.errors) {
+      const code = getDbResourceExhaustionErrorCode(subError, depth + 1);
+      if (code) return code;
+    }
+  }
+
+  // DrizzleQueryError wraps the underlying pg error as `cause`
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause) return getDbResourceExhaustionErrorCode(cause, depth + 1);
+
+  return null;
 }
 
 /**

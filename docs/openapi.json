@@ -242076,6 +242076,18 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "customContextLength": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "customOutputLength": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "inputModalities": {
                         "nullable": true,
                         "type": "array",
@@ -242416,6 +242428,8 @@
                       "description",
                       "contextLength",
                       "outputLength",
+                      "customContextLength",
+                      "customOutputLength",
                       "inputModalities",
                       "outputModalities",
                       "supportsToolCalling",
@@ -242725,6 +242739,18 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "customContextLength": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "customOutputLength": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
                   "ignored": {
                     "type": "boolean"
                   },
@@ -242905,6 +242931,18 @@
                       "maximum": 2147483647
                     },
                     "outputLength": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "customContextLength": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "customOutputLength": {
                       "nullable": true,
                       "type": "integer",
                       "minimum": -2147483648,
@@ -243121,6 +243159,8 @@
                     "description",
                     "contextLength",
                     "outputLength",
+                    "customContextLength",
+                    "customOutputLength",
                     "inputModalities",
                     "outputModalities",
                     "supportsToolCalling",

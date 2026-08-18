@@ -18,7 +18,7 @@ tests:
           value: "-5"
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded
+          value: before-hook-creation,hook-succeeded,hook-failed
       - matchRegex:
           path: metadata.name
           pattern: -archestra-platform-migrate$
@@ -31,8 +31,8 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].command
           value:
-            - ./node_modules/.bin/drizzle-kit
-            - migrate
+            - node
+            - ./scripts/migrate-with-lock.mjs
       - equal:
           path: spec.template.spec.containers[0].resources
           value:
@@ -79,7 +79,7 @@ tests:
                 name: RELEASE-NAME-archestra-platform-migrate-auth
                 key: database-url
 
-  - it: prepends migration-job env before shared env for Kubernetes variable expansion
+  - it: prepends migration-job env before the database URL for Kubernetes variable expansion
     set:
       postgresql.enabled: false
       postgresql.external_database_url: null
@@ -126,6 +126,57 @@ tests:
           content:
             secretRef:
               name: migration-job-env
+
+  - it: preserves shared external database environment sources
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.envFromSecrets:
+        - name: ARCHESTRA_DATABASE_URL
+          secretName: shared-db-secret
+          secretKey: url
+      archestra.envWithValueFrom:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: shared-db-secret
+              key: password
+      archestra.envFrom:
+        - configMapRef:
+            name: shared-db-env
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: shared-db-secret
+                key: url
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: shared-db-secret
+                key: password
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: shared-db-env
+
+  - it: does not inherit unrelated sensitive application environment
+    set:
+      archestra.env:
+        ARCHESTRA_METRICS_SECRET: top-secret
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_METRICS_SECRET
+          any: true
 
   - it: sets a PostgreSQL lock_timeout for the migration session by default
     asserts:

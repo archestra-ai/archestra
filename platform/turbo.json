@@ -101,7 +101,8 @@
       "persistent": true
     },
     "db:migrate": {
-      "inputs": ["backend/src/database/**/*.ts"]
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "db:studio": {
       "persistent": true,

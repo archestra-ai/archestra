@@ -428,6 +428,27 @@ const organizationsTable = pgTable("organization", {
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Whether this organization wants idle MCP servers scaled to zero replicas
+   * (enterprise-licensed; the PATCH route refuses the field without a licence).
+   *
+   * The master switch: with it off nothing hibernates, whatever an individual
+   * install's `mcp_server.hibernation_mode` says. Off by default because
+   * hibernation trades a few seconds of first-call latency for the idle
+   * compute, and that is a decision to make deliberately.
+   *
+   * Deliberately only the on/off half: HOW LONG a server must be idle stays
+   * operator configuration (`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`),
+   * because the right window depends on the cluster, not on the tenant.
+   */
+  mcpIdleHibernationEnabled: boolean("mcp_idle_hibernation_enabled")
+    .notNull()
+    .default(false),
+  // SPDX-SnippetEnd
+
   /**
    * Whether this organization shows the Apps Hackathon recorder. On by
    * default, and the way an admin who does not want the promotion turns it and

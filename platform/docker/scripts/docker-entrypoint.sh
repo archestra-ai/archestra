@@ -367,11 +367,9 @@ else
     # The application uses EFFECTIVE_DATABASE_URL directly
 fi
 
-# Update supervisord config with actual environment variables
-# Escape % as %% for supervisord (it uses % for string interpolation like %(ENV_VAR)s)
-# Then use awk to handle other special characters in DATABASE_URL (like |, &, \)
-ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
-awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
+# Supervisord passes its own environment through unchanged. Exporting avoids
+# rewriting a config file and preserves every legal URL character verbatim.
+export DATABASE_URL="$EFFECTIVE_DATABASE_URL"
 
 # ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
 # handled in-process by the backend via the ngrok agent SDK — no binary download

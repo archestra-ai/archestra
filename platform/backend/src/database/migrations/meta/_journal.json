@@ -2948,6 +2948,13 @@
       "when": 1787007240714,
       "tag": "0420_knowledge_files",
       "breakpoints": true
+    },
+    {
+      "idx": 421,
+      "version": "7",
+      "when": 1787039911186,
+      "tag": "0421_mcp_idle_hibernation",
+      "breakpoints": true
     }
   ]
 }

@@ -575,6 +575,25 @@ class AnthropicResponseAdapter
     return reason ? [reason] : [];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): AnthropicResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    let next = 0;
+    const content = this.response.content.map((block) => {
+      if (block.type !== "tool_use") return block;
+      const rewritten = toolCalls[next++];
+      if (!rewritten) return block;
+      return {
+        ...block,
+        name: rewritten.name,
+        input: parseArgs(rewritten.arguments),
+      };
+    });
+    return { ...this.response, content };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -796,6 +815,59 @@ class AnthropicStreamAdapter
       );
       return `event: ${renumbered.type}\ndata: ${JSON.stringify(renumbered)}\n\n`;
     });
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // Same release semantics as getRawToolCallEvents: these blocks are becoming
+    // the client's, so toProviderResponse must name them. The buffered raw
+    // events are deliberately NOT replayed — they carry the tool the model
+    // named directly, which is the call being repaired — so these blocks get
+    // freshly allocated output indices instead of going through the upstream
+    // index mapping.
+    this.toolCallsReleased = true;
+    const events: string[] = [];
+    for (const toolCall of toolCalls) {
+      const index = this.nextOutIndex++;
+      let input: Record<string, unknown> = {};
+      try {
+        input = JSON.parse(toolCall.arguments);
+      } catch {
+        // A call whose arguments do not parse is never rewritten upstream of
+        // here; keep the block well-formed rather than emitting invalid JSON.
+      }
+      events.push(
+        `event: content_block_start\ndata: ${JSON.stringify({
+          type: "content_block_start",
+          index,
+          content_block: {
+            type: "tool_use",
+            id: toolCall.id,
+            name: toolCall.name,
+            input: {},
+          },
+        })}\n\n`,
+      );
+      // Anthropic streams tool input as `partial_json` fragments that the
+      // client concatenates and parses; one fragment carrying the whole object
+      // is the valid degenerate case.
+      events.push(
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index,
+          delta: {
+            type: "input_json_delta",
+            partial_json: JSON.stringify(input),
+          },
+        })}\n\n`,
+      );
+      events.push(
+        `event: content_block_stop\ndata: ${JSON.stringify({
+          type: "content_block_stop",
+          index,
+        })}\n\n`,
+      );
+    }
+    return events;
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1488,4 +1560,18 @@ function createAnthropicAzureFoundryFetch(
       headers,
     });
   };
+}
+
+/** Rewritten arguments arrive as the JSON string the model emitted; this wire
+ * shape carries them as an object. A repaired call always parses (the planner
+ * refuses to rewrite otherwise), so the fallback is defensive only. */
+function parseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
 }

@@ -29,6 +29,9 @@ class AnthropicOpenaiResponseAdapter
 {
   readonly provider = "anthropic" as const;
   private inner: LLMResponseAdapter<AnthropicResponse>;
+  // The inner (logged-shape) response after a dispatch-mode repair, so
+  // getLoggedResponse persists the rewritten turn rather than the original.
+  private rewrittenInner: AnthropicResponse | null = null;
   private ctx: AnthropicOpenaiContext;
 
   constructor(response: AnthropicResponse, ctx: AnthropicOpenaiContext) {
@@ -70,11 +73,30 @@ class AnthropicOpenaiResponseAdapter
   }
 
   getLoggedResponse(): AnthropicResponse {
-    return this.inner.getOriginalResponse();
+    return this.rewrittenInner ?? this.inner.getOriginalResponse();
   }
 
   getFinishReasons(): string[] {
     return this.inner.getFinishReasons();
+  }
+
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): AnthropicResponse {
+    // Rewrite in the inner wire shape (which is what gets logged), then
+    // translate for the client exactly as getOriginalResponse does. If the
+    // inner adapter cannot rewrite, hand back the untouched translation — the
+    // handler only reaches here when the planner produced a rewrite, and a
+    // silent no-op would strand the client with a call it cannot execute; but
+    // every inner adapter this wraps does implement it.
+    const inner =
+      this.inner.withRewrittenToolCalls?.(toolCalls) ??
+      this.inner.getOriginalResponse();
+    this.rewrittenInner = inner;
+    return anthropicResponseToOpenai(
+      inner,
+      this.ctx,
+    ) as unknown as AnthropicResponse;
   }
 
   toRefusalResponse(
@@ -171,6 +193,30 @@ class AnthropicOpenaiStreamAdapter
     // once it has handed them over, and this is that moment.
     this.inner.getRawToolCallEvents();
     return [...this.pendingToolCallEvents];
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // The inner (Anthropic-shaped) read is for its side effect only — it marks
+    // the calls as handed over so inner.toProviderResponse() names them — while
+    // the wire events below are the OpenAI-shaped ones this surface speaks.
+    // Mirrors getRawToolCallEvents above; the buffered OpenAI events are
+    // dropped rather than replayed, because they name the tool the model called
+    // directly and that is the call being repaired.
+    this.inner.formatToolCallsSSE?.(toolCalls);
+    this.pendingToolCallEvents = [];
+    return [
+      this.formatChunk({
+        delta: {
+          tool_calls: toolCalls.map((toolCall, index) => ({
+            index,
+            id: toolCall.id,
+            type: "function" as const,
+            function: { name: toolCall.name, arguments: toolCall.arguments },
+          })),
+        },
+        finishReason: null,
+      }),
+    ];
   }
 
   formatCompleteTextSSE(text: string): string[] {

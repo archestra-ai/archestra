@@ -305,6 +305,15 @@ class BedrockInvokeResponseAdapter
     return this.inner.getFinishReasons();
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): AnthropicResponse {
+    return (
+      this.inner.withRewrittenToolCalls?.(toolCalls) ??
+      this.inner.getOriginalResponse()
+    );
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,
@@ -372,6 +381,14 @@ class BedrockInvokeStreamAdapter
     return this.inner
       .formatCompleteTextSSE(text)
       .map((event) => sseToInvokeEventStream(innerSse(event)));
+  }
+
+  formatToolCallsSSE(
+    toolCalls: StreamAccumulatorState["toolCalls"],
+  ): Uint8Array[] {
+    return (this.inner.formatToolCallsSSE?.(toolCalls) ?? []).map((event) =>
+      sseToInvokeEventStream(innerSse(event)),
+    );
   }
 
   formatEndSSE(): Uint8Array {

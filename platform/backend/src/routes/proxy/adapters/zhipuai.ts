@@ -560,6 +560,31 @@ class ZhipuaiResponseAdapter implements LLMResponseAdapter<ZhipuaiResponse> {
     return this.response;
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): ZhipuaiResponse {
+    const choice = this.response.choices[0];
+    return {
+      ...this.response,
+      choices: [
+        {
+          ...choice,
+          message: {
+            ...choice.message,
+            tool_calls: toolCalls.map((toolCall) => ({
+              id: toolCall.id,
+              type: "function" as const,
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              },
+            })),
+          },
+        },
+      ],
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -762,6 +787,35 @@ class ZhipuaiStreamAdapter
           delta: {
             role: "assistant",
             content: text,
+          },
+          finish_reason: null,
+        },
+      ],
+    };
+    return [`data: ${JSON.stringify(chunk)}\n\n`];
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // Mirrors the OpenAI chat adapter: one chunk carrying every call complete,
+    // which is a valid degenerate case of the concatenated-deltas wire format.
+    const chunk: ZhipuaiStreamChunk = {
+      id: this.state.responseId,
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model: this.state.model,
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: toolCalls.map((toolCall, index) => ({
+              index,
+              id: toolCall.id,
+              type: "function" as const,
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              },
+            })),
           },
           finish_reason: null,
         },

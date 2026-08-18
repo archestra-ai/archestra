@@ -588,6 +588,36 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
     return reason ? [reason] : [];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): GeminiResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    const candidate = this.response.candidates?.[0];
+    if (!candidate?.content?.parts) return this.response;
+    let next = 0;
+    const parts = candidate.content.parts.map((part) => {
+      if (!("functionCall" in part) || !part.functionCall) return part;
+      const rewritten = toolCalls[next++];
+      if (!rewritten) return part;
+      return {
+        ...part,
+        functionCall: {
+          ...part.functionCall,
+          name: rewritten.name,
+          args: parseArgs(rewritten.arguments),
+        },
+      };
+    });
+    return {
+      ...this.response,
+      candidates: [
+        { ...candidate, content: { ...candidate.content, parts } },
+        ...(this.response.candidates?.slice(1) ?? []),
+      ],
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -786,6 +816,33 @@ class GeminiStreamAdapter
       );
       return `data: ${JSON.stringify(restChunk)}\n\n`;
     });
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // One REST-shaped chunk carrying every call as a functionCall part —
+    // exactly how the upstream delivers whole (non-incremental) calls, so the
+    // client accumulates it the same way. No finishReason: formatEndSSE closes
+    // the turn.
+    const chunk: GeminiResponse = {
+      candidates: [
+        {
+          content: {
+            parts: toolCalls.map((toolCall) => ({
+              functionCall: {
+                id: toolCall.id,
+                name: toolCall.name,
+                args: parseArgs(toolCall.arguments),
+              },
+            })),
+            role: "model",
+          },
+          index: 0,
+        },
+      ],
+      modelVersion: this.state.model || this.model,
+      responseId: this.state.responseId || `gemini-${Date.now()}`,
+    };
+    return [`data: ${JSON.stringify(chunk)}\n\n`];
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1577,3 +1634,17 @@ export const geminiAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/** Rewritten arguments arrive as the JSON string the model emitted; this wire
+ * shape carries them as an object. A repaired call always parses (the planner
+ * refuses to rewrite otherwise), so the fallback is defensive only. */
+function parseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}

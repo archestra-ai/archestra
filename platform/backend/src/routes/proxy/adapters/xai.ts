@@ -32,6 +32,7 @@ import {
   type LLMRequestAdapter,
   type LLMResponseAdapter,
   type LLMStreamAdapter,
+  type StreamAccumulatorState,
   type Xai,
 } from "@/types";
 import {
@@ -143,6 +144,11 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
   toRefusalResponse(refusalMessage: string, contentMessage: string) {
     return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
   }
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ) {
+    return this.delegate.withRewrittenToolCalls(toolCalls);
+  }
 }
 
 class XaiStreamAdapter
@@ -173,6 +179,9 @@ class XaiStreamAdapter
   }
   formatCompleteTextSSE(text: string) {
     return this.delegate.formatCompleteTextSSE(text);
+  }
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]) {
+    return this.delegate.formatToolCallsSSE(toolCalls);
   }
   formatEndSSE() {
     return this.delegate.formatEndSSE();

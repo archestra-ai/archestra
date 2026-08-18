@@ -29,6 +29,9 @@ class CohereOpenaiResponseAdapter
 {
   readonly provider = "cohere" as const;
   private inner: LLMResponseAdapter<CohereResponse>;
+  // The inner (logged-shape) response after a dispatch-mode repair, so
+  // getLoggedResponse persists the rewritten turn rather than the original.
+  private rewrittenInner: CohereResponse | null = null;
   private ctx: CohereOpenaiContext;
 
   constructor(response: CohereResponse, ctx: CohereOpenaiContext) {
@@ -68,11 +71,27 @@ class CohereOpenaiResponseAdapter
   }
 
   getLoggedResponse(): CohereResponse {
-    return this.inner.getOriginalResponse();
+    return this.rewrittenInner ?? this.inner.getOriginalResponse();
   }
 
   getFinishReasons(): string[] {
     return this.inner.getFinishReasons();
+  }
+
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): CohereResponse {
+    // Rewrite in the inner wire shape (which is what gets logged), then
+    // translate for the client exactly as getOriginalResponse does. If the
+    // inner adapter cannot rewrite, hand back the untouched translation — the
+    // handler only reaches here when the planner produced a rewrite, and a
+    // silent no-op would strand the client with a call it cannot execute; but
+    // every inner adapter this wraps does implement it.
+    const inner =
+      this.inner.withRewrittenToolCalls?.(toolCalls) ??
+      this.inner.getOriginalResponse();
+    this.rewrittenInner = inner;
+    return cohereResponseToOpenai(inner, this.ctx) as unknown as CohereResponse;
   }
 
   toRefusalResponse(
@@ -141,6 +160,26 @@ class CohereOpenaiStreamAdapter
 
   getRawToolCallEvents(): string[] {
     return [];
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // The inner (Cohere-shaped) read is a side effect only — it marks the calls
+    // as handed over so inner.toProviderResponse() names them — while the wire
+    // event below is the OpenAI-shaped one this surface speaks.
+    this.inner.formatToolCallsSSE?.(toolCalls);
+    return [
+      this.formatChunk({
+        delta: {
+          tool_calls: toolCalls.map((toolCall, index) => ({
+            index,
+            id: toolCall.id,
+            type: "function" as const,
+            function: { name: toolCall.name, arguments: toolCall.arguments },
+          })),
+        },
+        finishReason: null,
+      }),
+    ];
   }
 
   formatCompleteTextSSE(text: string): string[] {

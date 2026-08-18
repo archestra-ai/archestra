@@ -65,6 +65,8 @@ const cells = new Map([
 function renderGrid(overrides: Partial<GridProps> = {}) {
   const onSelectCell = vi.fn();
   const onPreviewFile = vi.fn();
+  const onPreviewText = vi.fn();
+  const onAddRow = vi.fn();
   render(
     <AnalysisGrid
       columns={columns}
@@ -72,12 +74,15 @@ function renderGrid(overrides: Partial<GridProps> = {}) {
       cellsByRowAndColumn={cells}
       onSelectCell={onSelectCell}
       onPreviewFile={onPreviewFile}
+      onPreviewText={onPreviewText}
       onDeleteRow={vi.fn()}
       deleteRowDisabled={false}
+      onAddRow={onAddRow}
+      onAddColumn={vi.fn()}
       {...overrides}
     />,
   );
-  return { onSelectCell, onPreviewFile };
+  return { onSelectCell, onPreviewFile, onPreviewText, onAddRow };
 }
 
 describe("AnalysisGrid", () => {
@@ -105,6 +110,25 @@ describe("AnalysisGrid", () => {
     onSelectCell.mockClear();
     await user.click(screen.getByText("Pasted text"));
     expect(onSelectCell).not.toHaveBeenCalled();
+  });
+
+  it("opens a pasted source's text from its label", async () => {
+    const user = userEvent.setup();
+    const { onPreviewText } = renderGrid();
+
+    await user.click(screen.getByRole("button", { name: "Pasted text" }));
+    expect(onPreviewText).toHaveBeenCalledWith({
+      label: "Pasted text",
+      text: "hello",
+    });
+  });
+
+  it("offers a subtle in-grid Add row from the pinned bottom row", async () => {
+    const user = userEvent.setup();
+    const { onAddRow } = renderGrid();
+
+    await user.click(screen.getByRole("button", { name: /add row/i }));
+    expect(onAddRow).toHaveBeenCalled();
   });
 
   it("opens the file preview from an uploaded source's label", async () => {

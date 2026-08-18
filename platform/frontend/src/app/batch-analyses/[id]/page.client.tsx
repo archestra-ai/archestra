@@ -10,6 +10,11 @@ import { AnalysisGrid } from "@/app/batch-analyses/_parts/analysis-grid";
 import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
 import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
 import {
+  type PreviewableSourceText,
+  SourceTextDialog,
+} from "@/app/batch-analyses/_parts/source-text-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
   FilePreviewDialog,
   type PreviewableDocument,
 } from "@/components/files/file-preview-dialog";
@@ -67,6 +72,8 @@ export default function BatchAnalysisDetailPage() {
   const analysisId = params.id;
   const [addRowsOpen, setAddRowsOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
+  const [previewText, setPreviewText] = useState<PreviewableSourceText>();
+  const [rowPendingDelete, setRowPendingDelete] = useState<Row | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<{
     row: Row;
@@ -224,8 +231,11 @@ export default function BatchAnalysisDetailPage() {
           cellsByRowAndColumn={cellsByRowAndColumn}
           onSelectCell={(row, columnKey) => setSelected({ row, columnKey })}
           onPreviewFile={setPreviewFile}
-          onDeleteRow={(rowId) => deleteRow.mutate(rowId)}
+          onPreviewText={setPreviewText}
+          onDeleteRow={setRowPendingDelete}
           deleteRowDisabled={deleteRow.isPending}
+          onAddRow={() => setAddRowsOpen(true)}
+          onAddColumn={() => setEditOpen(true)}
         />
       )}
 
@@ -256,6 +266,26 @@ export default function BatchAnalysisDetailPage() {
         open={!!previewFile}
         onOpenChange={(open) => !open && setPreviewFile(undefined)}
         file={previewFile}
+      />
+      <SourceTextDialog
+        open={!!previewText}
+        onOpenChange={(open) => !open && setPreviewText(undefined)}
+        source={previewText}
+      />
+      <DeleteConfirmDialog
+        open={!!rowPendingDelete}
+        onOpenChange={(open) => !open && setRowPendingDelete(null)}
+        title="Remove row"
+        description={`Remove "${rowPendingDelete?.label}"? Its answers are removed with it.`}
+        isPending={deleteRow.isPending}
+        confirmLabel="Remove"
+        pendingLabel="Removing..."
+        onConfirm={() =>
+          rowPendingDelete &&
+          deleteRow.mutate(rowPendingDelete.id, {
+            onSettled: () => setRowPendingDelete(null),
+          })
+        }
       />
       <EditAnalysisDialog
         open={editOpen}

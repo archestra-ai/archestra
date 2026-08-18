@@ -131,10 +131,13 @@ export function AnalysisGrid({
       {
         key: ADD_COLUMN_KEY,
         name: "",
-        width: 44,
-        minWidth: 44,
+        width: 56,
+        minWidth: 56,
         cellClass: CELL_CLASS,
-        headerCellClass: cn(HEADER_CLASS, "p-0 text-center"),
+        // text-clip: the cell inherits the grid's nowrap+ellipsis text
+        // handling, and a content overflow of even 1px paints a literal
+        // "…" next to the button.
+        headerCellClass: cn(HEADER_CLASS, "p-0 text-center text-clip"),
         renderHeaderCell: () => (
           <PermissionButton
             permissions={{ batchAnalysis: ["update"] }}

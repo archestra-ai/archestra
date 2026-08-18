@@ -146,5 +146,3 @@ export function RegistryAttentionList({
     </div>
   );
 }
-
-// ===== Internal pieces =====

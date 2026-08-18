@@ -1,6 +1,7 @@
 "use client";
 
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { useCallback } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 
@@ -30,26 +31,37 @@ export function useCanReauthenticate() {
     mcpServerInstallation: ["admin"],
   });
 
-  const isCurrentUserTeamAdmin = (teamId: string | null | undefined) => {
-    if (!teamId || !currentUserId) return false;
-    const team = userTeams?.find((t) => t.id === teamId);
-    return (
-      team?.members?.some(
-        (member) =>
-          member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
-      ) ?? false
-    );
-  };
+  // Stable across renders while the queries it reads are unchanged: callers
+  // memoize on this reference (the issue rule behind the sidebar count runs
+  // on every page), and a fresh closure each render would defeat that.
+  return useCallback(
+    (server: ReauthCandidate): boolean => {
+      if (!hasCreatePermission) return false;
+      const scope = server.scope ?? (server.teamId ? "team" : "personal");
 
-  return (server: ReauthCandidate): boolean => {
-    if (!hasCreatePermission) return false;
-    const scope = server.scope ?? (server.teamId ? "team" : "personal");
+      if (scope === "org") return !!hasAdminPermission;
+      if (scope === "personal") return server.ownerId === currentUserId;
 
-    if (scope === "org") return !!hasAdminPermission;
-    if (scope === "personal") return server.ownerId === currentUserId;
-
-    if (isCurrentUserTeamAdmin(server.teamId)) return true;
-    if (!hasUpdatePermission) return false;
-    return userTeams?.some((team) => team.id === server.teamId) ?? false;
-  };
+      const team = server.teamId
+        ? userTeams?.find((t) => t.id === server.teamId)
+        : undefined;
+      const isTeamAdmin =
+        !!currentUserId &&
+        (team?.members?.some(
+          (member) =>
+            member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
+        ) ??
+          false);
+      if (isTeamAdmin) return true;
+      if (!hasUpdatePermission) return false;
+      return !!team;
+    },
+    [
+      currentUserId,
+      userTeams,
+      hasCreatePermission,
+      hasUpdatePermission,
+      hasAdminPermission,
+    ],
+  );
 }

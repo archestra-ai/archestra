@@ -1104,6 +1104,53 @@ describe("agent routes", () => {
   });
 
   describe("GET /api/agents/all", () => {
+    test("embeds tools as slim refs without parameter schemas", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent({
+        name: `Tool Ref Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+      const tool = await makeTool({
+        parameters: {
+          type: "object",
+          properties: { q: { type: "string", description: "query" } },
+        },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/agents/all?excludeBuiltIn=true",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const returned = response
+        .json()
+        .find((a: { id: string }) => a.id === agent.id);
+      expect(returned).toBeDefined();
+      expect(returned.tools).toHaveLength(1);
+      expect(returned.tools[0]).toMatchObject({
+        id: tool.id,
+        name: tool.name,
+        rawName: tool.rawName,
+        catalogId: tool.catalogId,
+        delegateToAgentId: null,
+        description: tool.description,
+      });
+      // The whole point of the slim ref: no parameter JSON schemas or policy
+      // bookkeeping duplicated into every agent list response.
+      expect(returned.tools[0]).not.toHaveProperty("parameters");
+      expect(returned.tools[0]).not.toHaveProperty(
+        "policiesAutoConfiguredReasoning",
+      );
+      expect(returned.tools[0]).not.toHaveProperty("meta");
+    });
+
     test("should exclude built-in agents when excludeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,

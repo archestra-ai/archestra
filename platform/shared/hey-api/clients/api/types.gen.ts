@@ -12175,33 +12175,7 @@ export type GetAgentsResponses = {
                 delegateToAgentId: string | null;
                 name: string;
                 rawName: string | null;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
                 description: string | null;
-                meta: string | number | boolean | null | {
-                    [key: string]: unknown;
-                } | Array<unknown> | null;
-                clonedPendingDiscovery: boolean;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-                deletedAt: string | null;
             }>;
             teams: Array<{
                 id: string;
@@ -12435,33 +12409,7 @@ export type CreateAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -12659,33 +12607,7 @@ export type GetAllAgentsResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -12942,33 +12864,7 @@ export type GetDefaultMcpGatewayResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13137,33 +13033,7 @@ export type GetDefaultLlmProxyResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13412,33 +13282,7 @@ export type ImportAgentResponses = {
                 delegateToAgentId: string | null;
                 name: string;
                 rawName: string | null;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
                 description: string | null;
-                meta: string | number | boolean | null | {
-                    [key: string]: unknown;
-                } | Array<unknown> | null;
-                clonedPendingDiscovery: boolean;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-                deletedAt: string | null;
             }>;
             teams: Array<{
                 id: string;
@@ -13700,33 +13544,7 @@ export type GetAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13953,33 +13771,7 @@ export type UpdateAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -14406,33 +14198,7 @@ export type RestoreAgentVersionResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -14612,33 +14378,7 @@ export type CloneAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -15755,33 +15495,7 @@ export type RestoreAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;

@@ -118,6 +118,15 @@ const USER_STATISTICS_PAGE_SIZE = 10;
 const USER_MODEL_BADGE_LIMIT = 2;
 /** Apps and skills are paginated for the same reason as people. */
 const ENTITY_STATISTICS_PAGE_SIZE = 10;
+/**
+ * Recharts series keys double as CSS custom-property names (`--color-<key>`,
+ * see ChartStyle in components/ui/chart). Model ids such as
+ * `anthropic/claude-opus-4.8` contain `/` and `.`, which are not valid in a
+ * property name, so a chart keyed by the raw id gets no line stroke, black
+ * dots and colourless legend/tooltip swatches. Model series are keyed by
+ * rank instead; the chart config carries the real id as the label.
+ */
+const modelSeriesKey = (rank: number) => `model-${rank}`;
 
 export default function StatisticsPage() {
   const router = useRouter();
@@ -291,42 +300,6 @@ export default function StatisticsPage() {
     [timeframe],
   );
 
-  // Convert team statistics to recharts format
-  const teamChartData = useMemo(() => {
-    if (teamStatistics.length === 0) return [];
-
-    const allTimestamps = [
-      ...new Set(
-        teamStatistics.flatMap((stat) =>
-          stat.timeSeries.map((point) => point.timestamp),
-        ),
-      ),
-    ].sort();
-
-    return allTimestamps.map((timestamp) => {
-      const dataPoint: Record<string, string | number> = {
-        timestamp,
-        label: formatTimestamp(timestamp),
-      };
-      teamStatistics.slice(0, 5).forEach((team) => {
-        const point = team.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[team.teamId] = point ? point.value : 0;
-      });
-      return dataPoint;
-    });
-  }, [teamStatistics, formatTimestamp]);
-
-  const teamChartConfig = useMemo(() => {
-    const config: ChartConfig = {};
-    teamStatistics.slice(0, 5).forEach((team, index) => {
-      config[team.teamId] = {
-        label: team.teamName,
-        color: `var(--chart-${index + 1})`,
-      };
-    });
-    return config;
-  }, [teamStatistics]);
-
   // Filter agent statistics by type
   const chatAgentStatistics = useMemo(
     () => agentStatistics.filter((stat) => stat.agentType === "agent"),
@@ -337,13 +310,32 @@ export default function StatisticsPage() {
     [agentStatistics],
   );
 
-  // Convert agent statistics to recharts format
-  const agentChartData = useMemo(() => {
-    if (chatAgentStatistics.length === 0) return [];
+  // The API returns entities in first-seen order, not by cost. Both the
+  // tables and the "top 5 by cost" charts below need the cost order.
+  const sortedTeamStatistics = useMemo(
+    () => [...teamStatistics].sort((a, b) => b.cost - a.cost),
+    [teamStatistics],
+  );
+  const sortedChatAgentStatistics = useMemo(
+    () => [...chatAgentStatistics].sort((a, b) => b.cost - a.cost),
+    [chatAgentStatistics],
+  );
+  const sortedLlmProxyStatistics = useMemo(
+    () => [...llmProxyStatistics].sort((a, b) => b.cost - a.cost),
+    [llmProxyStatistics],
+  );
+  const sortedModelStatistics = useMemo(
+    () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
+    [modelStatistics],
+  );
+
+  // Convert team statistics to recharts format
+  const teamChartData = useMemo(() => {
+    if (sortedTeamStatistics.length === 0) return [];
 
     const allTimestamps = [
       ...new Set(
-        chatAgentStatistics.flatMap((stat) =>
+        sortedTeamStatistics.flatMap((stat) =>
           stat.timeSeries.map((point) => point.timestamp),
         ),
       ),
@@ -354,32 +346,68 @@ export default function StatisticsPage() {
         timestamp,
         label: formatTimestamp(timestamp),
       };
-      chatAgentStatistics.slice(0, 5).forEach((agent) => {
+      sortedTeamStatistics.slice(0, 5).forEach((team) => {
+        const point = team.timeSeries.find((p) => p.timestamp === timestamp);
+        dataPoint[team.teamId] = point ? point.value : 0;
+      });
+      return dataPoint;
+    });
+  }, [sortedTeamStatistics, formatTimestamp]);
+
+  const teamChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    sortedTeamStatistics.slice(0, 5).forEach((team, index) => {
+      config[team.teamId] = {
+        label: team.teamName,
+        color: `var(--chart-${index + 1})`,
+      };
+    });
+    return config;
+  }, [sortedTeamStatistics]);
+
+  // Convert agent statistics to recharts format
+  const agentChartData = useMemo(() => {
+    if (sortedChatAgentStatistics.length === 0) return [];
+
+    const allTimestamps = [
+      ...new Set(
+        sortedChatAgentStatistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
+      ),
+    ].sort();
+
+    return allTimestamps.map((timestamp) => {
+      const dataPoint: Record<string, string | number> = {
+        timestamp,
+        label: formatTimestamp(timestamp),
+      };
+      sortedChatAgentStatistics.slice(0, 5).forEach((agent) => {
         const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
         dataPoint[agent.agentId] = point ? point.value : 0;
       });
       return dataPoint;
     });
-  }, [chatAgentStatistics, formatTimestamp]);
+  }, [sortedChatAgentStatistics, formatTimestamp]);
 
   const agentChartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    chatAgentStatistics.slice(0, 5).forEach((agent, index) => {
+    sortedChatAgentStatistics.slice(0, 5).forEach((agent, index) => {
       config[agent.agentId] = {
         label: agent.agentName,
         color: `var(--chart-${index + 1})`,
       };
     });
     return config;
-  }, [chatAgentStatistics]);
+  }, [sortedChatAgentStatistics]);
 
   // Convert LLM proxy statistics to recharts format
   const llmProxyChartData = useMemo(() => {
-    if (llmProxyStatistics.length === 0) return [];
+    if (sortedLlmProxyStatistics.length === 0) return [];
 
     const allTimestamps = [
       ...new Set(
-        llmProxyStatistics.flatMap((stat) =>
+        sortedLlmProxyStatistics.flatMap((stat) =>
           stat.timeSeries.map((point) => point.timestamp),
         ),
       ),
@@ -390,32 +418,32 @@ export default function StatisticsPage() {
         timestamp,
         label: formatTimestamp(timestamp),
       };
-      llmProxyStatistics.slice(0, 5).forEach((agent) => {
+      sortedLlmProxyStatistics.slice(0, 5).forEach((agent) => {
         const point = agent.timeSeries.find((p) => p.timestamp === timestamp);
         dataPoint[agent.agentId] = point ? point.value : 0;
       });
       return dataPoint;
     });
-  }, [llmProxyStatistics, formatTimestamp]);
+  }, [sortedLlmProxyStatistics, formatTimestamp]);
 
   const llmProxyChartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    llmProxyStatistics.slice(0, 5).forEach((agent, index) => {
+    sortedLlmProxyStatistics.slice(0, 5).forEach((agent, index) => {
       config[agent.agentId] = {
         label: agent.agentName,
         color: `var(--chart-${index + 1})`,
       };
     });
     return config;
-  }, [llmProxyStatistics]);
+  }, [sortedLlmProxyStatistics]);
 
   // Convert model statistics to recharts format
   const modelChartData = useMemo(() => {
-    if (modelStatistics.length === 0) return [];
+    if (sortedModelStatistics.length === 0) return [];
 
     const allTimestamps = [
       ...new Set(
-        modelStatistics.flatMap((stat) =>
+        sortedModelStatistics.flatMap((stat) =>
           stat.timeSeries.map((point) => point.timestamp),
         ),
       ),
@@ -426,24 +454,24 @@ export default function StatisticsPage() {
         timestamp,
         label: formatTimestamp(timestamp),
       };
-      modelStatistics.slice(0, 5).forEach((model) => {
+      sortedModelStatistics.slice(0, 5).forEach((model, rank) => {
         const point = model.timeSeries.find((p) => p.timestamp === timestamp);
-        dataPoint[model.model] = point ? point.value : 0;
+        dataPoint[modelSeriesKey(rank)] = point ? point.value : 0;
       });
       return dataPoint;
     });
-  }, [modelStatistics, formatTimestamp]);
+  }, [sortedModelStatistics, formatTimestamp]);
 
   const modelChartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    modelStatistics.slice(0, 5).forEach((model, index) => {
-      config[model.model] = {
+    sortedModelStatistics.slice(0, 5).forEach((model, rank) => {
+      config[modelSeriesKey(rank)] = {
         label: model.model,
-        color: `var(--chart-${index + 1})`,
+        color: `var(--chart-${rank + 1})`,
       };
     });
     return config;
-  }, [modelStatistics]);
+  }, [sortedModelStatistics]);
 
   // Cost savings chart data
   const costSavingsChartData = useMemo(() => {
@@ -508,24 +536,6 @@ export default function StatisticsPage() {
       color: "var(--chart-3)",
     },
   };
-
-  // Sort statistics by cost for table display
-  const sortedTeamStatistics = useMemo(
-    () => [...teamStatistics].sort((a, b) => b.cost - a.cost),
-    [teamStatistics],
-  );
-  const sortedChatAgentStatistics = useMemo(
-    () => [...chatAgentStatistics].sort((a, b) => b.cost - a.cost),
-    [chatAgentStatistics],
-  );
-  const sortedLlmProxyStatistics = useMemo(
-    () => [...llmProxyStatistics].sort((a, b) => b.cost - a.cost),
-    [llmProxyStatistics],
-  );
-  const sortedModelStatistics = useMemo(
-    () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
-    [modelStatistics],
-  );
 
   useEffect(() => {
     setActionButton(
@@ -771,7 +781,7 @@ export default function StatisticsPage() {
                   />
                   <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  {teamStatistics.slice(0, 5).map((team) => (
+                  {sortedTeamStatistics.slice(0, 5).map((team) => (
                     <Line
                       key={team.teamId}
                       dataKey={team.teamId}
@@ -888,7 +898,7 @@ export default function StatisticsPage() {
                   />
                   <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  {chatAgentStatistics.slice(0, 5).map((agent) => (
+                  {sortedChatAgentStatistics.slice(0, 5).map((agent) => (
                     <Line
                       key={agent.agentId}
                       dataKey={agent.agentId}
@@ -1007,7 +1017,7 @@ export default function StatisticsPage() {
                   />
                   <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  {llmProxyStatistics.slice(0, 5).map((proxy) => (
+                  {sortedLlmProxyStatistics.slice(0, 5).map((proxy) => (
                     <Line
                       key={proxy.agentId}
                       dataKey={proxy.agentId}
@@ -1120,17 +1130,17 @@ export default function StatisticsPage() {
                   />
                   <ChartTooltip content={CostChartTooltip} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  {modelStatistics.slice(0, 5).map((model) => (
+                  {sortedModelStatistics.slice(0, 5).map((model, rank) => (
                     <Line
                       key={model.model}
-                      dataKey={model.model}
+                      dataKey={modelSeriesKey(rank)}
                       type="monotone"
-                      stroke={`var(--color-${model.model})`}
+                      stroke={`var(--color-${modelSeriesKey(rank)})`}
                       strokeWidth={2}
                       dot={{
                         strokeWidth: 0,
                         r: 3,
-                        fill: `var(--color-${model.model})`,
+                        fill: `var(--color-${modelSeriesKey(rank)})`,
                       }}
                       activeDot={{ strokeWidth: 0, r: 5 }}
                     />

@@ -47,7 +47,11 @@ vi.mock("@/lib/statistics.query", () => ({
 
 vi.mock("recharts", () => ({
   CartesianGrid: () => null,
-  Line: () => null,
+  // Expose what each series was given so tests can check the chart wiring
+  // without rendering SVG.
+  Line: ({ dataKey, stroke }: { dataKey: string; stroke: string }) => (
+    <div data-testid="chart-line" data-key={dataKey} data-stroke={stroke} />
+  ),
   LineChart: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -56,8 +60,16 @@ vi.mock("recharts", () => ({
 }));
 
 vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  ChartContainer: ({
+    config,
+    children,
+  }: {
+    config: Record<string, { label: string }>;
+    children: React.ReactNode;
+  }) => (
+    <div data-testid="chart" data-config={JSON.stringify(config)}>
+      {children}
+    </div>
   ),
   ChartLegend: () => null,
   ChartLegendContent: () => null,
@@ -273,6 +285,65 @@ describe("StatisticsPage", () => {
     expect(headers).toHaveLength(7);
     for (const header of headers) {
       expect(header.className).toMatch(/w-\[\d+%\]/);
+    }
+  });
+
+  it("charts the five costliest models under CSS-safe series keys", () => {
+    // Six models, deliberately NOT in cost order: the API returns entities in
+    // first-seen order, and the chart used to slice that order while claiming
+    // "top 5 by cost".
+    const model = (name: string, cost: number) => ({
+      model: name,
+      requests: 1,
+      inputTokens: 10,
+      outputTokens: 5,
+      cost,
+      percentage: 0,
+      timeSeries: [{ timestamp: "2026-08-11T00:00:00.000Z", value: cost }],
+    });
+    mockUseModelStatistics.mockReturnValue({
+      data: [
+        model("google/gemini-3-pro-preview", 0.1),
+        model("anthropic/claude-opus-4.8", 46),
+        model("moonshotai/kimi-k2-thinking", 0.64),
+        model("openrouter/auto", 4.21),
+        model("deepseek/deepseek-v3.1-terminus", 5),
+        model("z-ai/glm-4.6", 1.64),
+      ],
+    });
+
+    const { getAllByTestId } = render(<StatisticsPage />);
+
+    // The Models chart is the one whose config labels are model ids.
+    const chart = getAllByTestId("chart").find((el) =>
+      (el.getAttribute("data-config") ?? "").includes("claude-opus-4.8"),
+    );
+    expect(chart).toBeDefined();
+    const config = JSON.parse(chart?.getAttribute("data-config") ?? "{}");
+
+    // Top 5 by cost, costliest first — gemini ($0.10) must be the one left out.
+    expect(
+      Object.values(config).map((c) => (c as { label: string }).label),
+    ).toEqual([
+      "anthropic/claude-opus-4.8",
+      "deepseek/deepseek-v3.1-terminus",
+      "openrouter/auto",
+      "z-ai/glm-4.6",
+      "moonshotai/kimi-k2-thinking",
+    ]);
+
+    // Series keys become CSS custom-property names (`--color-<key>`). Model
+    // ids contain `/` and `.`, which are not valid there, so keying by the raw
+    // id gave every line an unresolvable stroke and no colour anywhere.
+    const lines = Array.from(
+      chart?.querySelectorAll("[data-testid='chart-line']") ?? [],
+    );
+    expect(lines).toHaveLength(5);
+    for (const line of lines) {
+      const key = line.getAttribute("data-key") ?? "";
+      expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(config[key]).toBeDefined();
+      expect(line.getAttribute("data-stroke")).toBe(`var(--color-${key})`);
     }
   });
 

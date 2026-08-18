@@ -135,7 +135,12 @@ export const AuditEventNameSchema = z.enum([
   "serviceAccount.deleted",
   "skill.created",
   "skill.updated",
+  // Visibility changed / soft-deleted across a batch of skills in one request.
+  // Distinct from the per-skill actions so a sweep over many skills is
+  // recognizable as one act rather than a burst of unrelated edits.
+  "skill.bulk_updated",
   "skill.deleted",
+  "skill.bulk_deleted",
   "skill.restored",
   "skill.purged",
   "skill.imported",

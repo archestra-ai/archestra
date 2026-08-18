@@ -1756,7 +1756,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.BulkUpdateSkillsVisibility]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.BulkDeleteSkills]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
   // Permanent deletion is irreversible, so the handler narrows this further to
   // a built-in admin ROLE — no skill permission, `skill:admin` included, gets

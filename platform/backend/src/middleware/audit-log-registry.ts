@@ -559,6 +559,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
+  // Bulk visibility / delete act on a list of skills from the request body, so
+  // there is no single resourceId and `fetchById` (which sees route params
+  // only) cannot represent the batch. Both handlers set `auditBefore` and
+  // `auditAfter` themselves — see buildBulkSkillAuditSnapshot in
+  // routes/skill/skill.routes.ts.
+  "/api/skills/bulk-visibility": {
+    resourceType: "skill",
+    action: "skill.bulk_updated",
+    resourceIdSource: "organizationContext",
+  },
+  "/api/skills/bulk-delete": {
+    resourceType: "skill",
+    action: "skill.bulk_deleted",
+    resourceIdSource: "organizationContext",
+  },
   // Restore is a POST carrying :id; register it directly so the hook captures
   // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
   // returns soft-deleted rows, so the "before" is the still-deleted skill.

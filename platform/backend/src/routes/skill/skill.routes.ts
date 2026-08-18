@@ -283,6 +283,40 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
     ),
 }).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
+/**
+ * Ceiling on one bulk request. Comfortably above the largest page the skills
+ * table offers, which is where a selection is made, while keeping a single
+ * request's work bounded — the visibility route writes one transaction per
+ * skill.
+ */
+const MAX_BULK_SKILL_IDS = 500;
+
+const BulkSkillIdsSchema = z
+  .array(UuidIdSchema)
+  .min(1)
+  .max(MAX_BULK_SKILL_IDS)
+  .describe("Skills to act on. Duplicates are collapsed.");
+
+/**
+ * Per-skill outcome of a bulk operation. Partial success is the normal case:
+ * ids are authorized one at a time, so one skill the caller may not touch does
+ * not strand the rest of the selection.
+ */
+const BulkSkillOutcomeSchema = z.object({
+  succeeded: z.array(z.object({ id: z.string(), name: z.string() })),
+  failed: z.array(
+    z.object({
+      id: z.string(),
+      /** Null when the id resolved to nothing the caller can see. */
+      name: z.string().nullable(),
+      error: z.string(),
+    }),
+  ),
+});
+
+type BulkSkillOutcomeEntry = { id: string; name: string };
+type BulkSkillFailure = { id: string; name: string | null; error: string };
+
 /** A comma-separated query param parsed into a string[] (mirrors the agents list). */
 const CommaSeparatedIds = z.preprocess(
   (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
@@ -972,6 +1006,141 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/skills/bulk-visibility",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateSkillsVisibility,
+        description:
+          "Move several skills to one visibility scope in a single request, " +
+          "replacing their team assignments (`scope = team`) or per-person " +
+          "grants (`scope = personal`). Nothing else about the skills is " +
+          "touched: no version is forked, and GitHub-synced skills are " +
+          "included because their read-only content is not involved. The " +
+          "target scope and teams are validated once for the whole request " +
+          "(400/403 changes nothing); per-skill problems — an id the caller " +
+          "cannot see or modify, or a name already taken in the target " +
+          "visibility namespace — are reported in `failed` and leave the " +
+          "rest of the batch applied. A skill already in the requested state " +
+          "is reported as succeeded without being rewritten.",
+        tags: ["Skills"],
+        body: z.object({
+          skillIds: BulkSkillIdsSchema,
+          scope: ResourceVisibilityScopeSchema,
+          teamIds: z
+            .array(z.string())
+            .optional()
+            .describe("Only meaningful for `scope = team`; required there."),
+          userIds: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "People to share with by name. Only meaningful for " +
+                "`scope = personal`; ignored for team/org skills.",
+            ),
+        }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const skillIds = dedupe(body.skillIds);
+      const scope = body.scope;
+      // Mirrors the single-skill update: teams only bind a team-scoped skill,
+      // and grants only a personal one, so the other set is cleared rather
+      // than left stranded on a skill whose visibility now says otherwise.
+      const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
+
+      // Request-level: the target is the same for every skill, so an unusable
+      // one is a bad request rather than N identical per-skill failures.
+      await assertSkillTeams({ scope, teamIds, organizationId });
+
+      const context = await loadBulkSkillContext({
+        skillIds,
+        userId: user.id,
+        organizationId,
+      });
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const succeeded: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      for (const id of skillIds) {
+        const skill = context.skillsById.get(id);
+        if (!skill || !context.isVisible(skill)) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        const currentTeamIds = context.teamIdsBySkill.get(id) ?? [];
+        const currentUserIds = context.userIdsBySkill.get(id) ?? [];
+
+        try {
+          // Two checks, as on the single-skill update: the caller must be
+          // allowed to modify the skill where it is now, and to place it where
+          // it is going.
+          requireSkillModifyPermission({
+            checker: context.checker,
+            scope: skill.scope,
+            authorId: skill.authorId,
+            skillTeamIds: currentTeamIds,
+            userTeamIds: context.userTeamIds,
+            userId: user.id,
+          });
+          authorizeSkillScope({
+            checker: context.checker,
+            scope,
+            authorId: skill.authorId,
+            requestedTeamIds: teamIds,
+            userTeamIds: context.userTeamIds,
+            userId: user.id,
+          });
+
+          const unchanged =
+            skill.scope === scope &&
+            sameIdSet(currentTeamIds, teamIds) &&
+            sameIdSet(currentUserIds, userIds);
+          if (!unchanged) {
+            const updated = await withTeamFkErrorMapped(() =>
+              SkillModel.updateVisibility({ id, scope, teamIds, userIds }),
+            );
+            if (!updated) {
+              failed.push({ id, name: skill.name, error: "Skill not found" });
+              continue;
+            }
+          }
+          succeeded.push({ id, name: skill.name });
+        } catch (error) {
+          // A skill keeps its name only within its visibility namespace, so
+          // widening one to team/org can collide with a shared skill of the
+          // same name. That is this skill's problem, not the batch's.
+          if (isSkillNameConflict(error)) {
+            failed.push({
+              id,
+              name: skill.name,
+              error: skillNameConflict(skill.name).message,
+            });
+            continue;
+          }
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded, failed });
+    },
+  );
+
   fastify.get(
     "/api/skills/source-repos",
     {
@@ -1026,6 +1195,77 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/bulk-delete",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteSkills,
+        description:
+          "Soft-delete several skills in one request. Each id is authorized " +
+          "exactly as the single-skill delete authorizes its own: an id the " +
+          "caller cannot see or modify is reported in `failed` and the rest " +
+          "of the batch still applies. Deleted skills keep their versions and " +
+          "resource files and can be restored from the trash.",
+        tags: ["Skills"],
+        body: z.object({ skillIds: BulkSkillIdsSchema }),
+        response: constructResponseSchema(BulkSkillOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const skillIds = dedupe(body.skillIds);
+
+      const context = await loadBulkSkillContext({
+        skillIds,
+        userId: user.id,
+        organizationId,
+      });
+      request.auditBefore = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+
+      const deletable: BulkSkillOutcomeEntry[] = [];
+      const failed: BulkSkillFailure[] = [];
+
+      for (const id of skillIds) {
+        const skill = context.skillsById.get(id);
+        if (!skill || !context.isVisible(skill)) {
+          failed.push({ id, name: null, error: "Skill not found" });
+          continue;
+        }
+        try {
+          requireSkillModifyPermission({
+            checker: context.checker,
+            scope: skill.scope,
+            authorId: skill.authorId,
+            skillTeamIds: context.teamIdsBySkill.get(id) ?? [],
+            userTeamIds: context.userTeamIds,
+            userId: user.id,
+          });
+        } catch (error) {
+          if (error instanceof ApiError) {
+            failed.push({ id, name: skill.name, error: error.message });
+            continue;
+          }
+          throw error;
+        }
+        deletable.push({ id, name: skill.name });
+      }
+
+      // One statement rather than a delete per id: a soft delete cannot
+      // conflict with anything (it frees the name rather than claiming one),
+      // so there is no per-skill failure left for the write itself to produce.
+      await SkillModel.deleteMany(deletable.map((entry) => entry.id));
+
+      request.auditAfter = await buildBulkSkillAuditSnapshot({
+        skillIds,
+        organizationId,
+      });
+      return reply.send({ succeeded: deletable, failed });
     },
   );
 
@@ -1812,6 +2052,106 @@ async function loadSkillDetail(skill: Skill) {
     teams: teamsBySkill.get(skill.id) ?? [],
     users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
+  };
+}
+
+/**
+ * Everything the bulk routes need to authorize a batch of skills, read in a
+ * fixed number of queries rather than per skill: the caller's skill
+ * permissions and teams, the skills themselves fenced to the organization,
+ * their current team assignments and per-person grants, and a visibility test.
+ *
+ * The organization fence is load-bearing. Skill ids arrive straight from the
+ * request body, and `requireSkillModifyPermission` short-circuits for an
+ * admin — where "admin" means admin of the CALLER's organization — so without
+ * fencing here a foreign-org id would sail past the scope checks. Dropping it
+ * from the map instead makes it indistinguishable from a nonexistent id, which
+ * is what the single-skill routes answer too.
+ */
+async function loadBulkSkillContext(params: {
+  skillIds: string[];
+  userId: string;
+  organizationId: string;
+}): Promise<{
+  checker: SkillPermissionChecker;
+  userTeamIds: string[];
+  skillsById: Map<string, Skill>;
+  teamIdsBySkill: Map<string, string[]>;
+  userIdsBySkill: Map<string, string[]>;
+  isVisible: (skill: Skill) => boolean;
+}> {
+  const { skillIds, userId, organizationId } = params;
+
+  const checker = await getSkillPermissionChecker({ userId, organizationId });
+  const [skills, userTeamIds, accessibleIds] = await Promise.all([
+    SkillModel.findByIds(skillIds),
+    checker.isAdmin
+      ? Promise.resolve<string[]>([])
+      : TeamModel.getUserTeamIds(userId),
+    // Admins see every skill in the org, so the (unbounded) accessible-id scan
+    // is skipped for them entirely — as the list route does.
+    checker.isAdmin
+      ? Promise.resolve<string[] | null>(null)
+      : SkillTeamModel.getUserAccessibleSkillIds({ organizationId, userId }),
+  ]);
+
+  const skillsById = new Map(
+    skills
+      .filter((skill) => skill.organizationId === organizationId)
+      .map((skill) => [skill.id, skill]),
+  );
+  const foundIds = [...skillsById.keys()];
+  const [teamsBySkill, usersBySkill] = await Promise.all([
+    SkillTeamModel.getTeamDetailsForSkills(foundIds),
+    SkillUserModel.getUserDetailsForSkills(foundIds),
+  ]);
+  const accessibleIdSet = accessibleIds ? new Set(accessibleIds) : null;
+
+  return {
+    checker,
+    userTeamIds,
+    skillsById,
+    teamIdsBySkill: new Map(
+      [...teamsBySkill].map(([id, teams]) => [id, teams.map((t) => t.id)]),
+    ),
+    userIdsBySkill: new Map(
+      [...usersBySkill].map(([id, users]) => [id, users.map((u) => u.id)]),
+    ),
+    isVisible: (skill) =>
+      accessibleIdSet === null || accessibleIdSet.has(skill.id),
+  };
+}
+
+/**
+ * Per-skill visibility snapshot for a bulk route's audit record, used for both
+ * the before and after side.
+ *
+ * The registry's generic `fetchById` cannot express this: a batch has no single
+ * resource id, and the snapshot has to be derived from the request body, which
+ * `fetchById` never sees. Soft-deleted rows are included so a bulk delete's
+ * "after" side still names what it removed rather than going empty.
+ */
+async function buildBulkSkillAuditSnapshot(params: {
+  skillIds: string[];
+  organizationId: string;
+}): Promise<Record<string, unknown>> {
+  const rows = await SkillModel.findVisibilityForAudit({
+    ids: params.skillIds,
+    organizationId: params.organizationId,
+  });
+  const ids = rows.map((row) => row.id);
+  const [teamsBySkill, usersBySkill] = await Promise.all([
+    SkillTeamModel.getTeamDetailsForSkills(ids),
+    SkillUserModel.getUserDetailsForSkills(ids),
+  ]);
+  return {
+    skills: rows.map((row) => ({
+      ...row,
+      // Sorted so two reads of an unchanged batch produce an identical
+      // snapshot and the audit diff stays empty; row order is unspecified.
+      teamIds: (teamsBySkill.get(row.id) ?? []).map((team) => team.id).sort(),
+      userIds: (usersBySkill.get(row.id) ?? []).map((user) => user.id).sort(),
+    })),
   };
 }
 

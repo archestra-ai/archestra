@@ -119,8 +119,11 @@ import {
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
   type OLLAMA_NATIVE_PARAM_RULES,
+  parseCustomTokenLimit,
   resolveDisplayContextLength,
+  resolveDisplayOutputLength,
   validateConfiguredParameter,
+  validateCustomTokenLimit,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -313,9 +316,17 @@ export default function ModelsPage() {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="secondary" className="text-xs gap-1">
+                      {/* Bounded like the API-key badges beside it: this
+                          label is the longest thing the column ever renders,
+                          and unbounded it spilled over the next column. */}
+                      <Badge
+                        variant="secondary"
+                        className="text-xs gap-1 max-w-full"
+                      >
                         <ArrowLeftRight className="h-3 w-3 shrink-0" />
-                        <span>{OBSERVED_MODEL_SOURCE_LABEL}</span>
+                        <span className="truncate">
+                          {OBSERVED_MODEL_SOURCE_LABEL}
+                        </span>
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
@@ -406,30 +417,51 @@ export default function ModelsPage() {
           if (hasUnknownCapabilities(row.original)) {
             return <UnknownCapabilitiesBadge />;
           }
-          const { display, architectural, isCapped } =
+          const { display, architectural, isCapped, isCustom } =
             resolveDisplayContextLength(row.original);
-          if (!isCapped) {
+          if (isCapped) {
+            return (
+              <AnnotatedTokenLimit value={display}>
+                This model supports {formatContextLength(architectural)} tokens,
+                but is capped at {formatContextLength(display)} by its Ollama
+                Modelfile or a configured num_ctx.
+              </AnnotatedTokenLimit>
+            );
+          }
+          if (isCustom) {
+            return (
+              <AnnotatedTokenLimit value={display}>
+                Set manually, overriding whatever the provider reports for this
+                model.
+              </AnnotatedTokenLimit>
+            );
+          }
+          return (
+            <span className="text-sm">{formatContextLength(display)}</span>
+          );
+        },
+      },
+      {
+        id: "outputLength",
+        // Sorting follows the cell, which prefers the admin override.
+        accessorFn: (row) => resolveDisplayOutputLength(row).display,
+        size: 100,
+        header: "Max output",
+        cell: ({ row }) => {
+          if (hasUnknownCapabilities(row.original)) return null;
+          const { display, isCustom } = resolveDisplayOutputLength(
+            row.original,
+          );
+          if (!isCustom) {
             return (
               <span className="text-sm">{formatContextLength(display)}</span>
             );
           }
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm underline decoration-dotted underline-offset-4">
-                    {formatContextLength(display)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p>
-                    This model supports {formatContextLength(architectural)}{" "}
-                    tokens, but is capped at {formatContextLength(display)} by
-                    its Ollama Modelfile or a configured num_ctx.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <AnnotatedTokenLimit value={display}>
+              Set manually, overriding whatever the provider reports for this
+              model.
+            </AnnotatedTokenLimit>
           );
         },
       },
@@ -682,6 +714,8 @@ interface EditModelFormValues {
   customPricePerMillionOutput: string;
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
+  customContextLength: string;
+  customOutputLength: string;
   ignored: boolean;
   accessScope: ModelAccessScope;
   teamIds: string[];
@@ -759,6 +793,12 @@ function EditModelDialog({
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
   const accessScope = form.watch("accessScope");
+  // The `num_ctx` ceiling follows the window currently entered in this dialog,
+  // not the saved one: the update route validates the post-patch pair, so
+  // raising the window and `num_ctx` in one save has to pass here too.
+  const contextCeiling =
+    parseCustomTokenLimit(form.watch("customContextLength")) ??
+    model.contextLength;
 
   // An embedding model whose embedding client is text-only can't take image
   // input — the backend rejects the save, so disable the option here with the
@@ -816,6 +856,10 @@ function EditModelDialog({
       customPricePerMillionOutput: outputPrice,
       customPricePerMillionCacheRead: cacheReadPrice,
       customPricePerMillionCacheWrite: cacheWritePrice,
+      // Empty clears the override, which is how the provider's own figure
+      // becomes visible again after one has been set.
+      customContextLength: parseCustomTokenLimit(values.customContextLength),
+      customOutputLength: parseCustomTokenLimit(values.customOutputLength),
       ignored: values.ignored,
       // Both lists always go, so switching between Teams and Users revokes
       // what the previous choice left behind instead of stranding it.
@@ -866,7 +910,7 @@ function EditModelDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Edit Model"
-      description="Update pricing and modality settings for this model."
+      description="Update pricing, limits, and modality settings for this model."
       size="large"
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
@@ -1130,6 +1174,70 @@ function EditModelDialog({
                 )}
               </div>
             )}
+          </div>
+
+          <Separator />
+
+          {/* Context window + max output tokens */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Limits</span>
+              <p className="text-sm text-muted-foreground">
+                The context window and output ceiling {appName} assumes for this
+                model. Leave a field empty to use whatever the provider reports;
+                set it when the provider reports nothing, or reports a value
+                that does not match how this model is actually served.
+              </p>
+            </div>
+            {model.contextLength === null && model.outputLength === null && (
+              <p className="text-xs text-muted-foreground">
+                This provider reports neither limit for this model, so chat
+                context usage and output budgets fall back to conservative
+                defaults until you set them here.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="customContextLength"
+                rules={{ validate: validateCustomTokenLimit }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Context window (tokens)</FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        placeholder={providerLimitPlaceholder(
+                          model.contextLength,
+                        )}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="customOutputLength"
+                rules={{ validate: validateCustomTokenLimit }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max output tokens</FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        placeholder={providerLimitPlaceholder(
+                          model.outputLength,
+                        )}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -1408,7 +1516,7 @@ function EditModelDialog({
                           validateConfiguredParameter({
                             name: param.name,
                             value,
-                            contextLength: model.contextLength,
+                            contextLength: contextCeiling,
                           }),
                       }}
                       render={({ field }) => (
@@ -1541,6 +1649,35 @@ function ollamaDefaultPlaceholder(
 
 // --- Internal helpers ---
 
+/**
+ * A token-limit table cell whose number needs a footnote — an Ollama-capped
+ * window, or a value an admin set because the provider reports none. Dotted
+ * underline marks it as explainable rather than just rendering an unexplained
+ * number the provider never published.
+ */
+function AnnotatedTokenLimit({
+  value,
+  children,
+}: {
+  value: number | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-sm underline decoration-dotted underline-offset-4">
+            {formatContextLength(value)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p>{children}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function ModalitySelectField<T extends string>(params: {
   options: Array<{
     value: T;
@@ -1641,6 +1778,9 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
   // context ring is enforcing.
   const hasContextLength =
     model.contextLength !== null || model.effectiveContextLength !== null;
+  // Including the admin override: setting only the output limit on an
+  // otherwise-blank row left this badge up, hiding the number just entered.
+  const hasOutputLength = resolveDisplayOutputLength(model).display !== null;
   const hasPricing =
     model.pricePerMillionInput !== null || model.pricePerMillionOutput !== null;
   return (
@@ -1648,6 +1788,7 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
     !hasOutputModalities &&
     !hasToolCalling &&
     !hasContextLength &&
+    !hasOutputLength &&
     !hasPricing
   );
 }
@@ -1673,6 +1814,15 @@ function getFallbackPricing(model: ModelWithApiKeys): {
   };
 }
 
+/**
+ * Placeholder for a limit input: the provider's own figure, or a note that it
+ * published none. An empty field means "use the provider's value", so the
+ * placeholder has to say what that value is — including when there isn't one.
+ */
+function providerLimitPlaceholder(value: number | null): string {
+  return value === null ? "Not reported by the provider" : value.toString();
+}
+
 function sameModalities(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((modality) => b.includes(modality));
 }
@@ -1684,6 +1834,8 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
+    customContextLength: model.customContextLength?.toString() ?? "",
+    customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,
     accessScope:
       model.teams.length > 0 ? ("team" as const) : ("everyone" as const),

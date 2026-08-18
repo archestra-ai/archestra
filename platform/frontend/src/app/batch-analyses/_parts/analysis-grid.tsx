@@ -10,6 +10,7 @@ import {
   type CellMouseArgs,
   type Column,
   DataGrid,
+  type DataGridHandle,
 } from "react-data-grid";
 import type { PreviewableDocument } from "@/components/files/file-preview-dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -28,6 +29,7 @@ type AnalysisColumn = BatchAnalysisDetail["analysis"]["columns"][number];
  * opens the answer's detail sheet.
  */
 export function AnalysisGrid({
+  gridRef,
   columns: analysisColumns,
   rows,
   cellsByRowAndColumn,
@@ -36,6 +38,8 @@ export function AnalysisGrid({
   onDeleteRow,
   deleteRowDisabled,
 }: {
+  /** Exposes the grid element so the page can hand focus back after dialogs. */
+  gridRef?: React.Ref<DataGridHandle>;
   columns: AnalysisColumn[];
   rows: Row[];
   cellsByRowAndColumn: Map<string, Cell>;
@@ -118,12 +122,19 @@ export function AnalysisGrid({
       args.row &&
       args.column
     ) {
+      // Without preventDefault the browser's default Enter activation fires a
+      // click on whatever is focused once the event settles — by then that is
+      // the sheet's close button, so the sheet would close the instant it
+      // opens.
+      event.preventDefault();
+      event.preventGridDefault();
       openCell({ row: args.row, column: args.column });
     }
   }
 
   return (
     <DataGrid
+      ref={gridRef}
       columns={gridColumns}
       rows={rows}
       rowKeyGetter={(row) => row.id}

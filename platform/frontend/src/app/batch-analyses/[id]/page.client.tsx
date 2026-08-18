@@ -3,7 +3,8 @@
 import { ArrowLeft, Loader2, Pencil, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { DataGridHandle } from "react-data-grid";
 import { AddRowsDialog } from "@/app/batch-analyses/_parts/add-rows-dialog";
 import { AnalysisGrid } from "@/app/batch-analyses/_parts/analysis-grid";
 import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
@@ -71,6 +72,7 @@ export default function BatchAnalysisDetailPage() {
     row: Row;
     columnKey: string;
   } | null>(null);
+  const gridRef = useRef<DataGridHandle>(null);
 
   const { data, isLoading, isLoadingError, refetch } =
     useBatchAnalysis(analysisId);
@@ -216,6 +218,7 @@ export default function BatchAnalysisDetailPage() {
         </Card>
       ) : (
         <AnalysisGrid
+          gridRef={gridRef}
           columns={analysis.columns}
           rows={rows}
           cellsByRowAndColumn={cellsByRowAndColumn}
@@ -239,6 +242,15 @@ export default function BatchAnalysisDetailPage() {
         column={analysis.columns.find((c) => c.key === selected?.columnKey)}
         cell={selectedCell}
         onViewSource={(file) => setPreviewFile(file)}
+        // A controlled sheet has no trigger to give focus back to, so Radix
+        // would drop it on <body> and the grid's keyboard navigation would go
+        // dead. Hand focus back to the active cell instead.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          gridRef.current?.element
+            ?.querySelector<HTMLElement>('[tabindex="0"]')
+            ?.focus();
+        }}
       />
       <FilePreviewDialog
         open={!!previewFile}

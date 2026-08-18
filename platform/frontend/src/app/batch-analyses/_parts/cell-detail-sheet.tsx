@@ -42,6 +42,7 @@ export function CellDetailSheet({
   column,
   cell,
   onViewSource,
+  onCloseAutoFocus,
 }: {
   analysisId: string;
   open: boolean;
@@ -51,6 +52,8 @@ export function CellDetailSheet({
   cell: Cell | undefined;
   /** Called with the row's source file; the parent owns the preview dialog. */
   onViewSource?: (file: PreviewableDocument) => void;
+  /** Radix close-focus hook; the parent uses it to hand focus back to the grid. */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const retryCell = useRetryBatchAnalysisCell(analysisId);
 
@@ -61,7 +64,10 @@ export function CellDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-xl">
+      <SheetContent
+        className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-xl"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <SheetHeader className="shrink-0 border-b px-6 py-4">
           <SheetTitle className="pr-8">{column.name}</SheetTitle>
           <SheetDescription className="flex items-center gap-1.5">

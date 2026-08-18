@@ -891,7 +891,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             buildChatContext({
               conversationId,
               agentId,
-              agent,
+              // The conversation came from findById, which selects the agent's
+              // prompt (only list reads omit it) — pin the optional field to
+              // the concrete `string | null` contract the builder declares.
+              agent: { ...agent, systemPrompt: agent.systemPrompt ?? null },
               user: { id: user.id, email: user.email, name: user.name },
               organizationId,
               hookSessionContext,

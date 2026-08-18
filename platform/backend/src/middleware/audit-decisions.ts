@@ -4,6 +4,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BatchAnalysisModel from "@/models/batch-analysis";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -123,6 +124,26 @@ export const AUDIT_DECISIONS = {
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
   teamTokensTable: { audited: true, model: TeamTokenModel },
+  batchAnalysesTable: { audited: true, model: BatchAnalysisModel },
+  batchAnalysisTeamTable: {
+    audited: false,
+    reason: "join: batch analysis × team; parent (batch analysis) audited",
+  },
+  batchAnalysisRunsTable: {
+    audited: false,
+    reason:
+      "execution state for one dispatch of an analysis; progress counters advanced by workers, not admin-mutable",
+  },
+  batchAnalysisRowsTable: {
+    audited: false,
+    reason:
+      "child rows of an analysis; the parent analysis carries the auditable signal",
+  },
+  batchAnalysisCellsTable: {
+    audited: false,
+    reason:
+      "per-cell results written by workers; high-volume execution output. The one admin-mutable slice — human verification — is audited by the dedicated /cells/verification registry entry against the parent analysis",
+  },
   toolsTable: { audited: true, model: ToolModel },
   toolInvocationPoliciesTable: {
     audited: true,

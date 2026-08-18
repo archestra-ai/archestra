@@ -35,6 +35,7 @@ export const TaskTypeSchema = z.enum([
   "skill_github_sync",
   "skill_publication_backfill",
   "p4_shim_reconcile",
+  "batch_analysis_row",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -52,6 +53,16 @@ export type PermissionSyncPayload = {
 export type SkillGithubSyncPayload = {
   skillId: string;
 };
+/**
+ * One row of a batch analysis: resolve the row's source once, then answer every
+ * not-yet-`done` column against it. The unit of work is a row rather than a cell
+ * so a row's source text is fetched and paid for once per pass, no matter how
+ * many columns it carries.
+ */
+export type BatchAnalysisRowPayload = {
+  runId: string;
+  rowId: string;
+};
 
 // ===== Queue lanes (runtime isolation) =====
 
@@ -65,6 +76,11 @@ export type SkillGithubSyncPayload = {
 export const TASK_LANES = {
   content: ["connector_sync", "batch_embedding"],
   permission: ["permission_sync"],
+  // Batch analysis gets its own lane because a run is user-initiated and
+  // interactive — someone is watching cells fill in — while the content lane is
+  // sized for background embedding (default cap of 2). Sharing a lane would let
+  // a large sync stall a review, and a large review stall ingestion.
+  analysis: ["batch_analysis_row"],
   system: [
     "check_due_connectors",
     "check_due_permission_syncs",

@@ -41,6 +41,7 @@ export function FilePreview({
   editing = false,
   fileId,
   onExitEdit,
+  highlightQuote,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
@@ -50,6 +51,12 @@ export function FilePreview({
   fileId?: string;
   /** Called when the editor saves or cancels, so the caller can clear `editing`. */
   onExitEdit?: () => void;
+  /**
+   * A verbatim span to locate in the file. Plain-text previews mark and scroll
+   * to it; renderers that cannot mark inline (pdf, markdown, html, csv) show
+   * the quote above the preview for use with the browser's own find.
+   */
+  highlightQuote?: string;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
   // After a save the bytes change but the URL doesn't, so a plain re-render would
@@ -76,6 +83,9 @@ export function FilePreview({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
+      {highlightQuote && kind !== "text" && (
+        <QuoteBanner quote={highlightQuote} />
+      )}
       {kind === "markdown" && (
         <RemoteMarkdownPreview
           contentUrl={contentUrl}
@@ -100,7 +110,11 @@ export function FilePreview({
         />
       )}
       {(kind === "text" || kind === "csv") && (
-        <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
+        <FileTextPreview
+          contentUrl={contentUrl}
+          asTable={kind === "csv"}
+          highlightQuote={kind === "text" ? highlightQuote : undefined}
+        />
       )}
       {kind === "unsupported" && <UnsupportedPreview file={file} />}
     </div>
@@ -275,9 +289,11 @@ function HtmlPreview({ contentUrl }: { contentUrl: string }) {
 function FileTextPreview({
   contentUrl,
   asTable,
+  highlightQuote,
 }: {
   contentUrl: string;
   asTable: boolean;
+  highlightQuote?: string;
 }) {
   const { text, failed } = useFileText(contentUrl);
 
@@ -321,8 +337,84 @@ function FileTextPreview({
       </div>
     );
   }
+  const highlighted = highlightQuote
+    ? splitOnQuote(text, highlightQuote)
+    : null;
+  if (highlighted) {
+    return (
+      <pre className="whitespace-pre-wrap break-words p-4 text-xs">
+        {/* Spans, not bare text nodes: the mark's neighbors are created and
+            destroyed when the quote changes, which crashes under machine
+            translation if they are bare (see the frontend skill). */}
+        <span>{highlighted.before}</span>
+        <mark
+          ref={(el) => el?.scrollIntoView({ block: "center" })}
+          className="rounded-sm bg-yellow-200 px-0.5 dark:bg-yellow-500/40"
+        >
+          {highlighted.match}
+        </mark>
+        <span>{highlighted.after}</span>
+      </pre>
+    );
+  }
   return (
-    <pre className="whitespace-pre-wrap break-words p-4 text-xs">{text}</pre>
+    <>
+      {highlightQuote && <QuoteBanner quote={highlightQuote} notFound />}
+      <pre className="whitespace-pre-wrap break-words p-4 text-xs">{text}</pre>
+    </>
+  );
+}
+
+/**
+ * Locate a quote with the same tolerance the citation grounding check used:
+ * case-insensitive, any whitespace run matches any other. Returns the original
+ * text split around the first match, or null when absent.
+ *
+ * @public — exported for tests
+ */
+export function splitOnQuote(
+  text: string,
+  quote: string,
+): { before: string; match: string; after: string } | null {
+  const trimmed = quote.trim();
+  if (!trimmed) return null;
+  const pattern = trimmed
+    .split(/\s+/)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const match = new RegExp(pattern, "i").exec(text);
+  if (!match) return null;
+  return {
+    before: text.slice(0, match.index),
+    match: match[0],
+    after: text.slice(match.index + match[0].length),
+  };
+}
+
+/**
+ * Shown where inline marking is impossible (browser-owned PDF viewer, rendered
+ * markdown, sandboxed html) or the quote no longer occurs: the quote itself
+ * with a hint to use the browser's find.
+ */
+function QuoteBanner({
+  quote,
+  notFound,
+}: {
+  quote: string;
+  notFound?: boolean;
+}) {
+  return (
+    <div className="border-b bg-muted/50 px-4 py-2 text-xs">
+      <p className="line-clamp-3">
+        <span className="text-muted-foreground">
+          {notFound ? "Quote (not found verbatim): " : "Cited text: "}
+        </span>
+        <q>{quote}</q>
+      </p>
+      <p className="text-muted-foreground">
+        Use your browser's find (Ctrl/Cmd+F) to locate it in the document.
+      </p>
+    </div>
   );
 }
 

@@ -7,7 +7,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  Check,
   CheckCircle2,
   ChevronRight,
   Loader2,
@@ -53,6 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stepper } from "@/components/ui/stepper";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
@@ -91,7 +91,6 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
-import { cn } from "@/lib/utils";
 import { InstallationProgress } from "./installation-progress";
 import {
   LocalServerInstallDialog,
@@ -118,49 +117,12 @@ export function SetupStepper({
   activeStep: SetupStepId;
   onStepClick?: (step: SetupStepId) => void;
 }) {
-  const activeIndex = SETUP_STEPS.findIndex((s) => s.id === activeStep);
   return (
-    <ol className="flex flex-wrap items-center gap-3">
-      {SETUP_STEPS.map((step, index) => {
-        const isActive = index === activeIndex;
-        const isComplete = index < activeIndex;
-        return (
-          <li key={step.id} className="flex items-center gap-3">
-            <button
-              type="button"
-              className={cn(
-                "flex items-center gap-2",
-                onStepClick ? "cursor-pointer" : "cursor-default",
-              )}
-              onClick={() => onStepClick?.(step.id)}
-            >
-              <span
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-full border text-xs font-medium",
-                  isActive &&
-                    "border-primary bg-primary text-primary-foreground",
-                  isComplete && "border-primary bg-primary/10 text-primary",
-                  !isActive && !isComplete && "text-muted-foreground",
-                )}
-              >
-                {isComplete ? <Check className="h-3.5 w-3.5" /> : index + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-sm",
-                  isActive ? "font-medium" : "text-muted-foreground",
-                )}
-              >
-                {step.title}
-              </span>
-            </button>
-            {index < SETUP_STEPS.length - 1 && (
-              <span className="h-px w-8 bg-border" aria-hidden="true" />
-            )}
-          </li>
-        );
-      })}
-    </ol>
+    <Stepper
+      steps={SETUP_STEPS}
+      activeStep={activeStep}
+      onStepClick={onStepClick}
+    />
   );
 }
 

@@ -27,6 +27,7 @@ export { default as AppRenderScreenshotModel } from "./app-render-screenshot";
 export { default as AppToolModel } from "./app-tool";
 export { default as AppVersionModel } from "./app-version";
 export { default as AuditLogModel } from "./audit-log";
+export { default as BatchAnalysisModel } from "./batch-analysis";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";

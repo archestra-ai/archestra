@@ -3,6 +3,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BatchAnalysisModel from "@/models/batch-analysis";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
@@ -201,6 +202,31 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/apps": {
     resourceType: "app",
     fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+
+  // Batch analysis. The nested `/rows`, `/runs` and cell-retry routes resolve to
+  // the `:analysisId` entry by the path walk-up, so adding rows and dispatching
+  // work both record `batchAnalysis.updated` against the analysis — which is the
+  // resource an operator would search for.
+  "/api/batch-analyses": {
+    resourceType: "batchAnalysis",
+    fetchById: (id, orgId) => BatchAnalysisModel.findByIdForAudit(id, orgId),
+  },
+  "/api/batch-analyses/:analysisId": {
+    resourceType: "batchAnalysis",
+    resourceIdParam: "analysisId",
+    fetchById: (id, orgId) => BatchAnalysisModel.findByIdForAudit(id, orgId),
+  },
+  // Human verification mutates cell-level state the analysis snapshot above
+  // does not carry, so the walk-up would record an empty diff. This entry's
+  // snapshot is the verification surface itself (count + digest + the verified
+  // set while small), making even count-neutral changes diff.
+  "/api/batch-analyses/:analysisId/cells/verification": {
+    resourceType: "batchAnalysis",
+    resourceIdParam: "analysisId",
+    action: "batchAnalysis.updated",
+    fetchById: (id, orgId) =>
+      BatchAnalysisModel.findVerificationForAudit(id, orgId),
   },
   "/api/apps/:appId": {
     resourceType: "app",

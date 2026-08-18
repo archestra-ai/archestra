@@ -26,6 +26,12 @@
       "verifiedBy": "manual inspection",
       "verifiedDate": "2025-12-18"
     },
+    "buffers": {
+      "license": "MIT",
+      "source": "https://sources.debian.org/copyright/license/node-buffers/0.1.1-2/",
+      "verifiedBy": "Debian copyright audit; the deleted upstream repo's package.json declared MIT/X11 (preserved at https://github.com/franchb/node-buffers-substack-orig)",
+      "verifiedDate": "2026-08-18"
+    },
     "jsuri": {
       "license": "MIT",
       "source": "https://github.com/derek-watson/jsUri/blob/master/LICENSE",

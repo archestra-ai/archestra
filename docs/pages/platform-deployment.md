@@ -1733,6 +1733,20 @@ The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one
   - Default: Not set.
   - The secret is read on every token refresh, so rotating it alone needs no reconnect. Changing the client **ID** invalidates existing authorizations — each affected connector reports that and needs reconnecting.
 
+### Batch Analysis
+
+Batch analysis runs a saved set of prompts across a set of sources and collects the answers into a grid. Work is dispatched through the task queue one row at a time, in a lane of its own.
+
+- **`ARCHESTRA_BATCH_ANALYSIS_WORKER_MAX_CONCURRENT`** - Concurrency cap for the `analysis` worker lane.
+  - Default: `4`
+  - Each slot holds one in-flight row, and a row costs one LLM call, so this is effectively the parallel-request budget spent on analysis work. The lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so a large embedding backlog cannot stall a run someone is watching, and a large run cannot stall ingestion.
+- **`ARCHESTRA_BATCH_ANALYSIS_MAX_SOURCE_CHARS`** - Maximum characters of source text handed to the model for a single row.
+  - Default: `200000`
+  - Sources are analysed whole rather than retrieved, so this bounds what one outsized document can do to the context window. Truncation is recorded on the cell and stated in the prompt, so a partial answer is never presented as a complete one.
+- **`ARCHESTRA_BATCH_ANALYSIS_MAX_ROWS`** - Maximum rows a single analysis may hold.
+  - Default: `1000`
+  - Bounds the queue burst a single run can create.
+
 ### Data Retention
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

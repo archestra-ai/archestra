@@ -1,0 +1,471 @@
+"use client";
+
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Play,
+  Plus,
+} from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
+import type { DataGridHandle, SortColumn } from "react-data-grid";
+import { AddRowsDialog } from "@/app/batch-analyses/_parts/add-rows-dialog";
+import { AnalysisGrid } from "@/app/batch-analyses/_parts/analysis-grid";
+import {
+  type AnswerViewFilter,
+  computeVisibleRows,
+  EMPTY_ANSWER_FILTER,
+  isFilterActive,
+} from "@/app/batch-analyses/_parts/answer-view";
+import { AskGridPanel } from "@/app/batch-analyses/_parts/ask-grid-panel";
+import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
+import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
+import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
+import {
+  downloadAnalysisCsv,
+  downloadAnalysisXlsx,
+} from "@/app/batch-analyses/_parts/export-analysis";
+import {
+  type PreviewableSourceText,
+  SourceTextDialog,
+} from "@/app/batch-analyses/_parts/source-text-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  FilePreviewDialog,
+  type PreviewableDocument,
+} from "@/components/files/file-preview-dialog";
+import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
+import { SearchInput } from "@/components/search-input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  type BatchAnalysisDetail,
+  useBatchAnalysis,
+  useDeleteBatchAnalysisRow,
+  useStartBatchAnalysisRun,
+} from "@/lib/batch-analysis/batch-analysis.query";
+
+type Cell = BatchAnalysisDetail["cells"][number];
+type Row = BatchAnalysisDetail["rows"][number];
+
+const RUN_STATUS_LABELS: Record<string, string> = {
+  running: "Running",
+  success: "Completed",
+  completed_with_errors: "Completed with errors",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+function runStatusVariant(
+  status: string | undefined,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "failed") return "destructive";
+  if (status === "completed_with_errors") return "outline";
+  if (status === "success") return "secondary";
+  return "default";
+}
+
+function BackToAnalysesLink() {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-2 text-muted-foreground"
+      asChild
+    >
+      <Link href="/batch-analyses">
+        <ArrowLeft className="h-4 w-4" />
+        Batch Analyses
+      </Link>
+    </Button>
+  );
+}
+
+export default function BatchAnalysisDetailPage() {
+  const params = useParams<{ id: string }>();
+  const analysisId = params.id;
+  const [addRowsOpen, setAddRowsOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
+  const [previewText, setPreviewText] = useState<PreviewableSourceText>();
+  const [rowPendingDelete, setRowPendingDelete] = useState<Row | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [selected, setSelected] = useState<{
+    row: Row;
+    columnKey: string;
+  } | null>(null);
+  const gridRef = useRef<DataGridHandle>(null);
+  const [sortColumns, setSortColumns] = useState<SortColumn[]>([]);
+  const [filter, setFilter] = useState<AnswerViewFilter>(EMPTY_ANSWER_FILTER);
+
+  const { data, isLoading, isLoadingError, refetch } =
+    useBatchAnalysis(analysisId);
+  const startRun = useStartBatchAnalysisRun(analysisId);
+  const deleteRow = useDeleteBatchAnalysisRow(analysisId);
+
+  // Cells arrive as a flat list; the grid needs them addressable by
+  // (row, column) so lookup stays O(1) as the set grows.
+  const cellsByRowAndColumn = useMemo(() => {
+    const map = new Map<string, Cell>();
+    for (const cell of data?.cells ?? []) {
+      map.set(`${cell.rowId}:${cell.columnKey}`, cell);
+    }
+    return map;
+  }, [data?.cells]);
+
+  const progress = useMemo(() => {
+    const cells = data?.cells ?? [];
+    const done = cells.filter((cell) => cell.status === "done").length;
+    const errored = cells.filter((cell) => cell.status === "error").length;
+    const verified = cells.filter((cell) => cell.verifiedAt !== null).length;
+    return { done, errored, verified, total: cells.length };
+  }, [data?.cells]);
+
+  if (isLoadingError) {
+    return (
+      <PageLayout
+        title="Analysis"
+        description=""
+        backLink={<BackToAnalysesLink />}
+      >
+        <QueryLoadError
+          title="Could not load this analysis"
+          onRetry={() => refetch()}
+        />
+      </PageLayout>
+    );
+  }
+  if (isLoading) {
+    return (
+      <PageLayout
+        title="Analysis"
+        description=""
+        backLink={<BackToAnalysesLink />}
+      >
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      </PageLayout>
+    );
+  }
+  if (!data) {
+    return (
+      <PageLayout
+        title="Analysis"
+        description=""
+        backLink={<BackToAnalysesLink />}
+      >
+        <p className="text-muted-foreground text-sm">Not found.</p>
+      </PageLayout>
+    );
+  }
+
+  const { analysis, rows, latestRun } = data;
+  const visibleRows = computeVisibleRows({
+    rows,
+    columns: analysis.columns,
+    cellsByRowAndColumn,
+    filter,
+    sortColumns,
+  });
+  const filtering = isFilterActive(filter);
+  const isRunning = latestRun?.status === "running";
+  const selectedCell = selected
+    ? cellsByRowAndColumn.get(`${selected.row.id}:${selected.columnKey}`)
+    : undefined;
+
+  const description = (
+    <span className="flex flex-wrap items-center gap-2">
+      <span>
+        {rows.length} {rows.length === 1 ? "row" : "rows"} ×{" "}
+        {analysis.columns.length}{" "}
+        {analysis.columns.length === 1 ? "column" : "columns"}
+      </span>
+      {latestRun && (
+        <Badge variant={runStatusVariant(latestRun.status)}>
+          {RUN_STATUS_LABELS[latestRun.status] ?? latestRun.status}
+        </Badge>
+      )}
+      {progress.total > 0 && (
+        <span>
+          {progress.done}/{progress.total} cells
+        </span>
+      )}
+      {/* Its own element, not a bare conditional text node: a text node
+          created and destroyed on a condition flip is what crashes the
+          page under machine translation. */}
+      {progress.errored > 0 && <span>{`· ${progress.errored} failed`}</span>}
+      {progress.verified > 0 && (
+        <span>{`· ${progress.verified} verified`}</span>
+      )}
+    </span>
+  );
+
+  return (
+    <PageLayout
+      title={analysis.name}
+      description={description}
+      backLink={<BackToAnalysesLink />}
+      actionButton={
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="outline"
+            disabled={rows.length === 0}
+            onClick={() => setAskOpen(true)}
+          >
+            <MessageSquare className="mr-1 h-4 w-4" />
+            <span>Ask</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={rows.length === 0}>
+                <Download className="mr-1 h-4 w-4" />
+                <span>Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadAnalysisCsv({
+                    analysisName: analysis.name,
+                    columns: analysis.columns,
+                    rows: visibleRows,
+                    cellsByRowAndColumn,
+                  })
+                }
+              >
+                <span>CSV (current view)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadAnalysisXlsx({
+                    analysisName: analysis.name,
+                    columns: analysis.columns,
+                    rows: visibleRows,
+                    cellsByRowAndColumn,
+                  })
+                }
+              >
+                <span>Excel (current view)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <PermissionButton
+            permissions={{ batchAnalysis: ["update"] }}
+            variant="outline"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="mr-1 h-4 w-4" />
+            <span>Edit</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ batchAnalysis: ["update"] }}
+            variant="outline"
+            onClick={() => setAddRowsOpen(true)}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            <span>Add rows</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ batchAnalysis: ["execute"] }}
+            onClick={() => startRun.mutate()}
+            disabled={isRunning || rows.length === 0 || startRun.isPending}
+          >
+            {isRunning ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="mr-1 h-4 w-4" />
+            )}
+            <span>{isRunning ? "Running…" : "Run analysis"}</span>
+          </PermissionButton>
+        </div>
+      }
+    >
+      {rows.length === 0 ? (
+        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+          <p className="font-medium">No rows yet</p>
+          <p className="max-w-md text-muted-foreground text-sm">
+            Add the sources you want analysed. Each one becomes a row, and every
+            column question is asked of it.
+          </p>
+          <PermissionButton
+            permissions={{ batchAnalysis: ["update"] }}
+            variant="outline"
+            onClick={() => setAddRowsOpen(true)}
+          >
+            <span>Add rows</span>
+          </PermissionButton>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filter.query}
+              onSearchChange={(query) =>
+                setFilter((prev) => ({ ...prev, query }))
+              }
+              syncQueryParams={false}
+              placeholder="Filter rows and answers..."
+              className="w-64"
+            />
+            {analysis.columns.some((column) => column.flag) && (
+              <div className="flex items-center gap-1">
+                {(["red", "yellow", "green", "grey"] as const).map((flag) => (
+                  <button
+                    key={flag}
+                    type="button"
+                    title={CELL_FLAG_META[flag].label}
+                    aria-pressed={filter.flag === flag}
+                    className={`flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors ${
+                      filter.flag === flag
+                        ? "border-primary bg-accent"
+                        : "hover:bg-accent"
+                    }`}
+                    onClick={() =>
+                      setFilter((prev) => ({
+                        ...prev,
+                        flag: prev.flag === flag ? null : flag,
+                      }))
+                    }
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${CELL_FLAG_META[flag].dotClass}`}
+                    />
+                    <span>{CELL_FLAG_META[flag].label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              aria-pressed={filter.verifiedOnly}
+              className={`flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors ${
+                filter.verifiedOnly
+                  ? "border-primary bg-accent"
+                  : "hover:bg-accent"
+              }`}
+              onClick={() =>
+                setFilter((prev) => ({
+                  ...prev,
+                  verifiedOnly: !prev.verifiedOnly,
+                }))
+              }
+            >
+              <span>Verified only</span>
+            </button>
+            {filtering && (
+              <span className="text-muted-foreground text-xs">
+                {visibleRows.length} of {rows.length} rows
+              </span>
+            )}
+          </div>
+          <AnalysisGrid
+            gridRef={gridRef}
+            columns={analysis.columns}
+            rows={visibleRows}
+            cellsByRowAndColumn={cellsByRowAndColumn}
+            onSelectCell={(row, columnKey) => setSelected({ row, columnKey })}
+            onPreviewFile={setPreviewFile}
+            onPreviewText={setPreviewText}
+            onDeleteRow={setRowPendingDelete}
+            deleteRowDisabled={deleteRow.isPending}
+            onAddRow={() => setAddRowsOpen(true)}
+            onAddColumn={() => setEditOpen(true)}
+            sortColumns={sortColumns}
+            onSortColumnsChange={setSortColumns}
+          />
+        </div>
+      )}
+
+      <AddRowsDialog
+        analysisId={analysisId}
+        open={addRowsOpen}
+        onOpenChange={setAddRowsOpen}
+      />
+      <CellDetailSheet
+        analysisId={analysisId}
+        open={!!selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+        row={selected?.row}
+        column={analysis.columns.find((c) => c.key === selected?.columnKey)}
+        cell={selectedCell}
+        onViewSource={(file) => setPreviewFile(file)}
+        onViewSourceText={(source) => setPreviewText(source)}
+        // A controlled sheet has no trigger to give focus back to, so Radix
+        // would drop it on <body> and the grid's keyboard navigation would go
+        // dead. Hand focus back to the active cell instead.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          gridRef.current?.element
+            ?.querySelector<HTMLElement>('[tabindex="0"]')
+            ?.focus();
+        }}
+      />
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(open) => !open && setPreviewFile(undefined)}
+        file={previewFile}
+      />
+      <SourceTextDialog
+        open={!!previewText}
+        onOpenChange={(open) => !open && setPreviewText(undefined)}
+        source={previewText}
+      />
+      <DeleteConfirmDialog
+        open={!!rowPendingDelete}
+        onOpenChange={(open) => !open && setRowPendingDelete(null)}
+        title="Remove row"
+        description={`Remove "${rowPendingDelete?.label}"? Its answers are removed with it.`}
+        isPending={deleteRow.isPending}
+        confirmLabel="Remove"
+        pendingLabel="Removing..."
+        onConfirm={() =>
+          rowPendingDelete &&
+          deleteRow.mutate(rowPendingDelete.id, {
+            onSettled: () => setRowPendingDelete(null),
+          })
+        }
+      />
+      <EditAnalysisDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        analysis={analysis}
+      />
+      <AskGridPanel
+        analysisId={analysisId}
+        open={askOpen}
+        onOpenChange={setAskOpen}
+        rows={rows}
+        columns={analysis.columns}
+        onReference={(rowId, columnKey) => {
+          const row = rows.find((candidate) => candidate.id === rowId);
+          if (!row) return;
+          // Jump the grid to the cited cell when it is in the current view…
+          const rowIdx = visibleRows.findIndex(
+            (candidate) => candidate.id === rowId,
+          );
+          const colIdx = analysis.columns.findIndex(
+            (candidate) => candidate.key === columnKey,
+          );
+          if (rowIdx >= 0 && colIdx >= 0) {
+            // +1 for the frozen source column.
+            gridRef.current?.scrollToCell({ idx: colIdx + 1, rowIdx });
+          }
+          // …and open its detail sheet either way.
+          setSelected({ row, columnKey });
+        }}
+      />
+    </PageLayout>
+  );
+}

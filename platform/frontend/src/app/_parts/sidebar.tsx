@@ -32,6 +32,7 @@ import {
   Slack,
   Sparkles,
   Star,
+  Table2,
   Waypoints,
 } from "lucide-react";
 import Link from "next/link";
@@ -137,6 +138,15 @@ const chatsNavItems: NavItem[] = [
     dotKey: "nav:projects",
   },
   {
+    title: "Batch Analyses",
+    url: "/batch-analyses",
+    icon: Table2,
+    customIsActive: (pathname: string) =>
+      pathname.startsWith("/batch-analyses"),
+    beta: true,
+    badgeLabel: "Beta",
+  },
+  {
     title: "Apps",
     url: "/apps",
     icon: AppWindow,
@@ -156,7 +166,13 @@ const chatsNavItems: NavItem[] = [
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects", "/apps", "/connection"];
+  const chatPrefixes = [
+    "/chat",
+    "/projects",
+    "/batch-analyses",
+    "/apps",
+    "/connection",
+  ];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {

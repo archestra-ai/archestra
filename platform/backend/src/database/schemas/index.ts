@@ -71,6 +71,11 @@ export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
+export { default as batchAnalysesTable } from "./batch-analysis";
+export { default as batchAnalysisCellsTable } from "./batch-analysis-cell";
+export { default as batchAnalysisRowsTable } from "./batch-analysis-row";
+export { default as batchAnalysisRunsTable } from "./batch-analysis-run";
+export { default as batchAnalysisTeamTable } from "./batch-analysis-team";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
   chatActiveRunEventsTable,

@@ -39,6 +39,11 @@ export const AuditEventNameSchema = z.enum([
   "app.created",
   "app.updated",
   "app.deleted",
+  // Covers editing a batch analysis's definition, adding rows to it, and
+  // dispatching a run — the last of these spends LLM budget proportional to the
+  // grid, so who started one is worth recording.
+  "batchAnalysis.created",
+  "batchAnalysis.updated",
   "chatOpsBinding.created",
   "chatOpsBinding.updated",
   "chatOpsBinding.deleted",

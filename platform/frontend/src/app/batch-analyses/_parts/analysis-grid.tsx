@@ -5,8 +5,8 @@
 import { AlertCircle, FileText, Loader2, Quote, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import {
-  type CellKeyDownArgs,
   type CellKeyboardEvent,
+  type CellKeyDownArgs,
   type CellMouseArgs,
   type Column,
   DataGrid,
@@ -82,7 +82,9 @@ export function AnalysisGrid({
             <span className="block leading-snug">
               <span className="block font-medium">{column.name}</span>
               <span className="block font-normal text-muted-foreground text-xs">
-                {column.format === "exact_quote" ? "exact quote" : column.format}
+                {column.format === "exact_quote"
+                  ? "exact quote"
+                  : column.format}
               </span>
             </span>
           ),

@@ -23,6 +23,11 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 {{- end }}
 
+{{/* Same-namespace owner for runtime-created MCP resources. */}}
+{{- define "archestra-platform.mcpRuntimeAnchorName" -}}
+{{- printf "%s-mcp-runtime" (include "archestra-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{/*
 Create chart name and version as used by the chart label.
 */}}
@@ -113,6 +118,28 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
 }}
+{{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
+{{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
+{{- range .Values.archestra.envWithValueFrom }}
+  {{- if eq .name "POD_NAME" }}{{- $podNameProvided = true }}{{- end }}
+  {{- if eq .name "POD_NAMESPACE" }}{{- $podNamespaceProvided = true }}{{- end }}
+{{- end }}
+{{- if not $podNameProvided }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+{{- end }}
+{{- if not $podNamespaceProvided }}
+- name: POD_NAMESPACE
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.namespace
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP") }}
+- name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
+  value: {{ .Values.archestra.migrationJob.enabled | quote }}
+{{- end }}
 {{- include "archestra-platform.databaseEnv" . }}
 {{/*
 When both external_database_url is null and postgresql.enabled is false,
@@ -159,6 +186,20 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
 {{- end }}
+{{/* The release name, told to the backend rather than left for it to infer.
+     Cluster objects the backend creates for ITSELF (the MCP image pre-pull
+     DaemonSet) are named after it, so two releases sharing a namespace never
+     fight over one object — and a backend that inferred the name from a pod
+     read could infer a different one after a blip and strand a second,
+     permanently orphaned object in the cluster. */}}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME") }}
+- name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+  value: {{ .Release.Name | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP") }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP
+  value: {{ include "archestra-platform.mcpRuntimeAnchorName" . | quote }}
+{{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
@@ -194,6 +235,57 @@ An explicit archestra.env value overrides the injection.
 {{- if ne (toString .Values.archestra.orchestrator.failedPodReapIntervalSeconds) "" }}
 - name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
   value: {{ .Values.archestra.orchestrator.failedPodReapIntervalSeconds | quote }}
+{{- end }}
+{{/* "false" is a meaningful value — beta feature explicitly off, winning over
+     the ARCHESTRA_BETA master switch — so compare against the empty string
+     instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationEnabled) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+  value: {{ .Values.archestra.orchestrator.mcpIdleHibernationEnabled | quote }}
+{{- end }}
+{{/* "0" is a meaningful value — the operator's kill switch — so compare
+     against the empty string instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationSeconds) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+  value: {{ .Values.archestra.orchestrator.mcpIdleHibernationSeconds | quote }}
+{{- end }}
+{{- with .Values.archestra.orchestrator.mcpImagePrepull }}
+{{/* "false" is a meaningful value — the operator's kill switch for pre-pulling
+     alone, leaving hibernation on — so compare against the empty string instead
+     of relying on truthiness. */}}
+{{- if ne (toString .enabled) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED
+  value: {{ .enabled | quote }}
+{{- end }}
+{{- if .priorityClassName }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME
+  value: {{ .priorityClassName | quote }}
+{{- end }}
+{{/* This binary is copied into arbitrary MCP images and must be static: the
+     generic init-container busybox can use a libc the target image lacks. */}}
+{{- $prepullBootstrapImage := .bootstrapImage | default "docker.io/library/busybox:1.36-musl" }}
+{{- if $prepullBootstrapImage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+  value: {{ $prepullBootstrapImage | quote }}
+{{- end }}
+{{- if .bootstrapImagePullSecrets }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS
+  value: {{ join "," .bootstrapImagePullSecrets | quote }}
+{{- end }}
+{{- with .resources }}
+{{- if .requests.cpu }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST
+  value: {{ .requests.cpu | quote }}
+{{- end }}
+{{- if .requests.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST
+  value: {{ .requests.memory | quote }}
+{{- end }}
+{{- if .limits.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT
+  value: {{ .limits.memory | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
 - name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
@@ -402,6 +494,13 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# DaemonSet for the MCP image pre-puller, which keeps every node's image cache
+# warm so a hibernated MCP server wakes without reaching the registry. Narrower
+# than the rule above on purpose: the reconciler only reads and rewrites its own
+# single DaemonSet, and never watches one.
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]

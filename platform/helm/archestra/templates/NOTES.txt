@@ -25,7 +25,7 @@ Background worker: running in-process (worker Deployment disabled)
 
 {{- if .Values.postgresql.external_database_url }}
 
-Using external PostgreSQL database: {{ .Values.postgresql.external_database_url }}
+Using external PostgreSQL database
 {{- else }}
 
 Using internal PostgreSQL database:

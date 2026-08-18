@@ -249,3 +249,17 @@ tests:
               memory: 64Mi
             limits:
               memory: 128Mi
+
+  # The worker renders the same env block as the platform Deployment and runs
+  # the same MCP runtime, so it must learn the release name the same way: a
+  # worker that inferred a different name would create a second, orphaned
+  # pre-pull DaemonSet beside the platform's.
+  - it: worker is told the Helm release name
+    release:
+      name: "my-release"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+            value: "my-release"

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import {
+  type CellCopyArgs,
   type CellKeyboardEvent,
   type CellKeyDownArgs,
   type CellMouseArgs,
@@ -192,6 +193,24 @@ export function AnalysisGrid({
     }
   }
 
+  // Ctrl+C on the focused cell copies what the cell means: the answer text
+  // for answer cells, the pasted text or label for the source column.
+  function handleCellCopy(
+    { row, column }: CellCopyArgs<Row, SummaryRow>,
+    event: React.ClipboardEvent<HTMLDivElement>,
+  ) {
+    const text =
+      column.key === SOURCE_COLUMN_KEY
+        ? row.source.type === "inline_text"
+          ? row.source.text
+          : row.label
+        : column.key === ADD_COLUMN_KEY
+          ? ""
+          : (cellFor(cellsByRowAndColumn, row, column.key)?.content ?? "");
+    event.clipboardData?.setData("text/plain", text ?? "");
+    event.preventDefault();
+  }
+
   return (
     <DataGrid
       ref={gridRef}
@@ -204,6 +223,7 @@ export function AnalysisGrid({
       summaryRowHeight={40}
       onCellClick={(args: CellMouseArgs<Row, SummaryRow>) => openCell(args)}
       onCellKeyDown={handleCellKeyDown}
+      onCellCopy={handleCellCopy}
       className="rounded-md border"
       style={GRID_STYLE}
       aria-label="Analysis results"

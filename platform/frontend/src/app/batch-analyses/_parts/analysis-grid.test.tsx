@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -121,6 +121,18 @@ describe("AnalysisGrid", () => {
       label: "Pasted text",
       text: "hello",
     });
+  });
+
+  it("copies the focused answer cell's text on copy, spreadsheet-style", async () => {
+    const user = userEvent.setup();
+    renderGrid();
+
+    await user.click(screen.getByText("42 EUR"));
+    const setData = vi.fn();
+    fireEvent.copy(document.activeElement as Element, {
+      clipboardData: { setData },
+    });
+    expect(setData).toHaveBeenCalledWith("text/plain", "42 EUR");
   });
 
   it("offers a subtle in-grid Add row from the pinned bottom row", async () => {

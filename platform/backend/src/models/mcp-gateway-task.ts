@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   McpGatewayTask,
@@ -49,8 +49,6 @@ export default class McpGatewayTaskModel {
   static async listForConversation(params: {
     conversationId: string;
     principal: string;
-    statuses?: McpGatewayTaskStatus[];
-    limit?: number;
   }): Promise<McpGatewayTask[]> {
     return db
       .select()
@@ -59,13 +57,10 @@ export default class McpGatewayTaskModel {
         and(
           eq(schema.mcpGatewayTasksTable.conversationId, params.conversationId),
           eq(schema.mcpGatewayTasksTable.principal, params.principal),
-          params.statuses?.length
-            ? inArray(schema.mcpGatewayTasksTable.status, params.statuses)
-            : undefined,
         ),
       )
       .orderBy(desc(schema.mcpGatewayTasksTable.createdAt))
-      .limit(params.limit ?? 50);
+      .limit(50);
   }
 
   /**
@@ -145,6 +140,12 @@ export default class McpGatewayTaskModel {
   static async cancelForPrincipal(params: {
     taskId: string;
     principal: string;
+    /**
+     * Additionally require the task to belong to this conversation — the
+     * chat tool's scope. The HTTP cancel route omits it (principal-only, its
+     * historical contract).
+     */
+    conversationId?: string;
   }): Promise<boolean> {
     const updated = await db
       .update(schema.mcpGatewayTasksTable)
@@ -153,6 +154,12 @@ export default class McpGatewayTaskModel {
         and(
           eq(schema.mcpGatewayTasksTable.id, params.taskId),
           eq(schema.mcpGatewayTasksTable.principal, params.principal),
+          params.conversationId
+            ? eq(
+                schema.mcpGatewayTasksTable.conversationId,
+                params.conversationId,
+              )
+            : undefined,
           eq(schema.mcpGatewayTasksTable.status, "working"),
           gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),

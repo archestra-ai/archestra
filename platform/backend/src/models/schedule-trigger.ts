@@ -297,8 +297,8 @@ class ScheduleTriggerModel {
   static async countEnabledForConversation(
     conversationId: string,
   ): Promise<number> {
-    const rows = await db
-      .select({ id: schema.scheduleTriggersTable.id })
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
       .from(schema.scheduleTriggersTable)
       .where(
         and(
@@ -306,7 +306,7 @@ class ScheduleTriggerModel {
           eq(schema.scheduleTriggersTable.enabled, true),
         ),
       );
-    return rows.length;
+    return row?.count ?? 0;
   }
 
   static async markExecuted(id: string, now: Date): Promise<void> {

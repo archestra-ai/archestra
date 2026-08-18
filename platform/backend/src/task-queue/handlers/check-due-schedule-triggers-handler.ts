@@ -35,6 +35,11 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
           error: "Skipped: previous run was still in progress",
         });
         await ScheduleTriggerModel.markExecuted(trigger.id, now);
+        // A skipped one-shot is still spent (markExecuted stops any re-fire);
+        // disable it too so it never lingers as enabled-but-dead.
+        if (trigger.runAt !== null) {
+          await ScheduleTriggerModel.update(trigger.id, { enabled: false });
+        }
         continue;
       }
 

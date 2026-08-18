@@ -131,7 +131,12 @@ export async function handleScheduleTriggerRunExecution(
         run.id,
         conversation.id,
       );
-      const delivered = await conversationWakeService.deliver({
+      // Detached: the refusal checks run inline (deleted/locked conversation
+      // fails the run), but the delivery itself — which can wait minutes for
+      // a busy conversation and then run a whole wake turn — must not pin
+      // this task-queue lane. A post-acceptance turn failure surfaces in the
+      // conversation as a chat error card, not on the run row.
+      const delivered = await conversationWakeService.deliverDetached({
         conversationId: conversation.id,
         messageId: `sched-wake-${run.id}`,
         text: buildScheduledWakeupText(trigger),

@@ -97,7 +97,6 @@ import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
-import { drainBackgroundWork } from "@/utils/background-work";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
 import renderServiceRoutes from "@/services/apps/app-recording-render-service";
 import {
@@ -132,6 +131,7 @@ import {
   Xai,
   Zhipuai,
 } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { msTeamsWebhookRoutes } from "./routes/chatops";

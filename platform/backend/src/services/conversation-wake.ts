@@ -14,6 +14,7 @@ import { ProviderError } from "@/routes/chat/errors";
 import { normalizeChatMessages } from "@/routes/chat/normalization/normalize-chat-messages";
 import { buildModelMessages } from "@/routes/chat/prepare-model-messages";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
   broadcastConversationUpdated,
@@ -45,12 +46,12 @@ import {
 interface ConversationWakeParams {
   conversationId: string;
   /**
-   * Stable message content id (e.g. `bg-task-<taskId>`). The write below
-   * does NOT dedup by it — each event delivers exactly once by ownership
-   * (task-settle wins, reaper rows, one run per trigger fire). The stable id
-   * is for the BROWSER path: a client resubmitting the notification through
-   * POST /api/chat carries this id, and the chat route's persistence dedups
-   * it against the already-persisted row.
+   * Stable message content id (e.g. `bg-task-<taskId>`). Persistence checks
+   * for it before writing, so a retried delivery never duplicates the
+   * notification; the browser resubmit path carries the same id and the chat
+   * route's own persistence dedups it too. Event-level exactly-once still
+   * comes from ownership (task-settle wins, reaper rows, one run per trigger
+   * fire) — the id check is the crash-retry backstop.
    */
   messageId: string;
   text: string;
@@ -91,8 +92,49 @@ class ConversationWakeService {
    * Returns false when delivery was refused (deleted or locked conversation).
    */
   async deliver(params: ConversationWakeParams): Promise<boolean> {
-    // Guard every notification write: a deleted conversation has nowhere to
-    // deliver to, and a locked chat must never be written server-side.
+    if (!(await this.checkDeliverable(params))) {
+      return false;
+    }
+    await this.deliverChecked(params);
+    return true;
+  }
+
+  /**
+   * Like deliver, but only the refusal checks run inline — the delivery
+   * itself (idle wait, persistence, possibly a whole headless turn, in the
+   * worst case many minutes) continues as tracked background work. For
+   * callers that must not block on a delivery: the reaper's sweep, the task
+   * queue's trigger-run lane.
+   */
+  async deliverDetached(params: ConversationWakeParams): Promise<boolean> {
+    if (!(await this.checkDeliverable(params))) {
+      return false;
+    }
+    trackBackgroundWork(
+      this.deliverChecked(params).catch((error) => {
+        logger.error(
+          {
+            err: error,
+            conversationId: params.conversationId,
+            messageId: params.messageId,
+          },
+          "Detached wake delivery failed",
+        );
+      }),
+    );
+    return true;
+  }
+
+  // === Internal ===
+
+  /**
+   * Refusal checks shared by both entry points: a deleted conversation has
+   * nowhere to deliver to, and a locked chat must never be written
+   * server-side.
+   */
+  private async checkDeliverable(
+    params: ConversationWakeParams,
+  ): Promise<boolean> {
     const lockInfo = await ConversationModel.getLockedChatKeyInfo(
       params.conversationId,
     );
@@ -110,19 +152,39 @@ class ConversationWakeService {
       );
       return false;
     }
+    return true;
+  }
 
+  private async deliverChecked(params: ConversationWakeParams): Promise<void> {
     await this.waitForConversationIdle(params.conversationId);
 
-    await MessageModel.create({
-      conversationId: params.conversationId,
-      role: "user",
-      content: {
-        id: params.messageId,
+    // Idempotency: a retried delivery (a worker died between persisting the
+    // notification and recording its own completion, and the stuck-task
+    // sweep re-ran it) must not persist the notification twice. The turn is
+    // still ensured below — the first attempt may have died before it.
+    const existing = await MessageModel.findByConversation(
+      params.conversationId,
+    );
+    const alreadyPersisted = existing.some(
+      (row) => (row.content as { id?: string } | null)?.id === params.messageId,
+    );
+    if (alreadyPersisted) {
+      logger.info(
+        { conversationId: params.conversationId, messageId: params.messageId },
+        "Wake notification already persisted; skipping the duplicate write",
+      );
+    } else {
+      await MessageModel.create({
+        conversationId: params.conversationId,
         role: "user",
-        parts: [{ type: "text", text: params.text }],
-        metadata: params.metadata,
-      },
-    });
+        content: {
+          id: params.messageId,
+          role: "user",
+          parts: [{ type: "text", text: params.text }],
+          metadata: params.metadata,
+        },
+      });
+    }
 
     const owner = await ConversationModel.getOwner(params.conversationId);
     const ownerUserId = owner?.userId ?? params.fallbackUserId ?? null;
@@ -133,7 +195,7 @@ class ConversationWakeService {
         { conversationId: params.conversationId, messageId: params.messageId },
         "Could not resolve a conversation owner for the wake delivery",
       );
-      return true;
+      return;
     }
 
     broadcastConversationUpdated(
@@ -154,10 +216,7 @@ class ConversationWakeService {
       organizationId: owner.organizationId,
       quiet: params.quiet === true,
     });
-    return true;
   }
-
-  // === Internal ===
 
   /**
    * Give a viewing browser the grace window to claim the wake turn (it

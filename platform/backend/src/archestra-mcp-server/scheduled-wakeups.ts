@@ -72,15 +72,19 @@ const WakeupSchema = z.object({
     .describe("When the wakeup last fired, null if never."),
 });
 
-function resolveWakeupCaller(
-  context: ArchestraContext,
-):
-  | { conversationId: string; userId: string; agentId: string }
+function resolveWakeupCaller(context: ArchestraContext):
+  | {
+      conversationId: string;
+      userId: string;
+      agentId: string;
+      organizationId: string;
+    }
   | { error: ReturnType<typeof errorResult> } {
   const userId = context.userId ?? context.tokenAuth?.userId;
   if (
     !context.conversationId ||
     !context.agentId ||
+    !context.organizationId ||
     !userId ||
     userId === "system"
   ) {
@@ -94,6 +98,7 @@ function resolveWakeupCaller(
     conversationId: context.conversationId,
     userId,
     agentId: context.agentId,
+    organizationId: context.organizationId,
   };
 }
 
@@ -263,7 +268,7 @@ const registry = defineArchestraTools([
         }
 
         const created = await ScheduleTriggerModel.create({
-          organizationId: context.organizationId as string,
+          organizationId: caller.organizationId,
           name: args.name || deriveWakeupName(args.prompt),
           agentId: caller.agentId,
           projectId: null,

@@ -642,8 +642,14 @@ export function ChatMessages({
               const { message, messageIndex: idx } = item;
 
               // A quiet monitor check's no-change reply collapses into the
-              // muted line its notification renders (below) — nothing here.
-              if (isQuietWakeReply(message)) {
+              // muted line its notification renders (below) — but only when
+              // that notification actually precedes it; a reply orphaned by
+              // filtering renders normally rather than vanishing.
+              if (
+                isQuietWakeReply(message) &&
+                getWakeNotification(messages[idx - 1] ?? { role: "" })?.kind ===
+                  "scheduledWakeup"
+              ) {
                 return <div key={message.id || idx} className="hidden" />;
               }
 

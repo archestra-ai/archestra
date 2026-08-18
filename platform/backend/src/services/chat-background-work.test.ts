@@ -395,8 +395,15 @@ describe("chat background work", () => {
     // headless wake reply).
     const swept = await mcpGatewayTaskReaper.sweep();
     expect(swept.failed).toBe(1);
+    // Delivery is detached from the sweep; wait for it to land.
+    await expect
+      .poll(
+        async () =>
+          (await MessageModel.findByConversation(conversation.id)).length,
+        { timeout: 5_000 },
+      )
+      .toBe(2);
     const afterReaper = await MessageModel.findByConversation(conversation.id);
-    expect(afterReaper).toHaveLength(2);
     expect(afterReaper[0].content.metadata.backgroundTask.status).toBe(
       "failed",
     );
@@ -522,8 +529,15 @@ describe("chat background work", () => {
     const swept = await mcpGatewayTaskReaper.sweep();
     expect(swept.failed).toBe(1);
 
+    // Delivery is detached from the sweep; wait for it to land.
+    await expect
+      .poll(
+        async () =>
+          (await MessageModel.findByConversation(conversation.id)).length,
+        { timeout: 5_000 },
+      )
+      .toBe(2);
     const messages = await MessageModel.findByConversation(conversation.id);
-    expect(messages).toHaveLength(2);
     expect(messages[0].content.metadata.backgroundTask).toMatchObject({
       taskId: task.id,
       status: "failed",

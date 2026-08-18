@@ -33,7 +33,7 @@ vi.mock("@/services/scheduled-run-conversation", () => ({
 // browser-or-headless turn; it has its own tests. Here it is a boundary.
 const mockWakeDeliver = vi.hoisted(() => vi.fn());
 vi.mock("@/services/conversation-wake", () => ({
-  conversationWakeService: { deliver: mockWakeDeliver },
+  conversationWakeService: { deliverDetached: mockWakeDeliver },
 }));
 
 import { hasAnyAgentTypeAdminPermission } from "@/auth";

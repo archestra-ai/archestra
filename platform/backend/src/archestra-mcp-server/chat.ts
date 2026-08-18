@@ -184,6 +184,9 @@ const registry = defineArchestraTools([
         const cancelled = await McpGatewayTaskModel.cancelForPrincipal({
           taskId: args.taskId,
           principal: caller.principal,
+          // Scope to the current conversation, matching the tool's contract
+          // (and list_background_tasks' visibility).
+          conversationId: caller.conversationId,
         });
         if (cancelled) {
           // Abort the in-process execution when it runs on this replica; on

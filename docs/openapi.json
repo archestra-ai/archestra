@@ -100798,7 +100798,6 @@
                         "required": [
                           "id",
                           "name",
-                          "systemPrompt",
                           "agentType",
                           "toolExposureMode",
                           "llmApiKeyId"
@@ -101618,7 +101617,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -102387,7 +102385,6 @@
                         "required": [
                           "id",
                           "name",
-                          "systemPrompt",
                           "agentType",
                           "toolExposureMode",
                           "llmApiKeyId"
@@ -103167,7 +103164,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -103996,7 +103992,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -106552,7 +106547,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -107620,7 +107614,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -108753,7 +108746,6 @@
                           "required": [
                             "id",
                             "name",
-                            "systemPrompt",
                             "agentType",
                             "toolExposureMode",
                             "llmApiKeyId"
@@ -110488,7 +110480,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -111291,7 +111282,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -112086,7 +112076,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -112895,7 +112884,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -280383,43 +280371,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "onboardingWizard": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 25
-                        },
-                        "pages": {
-                          "minItems": 1,
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "image": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "content": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "content"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "label",
-                        "pages"
-                      ],
-                      "additionalProperties": false
-                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -280443,7 +280394,6 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "onboardingWizard",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "animateChatPlaceholders"
@@ -305204,7 +305154,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"

@@ -28097,7 +28097,7 @@ export type GetChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28267,7 +28267,7 @@ export type CreateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28429,7 +28429,7 @@ export type GetDeletedChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28678,7 +28678,7 @@ export type GetChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28850,7 +28850,7 @@ export type UpdateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -29454,7 +29454,7 @@ export type ForkChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -29707,7 +29707,7 @@ export type RestoreChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -29971,7 +29971,7 @@ export type CompactChatConversationResponses = {
             agent: {
                 id: string;
                 name: string;
-                systemPrompt: string | null;
+                systemPrompt?: string | null;
                 agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
                 toolExposureMode: 'full' | 'search_and_run_only';
                 llmApiKeyId: string | null;
@@ -30409,7 +30409,7 @@ export type GetSharedConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30576,7 +30576,7 @@ export type ForkSharedConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30745,7 +30745,7 @@ export type GenerateChatConversationTitleResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30914,7 +30914,7 @@ export type UpdateChatMessageResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -71716,13 +71716,6 @@ export type GetAppearanceSettingsResponses = {
             label: string;
             url: string;
         }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
-        } | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         animateChatPlaceholders: boolean;
@@ -78173,7 +78166,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;

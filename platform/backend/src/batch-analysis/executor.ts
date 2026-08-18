@@ -1,6 +1,8 @@
+import { providerHasMultipleSurfaces } from "@archestra/shared";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
+import ModelModel from "@/models/model";
 import type {
   BatchAnalysis,
   BatchAnalysisCitation,
@@ -96,6 +98,15 @@ export async function executeRow(params: {
     };
   }
 
+  // Providers that serve one catalog over two wire formats (GitHub Copilot)
+  // record each model's surface on the synced model row; without it a
+  // Responses-API-only model (codex) is sent to /chat/completions and the
+  // provider rejects the call. Same lookup createLLMModelForAgent does.
+  const supportedEndpoints = providerHasMultipleSurfaces(llm.provider)
+    ? ((await ModelModel.findByProviderAndModelId(llm.provider, llm.modelName))
+        ?.supportedEndpoints ?? null)
+    : null;
+
   const model = createLLMModel({
     provider: llm.provider,
     apiKey: llm.apiKey,
@@ -105,6 +116,7 @@ export async function executeRow(params: {
     userId: analysis.createdBy,
     source: "batch_analysis:cell",
     chatApiKeyId: llm.chatApiKeyId,
+    supportedEndpoints,
   });
 
   let raw: string | null;

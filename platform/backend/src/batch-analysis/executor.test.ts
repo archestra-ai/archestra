@@ -21,6 +21,7 @@ vi.mock("@/utils/llm-resolution", () => ({
 
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import { AgentModel, BatchAnalysisModel } from "@/models";
+import ModelModel from "@/models/model";
 import { beforeEach, describe, expect, test } from "@/test";
 import type {
   BatchAnalysis,
@@ -28,6 +29,7 @@ import type {
   BatchAnalysisRow,
 } from "@/types";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
+import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { executeRow } from "./executor";
 
 const SOURCE_TEXT =
@@ -75,6 +77,44 @@ describe("executeRow", () => {
       },
     ]);
     row = created;
+  });
+
+  test("routes a Responses-API-only model by its catalogued surface", async () => {
+    // GitHub Copilot's codex models reject /chat/completions; which surface a
+    // model needs lives on the synced model row. Without this lookup the run
+    // fails with "model … is not accessible via the /chat/completions
+    // endpoint" while the same model works in chat.
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      provider: "github-copilot",
+      modelName: "gpt-5.3-codex",
+      apiKey: "gho_test",
+      baseUrl: null,
+      chatApiKeyId: "key-row-1",
+    } as Awaited<ReturnType<typeof resolveAgentLlmOrDefault>>);
+    await ModelModel.create({
+      externalId: "github-copilot/gpt-5.3-codex",
+      provider: "github-copilot",
+      modelId: "gpt-5.3-codex",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportedEndpoints: ["/responses"],
+    });
+    vi.mocked(generateTaggedText).mockResolvedValue(
+      JSON.stringify({
+        effective_date: { value: "2026-01-01", quote: "effective 2026-01-01" },
+        has_sso: { value: "yes", quote: "SSO is supported via SAML" },
+      }),
+    );
+
+    await executeRow({ analysis, row, columns });
+
+    expect(createLLMModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "github-copilot",
+        modelName: "gpt-5.3-codex",
+        supportedEndpoints: ["/responses"],
+      }),
+    );
   });
 
   test("answers every column from one model call", async () => {

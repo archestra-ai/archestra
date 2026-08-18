@@ -14,6 +14,7 @@ import {
   SkillTeamModel,
   SkillVersionModel,
 } from "@/models";
+import { reportSkillActivation } from "@/observability/metrics/skill";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   buildSkillActivationPromptContext,
@@ -209,6 +210,7 @@ export async function injectSkillActivation({
     sessionId: conversationId ?? null,
     contextTokens,
   });
+  reportSkillActivation({ activationType: "slash_command", contextTokens });
   logger.info(
     {
       organizationId,

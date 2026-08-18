@@ -7,6 +7,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
+import { reportSkillActivation } from "@/observability/metrics/skill";
 import { ProviderError } from "@/routes/chat/errors";
 import {
   buildSkillActivationPromptContext,
@@ -207,12 +208,14 @@ export async function handleSkillDelegation(
   // dispatching the skill to its designated agent counts one use. The designated
   // agent's model is not resolved on this path (the executor picks it), so the
   // block is measured on the default tokenizer.
+  const contextTokens = measureSkillContextTokens({ block: activationBlock });
   SkillModel.recordUsage({
     skillId: skill.id,
     userId,
     sessionId: sessionId ?? null,
-    contextTokens: measureSkillContextTokens({ block: activationBlock }),
+    contextTokens,
   });
+  reportSkillActivation({ activationType: "delegation", contextTokens });
 
   try {
     logger.info(

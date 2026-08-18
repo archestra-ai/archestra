@@ -21,6 +21,7 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
+import { reportSkillActivation } from "@/observability/metrics/skill";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   MAX_FILES_PER_SKILL,
@@ -337,6 +338,7 @@ const registry = defineArchestraTools([
           null,
         contextTokens,
       });
+      reportSkillActivation({ activationType: "load_skill", contextTokens });
       logger.info(
         {
           organizationId: ctx.organizationId,

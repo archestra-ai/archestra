@@ -23,9 +23,10 @@ permissions: {}
 env:
   ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","divineforest"]'
   CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","divineforest","arsenyinfo"]'
-  # PRs opened by these bot accounts already have an owner shepherding them
-  # (e.g. the task-env pipeline's requester), so skip reviewer auto-assignment.
-  REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]"]'
+  # PRs opened by these accounts already have an owner shepherding them
+  # (e.g. the task-env pipeline's requester, or contributors who arrange their
+  # own reviews), so skip reviewer auto-assignment.
+  REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]","piercypixel"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}

@@ -11918,6 +11918,10 @@
           "chat_template_kwargs": {
             "type": "object",
             "additionalProperties": {}
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -13103,6 +13107,10 @@
           "n": {
             "nullable": true,
             "type": "number"
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -31800,6 +31808,10 @@
           "chat_template_kwargs": {
             "type": "object",
             "additionalProperties": {}
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -33039,6 +33051,10 @@
           "n": {
             "nullable": true,
             "type": "number"
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -241103,6 +241119,10 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "supportsReasoningEffort": {
+                            "nullable": true,
+                            "type": "boolean"
+                          },
                           "recommendedForAgents": {
                             "nullable": true,
                             "type": "boolean"
@@ -241153,6 +241173,7 @@
                           "inputModalities",
                           "outputModalities",
                           "supportsToolCalling",
+                          "supportsReasoningEffort",
                           "recommendedForAgents",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
@@ -241800,6 +241821,10 @@
                         "nullable": true,
                         "type": "boolean"
                       },
+                      "supportsReasoningEffort": {
+                        "nullable": true,
+                        "type": "boolean"
+                      },
                       "supportedEndpoints": {
                         "nullable": true,
                         "anyOf": [
@@ -242109,6 +242134,7 @@
                       "inputModalities",
                       "outputModalities",
                       "supportsToolCalling",
+                      "supportsReasoningEffort",
                       "supportedEndpoints",
                       "promptPricePerToken",
                       "completionPricePerToken",
@@ -242629,6 +242655,10 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "supportsReasoningEffort": {
+                      "nullable": true,
+                      "type": "boolean"
+                    },
                     "supportedEndpoints": {
                       "nullable": true,
                       "anyOf": [
@@ -242809,6 +242839,7 @@
                     "inputModalities",
                     "outputModalities",
                     "supportsToolCalling",
+                    "supportsReasoningEffort",
                     "supportedEndpoints",
                     "promptPricePerToken",
                     "completionPricePerToken",

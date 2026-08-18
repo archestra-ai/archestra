@@ -171,6 +171,7 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   inputModalities: true,
   outputModalities: true,
   supportsToolCalling: true,
+  supportsReasoningEffort: true,
 }).extend({
   /**
    * Endpoint-scoped agent-suitability verdict from the `api_key_models` link

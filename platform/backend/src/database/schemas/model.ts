@@ -62,6 +62,18 @@ const modelsTable = pgTable(
     supportsToolCalling: boolean("supports_tool_calling"),
 
     /**
+     * Whether this model takes a reasoning depth, for providers whose model
+     * names carry no such rule. Tri-state: true/false are reported by a source
+     * (Ollama's `/api/show` capabilities, or the registry entry describing the
+     * weights), null means nothing said so and the composer offers nothing.
+     *
+     * Only self-hosted providers read this column: openai/anthropic/gemini ids
+     * are vendor-fixed, so their rules stay in code where a wrong row cannot
+     * turn the control on for a model that would 400 on it.
+     */
+    supportsReasoningEffort: boolean("supports_reasoning_effort"),
+
+    /**
      * Provider surfaces this model can be invoked through, when the provider
      * publishes that per model. Null for every provider that serves one wire
      * format, which is all of them except GitHub Copilot: its Codex and

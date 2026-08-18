@@ -208,9 +208,19 @@ function toFetchedCapabilities(
       : null;
   }
 
+  // `thinking` is Ollama's own verdict on whether the model reasons, so it
+  // outranks anything a registry says about the weights: this is the server
+  // that will run the turn. Same tri-state as above — an older Ollama reports
+  // no capability list, and undefined lets a lower tier decide rather than
+  // asserting the model cannot think.
+  const supportsReasoningEffort = show.capabilities
+    ? show.capabilities.includes("thinking")
+    : undefined;
+
   return {
     contextLength,
     embeddingDimensions,
+    supportsReasoningEffort,
     defaultParameters,
     parameterCount,
   };

@@ -1,5 +1,5 @@
 /**
- * The reasoning-depth fragment of `providerOptions.openai` for a chat turn.
+ * The reasoning-depth fragment of a chat turn's `providerOptions`.
  *
  * A fragment rather than the whole object because two mutually exclusive blocks
  * in the chat route already own that key — one for the Responses transport
@@ -9,8 +9,14 @@
  *
  * `reasoning_effort` is accepted on both transports, so no branch is needed
  * here; only the model matters.
+ *
+ * The self-hosted OpenAI-compatible providers take the same fragment, but under
+ * their own namespace rather than `openai`: `@ai-sdk/openai-compatible` reads
+ * `providerOptions[<provider name>]` and maps `reasoningEffort` onto the wire's
+ * `reasoning_effort` itself. The caller owns that placement.
  */
 import {
+  isThinkingEffortSelfHostedProvider,
   openAiReasoningEffortForEffort,
   type ThinkingEffort,
   type ThinkingEffortSetting,
@@ -32,7 +38,21 @@ export function buildOpenAiThinkingProviderOptions(params: {
   const { provider, selectedModel, thinkingEffort } = params;
 
   // No chosen depth sends no field at all, so the model reasons as it would.
-  if (provider !== "openai" || thinkingEffort === null) {
+  if (thinkingEffort === null) {
+    return undefined;
+  }
+
+  // A self-hosted server takes the depth verbatim: `low | medium | high` is
+  // exactly what both accept, and neither has a vendor catalog to map against —
+  // the id is whatever the operator launched the server with. vLLM turns the
+  // field into its chat template's thinking switch, Ollama into `think`.
+  // Reaching them at all is gated upstream by the model's row, since only the
+  // composer's control puts a depth on the request.
+  if (isThinkingEffortSelfHostedProvider(provider)) {
+    return { reasoningEffort: thinkingEffort };
+  }
+
+  if (provider !== "openai") {
     return undefined;
   }
 

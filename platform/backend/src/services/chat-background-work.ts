@@ -15,17 +15,30 @@ import {
  *
  * Lets the model hand long-running work (today: subagent delegations) to a
  * durable MCP gateway task and keep control of the conversation. When the
- * task settles, the service waits for the conversation to go idle, persists a
- * harness notification message (role `user`, marked via metadata), and pushes
- * a `conversation_wake` websocket event. A client viewing the conversation
+ * task settles, the service persists a harness notification message (role
+ * `user`, marked via metadata) once the conversation is idle and pushes a
+ * `conversation_wake` websocket event. A client viewing the conversation
  * submits that notification as an ordinary turn — the model "regains control"
  * through the completely normal streaming path, so approvals, tool cards, and
  * persistence all behave exactly like a user-typed message.
  *
- * Durability: the notification is persisted before the wake is broadcast, so
- * a closed tab just means the result is waiting in the conversation. The task
- * row itself (cancel, TTL, reaper) is owned by the MCP tasks extension.
+ * Durability: the conversation linkage and delivery context live ON the task
+ * row (`conversation_id`, `context`), so delivery never depends on in-process
+ * closures — the replica that settles the task delivers, and the reaper
+ * delivers a failure notification for tasks whose replica died (see
+ * `deliverReapedTask`). The row itself (cancel, TTL) is owned by the MCP
+ * tasks extension.
+ *
+ * Locked chats are refused everywhere in this path: their messages are
+ * encrypted under a browser-held key no server-side writer can obtain, so a
+ * notification write would silently downgrade the conversation's encryption.
  */
+
+/**
+ * Background delegations exist for long-running work, so they outlive the
+ * extension's default 30-minute row TTL by design.
+ */
+const BACKGROUND_DELEGATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const IDLE_POLL_INTERVAL_MS = 750;
 const IDLE_WAIT_DEADLINE_MS = 15 * 60_000;
@@ -43,7 +56,20 @@ interface SpawnDelegationParams {
   organizationId: string;
   sessionId?: string;
   parentDelegationChain?: string;
+  /**
+   * Caller's environment, so the child run is billed to it — mirrors the
+   * synchronous delegation path.
+   */
+  callerEnvironmentId?: string | null;
+  /** Whether the parent context was still trusted at the delegation boundary. */
+  parentContextIsTrusted?: boolean;
 }
+
+type SpawnDelegationResult =
+  /** Detached: the durable task row exists and the child keeps running. */
+  | { kind: "task"; taskId: string }
+  /** The child finished inside the detach threshold — result came back synchronously. */
+  | { kind: "inline"; resultText: string };
 
 class ChatBackgroundWorkService {
   /**
@@ -53,18 +79,42 @@ class ChatBackgroundWorkService {
    */
   async spawnDelegation(
     params: SpawnDelegationParams,
-  ): Promise<{ taskId: string }> {
+  ): Promise<SpawnDelegationResult> {
+    const lockInfo = await ConversationModel.getLockedChatKeyInfo(
+      params.conversationId,
+    );
+    if (!lockInfo) {
+      throw new Error("Conversation not found.");
+    }
+    if (lockInfo.lockedChat) {
+      // A settled task could never deliver here (see module doc), so refuse
+      // up front instead of losing the result later.
+      throw new Error(
+        "Background delegation is not available in locked chats.",
+      );
+    }
+
     const principal = `user:${params.userId}`;
 
     const result = await runToolCallMaybeTask({
       eligible: true,
       // Detach immediately: the whole point is not to wait.
       thresholdMs: 1,
+      ttlMs: BACKGROUND_DELEGATION_TTL_MS,
       agentId: params.agentId,
       principal,
       toolName: params.toolName,
+      conversationId: params.conversationId,
+      context: {
+        kind: "delegation",
+        targetAgentName: params.targetAgentName,
+      },
       onSettled: ({ taskId }) => {
-        void this.deliverSettledTask({ taskId, ...params }).catch((error) => {
+        void this.deliverSettledTask({
+          taskId,
+          agentId: params.agentId,
+          principal,
+        }).catch((error) => {
           logger.error(
             { err: error, taskId, conversationId: params.conversationId },
             "Failed to deliver a settled background task to its conversation",
@@ -80,6 +130,13 @@ class ChatBackgroundWorkService {
           sessionId: params.sessionId,
           parentDelegationChain: params.parentDelegationChain,
           conversationId: params.conversationId,
+          // Mirrors the synchronous delegation path: bill the child run to
+          // the caller's environment and propagate the trust boundary. The
+          // parent's isolationKey is deliberately NOT shared — the child
+          // outlives the parent turn, so it must not depend on a scope the
+          // parent may clean up.
+          callerEnvironmentId: params.callerEnvironmentId,
+          parentContextIsTrusted: params.parentContextIsTrusted,
           abortSignal: signal,
         });
         return { content: [{ type: "text", text: res.text }] };
@@ -87,20 +144,10 @@ class ChatBackgroundWorkService {
     });
 
     if (result?.resultType !== "task" || typeof result.task !== "object") {
-      // The child somehow finished inside the 1ms threshold — the result came
-      // back synchronously, so deliver it straight into the conversation.
-      const text = extractContentText(result);
-      await this.persistAndBroadcastNotification({
-        conversationId: params.conversationId,
-        userId: params.userId,
-        organizationId: params.organizationId,
-        taskId: `inline-${crypto.randomUUID()}`,
-        status: "completed",
-        agentName: params.targetAgentName,
-        toolName: params.toolName,
-        resultText: text,
-      });
-      return { taskId: "inline" };
+      // The child finished inside the threshold: no task row, no notification
+      // — the caller returns the result to the model directly, exactly like a
+      // synchronous delegation.
+      return { kind: "inline", resultText: extractContentText(result) };
     }
 
     const taskId = (result.task as { taskId: string }).taskId;
@@ -113,32 +160,62 @@ class ChatBackgroundWorkService {
       },
       "Spawned background delegation task for chat conversation",
     );
-    return { taskId };
+    return { kind: "task", taskId };
+  }
+
+  /**
+   * Deliver the failure notification for a task row the reaper just flipped
+   * to `failed` (its executing replica died before settling). Only rows that
+   * carry a conversation link are deliverable; anything else is a plain
+   * gateway task and is not ours.
+   */
+  async deliverReapedTask(task: McpGatewayTask): Promise<void> {
+    if (!task.conversationId || !task.context) return;
+    await this.deliverFromRow(task);
   }
 
   // === Internal ===
 
-  private async deliverSettledTask(
-    params: SpawnDelegationParams & { taskId: string },
-  ): Promise<void> {
+  private async deliverSettledTask(params: {
+    taskId: string;
+    agentId: string;
+    principal: string;
+  }): Promise<void> {
     // The row is the source of truth — a concurrent cancel may have won over
     // the in-process outcome.
     const task = await McpGatewayTaskModel.getForPrincipal({
       taskId: params.taskId,
       agentId: params.agentId,
-      principal: `user:${params.userId}`,
+      principal: params.principal,
     });
     if (!task) {
       logger.warn(
-        { taskId: params.taskId, conversationId: params.conversationId },
+        { taskId: params.taskId },
         "Settled background task row not found (expired?); dropping delivery",
       );
       return;
     }
-    if (task.status === "working") {
-      // The settle write itself failed; the row will expire. Nothing to say.
+    await this.deliverFromRow(task);
+  }
+
+  /**
+   * Row-driven delivery: everything needed to compose and route the
+   * notification comes from the task row itself, so this works identically
+   * for the settling replica and the reaper.
+   */
+  private async deliverFromRow(task: McpGatewayTask): Promise<void> {
+    if (!task.conversationId || !task.context) {
       logger.warn(
-        { taskId: params.taskId },
+        { taskId: task.id },
+        "Background task row has no conversation linkage; dropping delivery",
+      );
+      return;
+    }
+    if (task.status === "working") {
+      // The settle write itself failed; the row will expire and the reaper
+      // delivers the failure then. Nothing to say now.
+      logger.warn(
+        { taskId: task.id },
         "Background task settled in-process but its row is still working; dropping delivery",
       );
       return;
@@ -150,27 +227,48 @@ class ChatBackgroundWorkService {
     }
 
     await this.persistAndBroadcastNotification({
-      conversationId: params.conversationId,
-      userId: params.userId,
-      organizationId: params.organizationId,
+      conversationId: task.conversationId,
       taskId: task.id,
       status: task.status === "completed" ? "completed" : "failed",
-      agentName: params.targetAgentName,
-      toolName: params.toolName,
+      agentName: task.context.targetAgentName,
+      toolName: task.toolName,
       resultText: taskOutcomeText(task),
+      fallbackUserId: userIdFromPrincipal(task.principal),
     });
   }
 
   private async persistAndBroadcastNotification(params: {
     conversationId: string;
-    userId: string;
-    organizationId: string;
     taskId: string;
     status: "completed" | "failed";
     agentName: string;
     toolName: string;
     resultText: string;
+    /** Used for broadcast scoping only if the owner lookup comes up empty. */
+    fallbackUserId: string | null;
   }): Promise<void> {
+    // Guard every notification write: a deleted conversation has nowhere to
+    // deliver to, and a locked chat's messages are encrypted under a
+    // browser-held key this server-side path can never obtain — writing
+    // without it would silently downgrade the conversation's encryption.
+    const lockInfo = await ConversationModel.getLockedChatKeyInfo(
+      params.conversationId,
+    );
+    if (!lockInfo) {
+      logger.warn(
+        { conversationId: params.conversationId, taskId: params.taskId },
+        "Conversation for a settled background task no longer exists; dropping delivery",
+      );
+      return;
+    }
+    if (lockInfo.lockedChat) {
+      logger.warn(
+        { conversationId: params.conversationId, taskId: params.taskId },
+        "Refusing to deliver a background task notification into a locked chat",
+      );
+      return;
+    }
+
     await this.waitForConversationIdle(params.conversationId);
 
     const messageId = `bg-task-${params.taskId}`;
@@ -200,14 +298,22 @@ class ChatBackgroundWorkService {
     });
 
     const owner = await ConversationModel.getOwner(params.conversationId);
-    const ownerUserId = owner?.userId ?? params.userId;
-    const ownerOrgId = owner?.organizationId ?? params.organizationId;
+    const ownerUserId = owner?.userId ?? params.fallbackUserId;
+    if (!ownerUserId || !owner?.organizationId) {
+      // Persisted but not broadcastable — the notification waits in the
+      // thread for the next open.
+      logger.warn(
+        { conversationId: params.conversationId, taskId: params.taskId },
+        "Could not resolve a conversation owner for the background task wake broadcast",
+      );
+      return;
+    }
     broadcastConversationUpdated(
       ownerUserId,
-      ownerOrgId,
+      owner.organizationId,
       params.conversationId,
     );
-    broadcastConversationWake(ownerUserId, ownerOrgId, {
+    broadcastConversationWake(ownerUserId, owner.organizationId, {
       conversationId: params.conversationId,
       messageId,
       text,
@@ -248,6 +354,10 @@ class ChatBackgroundWorkService {
 }
 
 export const chatBackgroundWork = new ChatBackgroundWorkService();
+
+function userIdFromPrincipal(principal: string): string | null {
+  return principal.startsWith("user:") ? principal.slice("user:".length) : null;
+}
 
 function taskOutcomeText(task: McpGatewayTask): string {
   if (task.status === "completed") {

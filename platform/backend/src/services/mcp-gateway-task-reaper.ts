@@ -1,6 +1,7 @@
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
+import { chatBackgroundWork } from "@/services/chat-background-work";
 
 /**
  * Post-TTL lifecycle for gateway-minted MCP tasks, in the two steps the Tasks
@@ -52,10 +53,25 @@ class McpGatewayTaskReaper {
     }
     this.sweepInProgress = true;
     try {
-      const failed = await McpGatewayTaskModel.failExpired();
+      const failedRows = await McpGatewayTaskModel.failExpired();
+      // Harness tasks carry a conversation link; their owner deserves to hear
+      // the task died. Each delivery is isolated so one failure can never
+      // break the sweep itself — the reaper's core job — or the other rows.
+      for (const row of failedRows) {
+        if (!row.conversationId) continue;
+        try {
+          await chatBackgroundWork.deliverReapedTask(row);
+        } catch (error) {
+          logger.warn(
+            { err: error, taskId: row.id, conversationId: row.conversationId },
+            "Failed to deliver an expired background task notification",
+          );
+        }
+      }
       const purged = await McpGatewayTaskModel.purgeExpired({
         graceMs: PURGE_GRACE_MS,
       });
+      const failed = failedRows.length;
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

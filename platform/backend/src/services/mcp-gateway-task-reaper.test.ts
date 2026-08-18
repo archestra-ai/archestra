@@ -54,7 +54,7 @@ describe("MCP gateway task reaper", () => {
 
     const failed = await McpGatewayTaskModel.failExpired();
 
-    expect(failed).toBe(1);
+    expect(failed).toHaveLength(1);
     const orphanRow = await rowById(orphan.id);
     expect(orphanRow?.status).toBe("failed");
     // The error explains what happened, in the JSON-RPC shape tasks/get serves.
@@ -124,7 +124,7 @@ describe("MCP gateway task reaper", () => {
     });
     const failed = await McpGatewayTaskModel.failExpired();
 
-    expect(failed).toBe(0);
+    expect(failed).toHaveLength(0);
     const row = await rowById(task.id);
     expect(row?.status).toBe("completed");
     expect(row?.result).toMatchObject({

@@ -7,8 +7,12 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { McpGatewayTaskStatus } from "@/types/mcp-gateway-task";
+import type {
+  McpGatewayTaskContext,
+  McpGatewayTaskStatus,
+} from "@/types/mcp-gateway-task";
 import agentsTable from "./agent";
+import conversationsTable from "./conversation";
 
 /**
  * Gateway-minted MCP tasks (Tasks extension, io.modelcontextprotocol/tasks).
@@ -38,6 +42,18 @@ const mcpGatewayTasksTable = pgTable(
      */
     principal: text("principal").notNull(),
     toolName: varchar("tool_name", { length: 512 }).notNull(),
+    /**
+     * Chat conversation a settled outcome should be delivered back into.
+     * Only set for harness-spawned tasks (background delegations); plain
+     * gateway tasks leave it null. Cascade: a deleted conversation has
+     * nowhere to deliver to.
+     */
+    conversationId: uuid("conversation_id").references(
+      () => conversationsTable.id,
+      { onDelete: "cascade" },
+    ),
+    /** Harness delivery context (target name, kind); null for gateway tasks. */
+    context: jsonb("context").$type<McpGatewayTaskContext | null>(),
     status: varchar("status", { length: 32 })
       .$type<McpGatewayTaskStatus>()
       .notNull()
@@ -61,6 +77,7 @@ const mcpGatewayTasksTable = pgTable(
       table.principal,
     ),
     index("mcp_gateway_tasks_expires_at_idx").on(table.expiresAt),
+    index("mcp_gateway_tasks_conversation_id_idx").on(table.conversationId),
   ],
 );
 

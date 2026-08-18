@@ -1,7 +1,8 @@
-import { and, eq, gt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   McpGatewayTask,
+  McpGatewayTaskContext,
   McpGatewayTaskStatus,
 } from "@/types/mcp-gateway-task";
 
@@ -21,6 +22,8 @@ export default class McpGatewayTaskModel {
     principal: string;
     toolName: string;
     ttlMs: number;
+    conversationId?: string;
+    context?: McpGatewayTaskContext;
   }): Promise<McpGatewayTask> {
     const [row] = await db
       .insert(schema.mcpGatewayTasksTable)
@@ -30,9 +33,39 @@ export default class McpGatewayTaskModel {
         toolName: params.toolName,
         status: "working",
         expiresAt: new Date(Date.now() + params.ttlMs),
+        conversationId: params.conversationId ?? null,
+        context: params.context ?? null,
       })
       .returning();
     return row;
+  }
+
+  /**
+   * Harness tasks tied to a chat conversation, newest first, scoped to the
+   * caller's principal — same isolation rule as getForPrincipal, but listing
+   * includes settled (even already-expired) rows so recent outcomes stay
+   * visible to `list_background_tasks`.
+   */
+  static async listForConversation(params: {
+    conversationId: string;
+    principal: string;
+    statuses?: McpGatewayTaskStatus[];
+    limit?: number;
+  }): Promise<McpGatewayTask[]> {
+    return db
+      .select()
+      .from(schema.mcpGatewayTasksTable)
+      .where(
+        and(
+          eq(schema.mcpGatewayTasksTable.conversationId, params.conversationId),
+          eq(schema.mcpGatewayTasksTable.principal, params.principal),
+          params.statuses?.length
+            ? inArray(schema.mcpGatewayTasksTable.status, params.statuses)
+            : undefined,
+        ),
+      )
+      .orderBy(desc(schema.mcpGatewayTasksTable.createdAt))
+      .limit(params.limit ?? 50);
   }
 
   /**
@@ -130,9 +163,12 @@ export default class McpGatewayTaskModel {
    * running one. The `working` guard means a still-live execution that
    * settles concurrently wins exactly as it does against cancellation.
    * Idempotent and replica-safe; every backend pod may sweep.
+   *
+   * Returns the flipped rows (not a count) so the reaper can deliver a
+   * failure notification for harness tasks that carry a conversation link.
    */
-  static async failExpired(): Promise<number> {
-    const updated = await db
+  static async failExpired(): Promise<McpGatewayTask[]> {
+    return db
       .update(schema.mcpGatewayTasksTable)
       .set({
         status: "failed",
@@ -148,8 +184,7 @@ export default class McpGatewayTaskModel {
           lte(schema.mcpGatewayTasksTable.expiresAt, new Date()),
         ),
       )
-      .returning({ id: schema.mcpGatewayTasksTable.id });
-    return updated.length;
+      .returning();
   }
 
   /**

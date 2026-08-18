@@ -207,7 +207,7 @@ export async function handleDelegation(
       );
     }
     try {
-      const { taskId } = await chatBackgroundWork.spawnDelegation({
+      const spawned = await chatBackgroundWork.spawnDelegation({
         conversationId: context.conversationId,
         // biome-ignore lint/style/noNonNullAssertion: guarded above by the agentId check
         agentId: context.agentId!,
@@ -221,13 +221,21 @@ export async function handleDelegation(
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
         parentDelegationChain,
+        // Same billing/trust semantics as the synchronous path below.
+        callerEnvironmentId: environmentId,
+        parentContextIsTrusted: context.contextIsTrusted,
       });
+      if (spawned.kind === "inline") {
+        // The child finished before the detach threshold — return its result
+        // directly, exactly like a synchronous delegation.
+        return successResult(spawned.resultText);
+      }
       logger.info(
-        { agentId, targetAgentId: target.id, taskId },
+        { agentId, targetAgentId: target.id, taskId: spawned.taskId },
         "Started background agent delegation",
       );
       return successResult(
-        `Background task started (taskId: ${taskId}). Subagent "${target.name}" is working on it now. ` +
+        `Background task started (taskId: ${spawned.taskId}). Subagent "${target.name}" is working on it now. ` +
           `The result will arrive in this conversation as a [Background task ...] notification message — ` +
           `do NOT wait or poll for it. Tell the user what you kicked off and continue helping them.`,
       );

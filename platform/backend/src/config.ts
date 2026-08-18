@@ -954,6 +954,53 @@ export const parseClampedInt = (
   return Math.min(Math.max(parsed, min), max);
 };
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Parses `ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`.
+ *
+ * The env var is no longer the on/off switch — idle hibernation is an
+ * enterprise feature an organization opts into. What is left here is the
+ * operator's two decisions:
+ *
+ *  - an explicit "0" is a HARD kill switch: hibernation is off platform-wide
+ *    no matter what the organization has enabled, for deployments that must
+ *    never see a scaled-to-zero MCP pod;
+ *  - anything else configures the idle WINDOW. Unset or unparseable falls
+ *    back to 30 minutes; a parsed value is floored at 120 seconds, because a
+ *    lower threshold could hibernate a server in the gap between normal
+ *    consecutive tool calls of one conversation and thrash pods.
+ *
+ * @public — exported for testability
+ */
+export const parseMcpIdleHibernationSeconds = (
+  envValue: string | undefined,
+): { windowSeconds: number; hardDisabled: boolean } => {
+  // Parse BEFORE testing for zero: "00", "0.0" and "+0" are all an operator
+  // writing zero, and a numerically-zero spelling that silently ARMED
+  // hibernation with the default window — instead of killing it — would be
+  // the worst possible reading of their intent.
+  if (envValue?.trim() && Number.parseInt(envValue, 10) === 0) {
+    return {
+      windowSeconds: DEFAULT_MCP_IDLE_HIBERNATION_SECONDS,
+      hardDisabled: true,
+    };
+  }
+  const parsed = parsePositiveInt(envValue, 0);
+  return {
+    windowSeconds:
+      parsed === 0
+        ? DEFAULT_MCP_IDLE_HIBERNATION_SECONDS
+        : Math.max(120, parsed),
+    hardDisabled: false,
+  };
+};
+
+/** 30 minutes — the idle window when the operator configures none. */
+const DEFAULT_MCP_IDLE_HIBERNATION_SECONDS = 1800;
+// SPDX-SnippetEnd
+
 /** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
@@ -1396,6 +1443,138 @@ const mcpServerResources = {
     }),
   },
 };
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The pre-pull DaemonSet's own footprint. It runs `true` once per image and
+ * then sleeps, so the requests are deliberately minimal — they are paid on
+ * EVERY node in the cluster, and anything larger would distort scheduling for
+ * the real workloads pre-pulling exists to serve.
+ */
+const MCP_IMAGE_PREPULL_DEFAULTS = {
+  // Copied into arbitrary MCP images, so this must be static rather than
+  // inheriting the chart's generic init-container BusyBox.
+  bootstrapImage: "docker.io/library/busybox:1.36-musl",
+  resourceRequestCpu: "10m",
+  resourceRequestMemory: "16Mi",
+  resourceLimitMemory: "64Mi",
+} as const;
+
+/**
+ * The OPERATOR half of MCP image pre-pulling: the DaemonSet that keeps every
+ * node's image cache warm so a hibernated MCP server can wake without reaching
+ * the container registry.
+ *
+ * `enabled` is a KILL SWITCH, not a feature gate — pre-pulling follows idle
+ * hibernation (beta flag + enterprise licence + organization toggle), and this
+ * only lets an operator turn the extra per-node pod off while keeping
+ * hibernation on. Hence default-on and an explicit `"false"` to disable, the
+ * mirror of the hibernation flag's default-off shape.
+ *
+ * `priorityClassName` is unset by default (the namespace default applies).
+ * Point it at a low or negative-priority class so warming a cache can never
+ * preempt a real workload.
+ *
+ * @public — exported for testability
+ */
+export const getMcpImagePrepullConfig = () => ({
+  enabled:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED?.trim() !==
+    "false",
+  /**
+   * Image for the DaemonSet's OWN containers — the noop bootstrap and the
+   * keepalive. Deliberately independent of the configurable MCP server base
+   * image: that one is an operator's choice (a pinned older release, a custom
+   * derivative), and assuming anything about its contents wedges every
+   * pre-pull pod in init. Override alongside
+   * `archestra.initContainers.busyboxImage` on clusters that mirror images.
+   */
+  bootstrapImage:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE?.trim() ||
+    MCP_IMAGE_PREPULL_DEFAULTS.bootstrapImage,
+  bootstrapImagePullSecrets: Array.from(
+    new Set(
+      parseCommaSeparatedList(
+        process.env
+          .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS ??
+          "",
+      ),
+    ),
+  ),
+  priorityClassName:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME?.trim() ||
+    undefined,
+  resources: {
+    requests: {
+      cpu: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST",
+        value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST,
+        validator: isValidK8sCpuQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceRequestCpu,
+      }),
+      memory: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST",
+        value:
+          process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST,
+        validator: isValidK8sMemoryQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceRequestMemory,
+      }),
+    },
+    limits: {
+      memory: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT",
+        value:
+          process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT,
+        validator: isValidK8sMemoryQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceLimitMemory,
+      }),
+    },
+  },
+});
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The Helm release this platform was installed as, injected by the chart
+ * (`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`) rather than inferred from the
+ * cluster. It names cluster objects the platform creates for itself but Helm
+ * does not template — today the MCP image pre-pull DaemonSet — so that two
+ * releases sharing a namespace never fight over one object.
+ *
+ * A name that is not a valid Helm release name resolves to `undefined` rather
+ * than to something approximate: the consumers of this value name a cluster
+ * object with it, and a name guessed from a bad value creates a SECOND object
+ * that nothing afterwards will ever look for, delete, or upgrade. Not knowing
+ * is a state they can handle; being wrong is not.
+ *
+ * @public — exported for testability
+ */
+export const parseHelmReleaseName = (
+  envValue: string | undefined,
+): string | undefined => {
+  const releaseName = envValue?.trim();
+  if (!releaseName) return undefined;
+  // Helm's own rule: a DNS-1123 label, at most 53 characters so the release
+  // name still fits the names generated from it.
+  if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(releaseName)) {
+    logger.warn(
+      `Ignoring ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME "${releaseName}": not a valid Helm release name (lowercase alphanumerics and "-")`,
+    );
+    return undefined;
+  }
+  if (releaseName.length > 53) {
+    logger.warn(
+      `Ignoring ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME "${releaseName}": longer than the 53 characters Helm allows`,
+    );
+    return undefined;
+  }
+  return releaseName;
+};
+// SPDX-SnippetEnd
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -2503,8 +2682,53 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
+     * MCP server must sit unused before it is scaled to zero (default 30 min,
+     * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
+     * the whole feature ships behind — off by default, a blank value falling
+     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+     * Whether hibernation runs at all is decided together with the enterprise
+     * licence and the organization's own toggle — see
+     * `k8s/mcp-server-runtime/hibernation.ee`.
+     */
+    mcpIdleHibernation: {
+      ...parseMcpIdleHibernationSeconds(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS,
+      ),
+      betaEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
+      ),
+    },
+    /**
+     * The pre-pull DaemonSet's kill switch, priority class and footprint — see
+     * {@link getMcpImagePrepullConfig}. The reconciler that acts on it lives in
+     * `k8s/mcp-server-runtime/image-prepuller.ee`.
+     */
+    mcpImagePrepull: getMcpImagePrepullConfig(),
+    // SPDX-SnippetEnd
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+      runtimeOwnerConfigMapName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP?.trim() ||
+        undefined,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      /**
+       * The Helm release this platform was installed as — see
+       * {@link parseHelmReleaseName}. `undefined` when the chart did not inject
+       * it (a non-Helm deployment, or local development), which is a state the
+       * features that name objects after it must handle by doing nothing.
+       */
+      helmReleaseName: parseHelmReleaseName(
+        process.env.ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME,
+      ),
+      // SPDX-SnippetEnd
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
       loadKubeconfigFromCurrentCluster:
         process.env

@@ -311,6 +311,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
 export function buildEgressBaselineNetworkPolicy(params: {
   name: string;
   labels: Record<string, string>;
+  ownerReferences?: k8s.V1OwnerReference[];
 }): k8s.V1NetworkPolicy {
   return {
     apiVersion: "networking.k8s.io/v1",
@@ -318,6 +319,9 @@ export function buildEgressBaselineNetworkPolicy(params: {
     metadata: {
       name: params.name,
       labels: sanitizeMetadataLabels(params.labels),
+      ...(params.ownerReferences
+        ? { ownerReferences: params.ownerReferences }
+        : {}),
     },
     spec: {
       podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },
@@ -330,6 +334,7 @@ export function buildEgressBaselineNetworkPolicy(params: {
 export function buildEgressBaselineAwsApplicationNetworkPolicy(params: {
   name: string;
   labels: Record<string, string>;
+  ownerReferences?: k8s.V1OwnerReference[];
 }): Record<string, unknown> {
   return {
     apiVersion: "networking.k8s.aws/v1alpha1",
@@ -337,6 +342,9 @@ export function buildEgressBaselineAwsApplicationNetworkPolicy(params: {
     metadata: {
       name: params.name,
       labels: sanitizeMetadataLabels(params.labels),
+      ...(params.ownerReferences
+        ? { ownerReferences: params.ownerReferences }
+        : {}),
     },
     spec: {
       podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },

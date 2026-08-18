@@ -31,6 +31,23 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import {
+  applyDeploymentObservation,
+  deriveOrdinaryDeploymentState,
+  type OrdinaryDeploymentFacts,
+} from "./hibernation-state-machine";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  assertActionTransition,
+  deriveDeploymentState as deriveHibernationDeploymentState,
+  MCP_FOREIGN_REPLICA_OWNER_ANNOTATION,
+  MCP_HIBERNATED_ANNOTATION,
+  MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION,
+  // biome-ignore lint/style/noRestrictedImports: runtime-gated EE state machine import
+} from "./hibernation-state-machine.ee";
+// SPDX-SnippetEnd
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 import {
   customYamlToDeployment,
@@ -50,6 +67,7 @@ import {
   shouldUseCiliumNetworkPolicy,
   shouldUseGkeFqdnNetworkPolicy,
 } from "./network-policy";
+import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type { K8sDeploymentStatusSummary } from "./schemas";
 
 const {
@@ -97,13 +115,148 @@ const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
  * container, unschedulable pod, bad image/config). A condition of the user's
  * server or environment, not a bug of ours: error tracking drops it by name,
  * and routes surface it as an upstream failure.
+ *
+ * SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+ * SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+ * @public — the runtime manager distinguishes it from a slow wake
+ * SPDX-SnippetEnd
  */
-class McpServerDeploymentFailedError extends Error {
+export class McpServerDeploymentFailedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "McpServerDeploymentFailedError";
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The ready-wait ran out under capacity pressure — a full cluster or an
+ * exhausted namespace quota, as told apart by {@link classifySchedulingFailure}.
+ * Not a pod defect: an autoscaler adds nodes, a neighbour releases its quota,
+ * so callers treat it as retryable rather than branding the deployment failed.
+ *
+ * A wait can hold both a capacity reason and an image-pull reason at once (a
+ * rollout whose old pod is stuck pulling while its replacement finds no room),
+ * so a known pull error rides along in the message. It stays out of
+ * `schedulerMessage`, which callers quote as the scheduler's own wording.
+ *
+ * @public — the wake path maps it onto a capacity-flavored retryable error
+ */
+export class McpServerUnschedulableError extends Error {
+  constructor(
+    deploymentName: string,
+    readonly schedulerMessage: string,
+    lastImagePullError?: string | null,
+  ) {
+    super(
+      `Deployment ${deploymentName} has a pod the cluster cannot schedule: ${schedulerMessage}${
+        lastImagePullError
+          ? ` (last image pull error: ${lastImagePullError})`
+          : ""
+      }`,
+    );
+    this.name = "McpServerUnschedulableError";
+  }
+}
+
+/**
+ * Outcome of a {@link K8sDeployment.hibernate} call. `hibernated: false`
+ * carries why the scale-to-zero did not happen: already asleep (here or on
+ * another replica), somebody else's zero-replica deployment, or a lost
+ * compare-and-swap. A discriminated object rather than a boolean so future
+ * outcomes extend it without touching every caller.
+ *
+ * @public — consumed by the idle-hibernation sweeper (hibernation.ee.ts)
+ */
+export type HibernateResult =
+  | { hibernated: true }
+  | {
+      hibernated: false;
+      reason: "already-hibernated" | "not-ours" | "conflict" | "waking";
+    };
+
+// SPDX-SnippetEnd
+type LifecycleMutationOptions = {
+  assertOwned?: () => Promise<void>;
+  runFencedMutation?: <T>(fn: () => Promise<T>) => Promise<T>;
+};
+
+type RuntimeExtensionOptions = Record<string, unknown>;
+type RefreshStateOptions = LifecycleMutationOptions & RuntimeExtensionOptions;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+type HibernationRefreshStateOptions = LifecycleMutationOptions & {
+  skipWakeCompletion?: boolean;
+  throwOnError?: boolean;
+};
+type HibernationReadyOptions = {
+  waitOutUnschedulablePods?: boolean;
+};
+// SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
+/**
+ * What a lifecycle write did. Only `applied` means the cluster now holds what
+ * the decision intended; every other outcome means no transition happened and
+ * the caller must not run the work that follows one.
+ */
+type TransitionWriteOutcome =
+  /** Written, and the response still carries the change. */
+  | { status: "applied"; applied: k8s.V1Deployment }
+  /** The live object was not what the decision assumed. Nothing was written. */
+  | { status: "shape-changed"; live: k8s.V1Deployment | null }
+  /** Superseded by a newer transition, or lost the CAS repeatedly. No write. */
+  | { status: "lost-race" }
+  /** Written, but the stored object does not carry the change. */
+  | { status: "not-persisted"; applied: k8s.V1Deployment }
+  /**
+   * Written, the response did not carry the change, and the cluster could not
+   * be re-read: whether the change persisted is unknown. Callers must treat
+   * this as NOT applied — missing information is never acceptance.
+   */
+  | { status: "unconfirmed" };
+
+/**
+ * How many times a lifecycle write re-reads and re-checks after a 409 before
+ * giving up. Losing twice in a row means the object is genuinely contended;
+ * the next sweep or the next demand re-decides from scratch, which is cheaper
+ * and safer than spinning here.
+ */
+const TRANSITION_WRITE_MAX_ATTEMPTS = 3;
+
+/**
+ * Classify why the scheduler could not place a pod.
+ *
+ * `capacity` means the cluster is merely full: a node-scale-up or a freed /
+ * raised ResourceQuota clears it without anyone touching the server, so a
+ * wake may keep waiting. Everything else — an unmatchable nodeSelector or
+ * affinity, an untolerated taint, an unbindable volume — describes a pod this
+ * cluster can never place, and waiting on it would retry until the end of
+ * time.
+ *
+ * Unrecognized wording is `terminal` deliberately: calling real capacity
+ * pressure a defect only restores the pre-existing fail-fast behavior, while
+ * calling a permanent condition capacity produces a wait that never ends.
+ * A composite message counts as capacity if any clause is resource pressure —
+ * those nodes are full, so more nodes would place the pod.
+ *
+ * @public — exported for direct testing
+ */
+export function classifySchedulingFailure(
+  message: string,
+): "capacity" | "terminal" {
+  return CAPACITY_PRESSURE_PATTERNS.some((pattern) => pattern.test(message))
+    ? "capacity"
+    : "terminal";
+}
+// SPDX-SnippetEnd
 
 // Container waiting reasons that won't resolve without user action (bad
 // config, invalid image name, crashing server) — treat as terminal failures.
@@ -326,11 +479,25 @@ export default class K8sDeployment {
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
+  // One-shot: the next generated spec pulls fresh (`Always`) even though the
+  // steady-state policy is `IfNotPresent` — the refresh-image flow's
+  // freshness contract. See image-pull-policy.ts.
+  private freshImagePullRequested = false;
   /** Count of consecutive polls where a running deployment appeared unavailable.
    *  We only downgrade to "pending" after multiple misses to avoid flickering
    *  caused by transient K8s API lag. */
   private runningMissCount = 0;
   private static readonly RUNNING_MISS_THRESHOLD = 3;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /** Bumped when a hibernation lifecycle transition starts. refreshState reads
+   *  the cluster across several awaits, so without this a refresh that began
+   *  before a hibernate/wake could land its now-stale reading on top of the
+   *  transition's state — advertising "running" for a deployment that is in
+   *  fact scaled to zero. */
+  private stateGeneration = 0;
+  // SPDX-SnippetEnd
   private cachedRestartCount = 0;
   private cachedPodCreationTime: Date | null = null;
   private cachedPodName: string | null = null;
@@ -339,6 +506,7 @@ export default class K8sDeployment {
   private environmentValues?: Record<string, string>;
   private effectiveNetworkPolicy?: EffectiveNetworkPolicy | null;
   private networkPolicyCapabilities?: K8sNetworkPolicyCapabilities | null;
+  private runtimeOwnerReferences?: k8s.V1OwnerReference[];
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
@@ -434,6 +602,13 @@ export default class K8sDeployment {
       this.catalogItem,
       this.mcpServer.catalogId,
     );
+  }
+
+  /** Replace the policy snapshot immediately before a leased reconciliation. */
+  setEffectiveNetworkPolicy(
+    effectiveNetworkPolicy: EffectiveNetworkPolicy,
+  ): void {
+    this.effectiveNetworkPolicy = effectiveNetworkPolicy;
   }
 
   /**
@@ -627,12 +802,13 @@ export default class K8sDeployment {
     networkPolicy: k8s.V1NetworkPolicy,
   ): Promise<void> {
     const k8sNetworkingApi = this.requireK8sNetworkingApi();
+    const ownedPolicy = await this.withRuntimeOwnerReference(networkPolicy);
 
     try {
       try {
         await k8sNetworkingApi.createNamespacedNetworkPolicy({
           namespace: this.namespace,
-          body: networkPolicy,
+          body: ownedPolicy,
         });
         logger.info(
           {
@@ -650,7 +826,7 @@ export default class K8sDeployment {
         await k8sNetworkingApi.replaceNamespacedNetworkPolicy({
           name: policyName,
           namespace: this.namespace,
-          body: networkPolicy,
+          body: ownedPolicy,
         });
         logger.info(
           {
@@ -750,6 +926,9 @@ export default class K8sDeployment {
   }): Promise<void> {
     const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
     const { group, version, plural, label } = params.resource;
+    const ownedBody = await this.withRuntimeOwnerReference(
+      params.body as Record<string, unknown> & { metadata?: k8s.V1ObjectMeta },
+    );
 
     try {
       try {
@@ -758,7 +937,7 @@ export default class K8sDeployment {
           version,
           namespace: this.namespace,
           plural,
-          body: params.body,
+          body: ownedBody,
         });
         logger.info(
           {
@@ -797,7 +976,7 @@ export default class K8sDeployment {
               namespace: this.namespace,
               plural,
               name: params.policyName,
-              body: bodyWithPreservedMetadata(params.body, existing),
+              body: bodyWithPreservedMetadata(ownedBody, existing),
             });
             break;
           } catch (replaceError: unknown) {
@@ -829,6 +1008,76 @@ export default class K8sDeployment {
         `Failed to create or update ${label}`,
       );
       throw error;
+    }
+  }
+
+  private async getRuntimeOwnerReferences(): Promise<
+    k8s.V1OwnerReference[] | undefined
+  > {
+    if (this.runtimeOwnerReferences) return this.runtimeOwnerReferences;
+    try {
+      const ownerReferences = await resolveRuntimeOwnerReferences(
+        this.k8sApi,
+        this.namespace,
+      );
+      if (ownerReferences) this.runtimeOwnerReferences = ownerReferences;
+      return ownerReferences;
+    } catch (error) {
+      logger.debug(
+        { err: error, namespace: this.namespace },
+        "Could not read the Helm anchor for MCP runtime resources",
+      );
+      return undefined;
+    }
+  }
+
+  private async withRuntimeOwnerReference<
+    T extends { metadata?: k8s.V1ObjectMeta },
+  >(resource: T): Promise<T> {
+    const ownerReferences = await this.getRuntimeOwnerReferences();
+    if (!ownerReferences) return resource;
+    const existing = resource.metadata?.ownerReferences ?? [];
+    return {
+      ...resource,
+      metadata: {
+        ...resource.metadata,
+        ownerReferences: [
+          ...existing,
+          ...ownerReferences.filter(
+            (owner) => !existing.some(({ uid }) => uid === owner.uid),
+          ),
+        ],
+      },
+    };
+  }
+
+  private async adoptRuntimeOwner(deployment: k8s.V1Deployment): Promise<void> {
+    const ownerReferences = await this.getRuntimeOwnerReferences();
+    if (!ownerReferences) return;
+    const existing = deployment.metadata?.ownerReferences ?? [];
+    const missing = ownerReferences.filter(
+      (owner) => !existing.some(({ uid }) => uid === owner.uid),
+    );
+    if (missing.length === 0) return;
+    try {
+      await this.k8sAppsApi.patchNamespacedDeployment(
+        {
+          name: this.deploymentName,
+          namespace: this.namespace,
+          body: {
+            metadata: {
+              ...K8sDeployment.resourceVersionPrecondition(deployment),
+              ownerReferences: [...existing, ...missing],
+            },
+          },
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      );
+    } catch (error) {
+      logger.warn(
+        { err: error, deploymentName: this.deploymentName },
+        "Could not attach the Helm runtime owner to an existing MCP deployment",
+      );
     }
   }
 
@@ -1226,7 +1475,7 @@ export default class K8sDeployment {
    * Get catalog item for this MCP server.
    * Caches the result in this.catalogItem for subsequent calls.
    */
-  private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+  async getCatalogItem(): Promise<InternalMcpCatalog | null> {
     if (this.catalogItem) {
       return this.catalogItem;
     }
@@ -1264,7 +1513,7 @@ export default class K8sDeployment {
         data[key] = Buffer.from(value).toString("base64");
       }
 
-      const secret: k8s.V1Secret = {
+      const secret = await this.withRuntimeOwnerReference<k8s.V1Secret>({
         metadata: {
           name: k8sSecretName,
           labels: sanitizeMetadataLabels({
@@ -1275,7 +1524,7 @@ export default class K8sDeployment {
         },
         type: "Opaque",
         data,
-      };
+      });
 
       try {
         // Try to create the secret
@@ -1491,7 +1740,7 @@ export default class K8sDeployment {
         },
       });
 
-      const k8sSecret: k8s.V1Secret = {
+      const k8sSecret = await this.withRuntimeOwnerReference<k8s.V1Secret>({
         metadata: {
           name: secretName,
           labels: sanitizeMetadataLabels({
@@ -1507,7 +1756,7 @@ export default class K8sDeployment {
         data: {
           ".dockerconfigjson": Buffer.from(dockerConfigJson).toString("base64"),
         },
-      };
+      });
 
       try {
         try {
@@ -1684,6 +1933,52 @@ export default class K8sDeployment {
    * @param tolerations - Optional tolerations to apply to the pod spec (e.g., inherited from platform pod)
    * @returns The Kubernetes deployment specification
    */
+  /**
+   * Make the next {@link generateDeploymentSpec} emit `imagePullPolicy:
+   * Always` so its rollout pulls the current image — the refresh-image flow's
+   * freshness contract under the `IfNotPresent` steady state. One-shot.
+   */
+  requestFreshImagePull(): void {
+    this.freshImagePullRequested = true;
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Best-effort read of what a wake would ask of the container registry: the
+   * image the sleeping deployment will run and the pull policy that decides
+   * whether a node-cached copy is allowed to satisfy it.
+   *
+   * Deliberately says nothing about which nodes hold that image — that lives
+   * in `node.status.images`, a cluster-scoped read the platform's namespaced
+   * Role does not grant, so it would be a 403 on every real install. Never
+   * throws — callers log, they don't gate.
+   */
+  async assessWakeImageCache(): Promise<{
+    image: string;
+    pullPolicy: string;
+  } | null> {
+    try {
+      const live = await this.readLiveDeployment();
+      const container = live?.spec?.template?.spec?.containers?.[0];
+      if (!container?.image) return null;
+      return {
+        image: container.image,
+        pullPolicy: container.imagePullPolicy ?? "IfNotPresent",
+      };
+    } catch {
+      return null;
+    }
+  }
+  // SPDX-SnippetEnd
+
+  private consumeFreshImagePullRequest(): boolean {
+    const requested = this.freshImagePullRequested;
+    this.freshImagePullRequested = false;
+    return requested;
+  }
+
   generateDeploymentSpec(
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
@@ -1774,7 +2069,9 @@ export default class K8sDeployment {
         {
           name: "mcp-server",
           image: dockerImage,
-          imagePullPolicy: getMcpImagePullPolicy(dockerImage),
+          imagePullPolicy: getMcpImagePullPolicy(dockerImage, {
+            forceFreshPull: this.consumeFreshImagePullRequest(),
+          }),
           env: envVars,
           // Inject all keys from existing K8s Secrets/ConfigMaps as env vars
           ...(localConfig.envFrom?.length
@@ -1973,6 +2270,35 @@ export default class K8sDeployment {
     if (!deployment) {
       return null;
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Lifecycle annotations are ownership tokens, not user configuration. A
+    // custom manifest must never make an operator-authored zero-replica
+    // Deployment look hibernated by Archestra or choose an arbitrary wake
+    // replica count.
+    if (deployment.metadata?.annotations) {
+      delete deployment.metadata.annotations[
+        MCP_FOREIGN_REPLICA_OWNER_ANNOTATION
+      ];
+      delete deployment.metadata.annotations[MCP_HIBERNATED_ANNOTATION];
+      delete deployment.metadata.annotations[
+        MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+      ];
+    }
+    if (deployment.spec?.template?.metadata?.annotations) {
+      delete deployment.spec.template.metadata.annotations[
+        MCP_FOREIGN_REPLICA_OWNER_ANNOTATION
+      ];
+      delete deployment.spec.template.metadata.annotations[
+        MCP_HIBERNATED_ANNOTATION
+      ];
+      delete deployment.spec.template.metadata.annotations[
+        MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+      ];
+    }
+    // SPDX-SnippetEnd
 
     // Apply additional system-managed settings that may not be in YAML
     // 1. Apply nodeSelector if provided
@@ -2179,6 +2505,29 @@ export default class K8sDeployment {
         if (container.tty === undefined) {
           container.tty = false;
         }
+      }
+    }
+
+    // 9. imagePullPolicy: an explicit YAML value wins, like every other field
+    // in this merge — advanced YAML exists so an operator can pin a pod spec we
+    // would not generate, and which registry round-trips a pod makes is theirs
+    // to decide. The system only fills the field in when the YAML leaves it
+    // unset, which is also what keeps the `Never` guard on bare local images.
+    // The one exception is a refresh-image request: that is an explicit admin
+    // action asking for the current image right now, and on a YAML frozen at
+    // `IfNotPresent` it is the only route to one. It applies to that single
+    // rollout, then the author's value governs again. On a bare local image
+    // that rollout writes `Never` rather than `Always`, because there is no
+    // registry to fetch a fresher image from; the request is still consumed so
+    // it cannot leak into a later rollout.
+    if (deployment.spec?.template?.spec?.containers?.[0]) {
+      const container = deployment.spec.template.spec.containers[0];
+      const forceFreshPull = this.consumeFreshImagePullRequest();
+      if (forceFreshPull || !container.imagePullPolicy) {
+        container.imagePullPolicy = getMcpImagePullPolicy(
+          container.image || dockerImage,
+          { forceFreshPull },
+        );
       }
     }
 
@@ -2447,8 +2796,11 @@ export default class K8sDeployment {
    */
   async startOrCreateDeployment(
     resolvedImagePullSecretNames?: Array<{ name: string }>,
+    lifecycle?: LifecycleMutationOptions,
   ): Promise<void> {
+    const mutate = lifecycle?.runFencedMutation ?? (async (fn) => fn());
     try {
+      await lifecycle?.assertOwned?.();
       // Load the catalog item up front so every path below derives the pod
       // selector from the correct id — the drift check and the reconcile branches'
       // policy apply both key on catalogItem.multitenant (getPodSelectorServerId),
@@ -2479,10 +2831,20 @@ export default class K8sDeployment {
           logger.info(
             `Found legacy bare pod ${this.deploymentName}, deleting for migration to Deployment`,
           );
-          await this.k8sApi.deleteNamespacedPod({
-            name: this.deploymentName,
-            namespace: this.namespace,
-          });
+          const uid = existingPod.metadata?.uid;
+          if (!uid) {
+            throw new Error(
+              `Refusing to delete legacy pod ${this.deploymentName} without a UID precondition`,
+            );
+          }
+          await lifecycle?.assertOwned?.();
+          await mutate(() =>
+            this.k8sApi.deleteNamespacedPod({
+              name: this.deploymentName,
+              namespace: this.namespace,
+              body: { preconditions: { uid } },
+            }),
+          );
         }
       } catch (error: unknown) {
         // Ignore 404, propagate others
@@ -2507,6 +2869,8 @@ export default class K8sDeployment {
             }),
           { label: `readNamespacedDeployment ${this.deploymentName}` },
         );
+        await lifecycle?.assertOwned?.();
+        await this.adoptRuntimeOwner(existingDeployment);
 
         // SELF-HEAL: a Deployment created before the catalog-stable selector fix
         // (#6340) still labels its pods with the per-install `mcpServer.id`, while
@@ -2528,17 +2892,74 @@ export default class K8sDeployment {
             `Deployment ${this.deploymentName} has a stale mcp-server-id selector; ` +
               "recreating it so its pod labels match the Service selector",
           );
-          await this.k8sAppsApi.deleteNamespacedDeployment({
-            name: this.deploymentName,
-            namespace: this.namespace,
-          });
+          await lifecycle?.assertOwned?.();
+          await mutate(() =>
+            this.stopDeployment({
+              uidPrecondition: existingDeployment.metadata?.uid ?? true,
+            }),
+          );
           await this.waitForDeploymentAbsent();
           // Recreate from scratch with the correct catalog-stable pod labels.
-          return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+          return this.startOrCreateDeployment(
+            resolvedImagePullSecretNames,
+            lifecycle,
+          );
         }
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // ADOPTION: a deployment we hibernated (scaled to 0 with our
+        // annotation) is intact and intentionally idle. Adopt it as
+        // "hibernated" — don't treat it as a pending start, don't recreate
+        // it, and don't scale it up; the idle-hibernation manager wakes it on
+        // demand. The egress policy and HTTP Service are still reconciled so
+        // a later wake only needs to scale up (the pod starts confined).
+        if (
+          existingDeployment.spec?.replicas === 0 &&
+          K8sDeployment.hasHibernationAnnotation(existingDeployment)
+        ) {
+          await lifecycle?.assertOwned?.();
+          await mutate(() => this.applyK8sNetworkPolicy());
+          await lifecycle?.assertOwned?.();
+          await mutate(() => this.ensureHttpServerConfigured());
+          // Cluster fact, recorded before either branch below: this is a
+          // deployment we are holding asleep. Recording it first is also what
+          // makes the beginWake below a legal `hibernated → waking` move
+          // rather than an action out of a never-confirmed state.
+          if (this.observeState("hibernated")) {
+            this.errorMessage = null;
+          }
+          if (
+            config.orchestrator.mcpIdleHibernation.betaEnabled &&
+            !config.orchestrator.mcpIdleHibernation.hardDisabled
+          ) {
+            logger.info(
+              `Deployment ${this.deploymentName} is hibernated — adopted without scaling up`,
+            );
+            return;
+          }
+          // The operator's kill switch (…MCP_IDLE_HIBERNATION_SECONDS=0) is
+          // set, or the beta flag that offers the feature is off. Leaving the
+          // deployment asleep would strand it: no sweeper runs, so only a
+          // tool call would ever wake it. Deployment-level off means "always
+          // on", so scale it back up here and let the periodic refresh
+          // complete the wake once it reports available replicas.
+          // (An org toggle that is merely OFF is deliberately NOT enough to
+          // force a wake: nothing new gets hibernated, and ensureAwake still
+          // wakes what is asleep on the next call that needs it.)
+          await this.beginWake({
+            runFencedMutation: lifecycle?.runFencedMutation,
+          });
+          logger.info(
+            `Deployment ${this.deploymentName} was hibernated but idle hibernation is disabled — scaling it back up`,
+          );
+          return;
+        }
+        // SPDX-SnippetEnd
+
         if (existingDeployment.status?.availableReplicas) {
-          this.state = "running";
+          this.observeState("running");
 
           // For running deployments, we need to find the pod to assign HTTP port
           const pod = await this.findPodForDeployment();
@@ -2548,8 +2969,10 @@ export default class K8sDeployment {
 
           // Reconcile the egress policy before HTTP config, so a slow or failing
           // Service setup can't skip (re)applying the pod's policy.
-          await this.applyK8sNetworkPolicy();
-          await this.ensureHttpServerConfigured();
+          await lifecycle?.assertOwned?.();
+          await mutate(() => this.applyK8sNetworkPolicy());
+          await lifecycle?.assertOwned?.();
+          await mutate(() => this.ensureHttpServerConfigured());
 
           logger.info(`Deployment ${this.deploymentName} is already running`);
           return;
@@ -2563,18 +2986,31 @@ export default class K8sDeployment {
         // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
         const failureCheck = await this.checkPodContainerStatusesForFailure();
         if (failureCheck.hasFailed && !failureCheck.isTransientImagePull) {
-          this.state = "failed";
-          this.errorMessage = failureCheck.message;
+          if (this.observeState("failed")) {
+            this.errorMessage = failureCheck.message;
+          }
           logger.warn(
             `Deployment ${this.deploymentName} is in a failure state: ${failureCheck.message}`,
           );
         } else {
-          // Image pull errors stay "pending": the kubelet retries the pull
-          // on its own and the deployment recovers once it succeeds.
-          this.state = "pending";
-          this.errorMessage = failureCheck.isTransientImagePull
-            ? failureCheck.message
-            : null;
+          let adopted: McpDeploymentState = "pending";
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          // A deployment scaled back up but still carrying the hibernation
+          // annotation is mid-wake (the annotation only drops once it is
+          // verifiably up), so adopt it as "waking" rather than as a cold
+          // start. Otherwise the ordinary state remains "pending" — including
+          // image pull errors, which the kubelet retries on its own.
+          if (K8sDeployment.hasHibernationAnnotation(existingDeployment)) {
+            adopted = "waking";
+          }
+          // SPDX-SnippetEnd
+          if (this.observeState(adopted)) {
+            this.errorMessage = failureCheck.isTransientImagePull
+              ? failureCheck.message
+              : null;
+          }
           if (failureCheck.isTransientImagePull) {
             logger.info(
               `Deployment ${this.deploymentName} is waiting on an image pull (kubelet will retry): ${failureCheck.message}`,
@@ -2585,9 +3021,11 @@ export default class K8sDeployment {
         // Reconcile the egress policy before HTTP config, so a slow or failing
         // Service setup can't leave an already-created (still not-ready) pod under
         // the deny-all baseline alone.
-        await this.applyK8sNetworkPolicy();
+        await lifecycle?.assertOwned?.();
+        await mutate(() => this.applyK8sNetworkPolicy());
         // Even if pending/failed, ensure HTTP configuration (Service + URL) is set up
-        await this.ensureHttpServerConfigured();
+        await lifecycle?.assertOwned?.();
+        await mutate(() => this.ensureHttpServerConfigured());
         return;
       } catch (error: unknown) {
         // Deployment doesn't exist, we'll create it below
@@ -2611,7 +3049,7 @@ export default class K8sDeployment {
         `Creating deployment ${this.deploymentName} for MCP server ${this.mcpServer.name}`,
       );
 
-      this.state = "pending";
+      this.observeState("pending");
 
       // Use custom Docker image if provided
       const dockerImage =
@@ -2643,12 +3081,12 @@ export default class K8sDeployment {
       // long enough to fail startup name resolution/connectivity and crashloop.
       // The policy selects the pod by label, so creating it first is inert until
       // the pod appears, then takes effect immediately.
-      await this.applyK8sNetworkPolicy();
+      await lifecycle?.assertOwned?.();
+      await mutate(() => this.applyK8sNetworkPolicy());
 
       try {
-        await this.k8sAppsApi.createNamespacedDeployment({
-          namespace: this.namespace,
-          body: this.generateDeploymentSpec(
+        const deploymentSpec = await this.withRuntimeOwnerReference(
+          this.generateDeploymentSpec(
             dockerImage,
             normalizedLocalConfig,
             needsHttp,
@@ -2657,7 +3095,14 @@ export default class K8sDeployment {
             platformTolerations,
             resolvedImagePullSecretNames,
           ),
-        });
+        );
+        await lifecycle?.assertOwned?.();
+        await mutate(() =>
+          this.k8sAppsApi.createNamespacedDeployment({
+            namespace: this.namespace,
+            body: deploymentSpec,
+          }),
+        );
         logger.info(`Deployment ${this.deploymentName} created`);
       } catch (createError) {
         // A concurrent reconcile (e.g. another orchestrator replica that also saw
@@ -2673,15 +3118,19 @@ export default class K8sDeployment {
         logger.info(
           `Deployment ${this.deploymentName} was created concurrently; re-reconciling`,
         );
-        return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+        return this.startOrCreateDeployment(
+          resolvedImagePullSecretNames,
+          lifecycle,
+        );
       }
 
       // Ensure HTTP configuration is set up
-      await this.ensureHttpServerConfigured();
+      await lifecycle?.assertOwned?.();
+      await mutate(() => this.ensureHttpServerConfigured());
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
-      this.state = "pending";
+      this.observeState("pending");
       logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
       // A throttled/unavailable API server (429/5xx) says nothing about the
@@ -2689,7 +3138,7 @@ export default class K8sDeployment {
       // "pending" so the periodic status refresh re-reads the real state,
       // instead of latching a terminal "failed" that sticks until a manual
       // restart.
-      this.state = isTransientK8sApiError(error) ? "pending" : "failed";
+      this.observeState(isTransientK8sApiError(error) ? "pending" : "failed");
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       logger.error(
@@ -2698,6 +3147,643 @@ export default class K8sDeployment {
       );
       throw error;
     }
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Hibernate this deployment: scale it to 0 replicas and mark it with the
+   * hibernation annotation in a single merge patch, so the two can never be
+   * observed out of sync. Uses a plain deployment patch, NOT the
+   * `deployments/scale` subresource — RBAC only grants patch on deployments.
+   * K8s errors propagate to the caller (the idle-hibernation manager).
+   *
+   * The result says whether THIS call put the deployment to sleep, and if
+   * not, why. `hibernated: false` means the scale-to-zero never happened —
+   * and the caller must not run the teardown that follows a real hibernate
+   * (dropping pooled connections for a pod that is still serving would fail
+   * live calls).
+   */
+  async hibernate(
+    options?: LifecycleMutationOptions,
+  ): Promise<HibernateResult> {
+    const generation = ++this.stateGeneration;
+
+    // What we scaled down FROM, remembered so a failed hibernate can put it
+    // back. Read off the same object the write was built from.
+    let priorReplicas = 1;
+
+    let outcome: TransitionWriteOutcome;
+    try {
+      outcome = await this.transitionWrite({
+        generation,
+        label: "hibernate",
+        maxAttempts: 1,
+        // Only ever sleep a deployment that is awake and unclaimed. This
+        // rejects both the mid-wake shape and somebody else's zero, however
+        // the object got there between the decision and this write.
+        expect: (live) =>
+          (live.spec?.replicas ?? 0) >= 1 &&
+          !K8sDeployment.hasHibernationAnnotation(live),
+        body: (live) => {
+          priorReplicas = Math.max(live.spec?.replicas ?? 0, 1);
+          return {
+            metadata: {
+              annotations: {
+                [MCP_HIBERNATED_ANNOTATION]: "true",
+                [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]:
+                  String(priorReplicas),
+              },
+            },
+            spec: { replicas: 0 },
+          };
+        },
+        // An admission webhook that strips unknown annotations while honouring
+        // the spec would leave this deployment at zero replicas with no
+        // ownership marker — indistinguishable from an operator's own zero,
+        // which nothing is allowed to wake. Refuse to call that a hibernate.
+        survived: (applied) =>
+          (applied.spec?.replicas ?? 0) === 0 &&
+          K8sDeployment.hasHibernationAnnotation(applied) &&
+          Number.parseInt(
+            applied.metadata?.annotations?.[
+              MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+            ] ?? "",
+            10,
+          ) === priorReplicas,
+        runFencedMutation: options?.runFencedMutation,
+      });
+    } catch (error) {
+      // The patch may or may not have committed (e.g. a timeout after the
+      // apply landed) — best-effort converge the cached state with whatever
+      // the cluster actually holds instead of guessing.
+      await this.refreshState().catch((refreshError) => {
+        logger.warn(
+          { err: refreshError },
+          `Failed to refresh state for ${this.deploymentName} after a hibernate patch error`,
+        );
+      });
+      throw error;
+    }
+
+    if (outcome.status !== "applied") {
+      if (
+        outcome.status === "not-persisted" ||
+        outcome.status === "unconfirmed"
+      ) {
+        // not-persisted: the scale-to-zero landed but the marker did not, so
+        // right now this deployment is an orphan: at zero replicas with
+        // nothing claiming it, which I1 forbids anything from ever waking.
+        // unconfirmed: the response did not carry the marker and the cluster
+        // could not be re-read — the same orphan may exist, unwitnessed.
+        // Detecting either is not enough — put the replicas back.
+        //
+        // The restore is a shape-checked write like every other, NOT a blind
+        // one. `expect` matches only the orphan we just made, so if the write
+        // actually did persist — or an operator or a controller has since
+        // taken the object over — we leave it alone rather than fighting
+        // them; losing is logged and accepted.
+        this.errorMessage =
+          outcome.status === "not-persisted"
+            ? "Hibernation could not mark this deployment as Archestra-owned; the cluster removed the annotation."
+            : "Hibernation could not be confirmed against the cluster; the deployment may be scaled to zero without its ownership marker.";
+        const restored = await this.transitionWrite({
+          generation,
+          label: "hibernate-abort",
+          expect: (live) =>
+            (live.spec?.replicas ?? 0) === 0 &&
+            !K8sDeployment.hasHibernationAnnotation(live),
+          body: () => ({ spec: { replicas: priorReplicas } }),
+          survived: (applied) => (applied.spec?.replicas ?? 0) >= 1,
+          runFencedMutation: options?.runFencedMutation,
+          maxAttempts: 1,
+        }).catch(() => null);
+        if (restored?.status !== "applied") {
+          logger.error(
+            { deploymentName: this.deploymentName },
+            "Could not undo a hibernate whose ownership marker was stripped; the deployment is left scaled to zero",
+          );
+        }
+        await this.refreshState().catch(() => {});
+        return { hibernated: false, reason: "conflict" };
+      }
+      if (outcome.status === "lost-race") {
+        return { hibernated: false, reason: "conflict" };
+      }
+
+      // Refused because the object was not what the decision assumed. The
+      // fresh read that refused it is the best evidence available, so classify
+      // from that rather than reading again.
+      const live = outcome.live;
+      if (!live) return { hibernated: false, reason: "conflict" };
+      const replicas = live.spec?.replicas ?? 0;
+      const ours = K8sDeployment.hasHibernationAnnotation(live);
+
+      if (replicas === 0 && ours) {
+        // Already asleep — here or on another replica. A legal no-op, and the
+        // cached state must converge on it: this is a positive observation of
+        // cluster truth, not doubt.
+        if (this.observeState("hibernated")) {
+          this.errorMessage = null;
+          this.runningMissCount = 0;
+          this.clearCachedPodTelemetry();
+        }
+        return { hibernated: false, reason: "already-hibernated" };
+      }
+      if (replicas === 0) {
+        // Somebody else's zero. Never claimed, never woken (I1).
+        logger.debug(
+          { deploymentName: this.deploymentName },
+          "Skipping MCP hibernate: the deployment is already at 0 replicas without our annotation",
+        );
+        return { hibernated: false, reason: "not-ours" };
+      }
+      if (ours) {
+        // Our marker with replicas up is a wake in progress. Scaling it down
+        // would kill the pod that wake just started and would license the
+        // teardown that follows a real hibernate.
+        logger.debug(
+          { deploymentName: this.deploymentName },
+          "Skipping MCP hibernate: the deployment is waking (our annotation, replicas up)",
+        );
+        return { hibernated: false, reason: "waking" };
+      }
+      return { hibernated: false, reason: "conflict" };
+    }
+    if (
+      this.transitionAction("hibernated", "scaled to 0 replicas for idleness")
+    ) {
+      this.errorMessage = null;
+      this.runningMissCount = 0;
+    }
+    // The pod is gone — statusSummary must not keep reporting its name, age,
+    // or restart count as if it still existed. Unconditional: the scale-to-0
+    // patch committed whatever the cached state was allowed to become.
+    this.clearCachedPodTelemetry();
+    logger.info(`Deployment ${this.deploymentName} hibernated (scaled to 0)`);
+    return { hibernated: true };
+  }
+
+  /**
+   * Begin waking a hibernated deployment: scale it back to its recorded
+   * pre-hibernation replica count (default 1). The hibernation annotations
+   * deliberately stay until readiness — replicas >= 1 with the annotation
+   * still present means "waking". The manager waits via
+   * waitForDeploymentReady, then calls {@link completeWake}.
+   */
+  async beginWake(options?: LifecycleMutationOptions): Promise<void> {
+    const generation = ++this.stateGeneration;
+
+    let replicas = 1;
+    const outcome = await this.transitionWrite({
+      generation,
+      label: "beginWake",
+      // Only ever scale up a deployment that is still OURS and still ASLEEP.
+      // The old code re-read on a 409 and checked exactly this — but only on
+      // the retry path, so when the compare-and-swap SUCCEEDED the check never
+      // ran and a stale wake silently resized a healthy multi-replica
+      // deployment down to the `?? 1` fallback. Atomicity was never the
+      // missing guarantee here; validity was.
+      expect: (live) =>
+        (live.spec?.replicas ?? 0) === 0 &&
+        K8sDeployment.hasHibernationAnnotation(live),
+      body: (live) => {
+        replicas = K8sDeployment.recordedPreHibernationReplicas(live);
+        return { spec: { replicas } };
+      },
+      // The annotations deliberately stay until readiness, so the only claim
+      // this write makes is the replica count.
+      survived: (applied) => (applied.spec?.replicas ?? 0) >= 1,
+      runFencedMutation: options?.runFencedMutation,
+    });
+
+    if (outcome.status !== "applied") {
+      // Another replica is already waking it, an operator took it over, or the
+      // attempt was superseded. Scaling it a second time would fight them:
+      // converge on cluster truth and let the caller's readiness wait ride
+      // along with the wake already in progress.
+      await this.refreshStateAfterLostWakeRace();
+      return;
+    }
+
+    this.transitionAction("waking", `scaled to ${replicas} to wake`);
+    logger.info(
+      `Deployment ${this.deploymentName} waking (scaled to ${replicas})`,
+    );
+  }
+
+  /**
+   * Finish waking: remove both hibernation annotations (a merge-patch null
+   * deletes the key) once the manager has confirmed the deployment is ready.
+   *
+   * Returns the state this deployment actually converged to: "running" when
+   * the annotations were dropped, or whatever cluster truth the refresh
+   * derived after the write lost its CAS — an operator re-zeroing the
+   * still-annotated object between readiness and this call is the ordinary
+   * way that happens. Callers must treat anything but "running" as a wake
+   * that did NOT complete.
+   */
+  async completeWake(
+    options?: LifecycleMutationOptions,
+  ): Promise<McpDeploymentState> {
+    const generation = ++this.stateGeneration;
+
+    // This write used to go out unconditionally, justified as "deleting two
+    // annotation keys is idempotent and commutes with every other write". The
+    // keys do commute as merge OPERATIONS; they do not commute as STATE. The
+    // marker is an ownership token whose meaning is bound to spec.replicas, so
+    // deleting half of that pair is only idempotent while the other half has
+    // not moved. Land this on top of a concurrent hibernate and the result is
+    // `replicas: 0` with no marker — indistinguishable from a Deployment an
+    // operator zeroed deliberately, which I1 forbids anyone from waking. That
+    // server is then dead until a human intervenes, and the caller was told
+    // its wake succeeded.
+    const outcome = await this.transitionWrite({
+      generation,
+      label: "completeWake",
+      // Only finish a wake that is still ours and still scaled up.
+      expect: (live) =>
+        K8sDeployment.hasHibernationAnnotation(live) &&
+        (live.spec?.replicas ?? 0) >= 1 &&
+        (live.status?.availableReplicas ?? 0) >= 1 &&
+        (live.status?.readyReplicas ?? 0) >= 1,
+      body: () => ({
+        metadata: {
+          annotations: {
+            [MCP_HIBERNATED_ANNOTATION]: null,
+            [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: null,
+          },
+        },
+      }),
+      survived: (applied) =>
+        !K8sDeployment.hasHibernationAnnotation(applied) &&
+        (applied.status?.availableReplicas ?? 0) >= 1 &&
+        (applied.status?.readyReplicas ?? 0) >= 1,
+      runFencedMutation: options?.runFencedMutation,
+      // Abandon rather than force. Giving up leaves `marker + replicas >= 1`,
+      // which deriveDeploymentState already calls a finish-wake and the
+      // periodic refresh already repairs — and which the sweeper is documented
+      // never to touch. Retrying towards a deployment that has since been
+      // re-slept is one edit away from re-creating the orphan above.
+      maxAttempts: 1,
+    });
+
+    if (outcome.status !== "applied") {
+      // Converge on whatever the cluster actually holds instead of asserting a
+      // transition that did not happen — and report THAT, so the caller
+      // decides from the observation rather than assuming success.
+      await this.refreshStateAfterLostWakeRace();
+      return this.state;
+    }
+
+    this.transitionAction("running", "wake confirmed and annotations dropped");
+    logger.info(`Deployment ${this.deploymentName} woke up`);
+    return this.state;
+  }
+
+  /** Persist that another controller owns this Deployment's replica count. */
+  async markForeignReplicaOwner(
+    options?: LifecycleMutationOptions,
+  ): Promise<boolean> {
+    const generation = ++this.stateGeneration;
+    const outcome = await this.transitionWrite({
+      generation,
+      label: "markForeignReplicaOwner",
+      expect: (live) => (live.spec?.replicas ?? 0) >= 1,
+      body: () => ({
+        metadata: {
+          annotations: { [MCP_FOREIGN_REPLICA_OWNER_ANNOTATION]: "true" },
+        },
+      }),
+      survived: (applied) =>
+        K8sDeployment.hasForeignReplicaOwnerAnnotation(applied),
+      runFencedMutation: options?.runFencedMutation,
+    });
+    return outcome.status === "applied";
+  }
+
+  /** Explicit demand gives managed hibernation another chance. */
+  async clearForeignReplicaOwner(): Promise<void> {
+    const live = await this.readLiveDeployment();
+    if (!live || !K8sDeployment.hasForeignReplicaOwnerAnnotation(live)) return;
+    const generation = ++this.stateGeneration;
+    await this.transitionWrite({
+      generation,
+      label: "clearForeignReplicaOwner",
+      expect: (current) =>
+        K8sDeployment.hasForeignReplicaOwnerAnnotation(current),
+      body: () => ({
+        metadata: {
+          annotations: { [MCP_FOREIGN_REPLICA_OWNER_ANNOTATION]: null },
+        },
+      }),
+      survived: (applied) =>
+        !K8sDeployment.hasForeignReplicaOwnerAnnotation(applied),
+    });
+  }
+
+  /**
+   * Read this deployment's live K8s object, or null when it doesn't exist.
+   * Demand-lane guards in the runtime manager use it to decide from cluster
+   * truth where the cached state can't be trusted (cache-cold wakes, the
+   * pre-hibernation external-scale check).
+   */
+  async readLiveDeployment(): Promise<k8s.V1Deployment | null> {
+    try {
+      return await this.k8sAppsApi.readNamespacedDeployment({
+        name: this.deploymentName,
+        namespace: this.namespace,
+      });
+    } catch (error: unknown) {
+      if (isK8sNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Mirror a hibernation state transition performed on a sibling alias onto
+   * this object's cached state. Exists solely for the runtime manager to keep
+   * the multitenant sibling aliases of one physical deployment consistent
+   * (K8sDeployment only transitions the object a lifecycle method was called
+   * on) — no other callers.
+   */
+  syncStateFromSibling(state: McpDeploymentState): void {
+    this.observeState(state);
+  }
+
+  /**
+   * Whether a Deployment carries the idle-hibernation annotation we set in
+   * {@link hibernate} (removed again by {@link completeWake}). Public so the
+   * runtime manager can classify deployments it read directly.
+   */
+  static hasHibernationAnnotation(deployment: k8s.V1Deployment): boolean {
+    return (
+      deployment.metadata?.annotations?.[MCP_HIBERNATED_ANNOTATION] === "true"
+    );
+  }
+
+  static hasForeignReplicaOwnerAnnotation(
+    deployment: k8s.V1Deployment,
+  ): boolean {
+    return (
+      deployment.metadata?.annotations?.[
+        MCP_FOREIGN_REPLICA_OWNER_ANNOTATION
+      ] === "true"
+    );
+  }
+  // SPDX-SnippetEnd
+
+  /** Assign cluster truth without constraining the observed transition. */
+  private observeState(observedState: McpDeploymentState): boolean {
+    this.state = applyDeploymentObservation({
+      cachedState: this.state,
+      observedState,
+    });
+    return true;
+  }
+
+  /** Add a resourceVersion precondition when the live object has one. */
+  private static resourceVersionPrecondition(
+    deployment: k8s.V1Deployment | null,
+  ): { resourceVersion?: string } {
+    const resourceVersion = deployment?.metadata?.resourceVersion;
+    return resourceVersion ? { resourceVersion } : {};
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /** Validate and apply a hibernation action. */
+  private transitionAction(next: McpDeploymentState, reason: string): boolean {
+    if (
+      !assertActionTransition({
+        from: this.state,
+        to: next,
+        reason,
+        deploymentName: this.deploymentName,
+      })
+    ) {
+      return false;
+    }
+    this.state = next;
+    return true;
+  }
+
+  /** The replica count {@link hibernate} recorded, clamped to a usable ≥ 1. */
+  private static recordedPreHibernationReplicas(
+    deployment: k8s.V1Deployment | null,
+  ): number {
+    const recorded = Number.parseInt(
+      deployment?.metadata?.annotations?.[
+        MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+      ] ?? "",
+      10,
+    );
+    return Number.isFinite(recorded) ? Math.max(recorded, 1) : 1;
+  }
+
+  /**
+   * The one way this class writes a lifecycle transition.
+   *
+   * A `resourceVersion` precondition proves ATOMICITY — nothing changed
+   * between my read and my write. It does not prove VALIDITY — that the object
+   * still means what the decision that reached this line assumed. Those are
+   * different claims, and conflating them is what produced the worst defects
+   * this file has had: a hibernate that scaled down a deployment mid-wake with
+   * the CAS passing, and a wake that resized a healthy deployment to 1 with the
+   * CAS passing. Every lifecycle write therefore states its own precondition:
+   *
+   *  - `expect` is the shape the DECISION was about, re-checked against a fresh
+   *    read. This is the barrier. `deriveDeploymentState` is already a total
+   *    function over cluster facts; `expect` makes mutation one too.
+   *  - `survived` is the post-condition, checked against the RESPONSE. The
+   *    patch we sent is not necessarily the object that got stored: an
+   *    admission webhook can strip an annotation while honouring the spec, and
+   *    trusting the write leaves a deployment scaled to zero with no ownership
+   *    marker — an orphan nothing can ever wake.
+   *  - `generation` closes the abandoned-attempt hole. Callers are released at
+   *    a deadline while the work keeps running, so an attempt that lost its
+   *    caller must not still land a patch on top of a newer transition.
+   *
+   * Abandoning is always safe here and forcing never is: every shape this can
+   * leave behind is one `deriveDeploymentState` already names and the periodic
+   * refresh already repairs. That is why a 409 re-reads and re-checks rather
+   * than retrying blind, and why exhausting the attempts gives up.
+   */
+  private async transitionWrite(params: {
+    generation: number;
+    label: string;
+    expect: (live: k8s.V1Deployment) => boolean;
+    body: (live: k8s.V1Deployment) => object;
+    survived: (applied: k8s.V1Deployment) => boolean;
+    runFencedMutation?: LifecycleMutationOptions["runFencedMutation"];
+    /**
+     * How many times a 409 is re-read and re-checked. Waking retries, because
+     * a wake that gives up leaves a caller with no server. Hibernating passes
+     * 1: a contended object is doubt, a missed hibernation costs one idle
+     * window, and a wrong one kills a pod that is serving.
+     */
+    maxAttempts?: number;
+  }): Promise<TransitionWriteOutcome> {
+    if (params.runFencedMutation) {
+      const { runFencedMutation, ...unfencedParams } = params;
+      return runFencedMutation(() => this.transitionWrite(unfencedParams));
+    }
+    const { generation, label, expect, body, survived } = params;
+    const maxAttempts = params.maxAttempts ?? TRANSITION_WRITE_MAX_ATTEMPTS;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (this.stateGeneration !== generation) {
+        logger.debug(
+          { deploymentName: this.deploymentName, label },
+          "Abandoning an MCP lifecycle write: another transition superseded it",
+        );
+        return { status: "lost-race" };
+      }
+
+      const live = await this.readLiveDeployment();
+
+      // Re-check AFTER the read, not only before it. The read is the long
+      // await in this loop, so it is the window a superseding transition
+      // actually lands in — checking only on the way in leaves the very hole
+      // the generation counter exists to close.
+      if (this.stateGeneration !== generation) {
+        logger.debug(
+          { deploymentName: this.deploymentName, label },
+          "Abandoning an MCP lifecycle write: a transition landed while it was reading",
+        );
+        return { status: "lost-race" };
+      }
+
+      // No object to check against is not permission to write blind.
+      if (!live || !expect(live)) {
+        logger.debug(
+          { deploymentName: this.deploymentName, label },
+          "Abandoning an MCP lifecycle write: the deployment is no longer the shape the decision assumed",
+        );
+        return { status: "shape-changed", live };
+      }
+
+      // The precondition is merged UNDER the caller's metadata, never over it,
+      // so a body can add annotations without dropping the CAS that guards it.
+      const patch = body(live) as {
+        metadata?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+      const metadata = {
+        ...K8sDeployment.resourceVersionPrecondition(live),
+        ...(patch.metadata ?? {}),
+      };
+      // Send no `metadata` key at all rather than an empty one: a merge patch
+      // should say only what it changes.
+      const patchBody =
+        Object.keys(metadata).length > 0
+          ? { ...patch, metadata }
+          : { ...patch };
+
+      let applied: k8s.V1Deployment;
+      try {
+        applied = await this.k8sAppsApi.patchNamespacedDeployment(
+          {
+            name: this.deploymentName,
+            namespace: this.namespace,
+            body: patchBody,
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
+      } catch (error) {
+        if (isK8sConflictError(error)) continue;
+        // A timeout or dropped response can mean the API server committed the
+        // patch but the client never received its body. Settle that ambiguity
+        // from cluster truth before reporting failure; every survived shape is
+        // an idempotent lifecycle outcome even if another replica produced it.
+        const confirmed = await this.readLiveDeployment().catch(() => null);
+        if (confirmed && survived(confirmed)) {
+          logger.warn(
+            { err: error, deploymentName: this.deploymentName, label },
+            "MCP lifecycle write returned an error but its outcome was confirmed in the cluster",
+          );
+          return { status: "applied", applied: confirmed };
+        }
+        throw error;
+      }
+
+      if (!survived(applied)) {
+        // The response did not show the change, and only the cluster can
+        // settle whether it persisted — confirm with a read. A confirmation
+        // that cannot be read (or finds the object gone) is NOT acceptance:
+        // reporting `applied` on missing information is how a hibernate whose
+        // marker was stripped gets recorded as success, leaving an
+        // unannotated zero-replica Deployment that nothing may ever wake.
+        const confirmed = await this.readLiveDeployment().catch(() => null);
+        if (!confirmed) return { status: "unconfirmed" };
+        if (!survived(confirmed)) {
+          logger.error(
+            { deploymentName: this.deploymentName, label },
+            "An MCP lifecycle write did not survive the cluster's admission chain",
+          );
+          return { status: "not-persisted", applied: confirmed };
+        }
+        return { status: "applied", applied: confirmed };
+      }
+      return { status: "applied", applied };
+    }
+
+    logger.debug(
+      { deploymentName: this.deploymentName, label },
+      "Abandoning an MCP lifecycle write: lost the compare-and-swap repeatedly",
+    );
+    return { status: "lost-race" };
+  }
+
+  /**
+   * The scale-up half of a wake. Patches replicas only — the hibernation
+   * annotations deliberately stay until readiness — under the read object's
+   * resourceVersion, so a concurrent write is surfaced as a 409 rather than
+   * silently overwriting it.
+   */
+  private async patchWakeReplicas(
+    replicas: number,
+    liveDeployment: k8s.V1Deployment | null,
+  ): Promise<void> {
+    const precondition =
+      K8sDeployment.resourceVersionPrecondition(liveDeployment);
+    await this.k8sAppsApi.patchNamespacedDeployment(
+      {
+        name: this.deploymentName,
+        namespace: this.namespace,
+        body: {
+          ...(precondition.resourceVersion ? { metadata: precondition } : {}),
+          spec: { replicas },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+  }
+
+  /** Converge on cluster truth after a wake lost its compare-and-swap race. */
+  private async refreshStateAfterLostWakeRace(): Promise<void> {
+    await this.refreshState({ skipWakeCompletion: true }).catch((error) => {
+      logger.warn(
+        { err: error },
+        `Failed to refresh state for ${this.deploymentName} after losing a wake race`,
+      );
+    });
+  }
+  // SPDX-SnippetEnd
+
+  /**
+   * Forget the pod this deployment used to run. Called wherever the pod is
+   * known to be gone, so statusSummary stops reporting a dead pod's name, age
+   * and restart count as if it still existed.
+   */
+  private clearCachedPodTelemetry(): void {
+    this.cachedPodName = null;
+    this.cachedPodCreationTime = null;
+    this.cachedRestartCount = 0;
   }
 
   /**
@@ -2747,39 +3833,35 @@ export default class K8sDeployment {
   }
 
   /**
-   * Helper to find any pod for this deployment (not just running)
+   * Helper to find any pod for this deployment (not just running).
+   *
+   * Throws on a failed lookup rather than reporting "no pod": callers draw
+   * conclusions from an absent pod (clearing telemetry, declaring a deployment
+   * pod-less), and a 429 from the API server is not evidence of either.
    */
   private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
-    try {
-      const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
-      const pods = await this.k8sApi.listNamespacedPod({
-        namespace: this.namespace,
-        labelSelector: `mcp-server-id=${sanitizedId}`,
-      });
-      if (pods.items.length > 0) {
-        return pods.items[0];
-      }
-
-      // Multi-tenant catalogs share one deployment across many mcp_server
-      // rows; the deployment's pod label was baked in at create time using
-      // the first caller's mcp_server.id, so subsequent callers won't match
-      // by label. Fall back to matching pods by deployment name prefix,
-      // scoped to pods this runtime created (every one carries
-      // app=mcp-server) so we never list the whole namespace.
-      const allPods = await this.k8sApi.listNamespacedPod({
-        namespace: this.namespace,
-        labelSelector: "app=mcp-server",
-      });
-      return allPods.items.find((pod) =>
-        (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
-      );
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to list pods for ${this.deploymentName}`,
-      );
-      return undefined;
+    const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
+    const pods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: `mcp-server-id=${sanitizedId}`,
+    });
+    if (pods.items.length > 0) {
+      return pods.items[0];
     }
+
+    // Multi-tenant catalogs share one deployment across many mcp_server
+    // rows; the deployment's pod label was baked in at create time using
+    // the first caller's mcp_server.id, so subsequent callers won't match
+    // by label. Fall back to matching pods by deployment name prefix,
+    // scoped to pods this runtime created (every one carries
+    // app=mcp-server) so we never list the whole namespace.
+    const allPods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: "app=mcp-server",
+    });
+    return allPods.items.find((pod) =>
+      (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+    );
   }
 
   /**
@@ -3094,7 +4176,10 @@ export default class K8sDeployment {
             name: serviceName,
             namespace: this.namespace,
             body: {
-              metadata: { labels: identityLabels },
+              metadata: {
+                labels: identityLabels,
+                ownerReferences: await this.getRuntimeOwnerReferences(),
+              },
               spec: { selector: identityLabels },
             },
           },
@@ -3119,7 +4204,7 @@ export default class K8sDeployment {
         ? "ClusterIP"
         : "NodePort";
 
-      const serviceSpec: k8s.V1Service = {
+      const serviceSpec = await this.withRuntimeOwnerReference<k8s.V1Service>({
         metadata: {
           name: serviceName,
           labels: identityLabels,
@@ -3137,7 +4222,7 @@ export default class K8sDeployment {
           ],
           type: serviceType,
         },
-      };
+      });
 
       await this.k8sApi.createNamespacedService({
         namespace: this.namespace,
@@ -3197,8 +4282,24 @@ export default class K8sDeployment {
   async waitForDeploymentReady(
     maxAttempts = 60,
     intervalMs = 2000,
+    options?: RuntimeExtensionOptions,
   ): Promise<void> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const hibernationOptions = options as HibernationReadyOptions | undefined;
+    const waitOutCapacityPressure =
+      hibernationOptions?.waitOutUnschedulablePods === true;
+    // SPDX-SnippetEnd
     let lastImagePullError: string | null = null;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Holds the capacity wording only while it is still the live reason this
+    // wait has not finished: an attempt that sees the pod on a node clears it,
+    // so the error thrown at the end names whatever actually ended the wait.
+    let lastCapacityPressureMessage: string | null = null;
+    // SPDX-SnippetEnd
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
@@ -3216,8 +4317,9 @@ export default class K8sDeployment {
           if (pod && pod.status?.phase === "Running") {
             await this.assignHttpPortIfNeeded(pod);
             // Update state to running now that deployment is confirmed ready
-            this.state = "running";
-            this.errorMessage = null;
+            if (this.observeState("running")) {
+              this.errorMessage = null;
+            }
             return;
           }
         }
@@ -3234,15 +4336,49 @@ export default class K8sDeployment {
         if (i >= 5 && i % 5 === 0) {
           const eventCheck = await this.checkEventsForFailure();
           if (eventCheck.hasFailure) {
-            this.state = "failed";
-            this.errorMessage = eventCheck.message || "Deployment failed";
-            throw new McpServerDeploymentFailedError(
-              `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
-            );
+            const eventMessage = eventCheck.message || "Deployment failed";
+            let failForEvent = true;
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            if (
+              waitOutCapacityPressure &&
+              classifySchedulingFailure(eventMessage) === "capacity"
+            ) {
+              // Capacity pressure reaches a wake as a Warning event too — an
+              // exhausted namespace ResourceQuota is reported against the
+              // ReplicaSet, before any pod exists to carry a condition.
+              lastCapacityPressureMessage = eventMessage;
+              this.errorMessage = eventMessage;
+              failForEvent = false;
+            }
+            // SPDX-SnippetEnd
+            if (failForEvent) {
+              this.observeState("failed");
+              this.errorMessage = eventMessage;
+              throw new McpServerDeploymentFailedError(
+                `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
+              );
+            }
           }
         }
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        let unschedulableThisAttempt: string | null = null;
+        let sawScheduledPod = false;
+        // SPDX-SnippetEnd
+
         for (const pod of pods.items) {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (isPodScheduled(pod)) {
+            sawScheduledPod = true;
+          }
+          // SPDX-SnippetEnd
+
           // Check pending pods without containerStatuses for condition failures
           if (
             pod.status?.phase === "Pending" &&
@@ -3251,20 +4387,45 @@ export default class K8sDeployment {
           ) {
             const conditionCheck = this.checkPodConditionsForFailure(pod);
             if (conditionCheck.hasFailure) {
-              // Check how long pod has been pending
-              const creationTime = pod.metadata?.creationTimestamp;
-              const pendingDuration = creationTime
-                ? Date.now() - new Date(creationTime).getTime()
-                : 0;
+              const conditionMessage =
+                conditionCheck.message || "Pod scheduling failed";
+              let failForCondition = true;
+              // SPDX-SnippetBegin
+              // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+              if (
+                waitOutCapacityPressure &&
+                classifySchedulingFailure(conditionMessage) === "capacity"
+              ) {
+                // A wake rides out scheduling pressure: a full cluster is the
+                // condition a cluster autoscaler exists to clear (nodes take
+                // 1–4 minutes to provision), so failing fast would brand a
+                // full-but-healthy cluster as a deployment defect. Keep
+                // waiting within the budget; the final error carries what the
+                // scheduler said. Anything the classifier does not recognize
+                // as capacity falls through and still fails fast — nothing
+                // outside capacity pressure resolves itself.
+                unschedulableThisAttempt = conditionMessage;
+                this.errorMessage = conditionMessage;
+                failForCondition = false;
+              }
+              // SPDX-SnippetEnd
+              if (failForCondition) {
+                // Check how long pod has been pending
+                const creationTime = pod.metadata?.creationTimestamp;
+                const pendingDuration = creationTime
+                  ? Date.now() - new Date(creationTime).getTime()
+                  : 0;
 
-              // If pending for > 20 seconds with a condition failure, fail fast
-              if (pendingDuration > TimeInMs.Second * 20) {
-                this.state = "failed";
-                this.errorMessage =
-                  conditionCheck.message || "Pod scheduling failed";
-                throw new McpServerDeploymentFailedError(
-                  `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
-                );
+                // If pending for > 20 seconds with a condition failure, fail fast
+                if (pendingDuration > TimeInMs.Second * 20) {
+                  this.observeState("failed");
+                  this.errorMessage =
+                    conditionCheck.message || "Pod scheduling failed";
+                  throw new McpServerDeploymentFailedError(
+                    `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
+                  );
+                }
               }
             }
           }
@@ -3281,7 +4442,7 @@ export default class K8sDeployment {
                 if (
                   TERMINAL_CONTAINER_WAITING_REASONS.includes(waitingReason)
                 ) {
-                  this.state = "failed";
+                  this.observeState("failed");
                   this.errorMessage = message;
                   throw new McpServerDeploymentFailedError(
                     `Deployment ${this.deploymentName} failed: ${waitingReason} - ${message}`,
@@ -3301,6 +4462,18 @@ export default class K8sDeployment {
             }
           }
         }
+
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (unschedulableThisAttempt) {
+          lastCapacityPressureMessage = unschedulableThisAttempt;
+        } else if (sawScheduledPod) {
+          // The pod got a node, so whatever is holding the wait up now is not
+          // capacity — drop the wording so it cannot shadow the real cause.
+          lastCapacityPressureMessage = null;
+        }
+        // SPDX-SnippetEnd
       } catch (error: unknown) {
         if (
           error instanceof Error &&
@@ -3315,6 +4488,17 @@ export default class K8sDeployment {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (lastCapacityPressureMessage) {
+      throw new McpServerUnschedulableError(
+        this.deploymentName,
+        lastCapacityPressureMessage,
+        lastImagePullError,
+      );
+    }
+    // SPDX-SnippetEnd
     throw new Error(
       `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts${
         lastImagePullError
@@ -3356,20 +4540,46 @@ export default class K8sDeployment {
   /**
    * Stop the deployment (fire-and-forget - K8s handles cleanup in background)
    */
-  async stopDeployment(): Promise<void> {
+  async stopDeployment(options?: {
+    assertOwned?: () => Promise<void>;
+    uidPrecondition?: boolean | string;
+  }): Promise<void> {
     try {
       logger.info(`Stopping deployment ${this.deploymentName}`);
+      let uid: string | undefined;
+      if (options?.uidPrecondition) {
+        await options.assertOwned?.();
+        uid =
+          typeof options.uidPrecondition === "string"
+            ? options.uidPrecondition
+            : (
+                await this.k8sAppsApi.readNamespacedDeployment({
+                  name: this.deploymentName,
+                  namespace: this.namespace,
+                })
+              ).metadata?.uid;
+        if (!uid) {
+          throw new Error(
+            `Deployment ${this.deploymentName} has no UID; refusing an unfenced delete`,
+          );
+        }
+        // A holder that stalled during the read must prove ownership again
+        // before issuing the delete. UID preconditions then protect a newer
+        // replacement if ownership expires while the request is in flight.
+        await options.assertOwned?.();
+      }
       await this.k8sAppsApi.deleteNamespacedDeployment({
         name: this.deploymentName,
         namespace: this.namespace,
+        ...(uid ? { body: { preconditions: { uid } } } : {}),
       });
       logger.info(`Deployment ${this.deploymentName} deletion initiated`);
-      this.state = "not_created";
+      this.observeState("not_created");
     } catch (error: unknown) {
       // If deployment doesn't exist (404), that's okay - it may have been deleted already
       if (isK8sNotFoundError(error)) {
         logger.info(`Deployment ${this.deploymentName} already deleted`);
-        this.state = "not_created";
+        this.observeState("not_created");
         return;
       }
       logger.error(
@@ -3383,12 +4593,18 @@ export default class K8sDeployment {
   /**
    * Remove the deployment completely (including associated Service and Secret)
    */
-  async removeDeployment(): Promise<void> {
-    await this.stopDeployment();
-    await this.deleteK8sService();
-    await this.deleteK8sSecret();
-    await this.deleteDockerRegistrySecrets();
-    await this.deleteK8sNetworkPolicy();
+  async removeDeployment(options?: {
+    runFencedMutation?: <T>(fn: () => Promise<T>) => Promise<T>;
+    uidPrecondition?: boolean;
+  }): Promise<void> {
+    const mutate = options?.runFencedMutation ?? (async (fn) => fn());
+    await mutate(() =>
+      this.stopDeployment({ uidPrecondition: options?.uidPrecondition }),
+    );
+    await mutate(() => this.deleteK8sService());
+    await mutate(() => this.deleteK8sSecret());
+    await mutate(() => this.deleteDockerRegistrySecrets());
+    await mutate(() => this.deleteK8sNetworkPolicy());
   }
 
   /**
@@ -3816,24 +5032,50 @@ export default class K8sDeployment {
    * Called periodically by the status polling to detect state changes
    * (e.g. a running pod entering CrashLoopBackOff).
    */
-  async refreshState(): Promise<void> {
-    // Only refresh for active states
-    if (this.state === "not_created") {
-      return;
-    }
+  async refreshState(options?: RefreshStateOptions): Promise<void> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Everything below is derived from cluster reads taken across several
+    // awaits. A hibernate or wake starting in the meantime makes all of it
+    // stale, so each read is followed by a generation check that abandons this
+    // refresh rather than overwriting the transition's state.
+    const hibernationOptions = options as
+      | HibernationRefreshStateOptions
+      | undefined;
+    const generation = this.stateGeneration;
+    // SPDX-SnippetEnd
 
     try {
-      // Update pod metadata (restarts, age) from the latest pod
-      const anyPod = await this.findAnyPodForDeployment();
-      if (anyPod) {
-        const cs = anyPod.status?.containerStatuses?.find(
-          (c) => c.name === "mcp-server",
+      // Update pod metadata (restarts, age) from the latest pod. Best-effort:
+      // a failed lookup is not evidence the pod is gone, so it leaves the
+      // cached values alone and the state evaluation below still runs.
+      try {
+        const anyPod = await this.findAnyPodForDeployment();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (this.stateGeneration !== generation) return;
+        // SPDX-SnippetEnd
+        if (anyPod) {
+          const cs = anyPod.status?.containerStatuses?.find(
+            (c) => c.name === "mcp-server",
+          );
+          this.cachedRestartCount = cs?.restartCount ?? 0;
+          this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
+            ? new Date(anyPod.metadata.creationTimestamp)
+            : null;
+          this.cachedPodName = anyPod.metadata?.name ?? null;
+        } else {
+          // No pod at all — statusSummary must not keep reporting the last
+          // pod's name, age, or restart count as if it still existed.
+          this.clearCachedPodTelemetry();
+        }
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          `Failed to refresh pod telemetry for ${this.deploymentName}`,
         );
-        this.cachedRestartCount = cs?.restartCount ?? 0;
-        this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
-          ? new Date(anyPod.metadata.creationTimestamp)
-          : null;
-        this.cachedPodName = anyPod.metadata?.name ?? null;
       }
 
       // "failed" is re-evaluated too: it can be a false positive — e.g. a
@@ -3841,60 +5083,206 @@ export default class K8sDeployment {
       // the pod kept running fine, or a crashloop that has since recovered.
       // A deployment that is verifiably available flips (back) to "running";
       // one that is genuinely broken re-derives the same failed state below.
-      if (
-        this.state !== "pending" &&
-        this.state !== "running" &&
-        this.state !== "failed"
-      ) {
-        return;
+      let canRefresh =
+        this.state === "not_created" ||
+        this.state === "pending" ||
+        this.state === "running" ||
+        this.state === "failed";
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (this.state === "hibernated" || this.state === "waking") {
+        canRefresh = true;
       }
+      // SPDX-SnippetEnd
+      if (!canRefresh) return;
 
       // Check if deployment has available replicas
-      const deployment = await this.k8sAppsApi.readNamespacedDeployment({
-        name: this.deploymentName,
-        namespace: this.namespace,
-      });
-
-      if (
-        deployment.status?.availableReplicas &&
-        deployment.status.availableReplicas > 0
-      ) {
-        const pod = await this.findPodForDeployment();
-        if (pod) {
-          this.state = "running";
+      let deployment: k8s.V1Deployment;
+      try {
+        deployment = await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        });
+      } catch (error) {
+        if (!isK8sNotFoundError(error)) throw error;
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (this.stateGeneration !== generation) return;
+        // SPDX-SnippetEnd
+        // The Deployment itself is gone — deleted out-of-band (kubectl, a
+        // namespace cleanup, another controller). That is a definitive read,
+        // not a flake: converge to not_created instead of advertising a
+        // running/hibernated deployment that no longer exists, which nothing
+        // else would ever correct.
+        const decision = deriveOrdinaryDeploymentState(
+          {
+            exists: false,
+            availableReplicas: 0,
+            podFailure: null,
+          },
+          this.state,
+        );
+        if (decision.kind === "state" && this.observeState(decision.state)) {
           this.errorMessage = null;
+          this.runningMissCount = 0;
+          this.clearCachedPodTelemetry();
+        }
+        return;
+      }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (this.stateGeneration !== generation) return;
+      // SPDX-SnippetEnd
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (K8sDeployment.hasHibernationAnnotation(deployment)) {
+        const availableReplicas = deployment.status?.availableReplicas ?? 0;
+        const desiredReplicas = deployment.spec?.replicas ?? 0;
+        let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
+        let failureMessage: string | null = null;
+        if (availableReplicas === 0 && desiredReplicas >= 1) {
+          const failureCheck = await this.checkPodContainerStatusesForFailure();
+          if (this.stateGeneration !== generation) return;
+          if (failureCheck.hasFailed) {
+            podFailure = {
+              failed: true,
+              transient: failureCheck.isTransientImagePull,
+            };
+            failureMessage = failureCheck.message;
+          }
+        }
+
+        const decision = deriveHibernationDeploymentState(
+          {
+            exists: true,
+            hasHibernationAnnotation: true,
+            replicas: desiredReplicas,
+            availableReplicas,
+            podFailure,
+          },
+          this.state,
+        );
+
+        if (decision.kind === "finish-wake") {
+          this.observeState("waking");
+          if (hibernationOptions?.skipWakeCompletion) {
+            this.runningMissCount = 0;
+            return;
+          }
+          try {
+            await this.completeWake(hibernationOptions);
+          } catch (error) {
+            logger.warn(
+              { err: error },
+              `Failed to self-heal wake completion for ${this.deploymentName}; retrying on the next refresh`,
+            );
+            this.observeState("pending");
+          }
           this.runningMissCount = 0;
           return;
         }
-      }
 
-      // No available replicas — check for container failure states
-      const failureCheck = await this.checkPodContainerStatusesForFailure();
-      if (failureCheck.hasFailed) {
-        if (failureCheck.isTransientImagePull) {
-          // Image pull errors self-heal: the kubelet retries the pull with
-          // exponential backoff. Stay "pending" (with the error visible) so
-          // the next refresh flips to "running" once the pull succeeds —
-          // marking it "failed" here would latch the state forever and
-          // require a manual restart.
-          this.state = "pending";
-          this.errorMessage = failureCheck.message;
-        } else {
-          this.state = "failed";
-          this.errorMessage = failureCheck.message;
-        }
-        this.runningMissCount = 0;
-      } else if (this.state === "running") {
-        // Debounce: only downgrade to "pending" after several consecutive
-        // misses to avoid flickering from transient K8s API inconsistencies.
-        this.runningMissCount++;
-        if (this.runningMissCount >= K8sDeployment.RUNNING_MISS_THRESHOLD) {
-          this.state = "pending";
+        if (decision.kind !== "state") return;
+        const stateChanged = decision.state !== this.state;
+        this.observeState(decision.state);
+        if (podFailure?.failed) {
+          this.errorMessage = failureMessage;
+          this.runningMissCount = 0;
+        } else if (
+          stateChanged ||
+          decision.state === "hibernated" ||
+          decision.state === "waking"
+        ) {
           this.errorMessage = null;
           this.runningMissCount = 0;
         }
+        return;
+      }
+      // SPDX-SnippetEnd
+
+      let availableReplicas = deployment.status?.availableReplicas ?? 0;
+      if (availableReplicas > 0) {
+        const pod = await this.findPodForDeployment();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (this.stateGeneration !== generation) return;
+        // SPDX-SnippetEnd
+        if (!pod) availableReplicas = 0;
+      }
+
+      let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
+      let failureMessage: string | null = null;
+      if (availableReplicas === 0) {
+        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (this.stateGeneration !== generation) return;
+        // SPDX-SnippetEnd
+        if (failureCheck.hasFailed) {
+          podFailure = {
+            failed: true,
+            transient: failureCheck.isTransientImagePull,
+          };
+          failureMessage = failureCheck.message;
+        }
+      }
+
+      let decision = deriveOrdinaryDeploymentState(
+        { exists: true, availableReplicas, podFailure },
+        this.state,
+      );
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        decision.kind === "state" &&
+        (decision.state === "hibernated" || decision.state === "waking")
+      ) {
+        decision = { kind: "state", state: "pending" };
+      }
+      // SPDX-SnippetEnd
+
+      if (decision.kind === "debounce-running") {
+        // Only downgrade a running deployment after several consecutive
+        // misses, so a transient K8s API inconsistency can't flicker the UI.
+        this.runningMissCount++;
+        if (this.runningMissCount >= K8sDeployment.RUNNING_MISS_THRESHOLD) {
+          if (this.observeState("pending")) {
+            this.errorMessage = null;
+          }
+          this.runningMissCount = 0;
+        }
+        return;
+      }
+
+      const stateChanged = decision.state !== this.state;
+      if (!this.observeState(decision.state)) return;
+      if (podFailure?.failed) {
+        // "failed" (terminal) or "pending" (an image pull the kubelet retries
+        // on its own) — either way, surface WHY.
+        this.errorMessage = failureMessage;
+        this.runningMissCount = 0;
+      } else if (stateChanged || decision.state === "running") {
+        // A state backed by a positive cluster fact clears any stale error.
+        // A "pending"/"failed" the deployment merely stayed in carries no new
+        // evidence, so it keeps the message an earlier refresh recorded.
+        this.errorMessage = null;
+        this.runningMissCount = 0;
       }
     } catch (error) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (hibernationOptions?.throwOnError) throw error;
+      // SPDX-SnippetEnd
       if (!isK8sNotFoundError(error)) {
         logger.error(
           { err: error },
@@ -3908,16 +5296,32 @@ export default class K8sDeployment {
    * Get the deployment's status summary
    */
   get statusSummary(): K8sDeploymentStatusSummary {
+    let message = "Deployment not created";
+    switch (this.state) {
+      case "running":
+        message = "Deployment is running";
+        break;
+      case "pending":
+        message = "Deployment is starting";
+        break;
+      case "failed":
+        message = "Deployment failed";
+        break;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      case "waking":
+        message = "Waking (from idle)";
+        break;
+      case "hibernated":
+        message = "Hibernated (idle)";
+        break;
+      // SPDX-SnippetEnd
+    }
+
     return {
       state: this.state,
-      message:
-        this.state === "running"
-          ? "Deployment is running"
-          : this.state === "pending"
-            ? "Deployment is starting"
-            : this.state === "failed"
-              ? "Deployment failed"
-              : "Deployment not created",
+      message,
       error: this.errorMessage,
       serverName: this.mcpServer.name,
       deploymentName: this.deploymentName,
@@ -4060,6 +5464,34 @@ export default class K8sDeployment {
     return { k8sWs, podName };
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// The only scheduling wordings an autoscaler, a rescheduled neighbour or a
+// quota change can clear on their own. kube-scheduler's NodeResourcesFit
+// plugin says "Insufficient <resource>" for every resource kind (cpu, memory,
+// ephemeral-storage, extended resources) and "Too many pods" when a node is at
+// its pod cap; admission says "exceeded quota" when the namespace
+// ResourceQuota is full.
+const CAPACITY_PRESSURE_PATTERNS = [
+  /\binsufficient\b/i,
+  /\btoo many pods\b/i,
+  /\bexceeded quota\b/i,
+];
+
+/**
+ * Whether the scheduler has already bound the pod to a node. Distinguishes a
+ * pod still waiting for capacity from one that got a node and is failing for
+ * some later reason (image pull, mount, crash).
+ */
+function isPodScheduled(pod: k8s.V1Pod): boolean {
+  return (pod.status?.conditions ?? []).some(
+    (condition) =>
+      condition.type === "PodScheduled" && condition.status === "True",
+  );
+}
+// SPDX-SnippetEnd
 
 function listCustomObjectItems(response: unknown): Array<{
   metadata?: { name?: string; labels?: Record<string, string> };

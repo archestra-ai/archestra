@@ -72,7 +72,10 @@ describe("k8s-yaml-generator", () => {
       expect(yaml).not.toContain("imagePullSecrets");
     });
 
-    test("generates YAML with imagePullPolicy Always", () => {
+    // A node that already holds the image can start a pod without the
+    // registry, which is what lets a hibernated server wake during a registry
+    // outage. Freshness comes from the explicit refresh-image action instead.
+    test("generates YAML with imagePullPolicy IfNotPresent for registry images", () => {
       const yaml = generateDeploymentYamlTemplate({
         serverId: "test-id",
         serverName: "test-server",
@@ -80,7 +83,8 @@ describe("k8s-yaml-generator", () => {
         dockerImage: "registry.example.com/test-image:latest",
       });
 
-      expect(yaml).toContain("imagePullPolicy: Always");
+      expect(yaml).toContain("imagePullPolicy: IfNotPresent");
+      expect(yaml).not.toContain("imagePullPolicy: Always");
     });
 
     test("generates YAML with imagePullPolicy Never for bare local images", () => {

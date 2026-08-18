@@ -434,6 +434,40 @@ describe("SkillModel.recordUsage", () => {
     expect(events.map((e) => e.userId).sort()).toEqual([user.id, null].sort());
   });
 
+  test("records the session and injected context size that make an activation costable", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "costable" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    SkillModel.recordUsage({
+      skillId: skill.id,
+      userId: user.id,
+      sessionId: "conversation-7",
+      contextTokens: 1_234,
+    });
+    // A caller that cannot measure the block still records the activation.
+    SkillModel.recordUsage({ skillId: skill.id, userId: user.id });
+    await drainBackgroundWork();
+
+    const events = await db
+      .select()
+      .from(schema.skillUsageEventsTable)
+      .where(eq(schema.skillUsageEventsTable.skillId, skill.id));
+    expect(events).toHaveLength(2);
+    const measured = events.find((e) => e.contextTokens !== null);
+    expect(measured?.sessionId).toBe("conversation-7");
+    expect(measured?.contextTokens).toBe(1_234);
+    const unmeasured = events.find((e) => e.contextTokens === null);
+    expect(unmeasured?.sessionId).toBeNull();
+  });
+
   test("getUsageStatistics buckets per user and day with resolved names", async ({
     makeOrganization,
     makeUser,

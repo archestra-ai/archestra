@@ -13,6 +13,8 @@ const {
   getAgentStatistics,
   getModelStatistics,
   getUserStatistics,
+  getAppStatistics,
+  getSkillStatistics,
   getOverviewStatistics,
   getCostSavingsStatistics,
 } = archestraApiSdk;
@@ -59,6 +61,75 @@ export function useUserStatistics({
           sortBy,
           includeModels: String(includeModels),
         },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
+/**
+ * Per-MCP-App cost: build spend, runtime spend, and the estimated saving versus
+ * doing the same work in chat. Paginated like the per-user hook — app
+ * cardinality is unbounded and this renders a leaderboard.
+ */
+export function useAppStatistics({
+  timeframe = "24h",
+  limit = 10,
+  offset = 0,
+  sortBy = "totalCost",
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  limit?: number;
+  offset?: number;
+  sortBy?:
+    | "totalCost"
+    | "buildCost"
+    | "runtimeCost"
+    | "runs"
+    | "estimatedNetSavings"
+    | "appName";
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "apps", timeframe, limit, offset, sortBy],
+    queryFn: async () => {
+      const { data, error } = await getAppStatistics({
+        query: { timeframe, limit, offset, sortBy },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
+/**
+ * Per-skill cost: the tokens each skill's activations inject into the context,
+ * and the spend of the turns that then ran with it.
+ */
+export function useSkillStatistics({
+  timeframe = "24h",
+  limit = 10,
+  offset = 0,
+  sortBy = "contextTokens",
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  limit?: number;
+  offset?: number;
+  sortBy?: "contextTokens" | "activations" | "lastActivatedAt" | "skillName";
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "skills", timeframe, limit, offset, sortBy],
+    queryFn: async () => {
+      const { data, error } = await getSkillStatistics({
+        query: { timeframe, limit, offset, sortBy },
       });
       throwOnApiError(error, { toastOnError: false });
       return data;

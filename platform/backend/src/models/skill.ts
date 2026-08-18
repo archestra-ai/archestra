@@ -1122,9 +1122,21 @@ class SkillModel {
    * awaiting (metrics must not fail or slow an activation); the writes are
    * registered as background work so the test teardown can drain them, and
    * they are independent so an event failure never loses the counter tick.
+   *
+   * `sessionId` and `contextTokens` are what make an activation costable — the
+   * session whose following turns carried the skill, and the tokens the injected
+   * block itself added. Both are optional: a caller that cannot supply them
+   * records an activation with no cost dimension rather than none at all.
    */
-  static recordUsage(params: { skillId: string; userId: string | null }): void {
-    const { skillId, userId } = params;
+  static recordUsage(params: {
+    skillId: string;
+    userId: string | null;
+    /** LLM session the activation happened in (`interactions.session_id`). */
+    sessionId?: string | null;
+    /** Measured tokens of the injected activation block. */
+    contextTokens?: number | null;
+  }): void {
+    const { skillId, userId, sessionId, contextTokens } = params;
     const usedAt = new Date();
     const counterWrite = db
       .update(schema.skillsTable)
@@ -1136,9 +1148,13 @@ class SkillModel {
       .where(
         and(eq(schema.skillsTable.id, skillId), notDeleted(schema.skillsTable)),
       );
-    const eventWrite = db
-      .insert(schema.skillUsageEventsTable)
-      .values({ skillId, userId, createdAt: usedAt });
+    const eventWrite = db.insert(schema.skillUsageEventsTable).values({
+      skillId,
+      userId,
+      sessionId: sessionId ?? null,
+      contextTokens: contextTokens ?? null,
+      createdAt: usedAt,
+    });
     trackBackgroundWork(
       Promise.allSettled([counterWrite, eventWrite]).then((results) => {
         for (const result of results) {

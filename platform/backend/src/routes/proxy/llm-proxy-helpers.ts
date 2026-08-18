@@ -284,6 +284,8 @@ export function buildInteractionRecord(params: {
   userId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
+  /** MCP App whose runtime made this call; only app-runtime completions set it. */
+  appId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source?: InteractionSource | null;
@@ -316,6 +318,7 @@ export function buildInteractionRecord(params: {
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,
     passthroughVirtualKeyId: params.passthroughVirtualKeyId,
+    appId: params.appId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
     source: params.source,

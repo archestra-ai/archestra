@@ -2955,6 +2955,13 @@
       "when": 1787039911186,
       "tag": "0421_mcp_idle_hibernation",
       "breakpoints": true
+    },
+    {
+      "idx": 422,
+      "version": "7",
+      "when": 1787079223098,
+      "tag": "0422_app_skill_cost_attribution",
+      "breakpoints": true
     }
   ]
 }

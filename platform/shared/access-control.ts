@@ -1574,6 +1574,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
   },
+  // Per-app and per-skill cost additionally narrow to what the caller can see:
+  // the routes resolve the same visibility the Apps page and the skills list use,
+  // so cost reporting never lists an app or skill the caller has no access to.
+  [RouteId.GetAppStatistics]: {
+    llmCost: ["read"],
+    app: ["read"],
+  },
+  [RouteId.GetSkillStatistics]: {
+    llmCost: ["read"],
+    skill: ["read"],
+  },
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },

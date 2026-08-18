@@ -228,8 +228,12 @@ function SkillsList() {
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so a bulk action must only
   // ever touch rows the user can actually see. Ids left over from another page
-  // simply drop out here.
-  const selectedSkills = items.filter((skill) => rowSelection[skill.id]);
+  // simply drop out here — including in the trash view, which renders no
+  // checkbox column and so must never surface a bar for a skill that was
+  // ticked while active and deleted from under the selection.
+  const selectedSkills = isDeletedView
+    ? []
+    : items.filter((skill) => rowSelection[skill.id]);
   const clearSelection = useCallback(() => setRowSelection({}), []);
 
   // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for

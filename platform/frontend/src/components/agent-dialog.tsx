@@ -154,9 +154,11 @@ type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useCreateProfile,
+  useDefaultAgentId,
   useDelegationTargetAgents,
   useDeleteProfile,
   useProfile,
+  useUpdateDefaultAgentId,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -856,6 +858,7 @@ function AgentDialogBody({
   const createAgent = useCreateProfile();
   const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
+  const updateDefaultAgentId = useUpdateDefaultAgentId();
   const syncDelegations = useSyncAgentDelegations();
   // Every set below is seeded from its own request and saved back as a full
   // replace, so all of them gate on `isSuccess` rather than `isFetched`:
@@ -1066,6 +1069,14 @@ function AgentDialogBody({
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
+  // The caller's personal default lives on the member, not the agent, so it is
+  // read from its own query and tracked as an override on top: null until the
+  // switch is touched, so a late-arriving query result cannot be mistaken for
+  // an edit.
+  const { data: memberDefaultAgentId } = useDefaultAgentId();
+  const [personalDefaultOverride, setPersonalDefaultOverride] = useState<
+    boolean | null
+  >(null);
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
@@ -1191,6 +1202,23 @@ function AgentDialogBody({
   // create mode too, before any gateway exists.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
+  // Only the caller's own personal chat agent can be their personal default:
+  // in edit mode that means the author is signed in; in create mode the caller
+  // is the author. Hidden for other scopes, built-ins and other agent types.
+  const isCurrentlyPersonalDefault =
+    !!agent?.id && agent.id === memberDefaultAgentId;
+  const canTogglePersonalDefault =
+    isInternalAgent &&
+    !isBuiltIn &&
+    scope === "personal" &&
+    (!agent || (!!currentUserId && agent.authorId === currentUserId));
+  const personalDefault =
+    canTogglePersonalDefault &&
+    (personalDefaultOverride ?? isCurrentlyPersonalDefault);
+  const personalDefaultChanged =
+    canTogglePersonalDefault &&
+    personalDefaultOverride !== null &&
+    personalDefaultOverride !== isCurrentlyPersonalDefault;
   // Rows the admin has picked, kept for as long as they stay picked. Without
   // this a skill chosen from one search vanishes the moment the query changes —
   // it is in neither the catalog page nor the new search hits — while its id
@@ -1350,6 +1378,7 @@ function AgentDialogBody({
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
+      setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
@@ -1895,6 +1924,16 @@ function AgentDialogBody({
         });
       }
 
+      // The personal default is a member setting, saved through its own route
+      // once the agent exists. Only when the switch was actually moved: an
+      // untouched switch on a brand-new agent leaves the server's own rule in
+      // charge (a member's first personal agent adopts the role by itself).
+      if (savedAgentId && personalDefaultChanged) {
+        await updateDefaultAgentId.mutateAsync(
+          personalDefault ? savedAgentId : null,
+        );
+      }
+
       // Persist the Auto-mode disabled-subagents set only when it changed (same
       // no-op-audit reasoning as delegations). Skipped for built-ins.
       if (
@@ -1958,6 +1997,9 @@ function AgentDialogBody({
     disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
+    updateDefaultAgentId,
+    personalDefault,
+    personalDefaultChanged,
     syncDelegations,
     syncSubagentExclusions,
     showSkills,
@@ -2027,6 +2069,7 @@ function AgentDialogBody({
     !readOnly &&
     initialSnapshotRef.current !== null &&
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
+      personalDefaultChanged ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
@@ -3160,6 +3203,32 @@ function AgentDialogBody({
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
                       />
+                    )}
+
+                    {/* Personal default (the caller's own personal chat agent) */}
+                    {canTogglePersonalDefault && (
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-0.5">
+                          <Label
+                            htmlFor="personal-default-agent"
+                            className="text-sm font-medium cursor-pointer"
+                          >
+                            My default agent
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Preselected for your new chats, ahead of the
+                            organization default. You have one default agent at
+                            a time.
+                          </p>
+                        </div>
+                        <Switch
+                          id="personal-default-agent"
+                          checked={personalDefault}
+                          onCheckedChange={setPersonalDefaultOverride}
+                          disabled={readOnly}
+                          data-testid={E2eTestId.PersonalDefaultAgentSwitch}
+                        />
+                      </div>
                     )}
 
                     {/* LLM Configuration (Agent and Built-in) */}

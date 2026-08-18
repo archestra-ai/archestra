@@ -27,6 +27,7 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PersonalDefaultAgentTag } from "@/components/personal-default-agent-tag";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -42,12 +43,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
   usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
   useRestoreProfile,
+  useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
@@ -220,6 +223,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+  const { data: personalDefaultAgentId } = useDefaultAgentId();
+  const updateDefaultAgentId = useUpdateDefaultAgentId();
   const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
   // The row's scope check travels with the id: it is computed per row, and the
@@ -333,6 +338,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
             labels={agent.labels}
+            extraBadges={
+              agent.id === personalDefaultAgentId ? (
+                <PersonalDefaultAgentTag />
+              ) : undefined
+            }
           />
         );
       },
@@ -415,6 +425,31 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             onPermanentlyDelete={setPermanentlyDeletingAgent}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
+            personalDefault={
+              isPersonal &&
+              isOwner &&
+              agent.agentType === "agent" &&
+              !agent.builtIn
+                ? {
+                    isDefault: agent.id === personalDefaultAgentId,
+                    onToggle: (target, makeDefault) => {
+                      updateDefaultAgentId.mutate(
+                        makeDefault ? target.id : null,
+                        {
+                          onSuccess: (data) => {
+                            if (!data) return;
+                            toast.success(
+                              makeDefault
+                                ? `${target.name} is now your default agent`
+                                : `${target.name} is no longer your default agent`,
+                            );
+                          },
+                        },
+                      );
+                    },
+                  }
+                : undefined
+            }
             onHistory={(id, historyCanModify) =>
               setHistory({ id, canModify: historyCanModify })
             }

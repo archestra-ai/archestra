@@ -369,6 +369,10 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
       "anthropic",
       "claude-haiku-4-5",
     );
+    // Asserted rather than defaulted: an update against a missing id is a
+    // no-op, which would leave the synced windows in place and pass.
+    expect(opus).not.toBeNull();
+    expect(haiku).not.toBeNull();
     await ModelModel.update(opus?.id ?? "", { customContextLength: 200_000 });
     await ModelModel.update(haiku?.id ?? "", {
       customContextLength: 1_000_000,

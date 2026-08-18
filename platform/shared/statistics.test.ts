@@ -3,7 +3,30 @@ import {
   getStatisticsAxisLabelPrecision,
   getStatisticsBucketIntervalMinutes,
   parseCustomStatisticsTimeframe,
+  StatisticsTimeFrameSchema,
 } from "./statistics";
+
+describe("StatisticsTimeFrameSchema", () => {
+  it.each([
+    "24h",
+    "all",
+    "custom:2026-07-01T00:00:00.000Z_2026-07-31T23:59:59.999Z",
+  ])("accepts %s", (timeframe) => {
+    expect(StatisticsTimeFrameSchema.safeParse(timeframe).success).toBe(true);
+  });
+
+  it.each([
+    // Shaped like a custom range, but the bounds are not dates. Accepting one
+    // drops the date predicate from the query it feeds, widening a "custom
+    // range" request to every interaction ever recorded.
+    ["unparseable bounds", "custom:not-a-date_also-not-a-date"],
+    ["one unparseable bound", "custom:2026-07-01T00:00:00.000Z_later"],
+    ["no separator", "custom:2026-07-01T00:00:00.000Z"],
+    ["an unknown preset", "3d"],
+  ])("rejects %s", (_case, timeframe) => {
+    expect(StatisticsTimeFrameSchema.safeParse(timeframe).success).toBe(false);
+  });
+});
 
 describe("parseCustomStatisticsTimeframe", () => {
   it("parses the bounds of a custom timeframe", () => {

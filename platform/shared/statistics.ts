@@ -4,6 +4,13 @@ export const StatisticsTimeFrameSchema = z.union([
   z.enum(["5m", "15m", "30m", "1h", "24h", "7d", "30d", "90d", "12m", "all"]),
   z
     .templateLiteral(["custom:", z.string(), "_", z.string()])
+    // The shape alone is not enough: bounds that are not dates parse to null
+    // further down, and a null range contributes no date predicate at all,
+    // silently widening a "custom range" query to every interaction ever
+    // recorded. Reject them at the boundary instead.
+    .refine((timeframe) => parseCustomStatisticsTimeframe(timeframe) !== null, {
+      message: "Custom timeframe bounds must be parseable dates",
+    })
     .describe("Custom timeframe must be in format 'custom:startTime_endTime'"),
 ]);
 

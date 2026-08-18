@@ -1,4 +1,5 @@
 import {
+  isSelfHostedProvider,
   isSmallModel,
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
@@ -35,6 +36,7 @@ import {
   resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
   resolveSelfHostedModelMetadata,
+  resolveSelfHostedModelReasoning,
 } from "@/services/cross-provider-pricing";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -286,6 +288,7 @@ interface ProviderModelCapabilities {
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
+  supportsReasoningEffort: boolean | null;
   supportedEndpoints: SupportedProviderEndpoint[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
@@ -362,11 +365,23 @@ export function buildModelsToUpsert(params: {
           }) ?? SELF_HOSTED_TEXT_ONLY)
         : null;
 
+    // Only the registry can say whether an operator's model reasons, and it
+    // has to be asked for every self-hosted provider rather than just the one
+    // whose metadata is resolved above: Ollama answers for itself only while
+    // its server is new enough to report capabilities.
+    const selfHostedReasoning = isSelfHostedProvider(provider)
+      ? resolveSelfHostedModelReasoning({
+          modelId: model.id,
+          modelsDevData,
+        })
+      : null;
+
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
       capabilities: lookupModelsDevCapabilities(capabilitiesMap, model.id),
       fetched: model.capabilities,
+      selfHostedReasoning,
       crossProviderPrices,
       crossProviderMetadata,
       awsPrices,
@@ -384,6 +399,7 @@ export function buildModelsToUpsert(params: {
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
+      supportsReasoningEffort: capabilities.supportsReasoningEffort,
       supportedEndpoints: capabilities.supportedEndpoints,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
@@ -509,6 +525,8 @@ export function resolveModelCapabilities(params: {
   crossProviderPrices?: CrossProviderPrices | null;
   /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderMetadata?: CrossProviderMetadata | null;
+  /** Registry verdict on whether a self-hosted model's weights reason. */
+  selfHostedReasoning?: boolean | null;
   /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
   /** Prices from a vendor's own list. Used where the registry has none. */
@@ -523,6 +541,7 @@ export function resolveModelCapabilities(params: {
     fetched,
     crossProviderPrices,
     crossProviderMetadata,
+    selfHostedReasoning,
     awsPrices,
     publishedPrices,
     underlyingModelName,
@@ -579,6 +598,17 @@ export function resolveModelCapabilities(params: {
         capabilities?.supportsToolCalling ??
         inferredCapabilities.supportsToolCalling ??
         crossProviderMetadata?.supportsToolCalling ??
+        null,
+      // The serving backend outranks the registry here for the same reason it
+      // does above, and more sharply: Ollama answers for the model it will
+      // actually run, while a registry entry describes the weights wherever
+      // anyone hosts them.
+      supportsReasoningEffort:
+        fetched?.supportsReasoningEffort ??
+        capabilities?.supportsReasoningEffort ??
+        inferredCapabilities.supportsReasoningEffort ??
+        crossProviderMetadata?.supportsReasoningEffort ??
+        selfHostedReasoning ??
         null,
       // Fetcher-only: no other tier knows which wire format a provider serves
       // a given model over. models.dev describes the model, not the transport
@@ -678,6 +708,7 @@ function buildCapabilitiesMap(
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
+        supportsReasoningEffort: model.reasoning ?? null,
         // models.dev describes the model, not which transport a given provider
         // exposes it on — only a fetcher can know that.
         supportedEndpoints: null,
@@ -731,6 +762,7 @@ const SELF_HOSTED_TEXT_ONLY: CrossProviderMetadata = {
   inputModalities: ["text"],
   outputModalities: ["text"],
   supportsToolCalling: null,
+  supportsReasoningEffort: null,
 };
 
 function inferModelCapabilities(params: {
@@ -984,6 +1016,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     outputLength: null,
     inputModalities: null,
     outputModalities: null,
+    supportsReasoningEffort: null,
     supportsToolCalling: null,
     supportedEndpoints: null,
     promptPricePerToken: null,

@@ -468,6 +468,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -494,6 +495,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -517,6 +519,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: null,
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -668,6 +671,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -690,6 +694,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
@@ -1182,6 +1187,70 @@ describe("ModelSyncService", () => {
     expect(model.supportsToolCalling).toBe(false);
     expect(model.embeddingDimensions).toBe(1536);
     expect(model.promptPricePerToken).toBe("2e-8");
+  });
+
+  test("describes a vLLM model's reasoning from the registry entry for those weights", () => {
+    // A self-hosted server publishes no capabilities, and the id is a
+    // HuggingFace path rather than a registry key — the trailing segment is
+    // what bridges the two.
+    const [model] = buildModelsToUpsert({
+      provider: "vllm",
+      models: [{ id: "Qwen/Qwen3.8-27B" }],
+      modelsDevData: {
+        // A reseller, deliberately: no first-party entry exists for this model,
+        // which is the ordinary case for open weights.
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "qwen/qwen3.8-27b": {
+              id: "qwen/qwen3.8-27b",
+              name: "Qwen3.8 27B",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(true);
+    // The deployment's own price stays out: the operator serves this model.
+    expect(model.promptPricePerToken).toBeNull();
+  });
+
+  test("lets the Ollama server outrank the registry on whether a model thinks", () => {
+    // The registry describes the weights; /api/show answers for the build this
+    // server will actually run.
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "qwen3",
+          capabilities: { supportsReasoningEffort: false },
+        },
+      ],
+      modelsDevData: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            qwen3: {
+              id: "qwen3",
+              name: "Qwen3",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(false);
   });
 
   test("persists fetched default parameters", () => {

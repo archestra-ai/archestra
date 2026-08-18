@@ -1102,6 +1102,23 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userTeamIds: context.userTeamIds,
             userId: user.id,
           });
+          // A personal skill IS its author: `skill://` addresses one by author
+          // id (buildSkillRootUri throws without one) and every access check
+          // resolves `personal` through `author_id`. A shared skill can have no
+          // author — built-ins are seeded that way, and `author_id` is
+          // `ON DELETE SET NULL`, so removing a user leaves their org/team
+          // skills authorless — and making one of those personal would strand
+          // it: reachable by no one, addressable by nothing, with no UI to give
+          // it an author back. An admin selecting a whole page is exactly how
+          // that would happen by accident.
+          if (scope === "personal" && skill.authorId === null) {
+            throw new ApiError(
+              400,
+              "This skill has no author, so it cannot be made personal. " +
+                "Share it with named people instead, or leave it team- or " +
+                "organization-scoped.",
+            );
+          }
 
           const unchanged =
             skill.scope === scope &&
@@ -1133,7 +1150,20 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             failed.push({ id, name: skill.name, error: error.message });
             continue;
           }
-          throw error;
+          // Deliberately not rethrown. Earlier skills in the batch have already
+          // been written, and the audit hook discards `auditAfter` on a non-2xx
+          // — so letting this escape would turn real mutations into a 500 with
+          // no trail of what changed. The raw error is logged rather than
+          // returned, since an unexpected one says nothing a caller can act on.
+          logger.error(
+            { err: error, skillId: id },
+            "bulk-visibility: unexpected failure updating a skill",
+          );
+          failed.push({
+            id,
+            name: skill.name,
+            error: "Could not update this skill",
+          });
         }
       }
 

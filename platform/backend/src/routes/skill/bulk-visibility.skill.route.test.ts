@@ -186,6 +186,36 @@ describe("POST /api/skills/bulk-visibility", () => {
     expect((await SkillModel.findById(fine.id))?.scope).toBe("team");
   });
 
+  test("refuses to make an authorless skill personal", async () => {
+    // Built-ins are seeded with no author, and `author_id` is ON DELETE SET
+    // NULL, so a removed user leaves their shared skills authorless too.
+    const authorless = await seedImportedSkill({
+      organizationId,
+      name: "bulk-authorless",
+      sourceRef: "acme/skills@main:bulk-authorless",
+      scope: "org",
+      authorId: null,
+    });
+    const mine = await createSkill("bulk-has-author");
+
+    const response = await bulkVisibility({
+      skillIds: [authorless.id, mine.id],
+      scope: "personal",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().succeeded).toEqual([
+      { id: mine.id, name: "bulk-has-author" },
+    ]);
+    expect(response.json().failed[0]).toMatchObject({
+      id: authorless.id,
+      name: "bulk-authorless",
+    });
+    expect(response.json().failed[0].error).toContain("no author");
+    // left where it was, rather than stranded as a personal skill nobody owns
+    expect((await SkillModel.findById(authorless.id))?.scope).toBe("org");
+  });
+
   test("rejects the whole request when the target teams are unusable", async () => {
     const skill = await createSkill("bulk-bad-target");
 

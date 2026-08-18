@@ -1,5 +1,5 @@
 import type { APIResponse, Page } from "@playwright/test";
-import { UI_BASE_URL } from "../consts";
+import { E2eTestId, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 
 /**
@@ -41,7 +41,7 @@ test.describe("Skills bulk actions", () => {
 
       await page.getByRole("checkbox", { name: `Select ${names[0]}` }).click();
       await page.getByRole("checkbox", { name: `Select ${names[1]}` }).click();
-      await expect(page.getByText("2 skills selected")).toBeVisible();
+      await expect(selectionCount(page)).toHaveText("2 skills selected");
 
       // Ticking a row must not also open that row's editor, which the row
       // click opens.
@@ -67,7 +67,7 @@ test.describe("Skills bulk actions", () => {
       expect((await readSkill(page, ids[2])).scope).toBe("personal");
 
       // Applying clears the selection, so the action bar goes away.
-      await expect(page.getByText("2 skills selected")).toBeHidden();
+      await expect(selectionCount(page)).toBeHidden();
     } finally {
       await Promise.all(
         ids.map((id) => page.request.delete(`${UI_BASE_URL}/api/skills/${id}`)),
@@ -92,7 +92,7 @@ test.describe("Skills bulk actions", () => {
       await page
         .getByRole("checkbox", { name: "Select all skills on this page" })
         .click();
-      await expect(page.getByText("2 skills selected")).toBeVisible();
+      await expect(selectionCount(page)).toHaveText("2 skills selected");
 
       await page.getByRole("button", { name: "Delete", exact: true }).click();
       const confirm = page.getByRole("dialog");
@@ -118,6 +118,15 @@ test.describe("Skills bulk actions", () => {
     }
   });
 });
+
+/**
+ * The visible "N skills selected" label. Located by test id because an
+ * off-screen `aria-live` region carries the same sentence for screen readers,
+ * so a text lookup matches two nodes.
+ */
+function selectionCount(page: Page) {
+  return page.getByTestId(E2eTestId.SkillsBulkSelectionCount);
+}
 
 async function createSkill(page: Page, skillName: string): Promise<string> {
   const response = await page.request.post(`${UI_BASE_URL}/api/skills`, {

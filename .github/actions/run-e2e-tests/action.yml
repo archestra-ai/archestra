@@ -31,6 +31,14 @@ inputs:
     description: "Optional path to environment file to source before running tests"
     required: false
     default: ""
+  blob_report_dir:
+    description: |
+      Blob-report directory, relative to the e2e-tests directory. Give a job's
+      second and later legs their own directory: the container runs as root, so
+      a leg that shares one directory leaves root-owned files the host runner
+      cannot delete between legs.
+    required: false
+    default: "blob-report"
 
 outputs:
   has_flaky_tests:
@@ -67,10 +75,17 @@ runs:
         SHARD: ${{ inputs.shard }}
         EXTRA_ARGS: ${{ inputs.extra_args }}
         WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        E2E_TESTS_PATH: ${{ inputs.e2e_tests_path }}
         ENV_FILE: ${{ inputs.env_file }}
         TIMEOUT_MINUTES: ${{ inputs.timeout }}
+        BLOB_REPORT_DIR: ${{ inputs.blob_report_dir }}
       run: |
         set -o pipefail
+
+        # Absolute container path: Playwright resolves a relative
+        # PLAYWRIGHT_BLOB_OUTPUT_DIR against its own cwd, which is not the
+        # directory the upload step reads from.
+        BLOB_OUTPUT_DIR="/work/${WORKING_DIRECTORY#./}/${E2E_TESTS_PATH}/${BLOB_REPORT_DIR}"
 
         # Source environment file if provided
         ENV_ARGS=()
@@ -115,6 +130,7 @@ runs:
           -w "/work/${WORKING_DIRECTORY#./}" \
           -e CI=true \
           -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+          -e "PLAYWRIGHT_BLOB_OUTPUT_DIR=${BLOB_OUTPUT_DIR}" \
           "${KUBE_ARGS[@]}" \
           "${ENV_ARGS[@]}" \
           "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \

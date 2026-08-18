@@ -5,11 +5,9 @@ archestra:
   # Image will be set via --set during deployment
   # image: archestra/platform:ci-test
 
-  # The shared non-quickstart CI environment now includes the Vault K8s startup
-  # scenario, which injects the database URL via an init container. Keep a single
-  # backend replica here to avoid concurrent first-boot migrations racing each
-  # other against a fresh CI database.
-  replicaCount: 1
+  # Exercise cross-replica runtime behavior. First-boot migrations are serialized
+  # by the database advisory lock in migrate-with-lock.mjs.
+  replicaCount: 2
 
   # Override the chart's production CPU requests (2 vCPU per pod) for CI.
   # The standard 4vcpu runner has ~3.9 vCPU allocatable, and the Kind
@@ -138,6 +136,11 @@ archestra:
           key: dummy_var
 
   orchestrator:
+    # Exercise the public chart values, not an env-var bypass, in every K8s
+    # hibernation run.
+    mcpIdleHibernationEnabled: true
+    # The shortest accepted idle window keeps negative assertions meaningful.
+    mcpIdleHibernationSeconds: 120
     kubernetes:
       networkPolicy:
         # Enable SSRF protection for e2e testing

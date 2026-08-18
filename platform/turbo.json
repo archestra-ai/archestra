@@ -61,9 +61,13 @@
       "passThroughEnv": [
         "CI",
         "PLAYWRIGHT_BROWSERS_PATH",
+        "PLAYWRIGHT_BLOB_OUTPUT_DIR",
         "E2E_UI_BASE_URL",
         "E2E_API_BASE_URL",
-        "E2E_WIREMOCK_BASE_URL"
+        "E2E_WIREMOCK_BASE_URL",
+        "E2E_WIREMOCK_INTERNAL_URL",
+        "E2E_KEYCLOAK_BACKEND_URL",
+        "KUBECONFIG"
       ]
     },
     "test:e2e:ui": {

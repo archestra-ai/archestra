@@ -202,6 +202,80 @@ describe("StatisticsPage", () => {
     expect(getByText("Subscription")).toBeInTheDocument();
   });
 
+  it("shows a metered person's cost as money, not a savings percentage", async () => {
+    mockUseUserStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            userId: "user-2",
+            userName: "Joey Orlando",
+            userEmail: "joey@example.com",
+            requests: 15260,
+            inputTokens: 19000000,
+            outputTokens: 572756,
+            cacheReadTokens: 0,
+            totalTokens: 19572756,
+            // Pay-as-you-go: everything is billed, nothing subscription-covered.
+            billedCost: 41.4405,
+            subscriptionCost: 0,
+            activeDays: 8,
+            lastActiveAt: "2026-08-11T14:41:00.000Z",
+            models: [{ model: "anthropic/claude-opus-4.8", requests: 15260 }],
+          },
+        ],
+        pagination: { total: 1 },
+      },
+    });
+
+    const { findByText, queryByText } = render(<StatisticsPage />);
+
+    // The Cost column must read as spend. It rendered the savings percentage
+    // ("0%") for everyone without subscription usage while `tooltip` was left
+    // at its "never" default.
+    expect(await findByText("$41.4405")).toBeInTheDocument();
+    expect(queryByText("0%")).not.toBeInTheDocument();
+  });
+
+  it("reserves width for the People columns that carry badges", async () => {
+    mockUseUserStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            userId: "user-3",
+            userName: "Ildar Iskhakov",
+            userEmail: "ildar@example.com",
+            requests: 118,
+            inputTokens: 3000000,
+            outputTokens: 883994,
+            cacheReadTokens: 0,
+            totalTokens: 3883994,
+            billedCost: 1.5,
+            subscriptionCost: 0,
+            activeDays: 6,
+            lastActiveAt: "2026-08-11T14:38:00.000Z",
+            models: [{ model: "anthropic/claude-opus-4.8", requests: 118 }],
+          },
+        ],
+        pagination: { total: 1 },
+      },
+    });
+
+    const { findByText, container } = render(<StatisticsPage />);
+    await findByText("Ildar Iskhakov");
+
+    // `table-fixed` splits width equally without explicit widths, which left
+    // the Models and Cost columns narrower than their badges — the badges then
+    // overflowed onto the neighbouring column.
+    const peopleTable = container.querySelector("table.min-w-\\[900px\\]");
+    expect(peopleTable).not.toBeNull();
+
+    const headers = Array.from(peopleTable?.querySelectorAll("thead th") ?? []);
+    expect(headers).toHaveLength(7);
+    for (const header of headers) {
+      expect(header.className).toMatch(/w-\[\d+%\]/);
+    }
+  });
+
   it("renders statistics tables inside capped scroll containers", () => {
     mockUseTeamStatistics.mockReturnValue({
       data: [

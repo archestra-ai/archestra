@@ -1218,28 +1218,34 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <StatisticsTablePanel>
-            <Table>
+            {/*
+              `table-fixed` splits width equally without explicit widths, and
+              badges neither wrap nor shrink — too narrow a share and they
+              overflow their cell onto the next column. The floor width makes
+              the panel scroll rather than crush the columns.
+            */}
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[18%]">
                     User
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[10%]">
                     Requests
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[13%]">
                     Tokens Used
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[21%]">
                     Models
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[11%]">
                     Active Days
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[16%]">
                     Cost
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead className="bg-card sticky top-0 z-10 w-[11%] text-right">
                     Last Active
                   </TableHead>
                 </TableRow>
@@ -1258,8 +1264,16 @@ export default function StatisticsPage() {
                   userStatistics.map((user) => (
                     <TableRow key={user.userId}>
                       <TableCell>
-                        <div className="font-medium">{user.userName}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div
+                          className="font-medium truncate"
+                          title={user.userName}
+                        >
+                          {user.userName}
+                        </div>
+                        <div
+                          className="text-xs text-muted-foreground truncate"
+                          title={user.userEmail}
+                        >
                           {user.userEmail}
                         </div>
                       </TableCell>
@@ -1275,6 +1289,8 @@ export default function StatisticsPage() {
                           billedCost={String(user.billedCost)}
                           subscriptionCost={String(user.subscriptionCost)}
                           baselineCost={String(user.billedCost)}
+                          tooltip="hover"
+                          className="flex-wrap"
                         />
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
@@ -1597,8 +1613,13 @@ function UserModelBadges({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {shown.map((model) => (
-        <Badge key={model.model} variant="secondary" className="font-normal">
-          {model.model}
+        <Badge
+          key={model.model}
+          variant="secondary"
+          className="font-normal max-w-full"
+          title={model.model}
+        >
+          <span className="truncate">{model.model}</span>
         </Badge>
       ))}
       {remaining > 0 && (

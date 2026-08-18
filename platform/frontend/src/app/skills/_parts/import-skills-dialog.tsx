@@ -59,7 +59,7 @@ import {
   usePreviewGithubSkill,
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
-import { SkillEditorDialog } from "./skill-editor-dialog";
+import { SkillPreviewDialog } from "./skill-preview-dialog";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
 /**
@@ -888,14 +888,13 @@ export function ImportSkillsDialog({
           )}
         </div>
       )}
-      <SkillEditorDialog
-        skillId={null}
+      <SkillPreviewDialog
         open={previewSkillPath !== null}
         onOpenChange={(isOpen) => {
           if (!isOpen) setPreviewSkillPath(null);
         }}
         preview={previewData ?? null}
-        isPreviewLoading={isPreviewLoading}
+        isLoading={isPreviewLoading}
       />
     </StandardDialog>
   );

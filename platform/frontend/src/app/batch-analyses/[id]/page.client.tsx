@@ -1,20 +1,11 @@
 "use client";
 
-import {
-  AlertCircle,
-  ArrowLeft,
-  FileText,
-  Loader2,
-  Pencil,
-  Play,
-  Plus,
-  Quote,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AddRowsDialog } from "@/app/batch-analyses/_parts/add-rows-dialog";
+import { AnalysisGrid } from "@/app/batch-analyses/_parts/analysis-grid";
 import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
 import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
 import {
@@ -33,7 +24,6 @@ import {
   useDeleteBatchAnalysisRow,
   useStartBatchAnalysisRun,
 } from "@/lib/batch-analysis/batch-analysis.query";
-import { cn } from "@/lib/utils";
 
 type Cell = BatchAnalysisDetail["cells"][number];
 type Row = BatchAnalysisDetail["rows"][number];
@@ -68,44 +58,6 @@ function BackToAnalysesLink() {
         Batch Analyses
       </Link>
     </Button>
-  );
-}
-
-/**
- * One grid cell. The status carries as much meaning as the content here — a
- * blank cell that is queued and a blank cell that failed are different facts,
- * and the whole point of the table is being able to see which is which at a
- * glance across hundreds of rows.
- */
-function CellContent({ cell }: { cell: Cell | undefined }) {
-  if (!cell || cell.status === "pending") {
-    return <span className="text-muted-foreground text-xs">—</span>;
-  }
-  if (cell.status === "generating") {
-    return (
-      <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        <span>Working…</span>
-      </span>
-    );
-  }
-  if (cell.status === "error") {
-    return (
-      <span className="inline-flex items-center gap-1 text-destructive text-xs">
-        <AlertCircle className="h-3 w-3 shrink-0" />
-        <span>Failed</span>
-      </span>
-    );
-  }
-  return (
-    <span className="flex items-start gap-1">
-      <span className="line-clamp-3 whitespace-pre-wrap text-sm">
-        {cell.content}
-      </span>
-      {(cell.citations?.length ?? 0) > 0 && (
-        <Quote className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-      )}
-    </span>
   );
 }
 
@@ -263,109 +215,15 @@ export default function BatchAnalysisDetailPage() {
           </PermissionButton>
         </Card>
       ) : (
-        <div className="max-h-[calc(100vh-16rem)] overflow-auto rounded-md border">
-          <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 z-10 bg-muted">
-              <tr>
-                <th className="min-w-[200px] max-w-[280px] border-r p-3 font-medium text-sm">
-                  Source
-                </th>
-                {analysis.columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className="min-w-[220px] border-r p-3 font-medium text-sm last:border-r-0"
-                  >
-                    <span className="block">{column.name}</span>
-                    <span className="block font-normal text-muted-foreground text-xs">
-                      {column.format === "exact_quote"
-                        ? "exact quote"
-                        : column.format}
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="group/row border-t align-top">
-                  <td className="max-w-[280px] border-r p-3">
-                    <div className="flex items-start gap-1">
-                      <div className="min-w-0 flex-1">
-                        {row.sourceFile ? (
-                          // An uploaded source stays inspectable: the label opens
-                          // the file itself, so an odd answer can be checked
-                          // against the actual document without leaving the grid.
-                          <button
-                            type="button"
-                            className="flex w-full items-start gap-1.5 text-left"
-                            onClick={() =>
-                              row.sourceFile &&
-                              setPreviewFile({
-                                name: row.sourceFile.filename,
-                                mimeType: row.sourceFile.mimeType,
-                                contentUrl: `/api/knowledge-files/${row.sourceFile.id}/content`,
-                              })
-                            }
-                          >
-                            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="line-clamp-2 min-w-0 break-words font-medium text-sm underline-offset-4 hover:underline">
-                              {row.label}
-                            </span>
-                          </button>
-                        ) : (
-                          <span className="line-clamp-2 break-words font-medium text-sm">
-                            {row.label}
-                          </span>
-                        )}
-                      </div>
-                      {/* Revealed on row hover so 200 rows of trash cans
-                          don't compete with the data. Removing a row removes
-                          its answers with it. */}
-                      <PermissionButton
-                        permissions={{ batchAnalysis: ["update"] }}
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/row:opacity-100"
-                        aria-label={`Remove ${row.label}`}
-                        tooltip="Remove row"
-                        disabled={deleteRow.isPending}
-                        onClick={() => deleteRow.mutate(row.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </PermissionButton>
-                    </div>
-                  </td>
-                  {analysis.columns.map((column) => {
-                    const cell = cellsByRowAndColumn.get(
-                      `${row.id}:${column.key}`,
-                    );
-                    return (
-                      <td
-                        key={column.key}
-                        className={cn(
-                          "border-r p-0 last:border-r-0",
-                          cell?.status === "error" && "bg-destructive/5",
-                        )}
-                      >
-                        {/* A button, not a click handler on the cell: opening
-                            the detail sheet has to be reachable by keyboard. */}
-                        <button
-                          type="button"
-                          className="h-full w-full cursor-pointer p-3 text-left transition-colors hover:bg-accent"
-                          onClick={() =>
-                            setSelected({ row, columnKey: column.key })
-                          }
-                        >
-                          <CellContent cell={cell} />
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AnalysisGrid
+          columns={analysis.columns}
+          rows={rows}
+          cellsByRowAndColumn={cellsByRowAndColumn}
+          onSelectCell={(row, columnKey) => setSelected({ row, columnKey })}
+          onPreviewFile={setPreviewFile}
+          onDeleteRow={(rowId) => deleteRow.mutate(rowId)}
+          deleteRowDisabled={deleteRow.isPending}
+        />
       )}
 
       <AddRowsDialog

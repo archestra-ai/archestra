@@ -607,6 +607,22 @@ export type ChatOpenedAppMetadata = z.infer<typeof ChatOpenedAppMetadataSchema>;
 export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
 export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
 
+/**
+ * Marks a harness wake notification for a settled background task (a
+ * delegation or skill run started with `background: true`). Messages carrying
+ * this metadata are persisted with `role: "user"` but rendered as a centered
+ * chip instead of a user bubble.
+ */
+export const ChatBackgroundTaskMetadataSchema = z.object({
+  taskId: z.string(),
+  status: z.enum(["completed", "failed"]),
+  agentName: z.string(),
+  toolName: z.string(),
+});
+export type ChatBackgroundTaskMetadata = z.infer<
+  typeof ChatBackgroundTaskMetadataSchema
+>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
   .object({
@@ -627,6 +643,8 @@ export const ChatMessageMetadataSchema = z
      * transcript shows.
      */
     sandboxCommand: z.literal(true).optional(),
+    /** Harness wake notification for a settled background task. */
+    backgroundTask: ChatBackgroundTaskMetadataSchema.optional(),
   })
   .passthrough();
 

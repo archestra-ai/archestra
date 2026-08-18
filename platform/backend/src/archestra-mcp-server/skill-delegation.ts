@@ -8,6 +8,7 @@ import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
+import { chatBackgroundWork } from "@/services/chat-background-work";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
@@ -200,6 +201,59 @@ export async function handleSkillDelegation(
 
   // dispatching the skill to its designated agent counts one use.
   SkillModel.recordUsage({ skillId: skill.id, userId });
+
+  // Background mode: hand the skill run to the chat background-work harness,
+  // exactly like agent delegation — the advertised schema includes
+  // `background`, so it must actually work here too.
+  if (args?.background === true) {
+    if (!context.conversationId) {
+      return errorResult(
+        "Background skill delegation requires an interactive chat conversation. Re-run without background: true.",
+      );
+    }
+    try {
+      const spawned = await chatBackgroundWork.spawnDelegation({
+        conversationId: context.conversationId,
+        agentId,
+        targetAgentId: target.id,
+        targetAgentName: target.name,
+        toolName,
+        message: delegatedMessage,
+        userId,
+        organizationId,
+        sessionId:
+          context.sessionId || context.conversationId || context.isolationKey,
+        parentDelegationChain,
+        parentContextIsTrusted: context.contextIsTrusted,
+        kind: "skill",
+      });
+      if (spawned.kind === "inline") {
+        return successResult(spawned.resultText);
+      }
+      logger.info(
+        {
+          agentId,
+          skillId: skill.id,
+          targetAgentId: target.id,
+          taskId: spawned.taskId,
+        },
+        "Started background skill delegation",
+      );
+      return successResult(
+        `Background task started (taskId: ${spawned.taskId}). Skill "${skill.name}" is running on agent "${target.name}" now. ` +
+          `The result will arrive in this conversation as a [Background task ...] notification message — ` +
+          `do NOT wait or poll for it. Tell the user what you kicked off and continue helping them.`,
+      );
+    } catch (error) {
+      logger.error(
+        { error, agentId, skillId: skill.id, targetAgentId: target.id },
+        "Failed to start background skill delegation",
+      );
+      return errorResult(
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    }
+  }
 
   try {
     const sessionId =

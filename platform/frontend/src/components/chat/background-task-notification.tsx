@@ -1,22 +1,18 @@
+import {
+  type ChatBackgroundTaskMetadata,
+  ChatBackgroundTaskMetadataSchema,
+} from "@archestra/shared";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/**
- * Shape of the `backgroundTask` metadata the backend stamps on harness
- * notification messages (see backend chat-background-work service).
- */
-export interface BackgroundTaskNotification {
-  taskId: string;
-  status: "completed" | "failed";
-  agentName: string;
-  toolName: string;
-}
+export type BackgroundTaskNotification = ChatBackgroundTaskMetadata;
 
 /**
  * Extract the background-task notification from a message's metadata, when
  * the message is one. These messages carry the task result as a user-role
  * text part for the model, but render as a harness chip instead of a user
- * bubble.
+ * bubble. The shape is the shared `ChatBackgroundTaskMetadataSchema` — the
+ * same declaration the backend stamps.
  */
 export function getBackgroundTaskNotification(message: {
   role: string;
@@ -25,19 +21,10 @@ export function getBackgroundTaskNotification(message: {
   if (message.role !== "user") return null;
   const metadata = message.metadata;
   if (!metadata || typeof metadata !== "object") return null;
-  const note = (metadata as Record<string, unknown>).backgroundTask;
-  if (!note || typeof note !== "object") return null;
-  const { taskId, status, agentName, toolName } = note as Record<
-    string,
-    unknown
-  >;
-  if (typeof taskId !== "string" || typeof agentName !== "string") return null;
-  return {
-    taskId,
-    status: status === "failed" ? "failed" : "completed",
-    agentName,
-    toolName: typeof toolName === "string" ? toolName : "",
-  };
+  const parsed = ChatBackgroundTaskMetadataSchema.safeParse(
+    (metadata as Record<string, unknown>).backgroundTask,
+  );
+  return parsed.success ? parsed.data : null;
 }
 
 /**

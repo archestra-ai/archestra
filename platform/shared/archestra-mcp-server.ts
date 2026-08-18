@@ -126,6 +126,9 @@ export const TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME =
 export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
+// Observe and manage the conversation's detached background tasks.
+export const TOOL_LIST_BACKGROUND_TASKS_SHORT_NAME = "list_background_tasks";
+export const TOOL_CANCEL_BACKGROUND_TASK_SHORT_NAME = "cancel_background_task";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -261,6 +264,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
+  TOOL_LIST_BACKGROUND_TASKS_SHORT_NAME,
+  TOOL_CANCEL_BACKGROUND_TASK_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SET_PROJECT_SHARE_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
@@ -437,6 +442,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   unassign_knowledge_connector_from_agent: "knowledge_management",
 
   todo_write: "chat",
+  list_background_tasks: "chat",
+  cancel_background_task: "chat",
 
   create_project_from_conversation: "projects",
   set_project_share: "projects",

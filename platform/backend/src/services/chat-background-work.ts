@@ -56,6 +56,8 @@ interface SpawnDelegationParams {
   callerEnvironmentId?: string | null;
   /** Whether the parent context was still trusted at the delegation boundary. */
   parentContextIsTrusted?: boolean;
+  /** What kind of delegation spawned this task (defaults to "delegation"). */
+  kind?: "delegation" | "skill";
 }
 
 type SpawnDelegationResult =
@@ -99,7 +101,7 @@ class ChatBackgroundWorkService {
       toolName: params.toolName,
       conversationId: params.conversationId,
       context: {
-        kind: "delegation",
+        kind: params.kind ?? "delegation",
         targetAgentName: params.targetAgentName,
       },
       onSettled: ({ taskId }) => {

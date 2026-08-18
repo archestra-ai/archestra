@@ -124,12 +124,16 @@ export async function getAgentTools(context: {
     "Fetched agent delegation tools from database",
   );
 
-  // Convert DB tools to MCP Tool format
+  // Convert DB tools to MCP Tool format. The input schema is always the
+  // canonical delegation schema, not the row's persisted `parameters`: rows
+  // minted before `background` existed would otherwise advertise a surface
+  // without it forever (the dispatch path validates against the canonical
+  // schema either way).
   return accessibleTools.map((t) =>
     buildDelegationToolDescriptor({
       name: t.tool.name,
       targetAgent: t.targetAgent,
-      inputSchema: t.tool.parameters as Tool["inputSchema"],
+      inputSchema: DELEGATION_INPUT_JSON_SCHEMA as Tool["inputSchema"],
     }),
   );
 }

@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-16
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,6 +124,14 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
+
+## Default Agents
+
+Every member starts with a personal chat agent, **My Assistant**, and it is their **personal default**: the agent preselected when they start a new chat, open an app in chat, or otherwise reach a chat without naming an agent. A member can move their personal default to any other personal agent they own from the **Agents** page — the row's menu offers **Set as my default** and **Unset as my default**, and the current one wears a **My default** badge. There is at most one; the first personal agent a member creates takes the role automatically whenever they have none.
+
+Admins can also set an organization-wide **Default Agent** in **Settings → Chat**. A member's personal default wins over it; the organization default applies to members who have unset theirs, or who have no personal agent left. A [project](/docs/platform-projects)'s pinned agent outranks both inside that project.
+
+Deleting a member's personal default moves them to their next personal agent, or — with none left — leaves them on the organization default. When there is neither, the delete is refused: set another agent as default first.
 
 ## Deleting an Agent
 

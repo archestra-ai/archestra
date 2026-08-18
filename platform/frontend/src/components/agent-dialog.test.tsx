@@ -36,6 +36,8 @@ const {
   useUpdateProfileMock,
   useCreateProfileMock,
   useDeleteProfileMock,
+  useDefaultAgentIdMock,
+  useUpdateDefaultAgentIdMock,
 } = vi.hoisted(() => ({
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
@@ -60,6 +62,13 @@ const {
     isPending: false,
   })),
   useDeleteProfileMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useDefaultAgentIdMock: vi.fn((): { data: string | null } => ({
+    data: null,
+  })),
+  useUpdateDefaultAgentIdMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
   })),
@@ -143,9 +152,11 @@ vi.mock("@tanstack/react-query", async () => {
 
 vi.mock("@/lib/agent.query", () => ({
   useCreateProfile: useCreateProfileMock,
+  useDefaultAgentId: useDefaultAgentIdMock,
   useDeleteProfile: useDeleteProfileMock,
   useDelegationTargetAgents: useDelegationTargetAgentsMock,
   useProfile: useProfileMock,
+  useUpdateDefaultAgentId: useUpdateDefaultAgentIdMock,
   useUpdateProfile: useUpdateProfileMock,
 }));
 
@@ -1137,6 +1148,123 @@ const skillsModeTab = (name: "Auto" | "Custom") => {
     .closest("div") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
+
+describe("AgentDialog personal default", () => {
+  const owner = { id: baseAgent.authorId };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pendingSaveChanges.mockResolvedValue(undefined);
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: owner },
+    } as unknown as ReturnType<typeof useSession>);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
+  });
+
+  it("offers the switch on the author's own personal agent, on when it is their default", async () => {
+    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    expect(
+      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
+    ).toBeChecked();
+  });
+
+  it("hides the switch on someone else's personal agent", async () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "someone-else" } },
+    } as unknown as ReturnType<typeof useSession>);
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await screen.findByText("Subagents (0)");
+    expect(
+      screen.queryByTestId(E2eTestId.PersonalDefaultAgentSwitch),
+    ).toBeNull();
+  });
+
+  it("saves the member default only when the switch was moved", async () => {
+    const user = userEvent.setup();
+    const setDefault = vi.fn().mockResolvedValue({ defaultAgentId: null });
+    useUpdateDefaultAgentIdMock.mockReturnValue({
+      mutateAsync: setDefault,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(baseAgent),
+      isPending: false,
+    });
+    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
+    const onOpenChange = vi.fn();
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    // Untouched → the save leaves the member setting alone.
+    await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch);
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(setDefault).not.toHaveBeenCalled();
+  });
+
+  it("clears the member default when the switch is turned off and saved", async () => {
+    const user = userEvent.setup();
+    const setDefault = vi.fn().mockResolvedValue({ defaultAgentId: null });
+    useUpdateDefaultAgentIdMock.mockReturnValue({
+      mutateAsync: setDefault,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(baseAgent),
+      isPending: false,
+    });
+    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
+    const onOpenChange = vi.fn();
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await user.click(
+      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(setDefault).toHaveBeenCalledWith(null);
+  });
+});
 
 describe("AgentDialog published skills", () => {
   const syncSkills = vi.fn();

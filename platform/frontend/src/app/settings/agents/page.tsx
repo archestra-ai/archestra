@@ -334,7 +334,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default Agent"
-        description="The default agent is preselected for all new chat conversations."
+        description="Preselected for new chats of members who have not set a personal default agent of their own."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

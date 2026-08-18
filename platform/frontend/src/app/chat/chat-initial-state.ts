@@ -74,13 +74,23 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     return null;
   }
 
-  // Outranks the org default: a project is the narrower workspace, and its
-  // agent is chosen for the work the project's chats do.
+  // Outranks everything: a project is the narrower workspace, and its agent
+  // is chosen for the work the project's chats do.
   const projectDefaultAgent = agents.find(
     (agent) => agent.id === params.projectDefaultAgentId,
   );
   if (projectDefaultAgent) {
     return { agent: projectDefaultAgent, fromProjectDefault: true };
+  }
+
+  // The member's own personal default (one of their personal agents, chosen
+  // by them or adopted as their first) beats the org-wide default; a member
+  // who cleared theirs falls through to the org default.
+  const memberDefaultAgent = agents.find(
+    (agent) => agent.id === params.memberDefaultAgentId,
+  );
+  if (memberDefaultAgent) {
+    return { agent: memberDefaultAgent, fromProjectDefault: false };
   }
 
   const organizationDefaultAgent = agents.find(
@@ -95,13 +105,6 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     if (savedAgent) {
       return { agent: savedAgent, fromProjectDefault: false };
     }
-  }
-
-  const memberDefaultAgent = agents.find(
-    (agent) => agent.id === params.memberDefaultAgentId,
-  );
-  if (memberDefaultAgent) {
-    return { agent: memberDefaultAgent, fromProjectDefault: false };
   }
 
   return { agent: agents[0], fromProjectDefault: false };

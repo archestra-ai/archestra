@@ -133,7 +133,9 @@ export function McpServerTable({
     },
     {
       id: "status",
-      size: 140,
+      // Wide enough for the longest issue label ("Needs re-authentication");
+      // the badge itself is capped to the cell so nothing can spill.
+      size: 210,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;

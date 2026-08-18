@@ -38,10 +38,10 @@ export function McpServerIssueBadge({
   const badge = (
     <Badge
       variant="secondary"
-      className={cn(SEVERITY_CLASS[issue.severity], className)}
+      className={cn("max-w-full", SEVERITY_CLASS[issue.severity], className)}
       data-testid={`mcp-server-issue-${issue.kind}`}
     >
-      {meta.label}
+      <span className="truncate">{meta.label}</span>
     </Badge>
   );
   if (!issue.detail) return badge;
@@ -50,7 +50,7 @@ export function McpServerIssueBadge({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="max-w-full rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`${meta.label}: ${issue.detail}`}
         >
           {badge}

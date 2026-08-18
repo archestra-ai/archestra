@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.41](https://github.com/archestra-ai/archestra/compare/platform-v1.3.40...platform-v1.3.41) (2026-08-18)
+
+
+### Features
+
+* **orchestrator:** hibernate idle MCP servers and wake them on demand ([#7135](https://github.com/archestra-ai/archestra/issues/7135)) ([6f5013a](https://github.com/archestra-ai/archestra/commit/6f5013a307add1c769aea7aaf802fa29a49308a3))
+
+
+### Bug Fixes
+
+* **auth:** don't mint personal user tokens for service-account principals ([#7326](https://github.com/archestra-ai/archestra/issues/7326)) ([0a6c69b](https://github.com/archestra-ai/archestra/commit/0a6c69bc4e4ca18d50a11f95ebace0c4f654c4b8))
+* **helm:** isolate runtime owner RBAC ([#7331](https://github.com/archestra-ai/archestra/issues/7331)) ([83374a5](https://github.com/archestra-ai/archestra/commit/83374a5a638d74219779143740328b950fff8355))
+* **helm:** reuse manager Role for runtime ownership ([#7325](https://github.com/archestra-ai/archestra/issues/7325)) ([70612ec](https://github.com/archestra-ai/archestra/commit/70612ec905415ee556ad174e3efb811a709778ff))
+* relay Cohere thinking blocks and group DB resource-exhaustion errors ([#7328](https://github.com/archestra-ai/archestra/issues/7328)) ([4467af3](https://github.com/archestra-ai/archestra/commit/4467af34592946be677b9723e0fab1da85b2f0c0))
+
+
+### Performance Improvements
+
+* slim hot-endpoint payloads (agents, MCP servers, conversations, logs SSR, appearance) ([#7327](https://github.com/archestra-ai/archestra/issues/7327)) ([70bf0d7](https://github.com/archestra-ai/archestra/commit/70bf0d7955dbcb8ab56381960349d082576bc116))
+
+
+### Miscellaneous Chores
+
+* **tests:** mute console output from passing tests across all workspaces ([#7329](https://github.com/archestra-ai/archestra/issues/7329)) ([850762c](https://github.com/archestra-ai/archestra/commit/850762cbd432e159dab28dc536ea8ad153aec680))
+
 ## [1.3.40](https://github.com/archestra-ai/archestra/compare/platform-v1.3.39...platform-v1.3.40) (2026-08-18)
 
 

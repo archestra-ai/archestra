@@ -2713,8 +2713,8 @@ const config = {
     // SPDX-SnippetEnd
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
-      runtimeOwnerConfigMapName:
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP?.trim() ||
+      runtimeOwnerRoleName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE?.trim() ||
         undefined,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

@@ -574,6 +574,9 @@ archestra:
       # RBAC (Role-Based Access Control) configuration
       rbac:
         # Specifies whether RBAC resources should be created
+        # When false, set ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE only if
+        # external RBAC supplies a readable Role with that name in every runtime
+        # namespace and deletes each Role during release uninstall.
         create: true
 
         # Kubernetes namespaces backing deployment environments that the platform

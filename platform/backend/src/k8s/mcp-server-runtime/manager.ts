@@ -221,6 +221,7 @@ export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAuthApi?: k8s.AuthorizationV1Api;
+  private k8sRbacApi?: k8s.RbacAuthorizationV1Api;
   private k8sNetworkingApi?: k8s.NetworkingV1Api;
   private k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   private k8sAttach?: k8s.Attach;
@@ -346,6 +347,7 @@ export class McpServerRuntimeManager {
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
       this.k8sAuthApi = clients.authApi;
+      this.k8sRbacApi = clients.rbacApi;
       this.k8sNetworkingApi = clients.networkingApi;
       this.k8sCustomObjectsApi = clients.customObjectsApi;
       this.k8sAttach = clients.attach;
@@ -363,6 +365,7 @@ export class McpServerRuntimeManager {
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
       this.k8sAuthApi = undefined;
+      this.k8sRbacApi = undefined;
       this.k8sNetworkingApi = undefined;
       this.k8sCustomObjectsApi = undefined;
       this.k8sAttach = undefined;
@@ -538,6 +541,7 @@ export class McpServerRuntimeManager {
       this.imagePrepuller = new McpImagePrepuller({
         coreApi: this.k8sApi,
         appsApi: this.k8sAppsApi,
+        rbacApi: this.k8sRbacApi,
         namespace: this.namespace,
         platformNamespace: this.platformNamespace,
       });
@@ -578,8 +582,8 @@ export class McpServerRuntimeManager {
       const networkingApi = this.k8sNetworkingApi;
       const customObjectsApi = this.k8sCustomObjectsApi;
       if (!networkingApi || !customObjectsApi) return Promise.resolve();
-      const ownerReferences = this.k8sApi
-        ? await resolveRuntimeOwnerReferences(this.k8sApi, namespace).catch(
+      const ownerReferences = this.k8sRbacApi
+        ? await resolveRuntimeOwnerReferences(this.k8sRbacApi, namespace).catch(
             () => undefined,
           )
         : undefined;
@@ -617,6 +621,7 @@ export class McpServerRuntimeManager {
     const {
       k8sApi,
       k8sAppsApi,
+      k8sRbacApi,
       k8sNetworkingApi,
       k8sCustomObjectsApi,
       k8sAttach,
@@ -651,6 +656,7 @@ export class McpServerRuntimeManager {
           mcpServer,
           k8sApi,
           k8sAppsApi,
+          k8sRbacApi,
           k8sNetworkingApi,
           k8sCustomObjectsApi,
           k8sAttach,
@@ -952,6 +958,7 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sRbacApi: this.k8sRbacApi,
         k8sNetworkingApi: this.k8sNetworkingApi,
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
@@ -1234,6 +1241,7 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sRbacApi: this.k8sRbacApi,
         k8sNetworkingApi: this.k8sNetworkingApi,
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,

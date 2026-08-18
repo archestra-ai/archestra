@@ -1412,7 +1412,10 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Independent of the MCP server base image on purpose, so a pinned or custom base image cannot break pre-pulling.
   - Point it at a static private mirror when your cluster cannot pull from Docker Hub.
 
-- **`ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP`** - Same-namespace Helm anchor used to remove runtime-created MCP resources on uninstall. The chart sets this automatically.
+- **`ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE`** - Same-namespace Role used to remove runtime-created MCP resources on uninstall.
+  - The chart sets this automatically when it creates orchestrator RBAC.
+  - With external RBAC, use a readable Role with the same name in every runtime namespace.
+  - Delete each external Role during uninstall to remove its runtime resources.
 
 - **`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`** - Names the cluster objects Archestra creates for itself outside the chart, such as the image pre-pull DaemonSet.
   - Default: injected by the Helm chart. Set it by hand only when you deploy without the chart.

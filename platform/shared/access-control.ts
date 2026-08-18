@@ -1552,6 +1552,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
+  [RouteId.UpdateMemberDefaultAgent]: {},
   [RouteId.GetMemberDefaultModel]: {},
   [RouteId.UpdateMemberDefaultModel]: {},
 

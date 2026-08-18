@@ -82,6 +82,28 @@ export function useMcpServers(params?: McpServersParams) {
   });
 }
 
+/**
+ * The organization's auto-mode agents (implicit access to all tools). The set
+ * is org-wide — identical for every MCP server — so it is fetched once here
+ * rather than embedded on every row of the servers list.
+ */
+export function useAutoModeAgents(params?: { enabled?: boolean }) {
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+
+  return useQuery({
+    queryKey: ["mcp-servers", "auto-mode-agents"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getMcpServerAutoModeAgents();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: (params?.enabled ?? true) && !!canReadInstallations,
+  });
+}
+
 export function useMcpInstallationStatusCacheSync(enabled = true) {
   const queryClient = useQueryClient();
 

@@ -12199,33 +12199,7 @@ export type GetAgentsResponses = {
                 delegateToAgentId: string | null;
                 name: string;
                 rawName: string | null;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
                 description: string | null;
-                meta: string | number | boolean | null | {
-                    [key: string]: unknown;
-                } | Array<unknown> | null;
-                clonedPendingDiscovery: boolean;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-                deletedAt: string | null;
             }>;
             teams: Array<{
                 id: string;
@@ -12459,33 +12433,7 @@ export type CreateAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -12683,33 +12631,7 @@ export type GetAllAgentsResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -12966,33 +12888,7 @@ export type GetDefaultMcpGatewayResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13161,33 +13057,7 @@ export type GetDefaultLlmProxyResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13436,33 +13306,7 @@ export type ImportAgentResponses = {
                 delegateToAgentId: string | null;
                 name: string;
                 rawName: string | null;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
                 description: string | null;
-                meta: string | number | boolean | null | {
-                    [key: string]: unknown;
-                } | Array<unknown> | null;
-                clonedPendingDiscovery: boolean;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-                deletedAt: string | null;
             }>;
             teams: Array<{
                 id: string;
@@ -13724,33 +13568,7 @@ export type GetAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -13977,33 +13795,7 @@ export type UpdateAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -14430,33 +14222,7 @@ export type RestoreAgentVersionResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -14636,33 +14402,7 @@ export type CloneAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -15779,33 +15519,7 @@ export type RestoreAgentResponses = {
             delegateToAgentId: string | null;
             name: string;
             rawName: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
             description: string | null;
-            meta: string | number | boolean | null | {
-                [key: string]: unknown;
-            } | Array<unknown> | null;
-            clonedPendingDiscovery: boolean;
-            policiesAutoConfiguredAt: string | null;
-            policiesAutoConfiguringStartedAt: string | null;
-            policiesAutoConfiguredReasoning: string | null;
-            policiesAutoConfiguredModel: string | null;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
         }>;
         teams: Array<{
             id: string;
@@ -28407,7 +28121,7 @@ export type GetChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28577,7 +28291,7 @@ export type CreateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28739,7 +28453,7 @@ export type GetDeletedChatConversationsResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -28988,7 +28702,7 @@ export type GetChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -29160,7 +28874,7 @@ export type UpdateChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -29764,7 +29478,7 @@ export type ForkChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30017,7 +29731,7 @@ export type RestoreChatConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30281,7 +29995,7 @@ export type CompactChatConversationResponses = {
             agent: {
                 id: string;
                 name: string;
-                systemPrompt: string | null;
+                systemPrompt?: string | null;
                 agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
                 toolExposureMode: 'full' | 'search_and_run_only';
                 llmApiKeyId: string | null;
@@ -30719,7 +30433,7 @@ export type GetSharedConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -30886,7 +30600,7 @@ export type ForkSharedConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -31055,7 +30769,7 @@ export type GenerateChatConversationTitleResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -31224,7 +30938,7 @@ export type UpdateChatMessageResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
@@ -63519,6 +63233,93 @@ export type McpServerProxyPostResponses = {
     200: unknown;
 };
 
+export type GetMcpServerAutoModeAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server/auto_mode_agents';
+};
+
+export type GetMcpServerAutoModeAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpServerAutoModeAgentsError = GetMcpServerAutoModeAgentsErrors[keyof GetMcpServerAutoModeAgentsErrors];
+
+export type GetMcpServerAutoModeAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        scope: 'personal' | 'team' | 'org';
+        ownerEmail: string | null;
+    }>;
+};
+
+export type GetMcpServerAutoModeAgentsResponse = GetMcpServerAutoModeAgentsResponses[keyof GetMcpServerAutoModeAgentsResponses];
+
 export type GetMcpServersData = {
     body?: never;
     path?: never;
@@ -63643,13 +63444,6 @@ export type GetMcpServersResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -63799,13 +63593,6 @@ export type InstallMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -64027,13 +63814,6 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerEmail: string | null;
         }>;
-        autoModeAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -64174,13 +63954,6 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerEmail: string | null;
         }>;
-        autoModeAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -64305,13 +64078,6 @@ export type RestoreMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -64726,13 +64492,6 @@ export type ReinstallMcpServerResponses = {
             createdAt: string;
         } | null;
         assignedAgents?: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerEmail: string | null;
-        }>;
-        autoModeAgents?: Array<{
             id: string;
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
@@ -71981,13 +71740,6 @@ export type GetAppearanceSettingsResponses = {
             label: string;
             url: string;
         }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
-        } | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
         animateChatPlaceholders: boolean;
@@ -78438,7 +78190,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         agent: {
             id: string;
             name: string;
-            systemPrompt: string | null;
+            systemPrompt?: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;

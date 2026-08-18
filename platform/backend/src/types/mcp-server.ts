@@ -100,13 +100,6 @@ export const SelectMcpServerSchema = createSelectSchema(
    * server — statically pinned to it, or unpinned on a tool of its catalog.
    */
   assignedAgents: z.array(McpServerAgentUsageSchema).optional(),
-  /**
-   * Auto-mode agents (implicit access to all tools) in this server's
-   * organization. They reach every server without an explicit tool assignment,
-   * so they are listed separately from `assignedAgents` — the same org-wide set
-   * appears on every server.
-   */
-  autoModeAgents: z.array(McpServerAgentUsageSchema).optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
   // SPDX-SnippetBegin

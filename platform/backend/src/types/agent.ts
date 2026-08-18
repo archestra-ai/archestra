@@ -287,8 +287,26 @@ const GatewayAgentSchema = AgentRowSchema.extend({
 });
 export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
 
+/**
+ * Slim tool reference embedded in agent payloads. Full tool definitions
+ * (parameters, policy fields, timestamps) are served by the dedicated
+ * per-agent tools endpoints; embedding them here multiplied agent list
+ * responses by the org's agent × tool fan-out, with the parameter JSON
+ * schemas duplicated once per assignment.
+ */
+export const AgentToolRefSchema = SelectToolSchema.pick({
+  id: true,
+  agentId: true,
+  catalogId: true,
+  delegateToAgentId: true,
+  name: true,
+  rawName: true,
+  description: true,
+});
+export type AgentToolRef = z.infer<typeof AgentToolRefSchema>;
+
 export const SelectAgentSchema = AgentRowSchema.extend({
-  tools: z.array(SelectToolSchema),
+  tools: z.array(AgentToolRefSchema),
   teams: z.array(AgentTeamInfoSchema),
   // People the agent is shared with individually. A personal-scoped agent with
   // a non-empty list is shared, not private — the settings form reads the pair

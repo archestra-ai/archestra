@@ -195,7 +195,6 @@ import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
-  type LlmProviderApiKey,
   type SupportedProvider,
   useAvailableLlmProviderApiKeys,
   useLlmProviderApiKeys,
@@ -1663,7 +1662,6 @@ export function ChatPageContent({
     chatSession?.isRecovering
       ? undefined
       : chatSession?.error;
-  const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
   const browserToolCallIds = useMemo(

@@ -633,7 +633,6 @@ class OrganizationModel {
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
         chatLinks: schema.organizationsTable.chatLinks,
-        onboardingWizard: schema.organizationsTable.onboardingWizard,
         chatErrorSupportMessage:
           schema.organizationsTable.chatErrorSupportMessage,
         slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
@@ -657,7 +656,6 @@ class OrganizationModel {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
-        onboardingWizard: null,
         chatErrorSupportMessage: null,
         slimChatErrorUi: false,
         animateChatPlaceholders: true,

@@ -67,7 +67,10 @@ export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
       return data ?? [];
     },
     enabled: params?.enabled,
-    staleTime: 0,
+    // No staleTime override: inherit the client default so several components
+    // mounting this hook during one page load share a single fetch instead of
+    // each observer refetching the whole roster. Agent mutations invalidate
+    // ["agents"] queries, so edits still show up immediately.
   });
 }
 
@@ -494,7 +497,10 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
     queryKey: internalAgentsQueryKey,
     queryFn: fetchInternalAgents,
     enabled: params?.enabled,
-    staleTime: 0,
+    // No staleTime override: inherit the client default so several components
+    // mounting this hook during one page load share a single fetch instead of
+    // each observer refetching the whole roster. Agent mutations invalidate
+    // ["agents"] queries, so edits still show up immediately.
   });
 }
 

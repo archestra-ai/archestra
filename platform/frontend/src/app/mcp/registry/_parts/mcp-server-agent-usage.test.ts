@@ -21,22 +21,25 @@ describe("deriveAgentUsage", () => {
   it("dedupes an agent assigned tools from several installs of the catalog", () => {
     const shared = agent({ id: "a1", name: "Support Bot" });
 
-    const usage = deriveAgentUsage([
-      { assignedAgents: [shared], autoModeAgents: [] },
-      { assignedAgents: [shared], autoModeAgents: [] },
-    ]);
+    const usage = deriveAgentUsage({
+      serversForCatalog: [
+        { assignedAgents: [shared] },
+        { assignedAgents: [shared] },
+      ],
+      autoModeAgents: [],
+    });
 
     expect(usage.assigned).toHaveLength(1);
     expect(usage.total).toBe(1);
   });
 
-  it("dedupes the org-wide auto-mode set that rides on every install", () => {
+  it("applies the org-wide auto-mode roster fetched once for all installs", () => {
     const auto = agent({ id: "auto1", name: "Auto Agent" });
 
-    const usage = deriveAgentUsage([
-      { assignedAgents: [], autoModeAgents: [auto] },
-      { assignedAgents: [], autoModeAgents: [auto] },
-    ]);
+    const usage = deriveAgentUsage({
+      serversForCatalog: [{ assignedAgents: [] }, { assignedAgents: [] }],
+      autoModeAgents: [auto],
+    });
 
     expect(usage.autoOnly).toHaveLength(1);
     expect(usage.total).toBe(1);
@@ -45,9 +48,10 @@ describe("deriveAgentUsage", () => {
   it("counts an agent that is both auto-mode and explicitly assigned only once, as assigned", () => {
     const both = agent({ id: "a1", name: "Hybrid" });
 
-    const usage = deriveAgentUsage([
-      { assignedAgents: [both], autoModeAgents: [both] },
-    ]);
+    const usage = deriveAgentUsage({
+      serversForCatalog: [{ assignedAgents: [both] }],
+      autoModeAgents: [both],
+    });
 
     expect(usage.assigned.map((a) => a.id)).toEqual(["a1"]);
     expect(usage.autoOnly).toEqual([]);
@@ -55,12 +59,12 @@ describe("deriveAgentUsage", () => {
   });
 
   it("tags each agent with how it reaches the server", () => {
-    const usage = deriveAgentUsage([
-      {
-        assignedAgents: [agent({ id: "a1", name: "Pinned" })],
-        autoModeAgents: [agent({ id: "a2", name: "Roaming" })],
-      },
-    ]);
+    const usage = deriveAgentUsage({
+      serversForCatalog: [
+        { assignedAgents: [agent({ id: "a1", name: "Pinned" })] },
+      ],
+      autoModeAgents: [agent({ id: "a2", name: "Roaming" })],
+    });
 
     expect(usage.all.map((a) => [a.name, a.access])).toEqual([
       ["Pinned", "assigned"],
@@ -69,25 +73,27 @@ describe("deriveAgentUsage", () => {
   });
 
   it("orders same-named personal agents deterministically by owner", () => {
-    const usage = deriveAgentUsage([
-      {
-        assignedAgents: [
-          agent({
-            id: "b",
-            name: "My Assistant",
-            scope: "personal",
-            ownerEmail: "zoe@example.com",
-          }),
-          agent({
-            id: "a",
-            name: "My Assistant",
-            scope: "personal",
-            ownerEmail: "adam@example.com",
-          }),
-        ],
-        autoModeAgents: [],
-      },
-    ]);
+    const usage = deriveAgentUsage({
+      serversForCatalog: [
+        {
+          assignedAgents: [
+            agent({
+              id: "b",
+              name: "My Assistant",
+              scope: "personal",
+              ownerEmail: "zoe@example.com",
+            }),
+            agent({
+              id: "a",
+              name: "My Assistant",
+              scope: "personal",
+              ownerEmail: "adam@example.com",
+            }),
+          ],
+        },
+      ],
+      autoModeAgents: [],
+    });
 
     expect(usage.assigned.map((a) => a.ownerEmail)).toEqual([
       "adam@example.com",
@@ -96,9 +102,15 @@ describe("deriveAgentUsage", () => {
   });
 
   it("returns an empty result for a catalog item nothing uses", () => {
-    expect(deriveAgentUsage([]).total).toBe(0);
     expect(
-      deriveAgentUsage([{ assignedAgents: [], autoModeAgents: [] }]).all,
+      deriveAgentUsage({ serversForCatalog: [], autoModeAgents: undefined })
+        .total,
+    ).toBe(0);
+    expect(
+      deriveAgentUsage({
+        serversForCatalog: [{ assignedAgents: [] }],
+        autoModeAgents: [],
+      }).all,
     ).toEqual([]);
   });
 });

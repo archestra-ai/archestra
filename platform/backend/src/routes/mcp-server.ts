@@ -72,6 +72,7 @@ import {
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
+  McpServerAgentUsageSchema,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -85,6 +86,27 @@ import {
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/mcp_server/auto_mode_agents",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerAutoModeAgents,
+        description:
+          "Get the organization's auto-mode agents (implicit access to all tools). " +
+          "The set is org-wide — these agents can reach every MCP server — so it " +
+          "is served once here instead of being embedded on every server row.",
+        tags: ["MCP Server"],
+        response: constructResponseSchema(z.array(McpServerAgentUsageSchema)),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+        organizationId,
+      ]);
+      return reply.send(byOrg.get(organizationId) ?? []);
+    },
+  );
+
   fastify.get(
     "/api/mcp_server",
     {
@@ -193,7 +215,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, user, headers, organizationId }, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -202,7 +224,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         user.id,
         isMcpServerAdmin,
-        organizationId,
       );
 
       if (!server) {

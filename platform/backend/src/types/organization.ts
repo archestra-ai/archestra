@@ -291,7 +291,9 @@ export const AppearanceSettingsSchema = z.object({
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
-  onboardingWizard: OnboardingWizardSchema.nullable(),
+  // No onboardingWizard here: this payload is served pre-auth and fetched on
+  // every page load, and wizard configs can embed large images. Its consumers
+  // (chat, the settings editor) read it from the authed /api/organization.
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
   animateChatPlaceholders: z.boolean(),

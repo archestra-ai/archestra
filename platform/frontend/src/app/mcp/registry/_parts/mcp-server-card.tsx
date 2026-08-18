@@ -63,7 +63,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
@@ -292,11 +292,15 @@ export function McpServerCard({
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
   // detail page's Usage tab so both surfaces count the same way.
+  const { data: autoModeAgents } = useAutoModeAgents();
   const {
     assigned: assignedAgents,
     autoOnly: autoModeOnlyAgents,
     total: totalAgentCount,
-  } = deriveAgentUsage(allServersForCatalog);
+  } = deriveAgentUsage({
+    serversForCatalog: allServersForCatalog,
+    autoModeAgents,
+  });
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {

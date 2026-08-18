@@ -65,6 +65,14 @@ class ConversationModel {
   private static readonly SEARCH_RESULT_LIMIT = 50;
 
   /**
+   * Maximum number of conversations the non-search listing returns. The
+   * sidebar refetches this list on every focus/navigation, and without a
+   * bound it re-downloads a heavy chat user's entire lifetime history each
+   * time. Older conversations stay reachable through search and direct links.
+   */
+  private static readonly LIST_RESULT_LIMIT = 250;
+
+  /**
    * Maximum number of messages to load per conversation for preview snippets.
    * Prevents memory issues with conversations that have hundreds of messages.
    */
@@ -164,10 +172,12 @@ class ConversationModel {
           },
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
+          // No systemPrompt here: list rows only need identity/config refs,
+          // and a roster of custom agents can carry very large prompts.
+          // findById selects it for the flows that need it (e.g. compaction).
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
-            systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
@@ -286,10 +296,12 @@ class ConversationModel {
           },
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
+          // No systemPrompt here: list rows only need identity/config refs,
+          // and a roster of custom agents can carry very large prompts.
+          // findById selects it for the flows that need it (e.g. compaction).
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
-            systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
@@ -313,7 +325,8 @@ class ConversationModel {
           eq(schema.conversationsTable.projectId, schema.projectsTable.id),
         )
         .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.lastMessageAt));
+        .orderBy(desc(schema.conversationsTable.lastMessageAt))
+        .limit(ConversationModel.LIST_RESULT_LIMIT);
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
@@ -1271,7 +1284,8 @@ function addMessagePersistenceMetadata(message: {
 type JoinedConversationAgent = {
   id: string | null;
   name: string | null;
-  systemPrompt: string | null;
+  /** Absent on list reads; only detail reads select the prompt. */
+  systemPrompt?: string | null;
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
   toolExposureMode: ToolExposureMode | null;
   llmApiKeyId: string | null;
@@ -1307,7 +1321,11 @@ function withVisibleAgent(
     agent: {
       id: agent.id,
       name: agent.name ?? "",
-      systemPrompt: agent.systemPrompt,
+      // Only present when the read selected it (detail reads); list reads
+      // deliberately leave the prompt out of the payload.
+      ...(agent.systemPrompt !== undefined && {
+        systemPrompt: agent.systemPrompt,
+      }),
       agentType: agent.agentType ?? "agent",
       toolExposureMode: agent.toolExposureMode ?? "full",
       llmApiKeyId: agent.llmApiKeyId,

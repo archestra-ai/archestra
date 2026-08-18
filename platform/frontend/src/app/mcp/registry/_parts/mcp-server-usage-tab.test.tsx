@@ -23,10 +23,8 @@ const agent = (
   ...overrides,
 });
 
-const server = (
-  assignedAgents: ReturnType<typeof agent>[],
-  autoModeAgents: ReturnType<typeof agent>[] = [],
-) => ({ assignedAgents, autoModeAgents }) as unknown as ServerArg;
+const server = (assignedAgents: ReturnType<typeof agent>[]) =>
+  ({ assignedAgents }) as unknown as ServerArg;
 
 describe("McpServerUsageTab", () => {
   it("tells same-named personal agents apart by owner", () => {
@@ -48,6 +46,7 @@ describe("McpServerUsageTab", () => {
             }),
           ]),
         ]}
+        autoModeAgents={[]}
       />,
     );
 
@@ -62,6 +61,7 @@ describe("McpServerUsageTab", () => {
         serversForCatalog={[
           server([agent({ id: "1", name: "Org Agent", scope: "org" })]),
         ]}
+        autoModeAgents={[]}
       />,
     );
 
@@ -74,12 +74,8 @@ describe("McpServerUsageTab", () => {
   it("labels how each agent reaches the server", () => {
     render(
       <McpServerUsageTab
-        serversForCatalog={[
-          server(
-            [agent({ id: "1", name: "Pinned Agent" })],
-            [agent({ id: "2", name: "Roaming Gateway" })],
-          ),
-        ]}
+        serversForCatalog={[server([agent({ id: "1", name: "Pinned Agent" })])]}
+        autoModeAgents={[agent({ id: "2", name: "Roaming Gateway" })]}
       />,
     );
 
@@ -98,7 +94,10 @@ describe("McpServerUsageTab", () => {
     const hybrid = agent({ id: "1", name: "Hybrid" });
 
     render(
-      <McpServerUsageTab serversForCatalog={[server([hybrid], [hybrid])]} />,
+      <McpServerUsageTab
+        serversForCatalog={[server([hybrid])]}
+        autoModeAgents={[hybrid]}
+      />,
     );
 
     expect(screen.getAllByText("Hybrid")).toHaveLength(1);
@@ -111,6 +110,7 @@ describe("McpServerUsageTab", () => {
     render(
       <McpServerUsageTab
         serversForCatalog={[server([shared]), server([shared])]}
+        autoModeAgents={[]}
       />,
     );
 
@@ -118,7 +118,12 @@ describe("McpServerUsageTab", () => {
   });
 
   it("explains the empty case instead of rendering a bare table", () => {
-    render(<McpServerUsageTab serversForCatalog={[server([], [])]} />);
+    render(
+      <McpServerUsageTab
+        serversForCatalog={[server([])]}
+        autoModeAgents={[]}
+      />,
+    );
 
     expect(
       screen.getByText("No agents use this server yet"),

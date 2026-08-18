@@ -164,6 +164,9 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
   ...getJson("/api/mcp_server", installedServersSeed),
+  // Org-wide auto-mode roster; per-test seeds override when a test needs
+  // auto-mode agents in the usage surfaces.
+  ...getJson("/api/mcp_server/auto_mode_agents", []),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {

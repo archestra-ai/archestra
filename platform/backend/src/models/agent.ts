@@ -49,6 +49,7 @@ import {
   type Agent,
   type AgentScope,
   type AgentScopeFilter,
+  type AgentToolRef,
   type AgentType,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
@@ -606,7 +607,7 @@ class AgentModel {
         ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
         : Promise.resolve([]),
       db
-        .select({ tool: schema.toolsTable })
+        .select({ tool: agentToolRefColumns })
         .from(schema.agentToolsTable)
         .innerJoin(
           schema.toolsTable,
@@ -658,18 +659,10 @@ class AgentModel {
       onlyEnforcingMissingCredentials?: boolean;
     },
   ): Promise<Agent[]> {
-    let query = db
-      .select()
-      .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentToolsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-      )
-      .leftJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .$dynamic();
+    // Tools are attached afterwards as slim refs via one batched query:
+    // joining them here multiplied every agent row (system prompt included)
+    // by that agent's tool count.
+    let query = db.select().from(schema.agentsTable).$dynamic();
 
     // Build where conditions
     const whereConditions: SQL[] = [
@@ -745,41 +738,43 @@ class AgentModel {
 
     const rows = await query;
 
-    // Group the flat join results by agent
-    const agentsMap = new Map<string, Agent>();
-
-    for (const row of rows) {
-      const agent = row.agents;
-      const tool = row.tools;
-
-      if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          users: [] as Array<{ id: string; name: string; email: string }>,
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-          suggestedPrompts: [],
-        });
-      }
-
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
-        agentsMap.get(agent.id)?.tools.push(tool);
-      }
-    }
-
-    const agents = Array.from(agentsMap.values());
+    const agents: Agent[] = rows.map((agent) => ({
+      ...agent,
+      tools: [],
+      teams: [] as Array<{ id: string; name: string }>,
+      users: [] as Array<{ id: string; name: string; email: string }>,
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    }));
     const agentIds = agents.map((agent) => agent.id);
 
-    // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, usersMap, labelsMap] = await Promise.all([
+    // Populate tools, teams, and labels for all agents with bulk queries to
+    // avoid N+1
+    const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
+      agentIds.length > 0
+        ? db
+            .select({
+              agentId: schema.agentToolsTable.agentId,
+              tool: agentToolRefColumns,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+            )
+            .where(inArray(schema.agentToolsTable.agentId, agentIds))
+        : Promise.resolve([]),
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
+
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    for (const row of toolRows) {
+      agentsById.get(row.agentId)?.tools.push(row.tool);
+    }
 
     // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
@@ -847,7 +842,7 @@ class AgentModel {
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          tool: schema.toolsTable,
+          tool: agentToolRefColumns,
         })
         .from(schema.agentToolsTable)
         .innerJoin(
@@ -858,10 +853,7 @@ class AgentModel {
     ]);
 
     // Group tools by agent
-    const toolsByAgent = new Map<
-      string,
-      (typeof schema.toolsTable.$inferSelect)[]
-    >();
+    const toolsByAgent = new Map<string, AgentToolRef[]>();
     for (const row of toolsResult) {
       const existing = toolsByAgent.get(row.agentId) || [];
       existing.push(row.tool);
@@ -937,7 +929,7 @@ class AgentModel {
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          tool: schema.toolsTable,
+          tool: agentToolRefColumns,
         })
         .from(schema.agentToolsTable)
         .innerJoin(
@@ -948,10 +940,7 @@ class AgentModel {
     ]);
 
     // Group tools by agent
-    const toolsByAgent = new Map<
-      string,
-      (typeof schema.toolsTable.$inferSelect)[]
-    >();
+    const toolsByAgent = new Map<string, AgentToolRef[]>();
     for (const row of toolsResult) {
       const existing = toolsByAgent.get(row.agentId) || [];
       existing.push(row.tool);
@@ -2761,7 +2750,7 @@ class AgentModel {
     ]);
 
     const toolRows = await db
-      .select({ tool: schema.toolsTable })
+      .select({ tool: agentToolRefColumns })
       .from(schema.agentToolsTable)
       .innerJoin(
         schema.toolsTable,
@@ -3839,5 +3828,22 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
  * finite number rather than no limit at all.
  */
 const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
+
+/**
+ * Column set for the slim {@link AgentToolRef} embedded in agent payloads.
+ * Deliberately excludes `parameters` and the other wide tool columns so agent
+ * list queries don't drag every assigned tool's JSON schema out of the
+ * database once per assignment; the dedicated per-agent tools endpoints serve
+ * full tool definitions.
+ */
+const agentToolRefColumns = {
+  id: schema.toolsTable.id,
+  agentId: schema.toolsTable.agentId,
+  catalogId: schema.toolsTable.catalogId,
+  delegateToAgentId: schema.toolsTable.delegateToAgentId,
+  name: schema.toolsTable.name,
+  rawName: schema.toolsTable.rawName,
+  description: schema.toolsTable.description,
+};
 
 export default AgentModel;

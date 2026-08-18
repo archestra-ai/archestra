@@ -27,7 +27,6 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
-        onboardingWizard: null,
         chatErrorSupportMessage: null,
         slimChatErrorUi: false,
         animateChatPlaceholders: true,
@@ -53,7 +52,6 @@ describe("OrganizationModel", () => {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
-        onboardingWizard: null,
         chatErrorSupportMessage: null,
         slimChatErrorUi: false,
         animateChatPlaceholders: true,
@@ -180,7 +178,6 @@ describe("OrganizationModel", () => {
         "logo",
         "logoDark",
         "ogDescription",
-        "onboardingWizard",
         "slimChatErrorUi",
         "theme",
       ]);

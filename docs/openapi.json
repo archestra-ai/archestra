@@ -40935,85 +40935,9 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
-                                "parameters": {
-                                  "anyOf": [
-                                    {
-                                      "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                      "type": "object",
-                                      "additionalProperties": {}
-                                    }
-                                  ]
-                                },
                                 "description": {
                                   "nullable": true,
                                   "type": "string"
-                                },
-                                "meta": {
-                                  "nullable": true,
-                                  "anyOf": [
-                                    {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "number"
-                                        },
-                                        {
-                                          "type": "boolean"
-                                        },
-                                        {
-                                          "type": "string",
-                                          "nullable": true,
-                                          "enum": [
-                                            null
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "object",
-                                      "additionalProperties": {}
-                                    },
-                                    {
-                                      "type": "array",
-                                      "items": {}
-                                    }
-                                  ]
-                                },
-                                "clonedPendingDiscovery": {
-                                  "type": "boolean"
-                                },
-                                "policiesAutoConfiguredAt": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "policiesAutoConfiguringStartedAt": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "policiesAutoConfiguredReasoning": {
-                                  "nullable": true,
-                                  "type": "string"
-                                },
-                                "policiesAutoConfiguredModel": {
-                                  "nullable": true,
-                                  "type": "string"
-                                },
-                                "createdAt": {
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "updatedAt": {
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "deletedAt": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "format": "date-time"
                                 }
                               },
                               "required": [
@@ -41023,16 +40947,7 @@
                                 "delegateToAgentId",
                                 "name",
                                 "rawName",
-                                "description",
-                                "meta",
-                                "clonedPendingDiscovery",
-                                "policiesAutoConfiguredAt",
-                                "policiesAutoConfiguringStartedAt",
-                                "policiesAutoConfiguredReasoning",
-                                "policiesAutoConfiguredModel",
-                                "createdAt",
-                                "updatedAt",
-                                "deletedAt"
+                                "description"
                               ],
                               "additionalProperties": false
                             }
@@ -42182,85 +42097,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -42270,16 +42109,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -43145,85 +42975,9 @@
                               "nullable": true,
                               "type": "string"
                             },
-                            "parameters": {
-                              "anyOf": [
-                                {
-                                  "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                  "type": "object",
-                                  "additionalProperties": {}
-                                }
-                              ]
-                            },
                             "description": {
                               "nullable": true,
                               "type": "string"
-                            },
-                            "meta": {
-                              "nullable": true,
-                              "anyOf": [
-                                {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "boolean"
-                                    },
-                                    {
-                                      "type": "string",
-                                      "nullable": true,
-                                      "enum": [
-                                        null
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "additionalProperties": {}
-                                },
-                                {
-                                  "type": "array",
-                                  "items": {}
-                                }
-                              ]
-                            },
-                            "clonedPendingDiscovery": {
-                              "type": "boolean"
-                            },
-                            "policiesAutoConfiguredAt": {
-                              "nullable": true,
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "policiesAutoConfiguringStartedAt": {
-                              "nullable": true,
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "policiesAutoConfiguredReasoning": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "policiesAutoConfiguredModel": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "createdAt": {
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "updatedAt": {
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "deletedAt": {
-                              "nullable": true,
-                              "type": "string",
-                              "format": "date-time"
                             }
                           },
                           "required": [
@@ -43233,16 +42987,7 @@
                             "delegateToAgentId",
                             "name",
                             "rawName",
-                            "description",
-                            "meta",
-                            "clonedPendingDiscovery",
-                            "policiesAutoConfiguredAt",
-                            "policiesAutoConfiguringStartedAt",
-                            "policiesAutoConfiguredReasoning",
-                            "policiesAutoConfiguredModel",
-                            "createdAt",
-                            "updatedAt",
-                            "deletedAt"
+                            "description"
                           ],
                           "additionalProperties": false
                         }
@@ -44312,85 +44057,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -44400,16 +44069,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -45184,85 +44844,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -45272,16 +44856,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -46420,85 +45995,9 @@
                                 "nullable": true,
                                 "type": "string"
                               },
-                              "parameters": {
-                                "anyOf": [
-                                  {
-                                    "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                    "type": "object",
-                                    "additionalProperties": {}
-                                  }
-                                ]
-                              },
                               "description": {
                                 "nullable": true,
                                 "type": "string"
-                              },
-                              "meta": {
-                                "nullable": true,
-                                "anyOf": [
-                                  {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "number"
-                                      },
-                                      {
-                                        "type": "boolean"
-                                      },
-                                      {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "enum": [
-                                          null
-                                        ]
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "type": "object",
-                                    "additionalProperties": {}
-                                  },
-                                  {
-                                    "type": "array",
-                                    "items": {}
-                                  }
-                                ]
-                              },
-                              "clonedPendingDiscovery": {
-                                "type": "boolean"
-                              },
-                              "policiesAutoConfiguredAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "policiesAutoConfiguringStartedAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "policiesAutoConfiguredReasoning": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "policiesAutoConfiguredModel": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "createdAt": {
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "updatedAt": {
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "deletedAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
                               }
                             },
                             "required": [
@@ -46508,16 +46007,7 @@
                               "delegateToAgentId",
                               "name",
                               "rawName",
-                              "description",
-                              "meta",
-                              "clonedPendingDiscovery",
-                              "policiesAutoConfiguredAt",
-                              "policiesAutoConfiguringStartedAt",
-                              "policiesAutoConfiguredReasoning",
-                              "policiesAutoConfiguredModel",
-                              "createdAt",
-                              "updatedAt",
-                              "deletedAt"
+                              "description"
                             ],
                             "additionalProperties": false
                           }
@@ -47339,85 +46829,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -47427,16 +46841,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -48542,85 +47947,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -48630,16 +47959,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -50695,85 +50015,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -50783,16 +50027,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -51607,85 +50842,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -51695,16 +50854,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -55672,85 +54822,9 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "parameters": {
-                            "anyOf": [
-                              {
-                                "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            ]
-                          },
                           "description": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "meta": {
-                            "nullable": true,
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "nullable": true,
-                                    "enum": [
-                                      null
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "additionalProperties": {}
-                              },
-                              {
-                                "type": "array",
-                                "items": {}
-                              }
-                            ]
-                          },
-                          "clonedPendingDiscovery": {
-                            "type": "boolean"
-                          },
-                          "policiesAutoConfiguredAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguringStartedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "policiesAutoConfiguredReasoning": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "policiesAutoConfiguredModel": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "deletedAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -55760,16 +54834,7 @@
                           "delegateToAgentId",
                           "name",
                           "rawName",
-                          "description",
-                          "meta",
-                          "clonedPendingDiscovery",
-                          "policiesAutoConfiguredAt",
-                          "policiesAutoConfiguringStartedAt",
-                          "policiesAutoConfiguredReasoning",
-                          "policiesAutoConfiguredModel",
-                          "createdAt",
-                          "updatedAt",
-                          "deletedAt"
+                          "description"
                         ],
                         "additionalProperties": false
                       }
@@ -101855,7 +100920,6 @@
                         "required": [
                           "id",
                           "name",
-                          "systemPrompt",
                           "agentType",
                           "toolExposureMode",
                           "llmApiKeyId"
@@ -102675,7 +101739,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -103444,7 +102507,6 @@
                         "required": [
                           "id",
                           "name",
-                          "systemPrompt",
                           "agentType",
                           "toolExposureMode",
                           "llmApiKeyId"
@@ -104224,7 +103286,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -105053,7 +104114,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -107609,7 +106669,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -108677,7 +107736,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -109810,7 +108868,6 @@
                           "required": [
                             "id",
                             "name",
-                            "systemPrompt",
                             "agentType",
                             "toolExposureMode",
                             "llmApiKeyId"
@@ -111545,7 +110602,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -112348,7 +111404,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -113143,7 +112198,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -113952,7 +113006,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"
@@ -250752,6 +249805,301 @@
         }
       }
     },
+    "/api/mcp_server/auto_mode_agents": {
+      "get": {
+        "operationId": "getMcpServerAutoModeAgents",
+        "tags": [
+          "MCP Server"
+        ],
+        "description": "Get the organization's auto-mode agents (implicit access to all tools). The set is org-wide — these agents can reach every MCP server — so it is served once here instead of being embedded on every server row.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "agentType": {
+                        "type": "string",
+                        "enum": [
+                          "profile",
+                          "mcp_gateway",
+                          "llm_proxy",
+                          "agent"
+                        ]
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
+                      "ownerEmail": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "agentType",
+                      "scope",
+                      "ownerEmail"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:read"
+          ]
+        }
+      }
+    },
     "/api/mcp_server": {
       "get": {
         "operationId": "getMcpServers",
@@ -251030,49 +250378,6 @@
                         "additionalProperties": false
                       },
                       "assignedAgents": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "agentType": {
-                              "type": "string",
-                              "enum": [
-                                "profile",
-                                "mcp_gateway",
-                                "llm_proxy",
-                                "agent"
-                              ]
-                            },
-                            "scope": {
-                              "type": "string",
-                              "enum": [
-                                "personal",
-                                "team",
-                                "org"
-                              ]
-                            },
-                            "ownerEmail": {
-                              "nullable": true,
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name",
-                            "agentType",
-                            "scope",
-                            "ownerEmail"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "autoModeAgents": {
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -251756,49 +251061,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "autoModeAgents": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "ownerEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "agentType",
-                          "scope",
-                          "ownerEmail"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
@@ -252316,49 +251578,6 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "ownerEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "agentType",
-                          "scope",
-                          "ownerEmail"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -253269,49 +252488,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "autoModeAgents": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "ownerEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "agentType",
-                          "scope",
-                          "ownerEmail"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
@@ -253829,49 +253005,6 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "ownerEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "agentType",
-                          "scope",
-                          "ownerEmail"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -255381,49 +254514,6 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "agentType": {
-                            "type": "string",
-                            "enum": [
-                              "profile",
-                              "mcp_gateway",
-                              "llm_proxy",
-                              "agent"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "ownerEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "agentType",
-                          "scope",
-                          "ownerEmail"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -281403,43 +280493,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "onboardingWizard": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 25
-                        },
-                        "pages": {
-                          "minItems": 1,
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "image": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "content": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "content"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "label",
-                        "pages"
-                      ],
-                      "additionalProperties": false
-                    },
                     "chatErrorSupportMessage": {
                       "nullable": true,
                       "type": "string"
@@ -281463,7 +280516,6 @@
                     "ogDescription",
                     "footerText",
                     "chatLinks",
-                    "onboardingWizard",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
                     "animateChatPlaceholders"
@@ -306224,7 +305276,6 @@
                       "required": [
                         "id",
                         "name",
-                        "systemPrompt",
                         "agentType",
                         "toolExposureMode",
                         "llmApiKeyId"

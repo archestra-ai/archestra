@@ -336,6 +336,16 @@ export const MCP_DEPLOYMENT_STATES = [
   "running",
   "failed",
   "succeeded",
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Deployment deliberately scaled to 0 replicas by the idle-hibernation
+  // manager; woken (scaled back to 1) on demand.
+  "hibernated",
+  // Deployment scaling back up from idle hibernation; the hibernation
+  // annotation is still present and it is not yet available.
+  "waking",
+  // SPDX-SnippetEnd
 ] as const;
 
 export type McpDeploymentState = (typeof MCP_DEPLOYMENT_STATES)[number];

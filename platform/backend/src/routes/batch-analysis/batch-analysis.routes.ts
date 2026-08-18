@@ -552,7 +552,11 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
         cells,
       });
       if (!result.ok) {
-        throw new ApiError(502, result.error);
+        const relayed = new ApiError(502, result.error);
+        // The provider's own failure, relayed — error tracking must not count
+        // it as our fault.
+        relayed.upstream = result.upstream ?? true;
+        throw relayed;
       }
       return { answer: result.answer, references: result.references };
     },

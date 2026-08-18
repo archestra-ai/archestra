@@ -64,14 +64,15 @@ function SourceBody({
   }
   return (
     <p className="whitespace-pre-wrap text-sm">
-      {parts.before}
+      {/* Spans, not bare text nodes — machine-translation safety. */}
+      <span>{parts.before}</span>
       <mark
         ref={(el) => el?.scrollIntoView({ block: "center" })}
         className="rounded-sm bg-yellow-200 px-0.5 dark:bg-yellow-500/40"
       >
         {parts.match}
       </mark>
-      {parts.after}
+      <span>{parts.after}</span>
     </p>
   );
 }

@@ -1,4 +1,3 @@
-import { APICallError } from "ai";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
 import type {
@@ -9,7 +8,10 @@ import type {
   BatchAnalysisRow,
 } from "@/types";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
-import { resolveBatchAnalysisModel } from "./llm";
+import {
+  describeModelCallError,
+  resolveBatchAnalysisModel,
+} from "./llm";
 import {
   BATCH_ANALYSIS_RESULT_TAG,
   buildBatchAnalysisSystemPrompt,
@@ -201,25 +203,3 @@ function failAll(columnKeys: string[], error: string): CellOutcome[] {
   return columnKeys.map((columnKey) => ({ columnKey, ok: false, error }));
 }
 
-/**
- * A provider error's HTTP statusText alone ("Bad Request") tells the user
- * nothing actionable. When the SDK preserved the response body, surface the
- * provider's own message with it.
- */
-function describeModelCallError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (!APICallError.isInstance(error) || !error.responseBody) {
-    return message;
-  }
-  let detail: string | undefined;
-  try {
-    const parsed = JSON.parse(error.responseBody) as {
-      error?: { message?: string };
-    };
-    detail = parsed.error?.message;
-  } catch {
-    detail = error.responseBody;
-  }
-  if (!detail || detail === message) return message;
-  return `${message} — ${detail.slice(0, 300)}`;
-}

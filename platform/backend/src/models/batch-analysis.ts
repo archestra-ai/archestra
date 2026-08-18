@@ -37,6 +37,12 @@ export interface BatchAnalysisViewer {
   canReadAll: boolean;
 }
 
+/**
+ * Verification precondition failure — the route maps it to a 400 naming the
+ * offending cell rather than a generic 500.
+ */
+export class CellVerificationError extends Error {}
+
 class BatchAnalysisModel {
   // ===== Analyses =====
 
@@ -310,6 +316,17 @@ class BatchAnalysisModel {
     userId: string;
     entries: { rowId: string; columnKey: string; verified: boolean }[];
   }): Promise<BatchAnalysisCell[]> {
+    // Duplicate coordinates collapse to the last occurrence — the bulk UPDATE
+    // counts distinct rows, so an uncollapsed duplicate would read as "a cell
+    // changed underneath us" and fail the whole batch.
+    const entries = [
+      ...new Map(
+        params.entries.map((entry) => [
+          `${entry.rowId}:${entry.columnKey}`,
+          entry,
+        ]),
+      ).values(),
+    ];
     return db.transaction(async (tx) => {
       const targets = await tx
         .select({
@@ -331,7 +348,7 @@ class BatchAnalysisModel {
             eq(schema.batchAnalysisRowsTable.analysisId, params.analysisId),
             inArray(
               schema.batchAnalysisCellsTable.rowId,
-              params.entries.map((entry) => entry.rowId),
+              entries.map((entry) => entry.rowId),
             ),
           ),
         );
@@ -339,7 +356,7 @@ class BatchAnalysisModel {
         targets.map((cell) => [`${cell.rowId}:${cell.columnKey}`, cell]),
       );
 
-      for (const entry of params.entries) {
+      for (const entry of entries) {
         const cell = byKey.get(`${entry.rowId}:${entry.columnKey}`);
         if (!cell) {
           throw new CellVerificationError(
@@ -362,9 +379,7 @@ class BatchAnalysisModel {
       // count → the whole batch rolls back.
       const updated = new Map<string, BatchAnalysisCell>();
       for (const verified of [true, false]) {
-        const group = params.entries.filter(
-          (entry) => entry.verified === verified,
-        );
+        const group = entries.filter((entry) => entry.verified === verified);
         if (group.length === 0) continue;
         const cells = await tx
           .update(schema.batchAnalysisCellsTable)
@@ -399,7 +414,7 @@ class BatchAnalysisModel {
           updated.set(`${cell.rowId}:${cell.columnKey}`, cell);
         }
       }
-      return params.entries.map(
+      return entries.map(
         (entry) =>
           updated.get(`${entry.rowId}:${entry.columnKey}`) as BatchAnalysisCell,
       );
@@ -461,12 +476,6 @@ class BatchAnalysisModel {
   }
 
   /**
-   * Drop cells whose column no longer exists on the analysis. Run after a
-   * column edit: orphaned cells render nowhere but still count in progress
-   * totals, so "12/15 cells" would never reach 15 again after removing a
-   * column.
-   */
-  /**
    * Null the stored triage flags for columns that opted OUT of flagging. The
    * answers stand — only the classification is withdrawn, matching what the
    * column configuration now promises.
@@ -494,6 +503,12 @@ class BatchAnalysisModel {
       );
   }
 
+  /**
+   * Drop cells whose column no longer exists on the analysis. Run after a
+   * column edit: orphaned cells render nowhere but still count in progress
+   * totals, so "12/15 cells" would never reach 15 again after removing a
+   * column.
+   */
   static async deleteCellsForRemovedColumns(params: {
     analysisId: string;
     keptColumnKeys: string[];
@@ -852,11 +867,6 @@ class BatchAnalysisModel {
 
 export default BatchAnalysisModel;
 
-/**
- * Verification precondition failure — the route maps it to a 400 naming the
- * offending cell rather than a generic 500.
- */
-export class CellVerificationError extends Error {}
 
 /** Above this many verified cells the audit snapshot keeps only the digest. */
 const VERIFICATION_AUDIT_MAP_LIMIT = 200;

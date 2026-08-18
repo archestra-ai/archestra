@@ -343,14 +343,17 @@ function FileTextPreview({
   if (highlighted) {
     return (
       <pre className="whitespace-pre-wrap break-words p-4 text-xs">
-        {highlighted.before}
+        {/* Spans, not bare text nodes: the mark's neighbors are created and
+            destroyed when the quote changes, which crashes under machine
+            translation if they are bare (see the frontend skill). */}
+        <span>{highlighted.before}</span>
         <mark
           ref={(el) => el?.scrollIntoView({ block: "center" })}
           className="rounded-sm bg-yellow-200 px-0.5 dark:bg-yellow-500/40"
         >
           {highlighted.match}
         </mark>
-        {highlighted.after}
+        <span>{highlighted.after}</span>
       </pre>
     );
   }

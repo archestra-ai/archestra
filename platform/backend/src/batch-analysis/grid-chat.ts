@@ -7,6 +7,7 @@ import type {
   BatchAnalysisRow,
 } from "@/types";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
+import { describeModelCallError } from "./llm";
 
 const GRID_CHAT_ANSWER_TAG = "grid_answer";
 
@@ -25,7 +26,7 @@ interface GridChatReference {
 
 type GridChatResult =
   | { ok: true; answer: string; references: GridChatReference[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; upstream?: boolean };
 
 /**
  * One-shot Q&A over the extracted grid — the table itself, not the source
@@ -47,22 +48,33 @@ export async function askGrid(params: {
     cells: params.cells,
   });
 
-  const raw = await generateTaggedText({
-    model: params.model,
-    tag: GRID_CHAT_ANSWER_TAG,
-    system: buildGridChatSystemPrompt(),
-    prompt: [
-      `ANALYSIS: ${params.analysis.name}`,
-      "",
-      "<grid>",
-      serialized,
-      "</grid>",
-      "",
-      `QUESTION: ${params.question}`,
-    ].join("\n"),
-    temperature: params.temperature,
-    maxOutputTokens: 2048,
-  });
+  let raw: string | null;
+  try {
+    raw = await generateTaggedText({
+      model: params.model,
+      tag: GRID_CHAT_ANSWER_TAG,
+      system: buildGridChatSystemPrompt(),
+      prompt: [
+        `ANALYSIS: ${params.analysis.name}`,
+        "",
+        "<grid>",
+        serialized,
+        "</grid>",
+        "",
+        `QUESTION: ${params.question}`,
+      ].join("\n"),
+      temperature: params.temperature,
+      maxOutputTokens: 2048,
+    });
+  } catch (error) {
+    // A provider failure is the provider's failure: surface its message and
+    // let the route relay it as an upstream error rather than a bare 500.
+    return {
+      ok: false,
+      upstream: true,
+      error: describeModelCallError(error),
+    };
+  }
   if (raw === null) {
     return { ok: false, error: "The model returned no usable answer" };
   }
@@ -83,8 +95,7 @@ export async function askGrid(params: {
   return { ok: true, answer: parsed.answer, references };
 }
 
-/** @public — exported for testability */
-export function buildGridChatSystemPrompt(): string {
+function buildGridChatSystemPrompt(): string {
   return [
     "You answer questions about a table of extracted answers (the grid).",
     "Each grid row is one source document; each cell is an answer extracted from it, some carrying a triage flag.",

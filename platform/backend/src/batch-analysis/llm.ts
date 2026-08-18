@@ -8,6 +8,7 @@ import {
   isApiKeyRequired,
   type LLMModel,
 } from "@/clients/llm-client";
+import { APICallError } from "ai";
 import ModelModel from "@/models/model";
 import type { Agent } from "@/types";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
@@ -87,4 +88,29 @@ function extractionTemperature(
     return undefined;
   }
   return 0;
+}
+
+/**
+ * @public — shared by the executor and grid-chat route
+ *
+ * A provider error's HTTP statusText alone ("Bad Request") tells the user
+ * nothing actionable. When the SDK preserved the response body, surface the
+ * provider's own message with it.
+ */
+export function describeModelCallError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!APICallError.isInstance(error) || !error.responseBody) {
+    return message;
+  }
+  let detail: string | undefined;
+  try {
+    const parsed = JSON.parse(error.responseBody) as {
+      error?: { message?: string };
+    };
+    detail = parsed.error?.message;
+  } catch {
+    detail = error.responseBody;
+  }
+  if (!detail || detail === message) return message;
+  return `${message} — ${detail.slice(0, 300)}`;
 }

@@ -431,6 +431,13 @@ class ModelModel {
               inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
               outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
+              // Prefers the fresh value rather than backfilling like the row
+              // above: nothing user-editable writes this column, and an Ollama
+              // tag can be repointed at a model that thinks (or stops
+              // thinking), so a stale `true` would leave the composer offering
+              // a depth the server now rejects. The last known value survives a
+              // sync that says nothing.
+              supportsReasoningEffort: sql`COALESCE(excluded.supports_reasoning_effort, ${schema.modelsTable.supportsReasoningEffort})`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
@@ -518,6 +525,7 @@ class ModelModel {
               inputModalities: sql`excluded.input_modalities`,
               outputModalities: sql`excluded.output_modalities`,
               supportsToolCalling: sql`excluded.supports_tool_calling`,
+              supportsReasoningEffort: sql`excluded.supports_reasoning_effort`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
@@ -696,6 +704,7 @@ class ModelModel {
       contextLength: number | null;
       outputLength: number | null;
       supportsToolCalling: boolean | null;
+      supportsReasoningEffort: boolean | null;
     },
   ): Promise<void> {
     await db
@@ -1018,6 +1027,7 @@ class ModelModel {
         inputModalities: null,
         outputModalities: null,
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         recommendedForAgents: null,
         pricePerMillionInput: null,
         pricePerMillionOutput: null,
@@ -1036,6 +1046,7 @@ class ModelModel {
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
+      supportsReasoningEffort: model.supportsReasoningEffort,
       recommendedForAgents,
       pricePerMillionInput: pricing.pricePerMillionInput,
       pricePerMillionOutput: pricing.pricePerMillionOutput,

@@ -1,5 +1,6 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
+  getDbResourceExhaustionErrorCode,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
@@ -68,6 +69,24 @@ export function classifyErrorForTracking(
       report: true,
       fingerprint: ["db-statement-timeout"],
       tags: { error_type: "db_statement_timeout", db_error_code: "57014" },
+    };
+  }
+
+  // Database resource exhaustion (SQLSTATE class 53: disk full, out of
+  // memory, too many connection slots) fails every in-flight query the same
+  // way, and the ORM's per-query "Failed query: <sql>" wrapper otherwise
+  // fragments one capacity incident into a new issue per SQL statement. Like
+  // statement timeouts these are deliberately not retried, but they should
+  // group into a single issue per root cause.
+  const resourceExhaustionCode = getDbResourceExhaustionErrorCode(error);
+  if (resourceExhaustionCode) {
+    return {
+      report: true,
+      fingerprint: ["db-resource-exhaustion", resourceExhaustionCode],
+      tags: {
+        error_type: "db_resource_exhaustion",
+        db_error_code: resourceExhaustionCode,
+      },
     };
   }
 

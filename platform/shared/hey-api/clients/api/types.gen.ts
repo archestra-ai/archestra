@@ -1901,6 +1901,12 @@ export type CohereChatRequestInput = {
             type: 'tool_result';
             tool_call_id: string;
             content: string;
+        } | {
+            type: 'thinking';
+            thinking: string;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         tool_calls?: Array<{
             id: string;
@@ -1964,6 +1970,12 @@ export type CohereChatResponseInput = {
             type: 'tool_result';
             tool_call_id: string;
             content: string;
+        } | {
+            type: 'thinking';
+            thinking: string;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         tool_calls?: Array<{
             id: string;
@@ -7777,6 +7789,12 @@ export type CohereChatRequest = {
             type: 'tool_result';
             tool_call_id: string;
             content: string;
+        } | {
+            type: 'thinking';
+            thinking: string;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         tool_calls?: Array<{
             id: string;
@@ -7840,6 +7858,12 @@ export type CohereChatResponse = {
             type: 'tool_result';
             tool_call_id: string;
             content: string;
+        } | {
+            type: 'thinking';
+            thinking: string;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
         tool_calls?: Array<{
             id: string;

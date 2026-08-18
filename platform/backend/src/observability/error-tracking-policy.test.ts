@@ -188,6 +188,29 @@ describe("classifyErrorForTracking", () => {
     });
   });
 
+  test("groups database resource exhaustion by root cause", () => {
+    // One full disk (or exhausted memory/connection slots) fails every
+    // in-flight query; per-statement wrappers must not fragment it.
+    const pgError = Object.assign(
+      new Error("could not write init file: No space left on device"),
+      { code: "53100" },
+    );
+    const dbError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: pgError },
+    );
+    const decision = classifyErrorForTracking(dbError);
+    expect(decision.report).toBe(true);
+    expect(decision.fingerprint).toEqual([
+      "db-resource-exhaustion",
+      "disk_full",
+    ]);
+    expect(decision.tags).toMatchObject({
+      error_type: "db_resource_exhaustion",
+      db_error_code: "disk_full",
+    });
+  });
+
   test("groups secrets-backend outages by the root condition", () => {
     const error = new ApiError(
       503,

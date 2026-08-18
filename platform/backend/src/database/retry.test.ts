@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 
 import {
+  getDbResourceExhaustionErrorCode,
   getTransientDbErrorCode,
   installDbErrorSafetyNet,
   isDbStatementTimeoutError,
@@ -330,6 +331,61 @@ describe("isDbStatementTimeoutError", () => {
     const pgError = Object.assign(
       new Error("canceling statement due to statement timeout"),
       { code: "57014" },
+    );
+    const drizzleError = new Error("Failed query: select 1", {
+      cause: pgError,
+    });
+    expect(isTransientDbError(drizzleError)).toBe(false);
+  });
+});
+
+describe("getDbResourceExhaustionErrorCode", () => {
+  test("maps SQLSTATE class 53 codes to stable names", () => {
+    for (const [code, name] of [
+      ["53100", "disk_full"],
+      ["53200", "out_of_memory"],
+      ["53300", "too_many_connections"],
+    ] as const) {
+      const pgError = Object.assign(new Error("server error"), { code });
+      expect(getDbResourceExhaustionErrorCode(pgError)).toBe(name);
+    }
+  });
+
+  test("unwraps the cause chain (DrizzleQueryError pattern)", () => {
+    const pgError = Object.assign(
+      new Error("could not extend file: No space left on device"),
+      { code: "53100" },
+    );
+    const drizzleError = new Error('Failed query: select "id" from "agents"', {
+      cause: pgError,
+    });
+    expect(getDbResourceExhaustionErrorCode(drizzleError)).toBe("disk_full");
+  });
+
+  test("detects disk-full reports without a SQLSTATE by message", () => {
+    // Raised during connection startup rather than query execution — no code.
+    const drizzleError = new Error("Failed query: select 1", {
+      cause: new Error("could not write init file: No space left on device"),
+    });
+    expect(getDbResourceExhaustionErrorCode(drizzleError)).toBe("disk_full");
+  });
+
+  test("returns null for unrelated errors", () => {
+    expect(getDbResourceExhaustionErrorCode(new Error("boom"))).toBeNull();
+    expect(
+      getDbResourceExhaustionErrorCode(
+        Object.assign(new Error("dup"), { code: "23505" }),
+      ),
+    ).toBeNull();
+    expect(getDbResourceExhaustionErrorCode(null)).toBeNull();
+  });
+
+  // A server out of disk or memory will not recover within the retry budget;
+  // retrying only adds load, so these must stay non-transient.
+  test("resource exhaustion is not classified as transient (not retried)", () => {
+    const pgError = Object.assign(
+      new Error("could not write init file: No space left on device"),
+      { code: "53100" },
     );
     const drizzleError = new Error("Failed query: select 1", {
       cause: pgError,

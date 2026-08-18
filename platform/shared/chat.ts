@@ -623,6 +623,21 @@ export type ChatBackgroundTaskMetadata = z.infer<
   typeof ChatBackgroundTaskMetadataSchema
 >;
 
+/**
+ * Marks a harness wake notification fired by a scheduled wakeup
+ * (`schedule_wakeup` tool): a one-shot reminder or a recurring check-in
+ * delivered back into the conversation it was created in.
+ */
+export const ChatScheduledWakeupMetadataSchema = z.object({
+  triggerId: z.string(),
+  runId: z.string(),
+  name: z.string(),
+  recurring: z.boolean(),
+});
+export type ChatScheduledWakeupMetadata = z.infer<
+  typeof ChatScheduledWakeupMetadataSchema
+>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
   .object({
@@ -645,6 +660,8 @@ export const ChatMessageMetadataSchema = z
     sandboxCommand: z.literal(true).optional(),
     /** Harness wake notification for a settled background task. */
     backgroundTask: ChatBackgroundTaskMetadataSchema.optional(),
+    /** Harness wake notification for a scheduled wakeup firing. */
+    scheduledWakeup: ChatScheduledWakeupMetadataSchema.optional(),
   })
   .passthrough();
 

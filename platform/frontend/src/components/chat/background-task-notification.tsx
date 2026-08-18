@@ -1,42 +1,78 @@
 import {
-  type ChatBackgroundTaskMetadata,
   ChatBackgroundTaskMetadataSchema,
+  ChatScheduledWakeupMetadataSchema,
 } from "@archestra/shared";
-import { Zap } from "lucide-react";
+import { AlarmClock, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type BackgroundTaskNotification = ChatBackgroundTaskMetadata;
+/**
+ * A harness wake notification: a `user`-role message the harness (not the
+ * user) injected to hand control back to the model — a settled background
+ * task's result, or a scheduled wakeup firing. The message text is for the
+ * model; the human sees a centered chip instead of a user bubble.
+ */
+export type WakeNotification =
+  | {
+      kind: "backgroundTask";
+      status: "completed" | "failed";
+      label: string;
+    }
+  | {
+      kind: "scheduledWakeup";
+      recurring: boolean;
+      label: string;
+    };
 
 /**
- * Extract the background-task notification from a message's metadata, when
- * the message is one. These messages carry the task result as a user-role
- * text part for the model, but render as a harness chip instead of a user
- * bubble. The shape is the shared `ChatBackgroundTaskMetadataSchema` — the
- * same declaration the backend stamps.
+ * Extract the wake notification from a message's metadata, when the message
+ * is one. The shapes are the shared metadata schemas the backend stamps.
  */
-export function getBackgroundTaskNotification(message: {
+export function getWakeNotification(message: {
   role: string;
   metadata?: unknown;
-}): BackgroundTaskNotification | null {
+}): WakeNotification | null {
   if (message.role !== "user") return null;
   const metadata = message.metadata;
   if (!metadata || typeof metadata !== "object") return null;
-  const parsed = ChatBackgroundTaskMetadataSchema.safeParse(
+
+  const backgroundTask = ChatBackgroundTaskMetadataSchema.safeParse(
     (metadata as Record<string, unknown>).backgroundTask,
   );
-  return parsed.success ? parsed.data : null;
+  if (backgroundTask.success) {
+    return {
+      kind: "backgroundTask",
+      status: backgroundTask.data.status,
+      label: backgroundTask.data.agentName,
+    };
+  }
+
+  const scheduledWakeup = ChatScheduledWakeupMetadataSchema.safeParse(
+    (metadata as Record<string, unknown>).scheduledWakeup,
+  );
+  if (scheduledWakeup.success) {
+    return {
+      kind: "scheduledWakeup",
+      recurring: scheduledWakeup.data.recurring,
+      label: scheduledWakeup.data.name,
+    };
+  }
+
+  return null;
 }
 
 /**
- * Centered harness chip marking the moment a background task's result was
- * delivered back into the conversation and the agent regained control.
+ * Centered harness chip marking the moment a wake was delivered back into
+ * the conversation and the agent regained control.
  */
-export function BackgroundTaskNotificationChip({
+export function WakeNotificationChip({
   notification,
 }: {
-  notification: BackgroundTaskNotification;
+  notification: WakeNotification;
 }) {
-  const failed = notification.status === "failed";
+  const failed =
+    notification.kind === "backgroundTask" &&
+    notification.status === "failed";
+  const Icon = notification.kind === "backgroundTask" ? Zap : AlarmClock;
   return (
     <div className="mb-4 flex justify-center">
       <div
@@ -45,19 +81,34 @@ export function BackgroundTaskNotificationChip({
           failed && "border-destructive/40",
         )}
       >
-        <Zap
+        <Icon
           className={cn(
             "h-3.5 w-3.5",
-            failed ? "text-destructive" : "text-amber-500",
+            failed
+              ? "text-destructive"
+              : notification.kind === "backgroundTask"
+                ? "text-amber-500"
+                : "text-sky-500",
           )}
         />
-        <span>
-          Background task{" "}
-          <span className="font-medium text-foreground">
-            {notification.agentName}
-          </span>{" "}
-          {failed ? "failed" : "completed"} — agent notified
-        </span>
+        {notification.kind === "backgroundTask" ? (
+          <span>
+            Background task{" "}
+            <span className="font-medium text-foreground">
+              {notification.label}
+            </span>{" "}
+            <span>{failed ? "failed" : "completed"}</span> — agent notified
+          </span>
+        ) : (
+          <span>
+            <span>{notification.recurring ? "Recurring" : "Scheduled"}</span>{" "}
+            wakeup{" "}
+            <span className="font-medium text-foreground">
+              {notification.label}
+            </span>{" "}
+            fired — agent woken
+          </span>
+        )}
       </div>
     </div>
   );

@@ -150,6 +150,12 @@ export const TOOL_PERMISSIONS: Record<
   // every read/cancel to the caller's `(conversation, principal)` pair.
   list_background_tasks: null,
   cancel_background_task: null,
+  // Scheduled wakeups are schedule_triggers rows: mirror the REST surface's
+  // scheduledTask permissions. Handlers additionally scope every operation to
+  // the caller's own triggers on the current conversation.
+  schedule_wakeup: { resource: "scheduledTask", action: "create" },
+  list_scheduled_wakeups: { resource: "scheduledTask", action: "read" },
+  cancel_scheduled_wakeup: { resource: "scheduledTask", action: "delete" },
   create_project_from_conversation: { resource: "project", action: "create" },
   // Coarse gate matching the SetProjectShare route; the service additionally
   // restricts to the owner/project-admin and gates org-wide visibility behind

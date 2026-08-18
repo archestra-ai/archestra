@@ -8,19 +8,21 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  ConversationModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import { ProviderError } from "@/routes/chat/errors";
+import { conversationWakeService } from "@/services/conversation-wake";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
   persistRunUserMessage,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
-import type { Conversation } from "@/types";
+import type { Conversation, ScheduleTrigger } from "@/types";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -101,31 +103,77 @@ export async function handleScheduleTriggerRunExecution(
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
-    // For a project-scoped trigger, materialize the run's chat conversation up
-    // front and execute against it, so the file tools resolve the project scope
-    // (results land in the project). Unscoped triggers keep the headless path.
-    let conversationId: string | undefined;
-    if (trigger.projectId) {
-      const conversation = await createAndLinkRunConversation({
-        run,
-        trigger,
-        ownerUserId: actor.id,
+    if (trigger.conversationId) {
+      // Conversation-targeted wakeup (created by the schedule_wakeup chat
+      // tool): deliver into the EXISTING conversation through the wake
+      // service — a viewing browser answers it as a streaming turn, and with
+      // no browser the wake service runs the turn headlessly. No run
+      // conversation is created; the run links to the target conversation.
+      const conversation = await ConversationModel.findByIdInOrganization({
+        id: trigger.conversationId,
         organizationId: trigger.organizationId,
       });
-      conversationId = conversation.id;
-      runConversation = conversation;
-    }
+      if (!conversation) {
+        throw new Error("The wakeup's conversation no longer exists");
+      }
+      if (conversation.userId !== actor.id) {
+        // Defensive: wakeups are created by the conversation owner, and the
+        // wake turn runs as the owner — refuse if that invariant ever breaks.
+        throw new Error(
+          "The wakeup's conversation no longer belongs to its creator",
+        );
+      }
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      const delivered = await conversationWakeService.deliver({
+        conversationId: conversation.id,
+        messageId: `sched-wake-${run.id}`,
+        text: buildScheduledWakeupText(trigger),
+        metadata: {
+          scheduledWakeup: {
+            triggerId: trigger.id,
+            runId: run.id,
+            name: trigger.name,
+            recurring: trigger.runAt === null,
+          },
+        },
+        fallbackUserId: actor.id,
+      });
+      if (!delivered) {
+        throw new Error(
+          "Wake delivery was refused — the conversation was deleted or is locked",
+        );
+      }
+    } else {
+      // For a project-scoped trigger, materialize the run's chat conversation
+      // up front and execute against it, so the file tools resolve the project
+      // scope (results land in the project). Unscoped triggers keep the
+      // headless path.
+      let conversationId: string | undefined;
+      if (trigger.projectId) {
+        const conversation = await createAndLinkRunConversation({
+          run,
+          trigger,
+          ownerUserId: actor.id,
+          organizationId: trigger.organizationId,
+        });
+        conversationId = conversation.id;
+        runConversation = conversation;
+      }
 
-    executeResult = await executeA2AMessage({
-      agentId: trigger.agentId,
-      message: trigger.messageTemplate,
-      organizationId: trigger.organizationId,
-      userId: actor.id,
-      sessionId: `scheduled-${run.id}`,
-      conversationId,
-      source: "schedule-trigger",
-      scheduleTriggerRunId: run.id,
-    });
+      executeResult = await executeA2AMessage({
+        agentId: trigger.agentId,
+        message: trigger.messageTemplate,
+        organizationId: trigger.organizationId,
+        userId: actor.id,
+        sessionId: `scheduled-${run.id}`,
+        conversationId,
+        source: "schedule-trigger",
+        scheduleTriggerRunId: run.id,
+      });
+    }
   } catch (error) {
     status = "failed";
     errorMessage = formatScheduleTriggerExecutionError(
@@ -212,6 +260,18 @@ export async function handleScheduleTriggerRunExecution(
   logger.info(
     { runId: run.id, triggerId: run.triggerId, status, error: errorMessage },
     "Schedule trigger run completed",
+  );
+}
+
+/**
+ * The wake-notification text a conversation-targeted wakeup injects. The
+ * scheduled prompt is the payload; the framing tells the model where it came
+ * from so it reacts rather than treating it as a fresh user question.
+ */
+function buildScheduledWakeupText(trigger: ScheduleTrigger): string {
+  return (
+    `[Scheduled wakeup] ${trigger.name}\n\n${trigger.messageTemplate}\n\n` +
+    "(This scheduled check-in was set up earlier in this conversation. Act on it now and report anything noteworthy to the user.)"
   );
 }
 

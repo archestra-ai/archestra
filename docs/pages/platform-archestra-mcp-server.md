@@ -1938,6 +1938,9 @@ Required RBAC permission: `knowledgeSource:update`
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
 | `list_background_tasks` | List this conversation's background tasks (delegations or skill runs started with background: true): their status, which subagent runs them, and when they started or settled. | None (no additional RBAC permission required) |
 | `cancel_background_task` | Cancel one of this conversation's still-running background tasks by taskId (from the spawn confirmation or list_background_tasks). | None (no additional RBAC permission required) |
+| `schedule_wakeup` | Schedule a future turn in THIS conversation: at the given time (one-shot reminder) or on a cron schedule (recurring check-in), this conversation wakes up with your prompt and you act on it — whethe... | `scheduledTask:create` |
+| `list_scheduled_wakeups` | List this conversation's scheduled wakeups: one-shot reminders and recurring check-ins, including spent one-shots (enabled: false). | `scheduledTask:read` |
+| `cancel_scheduled_wakeup` | Cancel (delete) one of this conversation's scheduled wakeups by wakeupId (from schedule_wakeup or list_scheduled_wakeups). | `scheduledTask:delete` |
 
 #### todo_write
 
@@ -1993,6 +1996,72 @@ Required RBAC permission: None (no additional RBAC permission required)
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `cancelled` | `boolean` | Yes | True when this call cancelled the task; false when there was nothing to cancel (already settled, unknown, or not yours). |
+
+#### schedule_wakeup
+
+Required RBAC permission: `scheduledTask:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | `string` | Yes | What the wakeup turn should do, written as an instruction to your future self (context included — the wakeup turn sees the conversation history). |
+| `at` | `string` | No | One-shot fire time, ISO 8601 (e.g. 2026-08-18T17:00:00Z or with offset). Mutually exclusive with `cron`. |
+| `cron` | `string` | No | 5-part cron expression for a recurring wakeup (e.g. '0 9 * * 1-5'). Mutually exclusive with `at`. |
+| `timezone` | `string` | No | IANA timezone the schedule is evaluated in (default UTC). Set it whenever the user names a local time. |
+| `name` | `string` | No | Short label; derived from the prompt when omitted. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `wakeup` | `object` | Yes |  |
+| `wakeup.wakeupId` | `string` | Yes | The wakeup's id (for cancel_scheduled_wakeup). |
+| `wakeup.name` | `string` | Yes | Short human-readable label. |
+| `wakeup.prompt` | `string` | Yes | What the wakeup turn will be asked to do. |
+| `wakeup.recurring` | `boolean` | Yes | True for cron wakeups, false for one-shots. |
+| `wakeup.cron` | `string \| null` | Yes | The cron expression (recurring wakeups). |
+| `wakeup.runAt` | `string \| null` | Yes | The one-shot fire time (ISO), null for recurring wakeups. |
+| `wakeup.timezone` | `string` | Yes | IANA timezone the schedule is evaluated in. |
+| `wakeup.enabled` | `boolean` | Yes | False once a one-shot has fired or the wakeup was disabled. |
+| `wakeup.lastFiredAt` | `string \| null` | Yes | When the wakeup last fired, null if never. |
+
+#### list_scheduled_wakeups
+
+Required RBAC permission: `scheduledTask:read`
+
+This tool takes no arguments.
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `wakeups` | `object[]` | Yes |  |
+| `wakeups[].wakeupId` | `string` | Yes | The wakeup's id (for cancel_scheduled_wakeup). |
+| `wakeups[].name` | `string` | Yes | Short human-readable label. |
+| `wakeups[].prompt` | `string` | Yes | What the wakeup turn will be asked to do. |
+| `wakeups[].recurring` | `boolean` | Yes | True for cron wakeups, false for one-shots. |
+| `wakeups[].cron` | `string \| null` | Yes | The cron expression (recurring wakeups). |
+| `wakeups[].runAt` | `string \| null` | Yes | The one-shot fire time (ISO), null for recurring wakeups. |
+| `wakeups[].timezone` | `string` | Yes | IANA timezone the schedule is evaluated in. |
+| `wakeups[].enabled` | `boolean` | Yes | False once a one-shot has fired or the wakeup was disabled. |
+| `wakeups[].lastFiredAt` | `string \| null` | Yes | When the wakeup last fired, null if never. |
+
+#### cancel_scheduled_wakeup
+
+Required RBAC permission: `scheduledTask:delete`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `wakeupId` | `string` | Yes | Id of the wakeup to cancel. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `cancelled` | `boolean` | Yes | True when the wakeup was deleted; false when it did not exist, was not yours, or belongs to another conversation. |
 
 ### Projects
 

@@ -131,17 +131,28 @@ function validateScheduleTriggerFields(
   data: {
     cronExpression?: string | null;
     timezone?: string | null;
+    /** One-shot triggers carry `runAt` INSTEAD of a cron expression. */
+    runAt?: Date | null;
   },
   ctx: z.RefinementCtx,
 ) {
   const cronExpression = data.cronExpression?.trim();
   const timezone = data.timezone?.trim();
+  const hasRunAt = data.runAt != null;
 
-  if (!cronExpression) {
+  if (!cronExpression && !hasRunAt) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Cron expression is required",
       path: ["cronExpression"],
+    });
+  }
+  if (cronExpression && hasRunAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Provide either a cron expression (recurring) or a run time (one-shot), not both",
+      path: ["runAt"],
     });
   }
 

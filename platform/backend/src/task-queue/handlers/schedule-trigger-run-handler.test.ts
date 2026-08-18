@@ -29,8 +29,16 @@ vi.mock("@/services/scheduled-run-conversation", () => ({
   recordRunConversationError: mockRecordRunConversationError,
 }));
 
+// The wake service owns notification persistence, idle-wait, and the
+// browser-or-headless turn; it has its own tests. Here it is a boundary.
+const mockWakeDeliver = vi.hoisted(() => vi.fn());
+vi.mock("@/services/conversation-wake", () => ({
+  conversationWakeService: { deliver: mockWakeDeliver },
+}));
+
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import {
+  ConversationModel,
   ProjectModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
@@ -48,7 +56,143 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockPersistRunConversationMessages.mockReset().mockResolvedValue(undefined);
     mockRecordRunConversationError.mockReset().mockResolvedValue(undefined);
     mockPersistRunUserMessage.mockReset().mockResolvedValue(undefined);
+    mockWakeDeliver.mockReset().mockResolvedValue(true);
   });
+
+  async function setupConversationWakeup(fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeInternalAgent: any;
+    makeScheduleTrigger: any;
+    makeScheduleTriggerRun: any;
+  }) {
+    const org = await fixtures.makeOrganization();
+    const actor = await fixtures.makeUser();
+    await fixtures.makeMember(actor.id, org.id);
+    const agent = await fixtures.makeInternalAgent({ organizationId: org.id });
+    const conversation = await ConversationModel.create({
+      userId: actor.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "wakeup target",
+    });
+    const trigger = await fixtures.makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      cronExpression: null,
+      runAt: new Date(Date.now() - 60_000),
+      conversationId: conversation.id,
+    });
+    const run = await fixtures.makeScheduleTriggerRun(trigger.id);
+    return { org, actor, agent, conversation, trigger, run };
+  }
+
+  test("a conversation-targeted wakeup delivers through the wake service and links the run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { conversation, trigger, run } = await setupConversationWakeup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    const completed = await ScheduleTriggerRunModel.findById(run.id);
+    expect(completed?.status).toBe("success");
+    expect(completed?.chatConversationId).toBe(conversation.id);
+    // No run conversation is created and no direct execution happens — the
+    // wake service owns the turn.
+    expect(mockCreateAndLinkRunConversation).not.toHaveBeenCalled();
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    expect(mockWakeDeliver).toHaveBeenCalledTimes(1);
+    const delivery = mockWakeDeliver.mock.calls[0][0];
+    expect(delivery.conversationId).toBe(conversation.id);
+    expect(delivery.messageId).toBe(`sched-wake-${run.id}`);
+    expect(delivery.text).toContain(trigger.messageTemplate);
+    expect(delivery.metadata.scheduledWakeup).toMatchObject({
+      triggerId: trigger.id,
+      runId: run.id,
+      recurring: false,
+    });
+  });
+
+  test("a refused wake delivery (locked or deleted conversation) fails the run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { trigger, run } = await setupConversationWakeup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    mockWakeDeliver.mockResolvedValue(false);
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    const completed = await ScheduleTriggerRunModel.findById(run.id);
+    expect(completed?.status).toBe("failed");
+    expect(completed?.error).toContain("refused");
+  });
+
+  test("a wakeup whose conversation was hard-deleted fails the run without delivering", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const { conversation, trigger, run } = await setupConversationWakeup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalAgent,
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    });
+    await ConversationModel.hardDelete(
+      conversation.id,
+      conversation.userId,
+      conversation.organizationId,
+    );
+    // Deleting the conversation cascades through the trigger to its runs —
+    // nothing is left to fire, which is exactly the contract: a deleted
+    // conversation takes its wakeups with it.
+    expect(await ScheduleTriggerModel.findById(trigger.id)).toBeNull();
+    expect(await ScheduleTriggerRunModel.findById(run.id)).toBeNull();
+
+    // A stale queue payload referencing the reaped run is a clean no-op.
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+    expect(mockWakeDeliver).not.toHaveBeenCalled();
+  });
+
 
   test("executes A2A message and marks run as success", async ({
     makeOrganization,

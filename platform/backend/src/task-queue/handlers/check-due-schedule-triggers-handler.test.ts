@@ -65,6 +65,33 @@ describe("handleCheckDueScheduleTriggers", () => {
     );
   });
 
+  test("a due one-shot fires once and is disabled afterwards", async ({
+    makeScheduleTrigger,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      cronExpression: null,
+      runAt: TWO_MIN_AGO(),
+    });
+
+    await handleCheckDueScheduleTriggers();
+
+    const runs = await ScheduleTriggerRunModel.listByTrigger({
+      organizationId: trigger.organizationId,
+      triggerId: trigger.id,
+    });
+    expect(runs).toHaveLength(1);
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+
+    const reloaded = await ScheduleTriggerModel.findById(trigger.id);
+    expect(reloaded?.enabled).toBe(false);
+    expect(reloaded?.lastExecutedAt).not.toBeNull();
+
+    // A second sweep finds nothing to do for it.
+    mockEnqueue.mockClear();
+    await handleCheckDueScheduleTriggers();
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
   test("creates failed run and skips enqueue when task already in flight", async ({
     makeScheduleTrigger,
   }) => {

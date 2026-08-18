@@ -20,6 +20,30 @@ describe("ScheduleTriggerModel.findDueTriggers", () => {
     expect(due.map((t) => t.id)).toContain(trigger.id);
   });
 
+  test("one-shot (runAt) triggers: due once their time passes, never again after firing", async ({
+    makeScheduleTrigger,
+  }) => {
+    const past = await makeScheduleTrigger({
+      cronExpression: null,
+      runAt: new Date(Date.now() - 60_000),
+    });
+    const future = await makeScheduleTrigger({
+      cronExpression: null,
+      runAt: new Date(Date.now() + 60 * 60_000),
+    });
+
+    const due = await ScheduleTriggerModel.findDueTriggers(new Date());
+    const dueIds = due.map((t) => t.id);
+    expect(dueIds).toContain(past.id);
+    expect(dueIds).not.toContain(future.id);
+
+    // Once fired (lastExecutedAt set), a one-shot is never due again — even
+    // while still enabled.
+    await ScheduleTriggerModel.markExecuted(past.id, new Date());
+    const dueAfter = await ScheduleTriggerModel.findDueTriggers(new Date());
+    expect(dueAfter.map((t) => t.id)).not.toContain(past.id);
+  });
+
   test("does not return trigger when lastExecutedAt is recent", async ({
     makeScheduleTrigger,
   }) => {

@@ -77189,7 +77189,9 @@ export type GetScheduleTriggersResponses = {
             agentId: string;
             projectId: string | null;
             messageTemplate: string;
-            cronExpression: string;
+            cronExpression: string | null;
+            runAt: string | null;
+            conversationId: string | null;
             timezone: string;
             enabled: boolean;
             actorUserId: string;
@@ -77310,7 +77312,9 @@ export type CreateScheduleTriggerResponses = {
         agentId: string;
         projectId: string | null;
         messageTemplate: string;
-        cronExpression: string;
+        cronExpression: string | null;
+        runAt: string | null;
+        conversationId: string | null;
         timezone: string;
         enabled: boolean;
         actorUserId: string;
@@ -77501,7 +77505,9 @@ export type GetScheduleTriggerResponses = {
         agentId: string;
         projectId: string | null;
         messageTemplate: string;
-        cronExpression: string;
+        cronExpression: string | null;
+        runAt: string | null;
+        conversationId: string | null;
         timezone: string;
         enabled: boolean;
         actorUserId: string;
@@ -77615,7 +77621,9 @@ export type UpdateScheduleTriggerResponses = {
         agentId: string;
         projectId: string | null;
         messageTemplate: string;
-        cronExpression: string;
+        cronExpression: string | null;
+        runAt: string | null;
+        conversationId: string | null;
         timezone: string;
         enabled: boolean;
         actorUserId: string;
@@ -77721,7 +77729,9 @@ export type EnableScheduleTriggerResponses = {
         agentId: string;
         projectId: string | null;
         messageTemplate: string;
-        cronExpression: string;
+        cronExpression: string | null;
+        runAt: string | null;
+        conversationId: string | null;
         timezone: string;
         enabled: boolean;
         actorUserId: string;
@@ -77827,7 +77837,9 @@ export type DisableScheduleTriggerResponses = {
         agentId: string;
         projectId: string | null;
         messageTemplate: string;
-        cronExpression: string;
+        cronExpression: string | null;
+        runAt: string | null;
+        conversationId: string | null;
         timezone: string;
         enabled: boolean;
         actorUserId: string;

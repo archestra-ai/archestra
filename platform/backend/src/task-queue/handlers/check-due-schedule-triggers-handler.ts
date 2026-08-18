@@ -46,6 +46,13 @@ export async function handleCheckDueScheduleTriggers(): Promise<void> {
 
       await ScheduleTriggerModel.markExecuted(trigger.id, now);
 
+      // A one-shot (`runAt`) trigger just fired: `lastExecutedAt` alone
+      // already prevents a re-fire, but disabling makes the row read as
+      // spent everywhere it is listed.
+      if (trigger.runAt !== null) {
+        await ScheduleTriggerModel.update(trigger.id, { enabled: false });
+      }
+
       await taskQueueService.enqueue({
         taskType: "schedule_trigger_run_execute",
         payload: { runId: run.id, triggerId: trigger.id },

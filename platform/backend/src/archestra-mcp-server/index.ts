@@ -31,6 +31,10 @@ import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
+import {
+  toolEntries as scheduledWakeupToolEntries,
+  tools as scheduledWakeupTools,
+} from "./scheduled-wakeups";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
 import {
@@ -153,6 +157,7 @@ function getToolEntries(): Partial<
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
+      ...scheduledWakeupToolEntries,
       ...projectToolEntries,
       ...searchToolEntries,
       ...runToolEntries,
@@ -188,6 +193,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,
+      ...scheduledWakeupTools,
       ...projectTools,
       ...searchToolTools,
       ...runToolTools,

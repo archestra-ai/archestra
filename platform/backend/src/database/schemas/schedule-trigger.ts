@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   pgTable,
   text,
@@ -7,6 +9,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+import conversationsTable from "./conversation";
 import projectsTable from "./project";
 import usersTable from "./user";
 
@@ -30,7 +33,22 @@ const scheduleTriggersTable = pgTable(
       onDelete: "cascade",
     }),
     messageTemplate: text("message_template").notNull(),
-    cronExpression: text("cron_expression").notNull(),
+    /**
+     * Recurrence: exactly one of `cronExpression` (recurring) or `runAt`
+     * (one-shot) is set — enforced by the CHECK below.
+     */
+    cronExpression: text("cron_expression"),
+    /** One-shot wakeup time. Fires once (`lastExecutedAt` null = not yet). */
+    runAt: timestamp("run_at", { withTimezone: true, mode: "date" }),
+    /**
+     * Chat conversation the run is delivered back into as a wake (created by
+     * the `schedule_wakeup` tool). Null = classic trigger: each run gets its
+     * own conversation. CASCADE: a deleted conversation takes its wakeups.
+     */
+    conversationId: uuid("conversation_id").references(
+      () => conversationsTable.id,
+      { onDelete: "cascade" },
+    ),
     timezone: text("timezone").notNull(),
     enabled: boolean("enabled").notNull().default(true),
     actorUserId: text("actor_user_id")
@@ -51,6 +69,11 @@ const scheduleTriggersTable = pgTable(
     index("schedule_triggers_enabled_last_executed_at_idx").on(
       table.enabled,
       table.lastExecutedAt,
+    ),
+    index("schedule_triggers_conversation_id_idx").on(table.conversationId),
+    check(
+      "schedule_triggers_cron_or_run_at_chk",
+      sql`(cron_expression IS NOT NULL) <> (run_at IS NOT NULL)`,
     ),
   ],
 );

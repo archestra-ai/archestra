@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.40](https://github.com/archestra-ai/archestra/compare/platform-v1.3.39...platform-v1.3.40) (2026-08-18)
+
+
+### Features
+
+* **knowledge:** Document OCR — transcribe scanned PDF pages with a vision model at sync time ([#7318](https://github.com/archestra-ai/archestra/issues/7318)) ([4d00d88](https://github.com/archestra-ai/archestra/commit/4d00d883c41ce7e8347a0368abb751d8a84f16e2))
+* **knowledge:** Knowledge Files — a document repository with visibility, indexing, and OCR for scans ([#7321](https://github.com/archestra-ai/archestra/issues/7321)) ([9f1dfba](https://github.com/archestra-ai/archestra/commit/9f1dfbadbdbd5745c74eeee85d5cb549b8535e12))
+* **knowledge:** say what an auto-sync credential needs, on the field that needs it ([#7310](https://github.com/archestra-ai/archestra/issues/7310)) ([02db11d](https://github.com/archestra-ai/archestra/commit/02db11d429432454c4c9d637d967eb8c96b56638))
+* **knowledge:** surface text-only embedding limitations ([#7315](https://github.com/archestra-ai/archestra/issues/7315)) ([c537a18](https://github.com/archestra-ai/archestra/commit/c537a18e33d6fd53b4115f40801fb87f7d62bfb0))
+* **organization:** let admins turn off model providers, messaging channels, and knowledge connectors ([#7320](https://github.com/archestra-ai/archestra/issues/7320)) ([c0e6070](https://github.com/archestra-ai/archestra/commit/c0e6070ebfe6c2c6af1108443193a8830a92c442))
+
+
+### Bug Fixes
+
+* address five recurring production error hotspots ([#7316](https://github.com/archestra-ai/archestra/issues/7316)) ([953b058](https://github.com/archestra-ai/archestra/commit/953b0580edaa52bde4542202f744cc47781cd904))
+* **dev:** unwedge db:clean, openapi codegen, the API client input, and the mock seed ([#7306](https://github.com/archestra-ai/archestra/issues/7306)) ([7c20d0c](https://github.com/archestra-ai/archestra/commit/7c20d0c87fd202a877a1bcca6ec5ed5c8cdb1cd4))
+* **llm-proxy:** make the virtual-key failure limiter's window actually roll ([#7322](https://github.com/archestra-ai/archestra/issues/7322)) ([bf59284](https://github.com/archestra-ai/archestra/commit/bf592846680fea919cc56bf894df99314f5dc781))
+* **mcp-registry:** send the edit wizard's save straight to Test Connection ([#7312](https://github.com/archestra-ai/archestra/issues/7312)) ([727a4b2](https://github.com/archestra-ai/archestra/commit/727a4b2282153eab048358c855b54268f9c72366))
+* **mcp:** stop the server detail page 404-flashing on its way out of a delete ([#7313](https://github.com/archestra-ai/archestra/issues/7313)) ([ad16ccf](https://github.com/archestra-ai/archestra/commit/ad16ccf21965215f45f82aeeb427597252ccf0d6))
+* **oauth:** recover dynamic client registration when configured scopes are rejected ([#7311](https://github.com/archestra-ai/archestra/issues/7311)) ([59cd2ab](https://github.com/archestra-ai/archestra/commit/59cd2ab8d47990f0177a934ba423cc62c843a0d5))
+
 ## [1.3.39](https://github.com/archestra-ai/archestra/compare/platform-v1.3.38...platform-v1.3.39) (2026-08-16)
 
 

@@ -120,6 +120,7 @@ export default function NewBatchAnalysisPage() {
           name: column.name,
           prompt: column.prompt,
           format: column.format,
+          flag: column.flag || undefined,
         })),
         scope,
         teamIds: scope === "team" ? scopeTeamIds : [],

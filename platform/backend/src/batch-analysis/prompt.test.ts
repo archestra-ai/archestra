@@ -83,6 +83,7 @@ describe("parseBatchAnalysisResult", () => {
     expect(result.answers.get("effective_date")).toEqual({
       value: "2026-01-01",
       quote: "Effective 2026-01-01",
+      flag: null,
     });
     expect(result.answers.get("has_sso")?.value).toBe("yes");
   });
@@ -96,7 +97,7 @@ describe("parseBatchAnalysisResult", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.answers.get("seats")).toEqual({ value: "250", quote: null });
+    expect(result.answers.get("seats")).toEqual({ value: "250", quote: null, flag: null });
   });
 
   test("strips a markdown code fence around the JSON", () => {
@@ -108,6 +109,23 @@ describe("parseBatchAnalysisResult", () => {
     expect(result.answers.get("a")?.value).toBe("x");
   });
 
+  test("accepts a valid triage flag and discards an unrecognised one", () => {
+    const result = parseBatchAnalysisResult(
+      JSON.stringify({
+        a: { value: "risky", quote: null, flag: "RED" },
+        b: { value: "fine", quote: null, flag: "purple" },
+        c: { value: "plain", quote: null },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Case-insensitive on the way in, canonical on the way out.
+    expect(result.answers.get("a")?.flag).toBe("red");
+    // An invalid flag never fails the row — the answer stands, flagless.
+    expect(result.answers.get("b")?.flag).toBeNull();
+    expect(result.answers.get("c")?.flag).toBeNull();
+  });
+
   test("normalizes an empty answer to the not-found sentinel", () => {
     const result = parseBatchAnalysisResult(
       JSON.stringify({ a: { value: "   ", quote: "  " } }),
@@ -117,6 +135,7 @@ describe("parseBatchAnalysisResult", () => {
     expect(result.answers.get("a")).toEqual({
       value: NOT_FOUND_VALUE,
       quote: null,
+      flag: null,
     });
   });
 

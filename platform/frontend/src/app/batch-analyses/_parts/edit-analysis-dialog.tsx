@@ -67,6 +67,7 @@ export function EditAnalysisDialog({
         name: column.name,
         prompt: column.prompt,
         format: column.format,
+        flag: column.flag ?? false,
       })),
     });
     setScope(analysis.scope);
@@ -95,6 +96,7 @@ export function EditAnalysisDialog({
               name: column.name.trim(),
               prompt: column.prompt.trim(),
               format: column.format,
+              flag: column.flag || undefined,
             }));
           })(),
           scope,

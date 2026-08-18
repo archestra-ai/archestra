@@ -82,7 +82,7 @@ describe("executeRow", () => {
   test("omits the sampling temperature for thinking-by-default models", async () => {
     // Anthropic 400s the whole row ("temperature may only be set to 1 when
     // thinking is enabled or in adaptive mode") if the executor pins 0.
-    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValueOnce({
       provider: "anthropic",
       modelName: "claude-sonnet-5",
       apiKey: "sk-ant-test",
@@ -123,7 +123,7 @@ describe("executeRow", () => {
     // model needs lives on the synced model row. Without this lookup the run
     // fails with "model … is not accessible via the /chat/completions
     // endpoint" while the same model works in chat.
-    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValueOnce({
       provider: "github-copilot",
       modelName: "gpt-5.3-codex",
       apiKey: "gho_test",

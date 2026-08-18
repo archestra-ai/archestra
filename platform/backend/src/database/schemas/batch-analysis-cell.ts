@@ -8,10 +8,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  BatchAnalysisCellFlag,
   BatchAnalysisCellStatus,
   BatchAnalysisCitation,
 } from "@/types/batch-analysis";
 import batchAnalysisRowsTable from "./batch-analysis-row";
+import usersTable from "./user";
 
 /**
  * One `(row, column)` intersection.
@@ -36,6 +38,21 @@ const batchAnalysisCellsTable = pgTable(
       .default("pending"),
     content: text("content"),
     citations: jsonb("citations").$type<BatchAnalysisCitation[]>(),
+    /**
+     * Model-assigned triage flag, produced only for columns that opted in.
+     * NULL = column not flagged, answer not generated yet, or the model gave
+     * no usable flag.
+     */
+    flag: text("flag").$type<BatchAnalysisCellFlag>(),
+    /**
+     * Human sign-off, mirroring the catalog approval pattern: `verifiedAt` is
+     * the verified predicate; `verifiedBy` may go NULL if the reviewer is
+     * deleted while the sign-off itself stands. Regeneration clears both.
+     */
+    verifiedBy: text("verified_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    verifiedAt: timestamp("verified_at", { mode: "date" }),
     error: text("error"),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

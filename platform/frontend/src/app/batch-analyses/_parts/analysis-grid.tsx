@@ -6,6 +6,7 @@ import {
   AlertCircle,
   AlignLeft,
   BookOpen,
+  CheckCircle2,
   FileText,
   Loader2,
   Plus,
@@ -22,6 +23,7 @@ import {
   DataGrid,
   type DataGridHandle,
 } from "react-data-grid";
+import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import type { PreviewableSourceText } from "@/app/batch-analyses/_parts/source-text-dialog";
 import type { PreviewableDocument } from "@/components/files/file-preview-dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -386,11 +388,23 @@ function CellContent({ cell }: { cell: Cell | undefined }) {
   }
   return (
     <span className="flex items-start gap-1">
+      {cell.flag && (
+        <span
+          title={CELL_FLAG_META[cell.flag].label}
+          className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CELL_FLAG_META[cell.flag].dotClass}`}
+        />
+      )}
       <span className="line-clamp-3 whitespace-pre-wrap text-sm">
         {cell.content}
       </span>
       {(cell.citations?.length ?? 0) > 0 && (
         <Quote className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+      )}
+      {cell.verifiedAt && (
+        <CheckCircle2
+          aria-label="Verified"
+          className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500"
+        />
       )}
     </span>
   );

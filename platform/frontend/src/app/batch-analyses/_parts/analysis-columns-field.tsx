@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
   FormField,
@@ -41,6 +42,8 @@ interface ColumnFormValue {
   name: string;
   prompt: string;
   format: (typeof COLUMN_FORMATS)[number]["value"];
+  /** Ask the model to also rate this column's answers green/yellow/red/grey. */
+  flag?: boolean;
 }
 
 export interface CreateAnalysisFormValues {
@@ -158,6 +161,25 @@ export function AnalysisColumnsField({
                   />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={`columns.${index}.flag`}
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center gap-2 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value ?? false}
+                    onCheckedChange={(checked) =>
+                      field.onChange(checked === true)
+                    }
+                  />
+                </FormControl>
+                <FormLabel className="cursor-pointer font-normal text-muted-foreground text-xs">
+                  Triage flag — also rate each answer green / yellow / red
+                </FormLabel>
               </FormItem>
             )}
           />

@@ -1946,6 +1946,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteBatchAnalysisRow]: { batchAnalysis: ["update"] },
   [RouteId.StartBatchAnalysisRun]: { batchAnalysis: ["execute"] },
   [RouteId.RetryBatchAnalysisCell]: { batchAnalysis: ["execute"] },
+  [RouteId.VerifyBatchAnalysisCells]: { batchAnalysis: ["update"] },
 
   // Knowledge files. Reads are `knowledgeSource:read` like every other
   // knowledge surface; indexing a file into a base changes what agents can

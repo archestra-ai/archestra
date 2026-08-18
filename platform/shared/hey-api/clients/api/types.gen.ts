@@ -24682,6 +24682,7 @@ export type GetBatchAnalysesResponses = {
                 name: string;
                 prompt: string;
                 format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+                flag?: boolean;
             }>;
             createdBy: string;
             createdAt: string;
@@ -24710,6 +24711,7 @@ export type CreateBatchAnalysisData = {
             name: string;
             prompt: string;
             format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+            flag?: boolean;
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
@@ -24799,6 +24801,7 @@ export type CreateBatchAnalysisResponses = {
             name: string;
             prompt: string;
             format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+            flag?: boolean;
         }>;
         createdBy: string;
         createdAt: string;
@@ -24984,6 +24987,7 @@ export type GetBatchAnalysisResponses = {
                 name: string;
                 prompt: string;
                 format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+                flag?: boolean;
             }>;
             createdBy: string;
             createdAt: string;
@@ -25022,8 +25026,12 @@ export type GetBatchAnalysisResponses = {
             citations: Array<{
                 quote: string;
             }> | null;
+            flag: 'green' | 'grey' | 'yellow' | 'red';
+            verifiedBy: string | null;
+            verifiedAt: string | null;
             error: string | null;
             updatedAt: string;
+            verifiedByName: string | null;
         }>;
         latestRun: {
             id: string;
@@ -25054,6 +25062,7 @@ export type UpdateBatchAnalysisData = {
             name: string;
             prompt: string;
             format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+            flag?: boolean;
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
@@ -25145,6 +25154,7 @@ export type UpdateBatchAnalysisResponses = {
             name: string;
             prompt: string;
             format: 'text' | 'boolean' | 'date' | 'number' | 'list' | 'exact_quote';
+            flag?: boolean;
         }>;
         createdBy: string;
         createdAt: string;
@@ -25552,6 +25562,111 @@ export type RetryBatchAnalysisCellResponses = {
 };
 
 export type RetryBatchAnalysisCellResponse = RetryBatchAnalysisCellResponses[keyof RetryBatchAnalysisCellResponses];
+
+export type VerifyBatchAnalysisCellsData = {
+    body: {
+        entries: Array<{
+            rowId: string;
+            columnKey: string;
+            verified: boolean;
+        }>;
+    };
+    path: {
+        analysisId: string;
+    };
+    query?: never;
+    url: '/api/batch-analyses/{analysisId}/cells/verification';
+};
+
+export type VerifyBatchAnalysisCellsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type VerifyBatchAnalysisCellsError = VerifyBatchAnalysisCellsErrors[keyof VerifyBatchAnalysisCellsErrors];
+
+export type VerifyBatchAnalysisCellsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        cells: Array<{
+            id: string;
+            rowId: string;
+            columnKey: string;
+            status: 'pending' | 'generating' | 'done' | 'error';
+            content: string | null;
+            citations: Array<{
+                quote: string;
+            }> | null;
+            flag: 'green' | 'grey' | 'yellow' | 'red';
+            verifiedBy: string | null;
+            verifiedAt: string | null;
+            error: string | null;
+            updatedAt: string;
+        }>;
+    };
+};
+
+export type VerifyBatchAnalysisCellsResponse = VerifyBatchAnalysisCellsResponses[keyof VerifyBatchAnalysisCellsResponses];
 
 export type BedrockOpenaiChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;

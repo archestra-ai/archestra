@@ -142,7 +142,7 @@ export const AUDIT_DECISIONS = {
   batchAnalysisCellsTable: {
     audited: false,
     reason:
-      "per-cell results written by workers; high-volume execution output, not admin-mutable state",
+      "per-cell results written by workers; high-volume execution output. The one admin-mutable slice — human verification — is audited by the dedicated /cells/verification registry entry against the parent analysis",
   },
   toolsTable: { audited: true, model: ToolModel },
   toolInvocationPoliciesTable: {

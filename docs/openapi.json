@@ -86357,6 +86357,9 @@
                                     "list",
                                     "exact_quote"
                                   ]
+                                },
+                                "flag": {
+                                  "type": "boolean"
                                 }
                               },
                               "required": [
@@ -86743,6 +86746,9 @@
                             "list",
                             "exact_quote"
                           ]
+                        },
+                        "flag": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -86844,6 +86850,9 @@
                               "list",
                               "exact_quote"
                             ]
+                          },
+                          "flag": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -87184,6 +87193,9 @@
                             "list",
                             "exact_quote"
                           ]
+                        },
+                        "flag": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -87297,6 +87309,9 @@
                               "list",
                               "exact_quote"
                             ]
+                          },
+                          "flag": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -87939,6 +87954,9 @@
                                   "list",
                                   "exact_quote"
                                 ]
+                              },
+                              "flag": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -88165,6 +88183,25 @@
                               "additionalProperties": false
                             }
                           },
+                          "flag": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "green",
+                              "grey",
+                              "yellow",
+                              "red"
+                            ]
+                          },
+                          "verifiedBy": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "verifiedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "error": {
                             "nullable": true,
                             "type": "string"
@@ -88172,6 +88209,10 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "verifiedByName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -88181,8 +88222,12 @@
                           "status",
                           "content",
                           "citations",
+                          "flag",
+                          "verifiedBy",
+                          "verifiedAt",
                           "error",
-                          "updatedAt"
+                          "updatedAt",
+                          "verifiedByName"
                         ],
                         "additionalProperties": false
                       }
@@ -90007,6 +90052,414 @@
           "kind": "static",
           "permissions": [
             "batchAnalysis:execute"
+          ]
+        }
+      }
+    },
+    "/api/batch-analyses/{analysisId}/cells/verification": {
+      "patch": {
+        "operationId": "verifyBatchAnalysisCells",
+        "tags": [
+          "Batch Analysis"
+        ],
+        "description": "Mark cells as human-verified, or clear the mark. Only completed answers can be verified; regeneration clears the mark automatically.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`batchAnalysis:update`: Modify batch analyses and add rows to them",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entries": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "rowId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "columnKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "verified": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "rowId",
+                        "columnKey",
+                        "verified"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "entries"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "analysisId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cells": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "rowId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "columnKey": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "generating",
+                              "done",
+                              "error"
+                            ]
+                          },
+                          "content": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "citations": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "flag": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "green",
+                              "grey",
+                              "yellow",
+                              "red"
+                            ]
+                          },
+                          "verifiedBy": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "verifiedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "error": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "rowId",
+                          "columnKey",
+                          "status",
+                          "content",
+                          "citations",
+                          "flag",
+                          "verifiedBy",
+                          "verifiedAt",
+                          "error",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "cells"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "batchAnalysis:update"
           ]
         }
       }

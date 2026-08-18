@@ -100,7 +100,8 @@ export default function BatchAnalysisDetailPage() {
     const cells = data?.cells ?? [];
     const done = cells.filter((cell) => cell.status === "done").length;
     const errored = cells.filter((cell) => cell.status === "error").length;
-    return { done, errored, total: cells.length };
+    const verified = cells.filter((cell) => cell.verifiedAt !== null).length;
+    return { done, errored, verified, total: cells.length };
   }, [data?.cells]);
 
   if (isLoadingError) {
@@ -167,6 +168,9 @@ export default function BatchAnalysisDetailPage() {
           created and destroyed on a condition flip is what crashes the
           page under machine translation. */}
       {progress.errored > 0 && <span>{`· ${progress.errored} failed`}</span>}
+      {progress.verified > 0 && (
+        <span>{`· ${progress.verified} verified`}</span>
+      )}
     </span>
   );
 

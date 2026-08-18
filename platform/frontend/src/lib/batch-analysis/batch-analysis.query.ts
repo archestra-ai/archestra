@@ -13,6 +13,7 @@ const {
   deleteBatchAnalysisRow,
   startBatchAnalysisRun,
   retryBatchAnalysisCell,
+  verifyBatchAnalysisCells,
 } = archestraApiSdk;
 
 /**
@@ -164,6 +165,36 @@ export function useRetryBatchAnalysisCell(analysisId: string) {
         queryKey: ["batch-analyses", analysisId],
       });
       toast.success("Cell queued for retry");
+    },
+  });
+}
+
+export function useVerifyBatchAnalysisCells(analysisId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      entries: {
+        rowId: string;
+        columnKey: string;
+        verified: boolean;
+      }[],
+    ) => {
+      const { data, error } = await verifyBatchAnalysisCells({
+        path: { analysisId },
+        body: { entries },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      // Deliberately no toast: verification is a rapid toggle and the grid's
+      // indicator updating is the confirmation.
+      queryClient.invalidateQueries({
+        queryKey: ["batch-analyses", analysisId],
+      });
     },
   });
 }

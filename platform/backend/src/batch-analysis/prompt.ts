@@ -1,7 +1,9 @@
 import { z } from "zod";
-import type {
-  BatchAnalysisColumn,
-  BatchAnalysisColumnFormat,
+import {
+  type BatchAnalysisCellFlag,
+  BatchAnalysisCellFlagSchema,
+  type BatchAnalysisColumn,
+  type BatchAnalysisColumnFormat,
 } from "@/types/batch-analysis";
 
 /**
@@ -43,6 +45,7 @@ export function buildBatchAnalysisSystemPrompt(): string {
     "Each key is a question's `key`. Each value is an object with:",
     '  - "value": the answer, formatted exactly as that question requires',
     '  - "quote": a short verbatim span from the source supporting the answer, or null if the answer is N/A',
+    '  - "flag": ONLY for questions marked "triage: yes" — classify the answer as "green" (standard or favourable), "yellow" (needs attention), "red" (problematic or unfavourable), or "grey" (neutral, or the source does not answer). Omit "flag" for every other question.',
     "",
     "Return every key you were asked for, and no others. Emit no text outside the tags.",
   ].join("\n");
@@ -58,7 +61,7 @@ export function buildBatchAnalysisUserPrompt(params: {
   const questions = params.columns
     .map(
       (column, index) =>
-        `${index + 1}. key: ${column.key}\n   question: ${column.prompt}\n   format: ${FORMAT_INSTRUCTIONS[column.format]}`,
+        `${index + 1}. key: ${column.key}\n   question: ${column.prompt}\n   format: ${FORMAT_INSTRUCTIONS[column.format]}${column.flag ? "\n   triage: yes" : ""}`,
     )
     .join("\n");
 
@@ -82,6 +85,9 @@ export function buildBatchAnalysisUserPrompt(params: {
 const RawAnswerSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean()]),
   quote: z.string().nullish(),
+  // Nullish and free-form on purpose: a model that omits or garbles the flag
+  // must not fail the whole row — the answer and quote are still good.
+  flag: z.string().nullish(),
 });
 
 const RawResultSchema = z.record(z.string(), RawAnswerSchema);
@@ -89,6 +95,8 @@ const RawResultSchema = z.record(z.string(), RawAnswerSchema);
 type ParsedAnswer = {
   value: string;
   quote: string | null;
+  /** Validated triage flag; null when absent or not a recognised value. */
+  flag: BatchAnalysisCellFlag | null;
 };
 
 type ParseOutcome =
@@ -131,9 +139,13 @@ export function parseBatchAnalysisResult(raw: string): ParseOutcome {
   for (const [key, answer] of Object.entries(validated.data)) {
     const value = String(answer.value).trim();
     const quote = answer.quote?.trim();
+    const flag = BatchAnalysisCellFlagSchema.safeParse(
+      answer.flag?.trim().toLowerCase(),
+    );
     answers.set(key, {
       value: value.length > 0 ? value : NOT_FOUND_VALUE,
       quote: quote && quote.length > 0 ? quote : null,
+      flag: flag.success ? flag.data : null,
     });
   }
   return { ok: true, answers };

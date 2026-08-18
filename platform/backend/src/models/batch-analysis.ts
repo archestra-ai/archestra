@@ -8,9 +8,11 @@ import {
   inArray,
   ne,
   notInArray,
+  isNotNull,
   or,
   sql,
 } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import db, { schema } from "@/database";
 import type {
   BatchAnalysis,
@@ -21,7 +23,10 @@ import type {
   BatchAnalysisRun,
   InsertBatchAnalysis,
 } from "@/types";
-import type { BatchAnalysisColumn } from "@/types/batch-analysis";
+import type {
+  BatchAnalysisCellFlag,
+  BatchAnalysisColumn,
+} from "@/types/batch-analysis";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /** Who is asking, for visibility filtering. */
@@ -232,6 +237,138 @@ class BatchAnalysisModel {
 
   // ===== Rows =====
 
+  /**
+   * Audit snapshot for the cell-verification route. The parent analysis
+   * snapshot carries no cell state, so verification changes would diff as
+   * "nothing happened"; this one carries the verification surface itself. A
+   * digest over every verified `(row, column, verifier)` triple guarantees a
+   * real diff even for count-neutral mutations (verify one cell, unverify
+   * another; or the same cell re-verified by someone else), and the explicit
+   * map is included while it stays small enough to read in the audit UI.
+   */
+  static async findVerificationForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const analysis = await BatchAnalysisModel.findById({
+      analysisId: id,
+      organizationId,
+    });
+    if (!analysis) return null;
+
+    const rows = await db
+      .select({
+        rowId: schema.batchAnalysisCellsTable.rowId,
+        columnKey: schema.batchAnalysisCellsTable.columnKey,
+        verifiedBy: schema.batchAnalysisCellsTable.verifiedBy,
+      })
+      .from(schema.batchAnalysisCellsTable)
+      .innerJoin(
+        schema.batchAnalysisRowsTable,
+        eq(
+          schema.batchAnalysisRowsTable.id,
+          schema.batchAnalysisCellsTable.rowId,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.batchAnalysisRowsTable.analysisId, id),
+          isNotNull(schema.batchAnalysisCellsTable.verifiedAt),
+        ),
+      );
+
+    const entries = rows
+      .map((row) => `${row.rowId}:${row.columnKey}:${row.verifiedBy ?? ""}`)
+      .sort();
+    return {
+      id: analysis.id,
+      name: analysis.name,
+      verifiedCellCount: entries.length,
+      verificationDigest: createHash("sha256")
+        .update(entries.join("\n"))
+        .digest("hex"),
+      ...(entries.length <= VERIFICATION_AUDIT_MAP_LIMIT
+        ? { verifiedCells: entries }
+        : {}),
+    };
+  }
+
+  /**
+   * Toggle human sign-off on a set of cells, all-or-nothing. Every entry must
+   * name a `done` cell belonging to this analysis — verifying a pending,
+   * generating, failed, or foreign cell is refused before anything mutates.
+   * Returns the updated cells in entry order.
+   */
+  static async setCellsVerification(params: {
+    analysisId: string;
+    userId: string;
+    entries: { rowId: string; columnKey: string; verified: boolean }[];
+  }): Promise<BatchAnalysisCell[]> {
+    return db.transaction(async (tx) => {
+      const targets = await tx
+        .select({
+          id: schema.batchAnalysisCellsTable.id,
+          rowId: schema.batchAnalysisCellsTable.rowId,
+          columnKey: schema.batchAnalysisCellsTable.columnKey,
+          status: schema.batchAnalysisCellsTable.status,
+        })
+        .from(schema.batchAnalysisCellsTable)
+        .innerJoin(
+          schema.batchAnalysisRowsTable,
+          eq(
+            schema.batchAnalysisRowsTable.id,
+            schema.batchAnalysisCellsTable.rowId,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.batchAnalysisRowsTable.analysisId, params.analysisId),
+            inArray(
+              schema.batchAnalysisCellsTable.rowId,
+              params.entries.map((entry) => entry.rowId),
+            ),
+          ),
+        );
+      const byKey = new Map(
+        targets.map((cell) => [`${cell.rowId}:${cell.columnKey}`, cell]),
+      );
+
+      for (const entry of params.entries) {
+        const cell = byKey.get(`${entry.rowId}:${entry.columnKey}`);
+        if (!cell) {
+          throw new CellVerificationError(
+            `Cell ${entry.columnKey} on row ${entry.rowId} does not exist in this analysis`,
+          );
+        }
+        if (cell.status !== "done") {
+          throw new CellVerificationError(
+            `Cell ${entry.columnKey} on row ${entry.rowId} has no completed answer to verify`,
+          );
+        }
+      }
+
+      const updated: BatchAnalysisCell[] = [];
+      for (const entry of params.entries) {
+        const [cell] = await tx
+          .update(schema.batchAnalysisCellsTable)
+          .set(
+            entry.verified
+              ? { verifiedBy: params.userId, verifiedAt: new Date() }
+              : { verifiedBy: null, verifiedAt: null },
+          )
+          .where(
+            and(
+              eq(schema.batchAnalysisCellsTable.rowId, entry.rowId),
+              eq(schema.batchAnalysisCellsTable.columnKey, entry.columnKey),
+            ),
+          )
+          .returning();
+        updated.push(cell as BatchAnalysisCell);
+      }
+      return updated;
+    });
+  }
+
   static async addRows(
     analysisId: string,
     rows: Array<{
@@ -422,6 +559,7 @@ class BatchAnalysisModel {
     columnKey: string;
     content: string;
     citations: BatchAnalysisCitation[] | null;
+    flag: BatchAnalysisCellFlag | null;
   }): Promise<void> {
     await db
       .update(schema.batchAnalysisCellsTable)
@@ -429,7 +567,12 @@ class BatchAnalysisModel {
         status: "done",
         content: params.content,
         citations: params.citations,
+        flag: params.flag,
         error: null,
+        // A regenerated answer is a new answer; any human sign-off applied to
+        // the previous one no longer holds.
+        verifiedBy: null,
+        verifiedAt: null,
       })
       .where(
         and(
@@ -447,7 +590,13 @@ class BatchAnalysisModel {
     if (params.columnKeys.length === 0) return;
     await db
       .update(schema.batchAnalysisCellsTable)
-      .set({ status: "error", error: params.error })
+      .set({
+        status: "error",
+        error: params.error,
+        flag: null,
+        verifiedBy: null,
+        verifiedAt: null,
+      })
       .where(
         and(
           eq(schema.batchAnalysisCellsTable.rowId, params.rowId),
@@ -466,7 +615,15 @@ class BatchAnalysisModel {
   }): Promise<BatchAnalysisCell | null> {
     const [cell] = await db
       .update(schema.batchAnalysisCellsTable)
-      .set({ status: "pending", error: null })
+      // Derived state resets with the answer: a stale triage flag or human
+      // sign-off must never survive into pending/generating.
+      .set({
+        status: "pending",
+        error: null,
+        flag: null,
+        verifiedBy: null,
+        verifiedAt: null,
+      })
       .where(
         and(
           eq(schema.batchAnalysisCellsTable.rowId, params.rowId),
@@ -629,3 +786,12 @@ class BatchAnalysisModel {
 }
 
 export default BatchAnalysisModel;
+
+/**
+ * Verification precondition failure — the route maps it to a 400 naming the
+ * offending cell rather than a generic 500.
+ */
+export class CellVerificationError extends Error {}
+
+/** Above this many verified cells the audit snapshot keeps only the digest. */
+const VERIFICATION_AUDIT_MAP_LIMIT = 200;

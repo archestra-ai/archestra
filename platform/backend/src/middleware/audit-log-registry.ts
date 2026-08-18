@@ -217,6 +217,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "analysisId",
     fetchById: (id, orgId) => BatchAnalysisModel.findByIdForAudit(id, orgId),
   },
+  // Human verification mutates cell-level state the analysis snapshot above
+  // does not carry, so the walk-up would record an empty diff. This entry's
+  // snapshot is the verification surface itself (count + digest + the verified
+  // set while small), making even count-neutral changes diff.
+  "/api/batch-analyses/:analysisId/cells/verification": {
+    resourceType: "batchAnalysis",
+    resourceIdParam: "analysisId",
+    action: "batchAnalysis.updated",
+    fetchById: (id, orgId) =>
+      BatchAnalysisModel.findVerificationForAudit(id, orgId),
+  },
   "/api/apps/:appId": {
     resourceType: "app",
     resourceIdParam: "appId",

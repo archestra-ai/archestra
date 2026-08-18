@@ -808,6 +808,7 @@ export const RouteId = {
   DeleteBatchAnalysisRow: "deleteBatchAnalysisRow",
   StartBatchAnalysisRun: "startBatchAnalysisRun",
   RetryBatchAnalysisCell: "retryBatchAnalysisCell",
+  VerifyBatchAnalysisCells: "verifyBatchAnalysisCells",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

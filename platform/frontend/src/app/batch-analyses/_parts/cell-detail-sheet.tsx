@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertCircle, FileText, Loader2, Quote, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Quote,
+  RefreshCw,
+} from "lucide-react";
+import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import type { PreviewableDocument } from "@/components/files/file-preview-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -14,6 +22,7 @@ import {
 import {
   type BatchAnalysisDetail,
   useRetryBatchAnalysisCell,
+  useVerifyBatchAnalysisCells,
 } from "@/lib/batch-analysis/batch-analysis.query";
 
 type Cell = BatchAnalysisDetail["cells"][number];
@@ -56,6 +65,7 @@ export function CellDetailSheet({
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const retryCell = useRetryBatchAnalysisCell(analysisId);
+  const verifyCells = useVerifyBatchAnalysisCells(analysisId);
 
   if (!row || !column) return null;
 
@@ -93,6 +103,24 @@ export function CellDetailSheet({
             <Badge variant="outline">
               {column.format === "exact_quote" ? "exact quote" : column.format}
             </Badge>
+            {cell?.flag && (
+              <Badge variant="outline" className="gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${CELL_FLAG_META[cell.flag].dotClass}`}
+                />
+                <span>{CELL_FLAG_META[cell.flag].label}</span>
+              </Badge>
+            )}
+            {cell?.verifiedAt && (
+              <Badge variant="secondary" className="gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                <span>
+                  {cell.verifiedByName
+                    ? `Verified by ${cell.verifiedByName}`
+                    : "Verified"}
+                </span>
+              </Badge>
+            )}
           </div>
         </SheetHeader>
 
@@ -167,20 +195,42 @@ export function CellDetailSheet({
           ) : (
             <span />
           )}
-          {cell && status !== "generating" && (
-            <PermissionButton
-              permissions={{ batchAnalysis: ["execute"] }}
-              variant="outline"
-              size="sm"
-              disabled={retryCell.isPending}
-              onClick={() =>
-                retryCell.mutate({ rowId: row.id, columnKey: column.key })
-              }
-            >
-              <RefreshCw className="mr-1 h-3 w-3" />
-              <span>{retryCell.isPending ? "Queueing…" : "Regenerate"}</span>
-            </PermissionButton>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {status === "done" && (
+              <PermissionButton
+                permissions={{ batchAnalysis: ["update"] }}
+                variant={cell?.verifiedAt ? "secondary" : "outline"}
+                size="sm"
+                disabled={verifyCells.isPending}
+                onClick={() =>
+                  verifyCells.mutate([
+                    {
+                      rowId: row.id,
+                      columnKey: column.key,
+                      verified: !cell?.verifiedAt,
+                    },
+                  ])
+                }
+              >
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                <span>{cell?.verifiedAt ? "Verified" : "Mark verified"}</span>
+              </PermissionButton>
+            )}
+            {cell && status !== "generating" && (
+              <PermissionButton
+                permissions={{ batchAnalysis: ["execute"] }}
+                variant="outline"
+                size="sm"
+                disabled={retryCell.isPending}
+                onClick={() =>
+                  retryCell.mutate({ rowId: row.id, columnKey: column.key })
+                }
+              >
+                <RefreshCw className="mr-1 h-3 w-3" />
+                <span>{retryCell.isPending ? "Queueing…" : "Regenerate"}</span>
+              </PermissionButton>
+            )}
+          </div>
         </div>
       </SheetContent>
     </Sheet>

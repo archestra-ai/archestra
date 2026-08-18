@@ -8,6 +8,7 @@ import logger from "@/logging";
 import { AgentModel } from "@/models";
 import ModelModel from "@/models/model";
 import type {
+  BatchAnalysisCellFlag,
   BatchAnalysis,
   BatchAnalysisCitation,
   BatchAnalysisColumn,
@@ -31,6 +32,7 @@ type CellOutcome =
       ok: true;
       content: string;
       citations: BatchAnalysisCitation[] | null;
+      flag: BatchAnalysisCellFlag | null;
     }
   | { columnKey: string; ok: false; error: string };
 
@@ -183,6 +185,9 @@ export async function executeRow(params: {
         columnKey: column.key,
         ok: true,
         content: answer.value,
+        // Only opted-in columns keep a flag — a model volunteering one for a
+        // plain extraction column is discarded, not stored.
+        flag: column.flag ? answer.flag : null,
         citations,
       };
     }),

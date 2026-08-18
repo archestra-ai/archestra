@@ -45,6 +45,12 @@ export const BatchAnalysisColumnSchema = z.object({
   name: z.string().min(1).max(200),
   prompt: z.string().min(1).max(4000),
   format: BatchAnalysisColumnFormatSchema,
+  /**
+   * Ask the model to also triage this column's answer into a colored flag
+   * (see BatchAnalysisCellFlagSchema). Optional so existing analyses and
+   * columns that are pure extraction stay untouched.
+   */
+  flag: z.boolean().optional(),
 });
 export type BatchAnalysisColumn = z.infer<typeof BatchAnalysisColumnSchema>;
 
@@ -125,6 +131,19 @@ export type BatchAnalysisCellStatus = z.infer<
 >;
 
 /**
+ * Model-assigned triage flag for columns that opt in (`column.flag`):
+ * `green` = standard / favourable, `yellow` = needs attention,
+ * `red` = problematic / unfavourable, `grey` = neutral or not found.
+ */
+export const BatchAnalysisCellFlagSchema = z.enum([
+  "green",
+  "grey",
+  "yellow",
+  "red",
+]);
+export type BatchAnalysisCellFlag = z.infer<typeof BatchAnalysisCellFlagSchema>;
+
+/**
  * A supporting span lifted verbatim from the row's source text. Quote-only by
  * design: chunk-level positional metadata (page, offsets) does not exist in the
  * corpus today, so promising a location we cannot produce would be a lie.
@@ -195,6 +214,20 @@ export const SelectBatchAnalysisCellSchema = createSelectSchema(
   {
     status: BatchAnalysisCellStatusSchema,
     citations: z.array(BatchAnalysisCitationSchema).nullable(),
+    flag: BatchAnalysisCellFlagSchema.nullable(),
   },
 );
 export type BatchAnalysisCell = z.infer<typeof SelectBatchAnalysisCellSchema>;
+
+/**
+ * Cell as the detail endpoint returns it: the reviewer's display name resolved
+ * server-side so the UI never has to look up raw user ids. Null when the cell
+ * is unverified or the reviewer's account no longer exists.
+ */
+export const BatchAnalysisCellWithVerifierSchema =
+  SelectBatchAnalysisCellSchema.extend({
+    verifiedByName: z.string().nullable(),
+  });
+export type BatchAnalysisCellWithVerifier = z.infer<
+  typeof BatchAnalysisCellWithVerifierSchema
+>;

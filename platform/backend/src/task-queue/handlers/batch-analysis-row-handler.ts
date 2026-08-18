@@ -97,6 +97,7 @@ export async function handleBatchAnalysisRow(
         columnKey: outcome.columnKey,
         content: outcome.content,
         citations: outcome.citations,
+        flag: outcome.flag,
       });
       doneCells += 1;
     } else {

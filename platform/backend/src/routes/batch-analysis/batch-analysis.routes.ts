@@ -17,8 +17,11 @@ import {
   TeamModel,
 } from "@/models";
 import type { BatchAnalysisViewer } from "@/models/batch-analysis";
+import { CellVerificationError } from "@/models/batch-analysis";
+import UserModel from "@/models/user";
 import {
   ApiError,
+  BatchAnalysisCellWithVerifierSchema,
   BatchAnalysisColumnsSchema,
   BatchAnalysisRowSourceSchema,
   constructResponseSchema,
@@ -70,7 +73,7 @@ const BatchAnalysisRowWithFileSchema = SelectBatchAnalysisRowSchema.extend({
 const BatchAnalysisDetailSchema = z.object({
   analysis: BatchAnalysisListItemSchema,
   rows: z.array(BatchAnalysisRowWithFileSchema),
-  cells: z.array(SelectBatchAnalysisCellSchema),
+  cells: z.array(BatchAnalysisCellWithVerifierSchema),
   latestRun: SelectBatchAnalysisRunSchema.nullable(),
 });
 
@@ -293,6 +296,12 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       ]);
 
+      const verifierNames = await UserModel.getNamesByIds([
+        ...new Set(
+          cells.flatMap((cell) => (cell.verifiedBy ? [cell.verifiedBy] : [])),
+        ),
+      ]);
+
       const filesById = new Map(sourceFiles.map((file) => [file.id, file]));
       return {
         analysis: { ...analysis, teamIds },
@@ -312,7 +321,12 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : null,
           };
         }),
-        cells,
+        cells: cells.map((cell) => ({
+          ...cell,
+          verifiedByName: cell.verifiedBy
+            ? (verifierNames.get(cell.verifiedBy) ?? null)
+            : null,
+        })),
         latestRun,
       };
     },
@@ -438,6 +452,56 @@ const batchAnalysisRoutes: FastifyPluginAsyncZod = async (fastify) => {
         rowId,
         columnKey,
       });
+    },
+  );
+
+  fastify.patch(
+    "/api/batch-analyses/:analysisId/cells/verification",
+    {
+      schema: {
+        operationId: RouteId.VerifyBatchAnalysisCells,
+        description:
+          "Mark cells as human-verified, or clear the mark. Only completed answers can be verified; regeneration clears the mark automatically.",
+        tags: ["Batch Analysis"],
+        params: AnalysisParamsSchema,
+        body: z.object({
+          entries: z
+            .array(
+              z.object({
+                rowId: z.string().uuid(),
+                columnKey: z.string().min(1).max(64),
+                verified: z.boolean(),
+              }),
+            )
+            .min(1)
+            .max(500),
+        }),
+        response: constructResponseSchema(
+          z.object({ cells: z.array(SelectBatchAnalysisCellSchema) }),
+        ),
+      },
+    },
+    async (request) => {
+      const { analysisId } = request.params;
+      const { entries } = request.body;
+      await assertAnalysisVisible(request, analysisId);
+
+      let cells: Awaited<
+        ReturnType<typeof BatchAnalysisModel.setCellsVerification>
+      >;
+      try {
+        cells = await BatchAnalysisModel.setCellsVerification({
+          analysisId,
+          userId: request.user.id,
+          entries,
+        });
+      } catch (error) {
+        if (error instanceof CellVerificationError) {
+          throw new ApiError(400, error.message);
+        }
+        throw error;
+      }
+      return { cells };
     },
   );
 };

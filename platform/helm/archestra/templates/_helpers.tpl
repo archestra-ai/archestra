@@ -23,9 +23,14 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 {{- end }}
 
-{{/* Helm-managed same-namespace Role that owns runtime-created MCP resources. */}}
-{{- define "archestra-platform.mcpRuntimeOwnerRoleName" -}}
+{{/* Broad Role used by the platform to manage MCP runtime resources. */}}
+{{- define "archestra-platform.mcpManagerRoleName" -}}
 {{- printf "%s-mcp-manager" (include "archestra-platform.fullname" .) }}
+{{- end }}
+
+{{/* Narrow Helm-managed Role that owns runtime-created MCP resources. */}}
+{{- define "archestra-platform.mcpRuntimeOwnerRoleName" -}}
+{{- printf "%s-mcp-runtime-owner" (include "archestra-platform.fullname" .) }}
 {{- end }}
 
 {{/*
@@ -468,10 +473,6 @@ by the release-namespace Role and the per-namespace Roles generated from
 rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 */}}
 {{- define "archestra-platform.mcpManagerRules" -}}
-{{- $runtimeOwnerRoleName := include "archestra-platform.mcpRuntimeOwnerRoleName" . -}}
-{{- if hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE" -}}
-{{- $runtimeOwnerRoleName = toString (get .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE") -}}
-{{- end -}}
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
@@ -505,14 +506,6 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["daemonsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
-# The Helm-managed manager Role is also the same-namespace owner for resources
-# created at runtime. Reading it supplies the UID required by ownerReferences.
-{{- if $runtimeOwnerRoleName }}
-- apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["roles"]
-  resourceNames: [{{ $runtimeOwnerRoleName | quote }}]
-  verbs: ["get"]
-{{- end }}
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]

@@ -661,7 +661,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <ModelSelectorLogo provider={logoProvider} className="size-4" />
             </Button>
           ) : (
-            <div className="flex items-center h-8 rounded-full bg-muted/50 overflow-hidden">
+            /* Same radius as the controls it clips: they are full-height and
+               sit flush against the group's end caps, so a wider group radius
+               rounds their outer corners while the inner ones keep the button
+               radius — a lopsided hover shape (T-1088). */
+            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden">
               {(conversationId || onApiKeyChange) && (
                 <LlmProviderApiKeySelector
                   conversationId={conversationId}

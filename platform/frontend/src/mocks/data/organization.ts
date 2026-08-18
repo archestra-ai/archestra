@@ -103,7 +103,6 @@ export function makeAppearanceSettings(
     ogDescription: null,
     footerText: null,
     chatLinks: null,
-    onboardingWizard: null,
     chatErrorSupportMessage: null,
     slimChatErrorUi: false,
     animateChatPlaceholders: false,

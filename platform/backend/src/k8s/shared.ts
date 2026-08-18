@@ -15,6 +15,7 @@ interface K8sClients {
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
   authApi: k8s.AuthorizationV1Api;
+  rbacApi: k8s.RbacAuthorizationV1Api;
   networkingApi: k8s.NetworkingV1Api;
   customObjectsApi: k8s.CustomObjectsApi;
   attach: k8s.Attach;
@@ -148,6 +149,9 @@ export function createK8sClients(
     batchApi: withK8sRequestTimeout(kubeConfig.makeApiClient(k8s.BatchV1Api)),
     authApi: withK8sRequestTimeout(
       kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
+    ),
+    rbacApi: withK8sRequestTimeout(
+      kubeConfig.makeApiClient(k8s.RbacAuthorizationV1Api),
     ),
     networkingApi: withK8sRequestTimeout(
       kubeConfig.makeApiClient(k8s.NetworkingV1Api),

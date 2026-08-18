@@ -7350,7 +7350,7 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
 
   function makeDeployment(params: {
     readNamespacedPod?: ReturnType<typeof vi.fn>;
-    readNamespacedConfigMap?: ReturnType<typeof vi.fn>;
+    readNamespacedRole?: ReturnType<typeof vi.fn>;
     readNamespacedDeployment: ReturnType<typeof vi.fn>;
     deleteNamespacedDeployment?: ReturnType<typeof vi.fn>;
     createNamespacedDeployment?: ReturnType<typeof vi.fn>;
@@ -7368,9 +7368,11 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
       mcpServer: mockMcpServer,
       k8sApi: {
         readNamespacedPod: params.readNamespacedPod ?? vi.fn(),
-        readNamespacedConfigMap:
-          params.readNamespacedConfigMap ?? vi.fn().mockRejectedValue(notFound),
       } as unknown as k8s.CoreV1Api,
+      k8sRbacApi: {
+        readNamespacedRole:
+          params.readNamespacedRole ?? vi.fn().mockRejectedValue(notFound),
+      } as unknown as k8s.RbacAuthorizationV1Api,
       k8sAppsApi: {
         readNamespacedDeployment: params.readNamespacedDeployment,
         deleteNamespacedDeployment:
@@ -7466,15 +7468,14 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     );
   });
 
-  test("attaches the Helm runtime anchor to a created deployment", async () => {
-    const previousOwner =
-      config.orchestrator.kubernetes.runtimeOwnerConfigMapName;
-    config.orchestrator.kubernetes.runtimeOwnerConfigMapName = "runtime-anchor";
+  test("attaches the Helm manager Role to a created deployment", async () => {
+    const previousOwner = config.orchestrator.kubernetes.runtimeOwnerRoleName;
+    config.orchestrator.kubernetes.runtimeOwnerRoleName = "runtime-owner";
     const createNamespacedDeployment = vi.fn().mockResolvedValue({});
     const deployment = makeDeployment({
       readNamespacedPod: vi.fn().mockRejectedValue(notFound),
-      readNamespacedConfigMap: vi.fn().mockResolvedValue({
-        metadata: { name: "runtime-anchor", uid: "anchor-uid" },
+      readNamespacedRole: vi.fn().mockResolvedValue({
+        metadata: { name: "runtime-owner", uid: "owner-uid" },
       }),
       readNamespacedDeployment: vi.fn().mockRejectedValue(notFound),
       createNamespacedDeployment,
@@ -7499,7 +7500,7 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     try {
       await deployment.startOrCreateDeployment();
     } finally {
-      config.orchestrator.kubernetes.runtimeOwnerConfigMapName = previousOwner;
+      config.orchestrator.kubernetes.runtimeOwnerRoleName = previousOwner;
     }
 
     expect(createNamespacedDeployment).toHaveBeenCalledWith({
@@ -7508,8 +7509,10 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
         metadata: expect.objectContaining({
           ownerReferences: [
             expect.objectContaining({
-              name: "runtime-anchor",
-              uid: "anchor-uid",
+              apiVersion: "rbac.authorization.k8s.io/v1",
+              kind: "Role",
+              name: "runtime-owner",
+              uid: "owner-uid",
             }),
           ],
         }),

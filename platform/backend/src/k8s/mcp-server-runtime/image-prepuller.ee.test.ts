@@ -299,21 +299,20 @@ describe("McpImagePrepuller.reconcileNow", () => {
   let betaEnabled: boolean;
   let hardDisabled: boolean;
   let helmReleaseName: string | undefined;
-  let ownerConfigMapName: string | undefined;
+  let ownerRoleName: string | undefined;
 
   beforeEach(() => {
     prepullEnabled = config.orchestrator.mcpImagePrepull.enabled;
     betaEnabled = config.orchestrator.mcpIdleHibernation.betaEnabled;
     hardDisabled = config.orchestrator.mcpIdleHibernation.hardDisabled;
     helmReleaseName = config.orchestrator.kubernetes.helmReleaseName;
-    ownerConfigMapName =
-      config.orchestrator.kubernetes.runtimeOwnerConfigMapName;
+    ownerRoleName = config.orchestrator.kubernetes.runtimeOwnerRoleName;
 
     // The chart tells the backend which release it is. The DaemonSet is named
     // after it, and that name has to be the same on every replica and after
     // every restart.
     config.orchestrator.kubernetes.helmReleaseName = RELEASE;
-    config.orchestrator.kubernetes.runtimeOwnerConfigMapName = undefined;
+    config.orchestrator.kubernetes.runtimeOwnerRoleName = undefined;
 
     // Pre-pulling only ever runs where hibernation runs: offered by the
     // deployment, licensed, and opted into by the organization.
@@ -340,8 +339,7 @@ describe("McpImagePrepuller.reconcileNow", () => {
     config.orchestrator.mcpIdleHibernation.betaEnabled = betaEnabled;
     config.orchestrator.mcpIdleHibernation.hardDisabled = hardDisabled;
     config.orchestrator.kubernetes.helmReleaseName = helmReleaseName;
-    config.orchestrator.kubernetes.runtimeOwnerConfigMapName =
-      ownerConfigMapName;
+    config.orchestrator.kubernetes.runtimeOwnerRoleName = ownerRoleName;
     vi.restoreAllMocks();
   });
 
@@ -1173,23 +1171,23 @@ describe("McpImagePrepuller.reconcileNow", () => {
     ]);
   });
 
-  test("uses the Helm-owned same-namespace anchor when configured", async ({
+  test("uses the Helm-owned same-namespace manager Role when configured", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
     await installLocalServer(makeInternalMcpCatalog, makeMcpServer, {
       dockerImage: "ghcr.io/acme/weather:1.4",
     });
-    config.orchestrator.kubernetes.runtimeOwnerConfigMapName = "helm-anchor";
+    config.orchestrator.kubernetes.runtimeOwnerRoleName = "helm-owner";
 
     await prepuller(cluster).reconcileNow();
 
     expect(cluster.ownersOf(DAEMONSET_NAME)).toEqual([
       {
-        apiVersion: "v1",
-        kind: "ConfigMap",
-        name: "helm-anchor",
-        uid: "helm-anchor-uid",
+        apiVersion: "rbac.authorization.k8s.io/v1",
+        kind: "Role",
+        name: "helm-owner",
+        uid: "helm-owner-uid",
         controller: false,
         blockOwnerDeletion: false,
       },
@@ -1377,14 +1375,19 @@ class FakeCluster {
         if (!existing) throw NOT_FOUND;
         return structuredClone(existing);
       },
-      readNamespacedConfigMap: async ({ name }: { name: string }) => {
-        this.allCalls.push("readConfigMap");
-        if (name !== "helm-anchor") throw NOT_FOUND;
-        return {
-          metadata: { name: "helm-anchor", uid: "helm-anchor-uid" },
-        } as k8s.V1ConfigMap;
-      },
     } as unknown as k8s.CoreV1Api;
+  }
+
+  get rbacApi(): k8s.RbacAuthorizationV1Api {
+    return {
+      readNamespacedRole: async ({ name }: { name: string }) => {
+        this.allCalls.push("readRole");
+        if (name !== "helm-owner") throw NOT_FOUND;
+        return {
+          metadata: { name: "helm-owner", uid: "helm-owner-uid" },
+        } as k8s.V1Role;
+      },
+    } as unknown as k8s.RbacAuthorizationV1Api;
   }
 
   get appsApi(): k8s.AppsV1Api {
@@ -1482,6 +1485,7 @@ function prepuller(
   return new McpImagePrepuller({
     coreApi: cluster.coreApi,
     appsApi: cluster.appsApi,
+    rbacApi: cluster.rbacApi,
     namespace: NAMESPACE,
     platformNamespace,
   });

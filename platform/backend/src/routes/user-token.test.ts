@@ -2,7 +2,7 @@ import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { SelectServiceAccount, User } from "@/types";
 
 describe("user token routes", () => {
   let app: FastifyInstanceWithZod;
@@ -141,5 +141,43 @@ describe("user token routes", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json().error.message).toContain("Personal token not found");
+  });
+});
+
+describe("user token routes for service-account callers", () => {
+  test("all personal-token endpoints reject service accounts with 400", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const serviceAccountId = crypto.randomUUID();
+
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      // Mirror the auth middleware's service-account population: a synthetic
+      // `service-account:<id>` user (no users row) plus request.serviceAccount.
+      Object.assign(request, {
+        user: { id: `service-account:${serviceAccountId}` } as User,
+        organizationId: organization.id,
+        serviceAccount: { id: serviceAccountId } as SelectServiceAccount,
+      });
+    });
+    const { default: userTokenRoutes } = await import("./user-token");
+    await app.register(userTokenRoutes);
+
+    try {
+      for (const [method, url] of [
+        ["GET", "/api/user-tokens/me"],
+        ["GET", "/api/user-tokens/me/value"],
+        ["POST", "/api/user-tokens/me/rotate"],
+      ] as const) {
+        const response = await app.inject({ method, url });
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain(
+          "Service accounts do not have personal user tokens",
+        );
+      }
+    } finally {
+      await app.close();
+    }
   });
 });

@@ -1,14 +1,36 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Radix Select uses scrollIntoView and pointer capture
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
 
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+vi.mock("@/lib/config/config.query");
+
+// SPDX-SnippetEnd
 
 import {
   useHasPermissions,
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  useEnterpriseFeature,
+  useFeature,
+  useSmallTeamTier,
+} from "@/lib/config/config.query";
+// SPDX-SnippetEnd
 import {
   useOrganization,
   useUpdateMcpSettings,
@@ -27,9 +49,26 @@ function setPermission(hasPermission: boolean) {
   );
 }
 
-function setOrganization(onlineMcpCatalogEnabled: boolean) {
+function setOrganization(
+  settings: Partial<{
+    onlineMcpCatalogEnabled: boolean;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    mcpIdleHibernationEnabled: boolean;
+    // SPDX-SnippetEnd
+  }> = {},
+) {
   vi.mocked(useOrganization).mockReturnValue({
-    data: { onlineMcpCatalogEnabled },
+    data: {
+      onlineMcpCatalogEnabled: true,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      mcpIdleHibernationEnabled: false,
+      // SPDX-SnippetEnd
+      ...settings,
+    },
     isPending: false,
   } as ReturnType<typeof useOrganization>);
 }
@@ -37,7 +76,17 @@ function setOrganization(onlineMcpCatalogEnabled: boolean) {
 beforeEach(() => {
   vi.clearAllMocks();
   setPermission(true);
-  setOrganization(true);
+  setOrganization();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  vi.mocked(useEnterpriseFeature).mockReturnValue(true);
+  // The hibernation block only exists when the beta flag is on.
+  vi.mocked(useFeature).mockReturnValue(true);
+  vi.mocked(useSmallTeamTier).mockReturnValue(
+    undefined as ReturnType<typeof useSmallTeamTier>,
+  );
+  // SPDX-SnippetEnd
   vi.mocked(useUpdateMcpSettings).mockReturnValue({
     mutateAsync: mockMutateAsync,
     isPending: false,
@@ -55,27 +104,105 @@ function renderPage() {
   );
 }
 
+/** The select belonging to one settings block, scoped by the block's title. */
+function blockSelect(title: string) {
+  const card = screen.getByText(title).closest('[data-slot="card"]');
+  if (!card) throw new Error(`No settings block titled "${title}"`);
+  return within(card as HTMLElement).getByRole("combobox");
+}
+
 describe("McpSettingsPage", () => {
   it("renders the online catalog setting", () => {
     renderPage();
 
     expect(screen.getByText("Online MCP catalog")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toHaveTextContent("Enabled");
+    expect(blockSelect("Online MCP catalog")).toHaveTextContent("Enabled");
   });
 
-  it("reflects a disabled online catalog from the organization", () => {
-    setOrganization(false);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  it("renders the idle hibernation setting alongside the catalog setting", () => {
+    setOrganization({ mcpIdleHibernationEnabled: true });
     renderPage();
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Disabled");
+    expect(screen.getByText("Idle hibernation")).toBeInTheDocument();
+    expect(blockSelect("Idle hibernation")).toHaveTextContent("Enabled");
+  });
+  // SPDX-SnippetEnd
+
+  it("reflects a disabled online catalog from the organization", () => {
+    setOrganization({ onlineMcpCatalogEnabled: false });
+    renderPage();
+
+    expect(blockSelect("Online MCP catalog")).toHaveTextContent("Disabled");
   });
 
   it("disables the control when the user cannot update MCP settings", () => {
     setPermission(false);
     renderPage();
 
-    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(blockSelect("Online MCP catalog")).toBeDisabled();
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  it("makes hibernation inert without an enterprise licence, leaving the catalog editable", () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+    renderPage();
+
+    expect(blockSelect("Idle hibernation")).toBeDisabled();
+    expect(blockSelect("Online MCP catalog")).toBeEnabled();
+  });
+
+  it("hides hibernation entirely while the beta flag is off", () => {
+    vi.mocked(useFeature).mockReturnValue(false);
+    renderPage();
+
+    expect(screen.queryByText("Idle hibernation")).not.toBeInTheDocument();
+    expect(blockSelect("Online MCP catalog")).toBeEnabled();
+  });
+
+  it("enables the hibernation control once enterprise core is active", () => {
+    renderPage();
+
+    expect(blockSelect("Idle hibernation")).toBeEnabled();
+  });
+
+  it("saves only the settings the user changed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(blockSelect("Idle hibernation"));
+    await user.click(await screen.findByRole("option", { name: "Enabled" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      mcpIdleHibernationEnabled: true,
+    });
+  });
+  // SPDX-SnippetEnd
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  it("saves both settings when both changed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(blockSelect("Online MCP catalog"));
+    await user.click(await screen.findByRole("option", { name: "Disabled" }));
+    await user.click(blockSelect("Idle hibernation"));
+    await user.click(await screen.findByRole("option", { name: "Enabled" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      onlineMcpCatalogEnabled: false,
+      mcpIdleHibernationEnabled: true,
+    });
+  });
+  // SPDX-SnippetEnd
 
   it("shows a loading state instead of the control while the org is pending", () => {
     vi.mocked(useOrganization).mockReturnValue({

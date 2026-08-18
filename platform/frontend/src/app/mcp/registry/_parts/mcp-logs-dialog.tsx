@@ -47,6 +47,11 @@ import {
   DeploymentStatusDot,
   getDeploymentLabel,
 } from "./deployment-status";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { hasNoPodToStream } from "./logs-streaming-indicator";
+// SPDX-SnippetEnd
 import { McpExecTerminal } from "./mcp-exec-terminal";
 import { McpInspector } from "./mcp-inspector";
 
@@ -190,6 +195,13 @@ export function McpLogsContent({
   const isDeploymentFailed = currentDeploymentStatus?.state === "failed";
   const isWaitingForLogs = isStreaming && !streamedLogs && !streamError;
   const streamingText = useStreamingAnimation(isWaitingForLogs);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Hibernated/waking deployments (and any status with pod telemetry cleared)
+  // have no pod to tail — show a muted "No pod" instead of the red chip.
+  const noPodToStream = hasNoPodToStream(currentDeploymentStatus);
+  // SPDX-SnippetEnd
 
   const stopStreaming = useCallback(() => {
     // Clear connection timeout
@@ -616,17 +628,28 @@ export function McpLogsContent({
                   </div>
                 </ScrollArea>
                 <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
-                  {isStreaming && !streamError ? (
-                    <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                      </span>
-                      <span>Streaming</span>
-                    </div>
-                  ) : (
-                    <div />
-                  )}
+                  {
+                    /* SPDX-SnippetBegin */
+                    /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                    /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                    noPodToStream ? (
+                      <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600" />
+                        <span>No pod</span>
+                      </div>
+                    ) : // SPDX-SnippetEnd
+                    isStreaming && !streamError ? (
+                      <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                        </span>
+                        <span>Streaming</span>
+                      </div>
+                    ) : (
+                      <div />
+                    )
+                  }
                   <Button
                     variant="ghost"
                     size="sm"
@@ -714,6 +737,15 @@ function InstanceSelector({
   const isRunning =
     selectedStatus?.state === "running" ||
     selectedStatus?.state === "succeeded";
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Hibernated and waking share the calm muted treatment: waking is the same
+  // idle pod on its way back, not a problem and not an amber "Starting".
+  const isIdleOrWaking =
+    selectedStatus?.state === "hibernated" ||
+    selectedStatus?.state === "waking";
+  // SPDX-SnippetEnd
   const stateLabel =
     selectedStatus && selectedStatus.state !== "not_created"
       ? getDeploymentLabel(
@@ -738,7 +770,12 @@ function InstanceSelector({
     ? "bg-destructive"
     : isRunning
       ? "bg-emerald-500"
-      : "bg-amber-500";
+      : /* SPDX-SnippetBegin */
+        /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+        /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+        isIdleOrWaking
+        ? "bg-muted-foreground"
+        : /* SPDX-SnippetEnd */ "bg-amber-500";
 
   const hasMultiple = installs.length > 1;
 
@@ -777,7 +814,12 @@ function InstanceSelector({
                     ? "text-destructive"
                     : isRunning
                       ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-amber-600 dark:text-amber-400"
+                      : /* SPDX-SnippetBegin */
+                        /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                        /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                        isIdleOrWaking
+                        ? "text-muted-foreground"
+                        : /* SPDX-SnippetEnd */ "text-amber-600 dark:text-amber-400"
                 }`}
               >
                 {stateLabel}

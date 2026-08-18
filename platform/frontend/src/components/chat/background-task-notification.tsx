@@ -1,6 +1,7 @@
 import {
   ChatBackgroundTaskMetadataSchema,
   ChatScheduledWakeupMetadataSchema,
+  QUIET_WAKE_SENTINEL,
 } from "@archestra/shared";
 import { AlarmClock, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,17 +63,29 @@ export function getWakeNotification(message: {
   return null;
 }
 
-/** Whether a message is a quiet wake's no-change assistant reply. */
+/**
+ * Whether a message is a quiet wake's no-change assistant reply. Headless
+ * turns carry the backend's `quietWake` stamp; a browser-claimed quiet turn
+ * has no stamp, so the sentinel the model was instructed to lead with is
+ * detected directly — otherwise it would render as a literal token in an
+ * ordinary bubble. Callers additionally require the preceding message to be
+ * the quiet wake notification, so ordinary replies can never be swallowed.
+ */
 export function isQuietWakeReply(message: {
   role: string;
   metadata?: unknown;
+  parts?: Array<{ type: string; text?: string }>;
 }): boolean {
-  return (
-    message.role === "assistant" &&
+  if (message.role !== "assistant") return false;
+  if (
     typeof message.metadata === "object" &&
     message.metadata !== null &&
     (message.metadata as Record<string, unknown>).quietWake === true
-  );
+  ) {
+    return true;
+  }
+  const firstText = message.parts?.find((part) => part.type === "text")?.text;
+  return firstText?.trimStart().startsWith(QUIET_WAKE_SENTINEL) === true;
 }
 
 /**

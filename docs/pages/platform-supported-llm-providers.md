@@ -26,6 +26,14 @@ A provider row also takes a name. It replaces the built-in one everywhere the pr
 
 Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
 
+## Model Context and Output Limits
+
+Archestra syncs each model's context window and maximum output tokens from the provider and a public model registry. Self-hosted endpoints and models first seen in proxy traffic often report neither.
+
+You can set both yourself. Go to **LLM → Models**, edit the model, and fill in **Context window** and **Max output tokens** under **Limits**. What you set replaces what the provider reports, and survives the next model refresh. Clear a field to go back to the provider's own number.
+
+The context window sizes the [chat context ring](/docs/platform-chat#context-window-visualizer) and decides when auto-compaction runs. The output limit is what an agent turn asks the provider for. Without one, a turn falls back to a conservative 8192-token budget, which can cut a long answer short.
+
 ## OpenAI-Compatible Model Router
 
 The model router exposes one OpenAI-compatible interface for models across configured providers.
@@ -455,7 +463,7 @@ Open **LLM → Models**, edit a native-transport model, and set any generation p
 
 ### Context Window
 
-Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
+Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer). A window you set under [Limits](#model-context-and-output-limits) is the architectural length for this purpose, so a Modelfile `num_ctx` still caps it.
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 

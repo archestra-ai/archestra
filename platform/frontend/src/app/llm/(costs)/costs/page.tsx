@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  parseCustomStatisticsTimeframe,
   type StatisticsTimeFrame,
   StatisticsTimeFrameSchema,
 } from "@archestra/shared";
@@ -221,23 +222,21 @@ export default function StatisticsPage() {
   }, [customFrom, customTo, handleTimeframeChange]);
 
   const getTimeframeDisplay = useCallback((tf: StatisticsTimeFrame) => {
-    if (tf.startsWith("custom:")) {
-      const value = tf.replace("custom:", "");
-      const [fromDate, toDate] = value.split("_");
-      const fromDateTime = new Date(fromDate);
-      const toDateTime = new Date(toDate);
+    // Falls through to the preset labels below when the bounds are unparseable,
+    // rather than formatting an Invalid Date and taking the page down with it.
+    const customRange = parseCustomStatisticsTimeframe(tf);
+    if (customRange) {
+      const { startTime, endTime } = customRange;
+      // A range picked as whole days runs local midnight to 23:59; any other
+      // bound was given an explicit time that belongs in the label.
+      const isWholeDayRange =
+        startTime.getHours() === 0 &&
+        startTime.getMinutes() === 0 &&
+        endTime.getHours() === 23 &&
+        endTime.getMinutes() === 59;
+      const pattern = isWholeDayRange ? "MMM d" : "MMM d, HH:mm";
 
-      const hasCustomTime =
-        fromDateTime.getHours() !== 0 ||
-        fromDateTime.getMinutes() !== 0 ||
-        toDateTime.getHours() !== 23 ||
-        toDateTime.getMinutes() !== 59;
-
-      if (hasCustomTime) {
-        return `${format(fromDateTime, "MMM d, HH:mm")} - ${format(toDateTime, "MMM d, HH:mm")}`;
-      } else {
-        return `${format(fromDateTime, "MMM d")} - ${format(toDateTime, "MMM d")}`;
-      }
+      return `${format(startTime, pattern)} - ${format(endTime, pattern)}`;
     }
     switch (tf) {
       case "1h":

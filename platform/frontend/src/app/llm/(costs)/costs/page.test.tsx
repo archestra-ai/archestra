@@ -198,6 +198,18 @@ describe("StatisticsPage", () => {
     expect(getByText("Subscription")).toBeInTheDocument();
   });
 
+  it("still renders when the custom timeframe in the URL is malformed", async () => {
+    // Well-formed enough for the schema, but the bounds are not dates — the
+    // selector label must not try to format an Invalid Date.
+    mockSearchParams = new URLSearchParams([
+      ["timeframe", "custom:not-a-date_also-not-a-date"],
+    ]);
+
+    const { findByText } = render(<StatisticsPage />);
+
+    expect(await findByText("Cost Savings")).toBeInTheDocument();
+  });
+
   it("labels each bucket of a multi-day chart distinctly", async () => {
     mockSearchParams = new URLSearchParams([["timeframe", "7d"]]);
     // A 7d chart aggregates into 6-hour buckets, so a single day supplies four

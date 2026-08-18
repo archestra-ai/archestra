@@ -42,8 +42,21 @@ vi.mock("@/lib/statistics.query", () => ({
 vi.mock("recharts", () => ({
   CartesianGrid: () => null,
   Line: () => null,
-  LineChart: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  // The x-axis is a category axis keyed off each point's `label`, so surfacing
+  // the labels is enough to see what the rendered axis would read.
+  LineChart: ({
+    children,
+    data,
+  }: {
+    children: React.ReactNode;
+    data?: { label?: string }[];
+  }) => (
+    <div>
+      <span data-testid="chart-axis-labels">
+        {(data ?? []).map((point) => point.label).join("|")}
+      </span>
+      {children}
+    </div>
   ),
   XAxis: () => null,
   YAxis: () => null,
@@ -183,6 +196,39 @@ describe("StatisticsPage", () => {
     expect(getByText("claude-sonnet-4")).toBeInTheDocument();
     // Usage is visible even though billed spend is $0.
     expect(getByText("Subscription")).toBeInTheDocument();
+  });
+
+  it("labels each bucket of a multi-day chart distinctly", async () => {
+    mockSearchParams = new URLSearchParams([["timeframe", "7d"]]);
+    // A 7d chart aggregates into 6-hour buckets, so a single day supplies four
+    // consecutive points that a day-only label would collapse into one tick.
+    mockUseCostSavingsStatistics.mockReturnValue({
+      data: {
+        timeSeries: [
+          "2026-07-01T00:00:00.000Z",
+          "2026-07-01T06:00:00.000Z",
+          "2026-07-01T12:00:00.000Z",
+          "2026-07-01T18:00:00.000Z",
+          "2026-07-02T00:00:00.000Z",
+        ].map((timestamp) => ({
+          timestamp,
+          baselineCost: 2,
+          actualCost: 1,
+          optimizationSavings: 1,
+          toonSavings: 0,
+          cacheSavings: 0,
+          subscriptionCost: 0,
+        })),
+      },
+    });
+
+    const { findAllByTestId } = render(<StatisticsPage />);
+
+    const [axis] = await findAllByTestId("chart-axis-labels");
+    const labels = (axis.textContent ?? "").split("|");
+
+    expect(labels).toHaveLength(5);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 
   it("renders statistics tables inside capped scroll containers", () => {

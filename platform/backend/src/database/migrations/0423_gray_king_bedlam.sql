@@ -1,0 +1,1 @@
+ALTER TABLE "models" ADD COLUMN "supports_reasoning_effort" boolean;

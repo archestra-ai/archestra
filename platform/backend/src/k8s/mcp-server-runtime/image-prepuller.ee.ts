@@ -457,6 +457,7 @@ export function buildPrepullDaemonSet(params: {
 export class McpImagePrepuller {
   private readonly coreApi: k8s.CoreV1Api;
   private readonly appsApi: k8s.AppsV1Api;
+  private readonly rbacApi?: k8s.RbacAuthorizationV1Api;
   private readonly namespace: string;
   private readonly platformNamespace: string;
 
@@ -502,11 +503,13 @@ export class McpImagePrepuller {
   constructor(deps: {
     coreApi: k8s.CoreV1Api;
     appsApi: k8s.AppsV1Api;
+    rbacApi?: k8s.RbacAuthorizationV1Api;
     namespace: string;
     platformNamespace?: string;
   }) {
     this.coreApi = deps.coreApi;
     this.appsApi = deps.appsApi;
+    this.rbacApi = deps.rbacApi;
     this.namespace = deps.namespace;
     this.platformNamespace = deps.platformNamespace ?? deps.namespace;
   }
@@ -707,7 +710,7 @@ export class McpImagePrepuller {
   }
 
   /**
-   * A Helm-owned ConfigMap in the MCP namespace, as an ownerReference, so the
+   * A release-owned Role in the MCP namespace, as an ownerReference, so the
    * cluster's garbage collector deletes the runtime-written DaemonSet when the
    * release is uninstalled. Same-namespace ownership also works when MCP pods
    * run outside the platform release namespace.
@@ -728,20 +731,20 @@ export class McpImagePrepuller {
   > {
     if (this.ownerReferences) return this.ownerReferences;
 
-    const anchorName = config.orchestrator.kubernetes.runtimeOwnerConfigMapName;
-    if (anchorName) {
+    const ownerRoleName = config.orchestrator.kubernetes.runtimeOwnerRoleName;
+    if (ownerRoleName) {
       try {
         const ownerReferences = await withK8sApiRetry(
-          () => resolveRuntimeOwnerReferences(this.coreApi, this.namespace),
-          { label: "mcp-image-prepull-owner-anchor" },
+          () => resolveRuntimeOwnerReferences(this.rbacApi, this.namespace),
+          { label: "mcp-image-prepull-owner-role" },
         );
         if (!ownerReferences) return undefined;
         this.ownerReferences = ownerReferences;
         return this.ownerReferences;
       } catch (error) {
         logger.debug(
-          { err: error, namespace: this.namespace, anchorName },
-          "Could not read the Helm anchor that owns the MCP image pre-pull DaemonSet",
+          { err: error, namespace: this.namespace, ownerRoleName },
+          "Could not read the configured Role that owns the MCP image pre-pull DaemonSet",
         );
         return undefined;
       }

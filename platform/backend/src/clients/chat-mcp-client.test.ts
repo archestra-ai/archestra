@@ -12,6 +12,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import db, { schema } from "@/database";
 import { AgentModel, TeamTokenModel } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
@@ -2701,5 +2702,49 @@ describe("throwIfApprovalRequired", () => {
       toolName: "workspace__export",
       toolInput: { destination: "external" },
     });
+  });
+});
+
+describe("selectMCPGatewayToken synthetic principals", () => {
+  test("service-account principal does not mint a personal user token and falls back to the org token", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    await TeamTokenModel.create({
+      organizationId: org.id,
+      isOrganizationToken: true,
+      name: "Org Token",
+    });
+
+    const result = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${crypto.randomUUID()}`,
+      org.id,
+    );
+
+    expect(result).toMatchObject({ isOrganizationToken: true });
+
+    // No personal user token row may be created for the synthetic principal
+    // (previously this path failed on the user_id foreign key).
+    const userTokens = await db.select().from(schema.userTokensTable);
+    expect(userTokens).toHaveLength(0);
+  });
+
+  test("service-account principal without any org token gets null instead of an error", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const result = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${crypto.randomUUID()}`,
+      org.id,
+    );
+
+    expect(result).toBeNull();
   });
 });

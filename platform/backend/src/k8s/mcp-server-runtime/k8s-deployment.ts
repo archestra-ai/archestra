@@ -448,6 +448,7 @@ interface K8sDeploymentOptions {
   mcpServer: McpServer;
   k8sApi: k8s.CoreV1Api;
   k8sAppsApi: k8s.AppsV1Api;
+  k8sRbacApi?: k8s.RbacAuthorizationV1Api;
   k8sNetworkingApi?: k8s.NetworkingV1Api;
   k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   k8sAttach: Attach;
@@ -470,6 +471,7 @@ export default class K8sDeployment {
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
   private k8sAppsApi: k8s.AppsV1Api;
+  private k8sRbacApi?: k8s.RbacAuthorizationV1Api;
   private k8sNetworkingApi?: k8s.NetworkingV1Api;
   private k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   private k8sAttach: Attach;
@@ -517,6 +519,7 @@ export default class K8sDeployment {
     this.mcpServer = options.mcpServer;
     this.k8sApi = options.k8sApi;
     this.k8sAppsApi = options.k8sAppsApi;
+    this.k8sRbacApi = options.k8sRbacApi;
     this.k8sNetworkingApi = options.k8sNetworkingApi;
     this.k8sCustomObjectsApi = options.k8sCustomObjectsApi;
     this.k8sAttach = options.k8sAttach;
@@ -1017,7 +1020,7 @@ export default class K8sDeployment {
     if (this.runtimeOwnerReferences) return this.runtimeOwnerReferences;
     try {
       const ownerReferences = await resolveRuntimeOwnerReferences(
-        this.k8sApi,
+        this.k8sRbacApi,
         this.namespace,
       );
       if (ownerReferences) this.runtimeOwnerReferences = ownerReferences;
@@ -1025,7 +1028,7 @@ export default class K8sDeployment {
     } catch (error) {
       logger.debug(
         { err: error, namespace: this.namespace },
-        "Could not read the Helm anchor for MCP runtime resources",
+        "Could not read the configured owner Role for MCP runtime resources",
       );
       return undefined;
     }

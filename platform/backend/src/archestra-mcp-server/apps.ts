@@ -470,7 +470,7 @@ const registry = defineArchestraTools([
         "Authentication required to create an app.",
       );
       if ("error" in auth) return auth.error;
-      const { userId, organizationId, sessionKey } = auth;
+      const { userId, organizationId, sessionKey, interactionSessionId } = auth;
 
       const scope = args.scope ?? "personal";
       // Team scope needs explicit team assignment, which these chat tools can't
@@ -570,6 +570,10 @@ const registry = defineArchestraTools([
               lifecycleDefaults.locked || !lifecycleDefaults.enabled
                 ? (sessionKey ?? null)
                 : null,
+            // The session that is building this app, so its build cost (the
+            // authoring turns' LLM spend) is reportable per app rather than
+            // vanishing into an unattributed conversation.
+            authoringSessionId: interactionSessionId ?? null,
           },
           payload,
         });
@@ -1746,6 +1750,14 @@ type AuthedCaller = {
    * present it.
    */
   sessionKey: string | undefined;
+  /**
+   * The LLM session the authoring turns were recorded under
+   * (`interactions.session_id`), stored on a newly scaffolded app so its build
+   * cost is reportable. Distinct from `sessionKey`, which is an opaque grace
+   * key: the two coincide in UI chat and diverge in a headless run, where the
+   * grace key is a per-execution id and this is the executor's session id.
+   */
+  interactionSessionId: string | undefined;
 };
 
 /** Narrow the caller to userId + organizationId, or a ready auth-required error. */
@@ -1760,6 +1772,7 @@ function requireAuthed(
     userId: context.userId,
     organizationId: context.organizationId,
     sessionKey: authoringSessionKey(context),
+    interactionSessionId: authoringInteractionSessionId(context),
   };
 }
 
@@ -1772,6 +1785,20 @@ function requireAuthed(
  */
 function authoringSessionKey(context: ArchestraContext): string | undefined {
   return context.isolationKey ?? context.conversationId;
+}
+
+/**
+ * The session id the authoring turns' interactions were recorded under, stored
+ * on a scaffolded app as `apps.authoring_session_id` so its build cost is a sum
+ * over that session. Prefers the explicit `sessionId` the caller was given
+ * (which is what the LLM proxy stamps on the interaction) and falls back the
+ * same way delegation does, so the value matches the recorded rows on every
+ * surface. Undefined where no session identifies the caller at all.
+ */
+function authoringInteractionSessionId(
+  context: ArchestraContext,
+): string | undefined {
+  return context.sessionId ?? context.conversationId ?? context.isolationKey;
 }
 
 /**

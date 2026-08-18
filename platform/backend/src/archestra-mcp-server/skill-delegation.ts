@@ -7,11 +7,13 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
+import { reportSkillActivation } from "@/observability/metrics/skill";
 import { ProviderError } from "@/routes/chat/errors";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import type { Skill } from "@/types";
 import { delegationToolArgsSchema } from "./delegation";
@@ -198,13 +200,24 @@ export async function handleSkillDelegation(
   // The caller's ancestor path, which the executor checks for cycles.
   const parentDelegationChain = context.delegationChain || context.agentId;
 
-  // dispatching the skill to its designated agent counts one use.
-  SkillModel.recordUsage({ skillId: skill.id, userId });
+  // The subagent's turns are recorded under this session, so it is also the key
+  // the activation's attributable spend is summed over.
+  const sessionId =
+    context.sessionId || context.conversationId || context.isolationKey;
+
+  // dispatching the skill to its designated agent counts one use. The designated
+  // agent's model is not resolved on this path (the executor picks it), so the
+  // block is measured on the default tokenizer.
+  const contextTokens = measureSkillContextTokens({ block: activationBlock });
+  SkillModel.recordUsage({
+    skillId: skill.id,
+    userId,
+    sessionId: sessionId ?? null,
+    contextTokens,
+  });
+  reportSkillActivation({ activationType: "delegation", contextTokens });
 
   try {
-    const sessionId =
-      context.sessionId || context.conversationId || context.isolationKey;
-
     logger.info(
       {
         agentId,

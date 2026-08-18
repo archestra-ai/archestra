@@ -6,6 +6,7 @@
  */
 
 import {
+  APP_ID_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
@@ -47,6 +48,7 @@ import {
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  AppModel,
   EnvironmentModel,
   InteractionModel,
   LimitValidationService,
@@ -166,6 +168,12 @@ export interface LLMProxyContext<TRequest> {
    * agent row. Undefined for every non-advisor request.
    */
   delegationBillingEnvironmentId?: string;
+  /**
+   * MCP App whose runtime made this call, resolved from the loopback-gated app
+   * header and re-validated against the executing agent's organization.
+   * Undefined for every request that is not an app-runtime completion.
+   */
+  appId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -720,6 +728,10 @@ export async function handleLLMProxy<
   // interaction write agree on it.
   const delegationBillingEnvironmentId =
     await resolveDelegationBillingEnvironment(request, resolvedAgent);
+
+  // App-runtime completions carry the calling app, so per-app runtime spend is
+  // attributable instead of collapsing into the shared App Runtime agent.
+  const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
   // Check usage limits
   try {
@@ -1277,6 +1289,7 @@ export async function handleLLMProxy<
       suppressContent,
       lockedChat,
       delegationBillingEnvironmentId,
+      appId: attributedAppId,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1332,6 +1345,7 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId: attributedAppId,
         sessionId,
         sessionSource,
         source,
@@ -1406,6 +1420,7 @@ async function handleStreaming<
     suppressContent,
     lockedChat,
     delegationBillingEnvironmentId,
+    appId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1452,6 +1467,7 @@ async function handleStreaming<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId,
         sessionId,
         sessionSource,
         source,
@@ -1867,6 +1883,7 @@ async function handleStreaming<
           userId,
           virtualKeyId,
           passthroughVirtualKeyId,
+          appId,
           sessionId,
           sessionSource,
           source,
@@ -1936,6 +1953,7 @@ async function handleNonStreaming<
     suppressContent,
     lockedChat,
     delegationBillingEnvironmentId,
+    appId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -2191,6 +2209,7 @@ async function handleNonStreaming<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId,
         sessionId,
         sessionSource,
         source,
@@ -2268,6 +2287,7 @@ async function handleNonStreaming<
       userId,
       virtualKeyId,
       passthroughVirtualKeyId,
+      appId,
       sessionId,
       sessionSource,
       source,
@@ -2537,6 +2557,62 @@ async function resolveDelegationBillingEnvironment(
     return undefined;
   }
   return environment.id;
+}
+
+/**
+ * Resolve the MCP App an app-runtime completion is attributed to, from
+ * APP_ID_HEADER. Honored only when all three hold: the request arrived over the
+ * loopback socket (the in-process app-runtime tool's path — the raw socket peer,
+ * not request.ip, which trustProxy can rewrite from forwarded headers), the id
+ * is a uuid, and it names an app of the executing agent's organization.
+ * Anything else ignores the header with a warning: the worst a spoofed value
+ * can do is misattribute app spend between one organization's apps, so an
+ * unusable header must be ignored rather than fail the LLM call.
+ */
+async function resolveAttributedAppId(
+  request: FastifyRequest,
+  agent: GatewayAgent,
+): Promise<string | undefined> {
+  const raw = request.headers[APP_ID_HEADER.toLowerCase()];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return undefined;
+  }
+
+  if (!isLoopbackRequest(request)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring app attribution header from a non-loopback peer",
+    );
+    return undefined;
+  }
+  // The app-id column is a uuid; a non-uuid value would make the lookup's cast
+  // throw and 500 the LLM call, so reject it here.
+  if (!isUuid(value)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring malformed app attribution header",
+    );
+    return undefined;
+  }
+  let app: Awaited<ReturnType<typeof AppModel.findById>>;
+  try {
+    app = await AppModel.findById(value);
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId: agent.id },
+      "Ignoring app attribution header after a lookup error",
+    );
+    return undefined;
+  }
+  if (!app || app.organizationId !== agent.organizationId) {
+    logger.warn(
+      { agentId: agent.id, appId: value },
+      "Ignoring app attribution header naming an app outside the agent's organization",
+    );
+    return undefined;
+  }
+  return app.id;
 }
 
 /**

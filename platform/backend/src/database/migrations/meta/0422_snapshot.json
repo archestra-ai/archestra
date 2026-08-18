@@ -1,5 +1,5 @@
 {
-  "id": "8f05debd-0ecb-4825-9078-1f6f244603ed",
+  "id": "dfacfc16-2f76-4ef6-ba3f-8bc23a52ddf9",
   "prevId": "b24243e2-e983-4b97-9c13-935a45ba1e89",
   "version": "7",
   "dialect": "postgresql",
@@ -3657,6 +3657,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "authoring_session_id": {
+          "name": "authoring_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3699,6 +3705,21 @@
           "columns": [
             {
               "expression": "mcp_server_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "apps_authoring_session_id_idx": {
+          "name": "apps_authoring_session_id_idx",
+          "columns": [
+            {
+              "expression": "authoring_session_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7812,6 +7833,12 @@
         },
         "connector_id": {
           "name": "connector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "app_id": {
+          "name": "app_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -13117,12 +13144,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "supports_reasoning_effort": {
-          "name": "supports_reasoning_effort",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
         "supported_endpoints": {
           "name": "supported_endpoints",
           "type": "jsonb",
@@ -17397,6 +17418,18 @@
         "user_id": {
           "name": "user_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "context_tokens": {
+          "name": "context_tokens",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-11
+lastUpdated: 2026-08-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,6 +38,30 @@ Tokens and requests are the honest measure of adoption. Cost is not: a person wh
 The same data is available from the API at `GET /api/statistics/users`, which returns one row per user with their email, so you can join it to an external roster. The response is paginated. Two options are off by default because each one costs extra work: `includeModels` adds the per-model breakdown, and `includeTimeSeries` adds a cost series per user.
 
 Per-user usage is employee-level data. Seeing other people's usage requires permission to read the member list; without it, both the UI and the API show you only your own.
+
+## Per-App Cost
+
+The Apps section reports what each [MCP App](platform-apps) cost to build and what it costs to run.
+
+Build cost is the LLM spend of the chat that authored the app. It is a one-off: you pay it once, then the app runs. An app created from the Apps page has no authoring chat, so it reports no build cost.
+
+Runtime cost has two parts. Opening an app and using its interface costs nothing — the model is not in the loop. But an app can request a completion of its own with `archestra.llm.complete()`, and those calls are billed like any other. The Runs and Tool calls columns show how often the app was used; Runtime cost shows what its own LLM calls came to.
+
+The estimate in the last two columns answers "was this app worth building". It assumes one run of an app replaces one chat session, priced at your organization's average cost per chat session over the same period. That average is measured from your own traffic and shown in the section description, so you can judge the assumption — an app that replaces a long research chat saves more than the average suggests, and one that replaces a two-message exchange saves less.
+
+One chat can build several apps. When it does, the whole chat's spend is reported for each of them rather than divided, and the build cost is marked to say so.
+
+The same data is available from the API at `GET /api/statistics/apps`.
+
+## Per-Skill Cost
+
+The Skills section reports what each [Agent Skill](platform-agent-skills) costs. A skill works by adding its instructions to the model's context, so it has two costs and they answer different questions.
+
+Context tokens is the skill's own footprint: the tokens its instructions added, measured when they were injected. This is the number that belongs to the skill alone, and the one to look at when a skill feels expensive for what it does.
+
+Cost on those turns is the spend of the turns that ran with the skill in context. Those turns carried the conversation as well as the skill, and two skills active in one chat are each credited with the same turns. Read it as an upper bound on the skill's influence, not as a bill.
+
+The same data is available from the API at `GET /api/statistics/skills`.
 
 ## Subscription vs Metered Cost
 

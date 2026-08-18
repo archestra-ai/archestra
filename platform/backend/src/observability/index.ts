@@ -27,6 +27,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.chat.initializeChatMetrics();
+  metrics.skill.initializeSkillMetrics();
   metrics.activeUsers.initializeActiveUsersMetrics();
 
   return labelKeys;

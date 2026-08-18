@@ -1,4 +1,5 @@
 import {
+  APP_ID_HEADER,
   CHAT_API_KEY_ID_HEADER,
   CHATGPT_SUBSCRIPTION_LABEL,
   DELEGATION_BILLING_ENVIRONMENT_HEADER,
@@ -1397,6 +1398,41 @@ describe("createLLMModel", () => {
       headers?: Record<string, string>;
     };
     expect(headers?.[DELEGATION_BILLING_ENVIRONMENT_HEADER]).toBeUndefined();
+  });
+
+  test("sets the app attribution header only when an app is provided", () => {
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      appId: "11111111-1111-4111-8111-111111111111",
+    });
+
+    expect(mockCreateAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [APP_ID_HEADER]: "11111111-1111-4111-8111-111111111111",
+        }),
+      }),
+    );
+
+    mockCreateAnthropic.mockClear();
+
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      appId: null,
+    });
+
+    const { headers } = mockCreateAnthropic.mock.calls[0][0] as {
+      headers?: Record<string, string>;
+    };
+    expect(headers?.[APP_ID_HEADER]).toBeUndefined();
   });
 
   for (const provider of ["ollama", "ollama-native", "vllm"] as const) {

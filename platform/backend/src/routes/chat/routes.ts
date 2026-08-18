@@ -969,6 +969,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   userId: user.id,
                   agentId: conversation.agentId ?? undefined,
                   conversationId,
+                  provider,
+                  model: selectedModel,
                 })
               : (messages as ChatMessage[]);
 

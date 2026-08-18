@@ -1,11 +1,17 @@
 import { vi } from "vitest";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
+import db, { schema } from "@/database";
+import { SkillModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/auth");
+// `app:admin` and the skills admin gate are resolved through this module
+// directly, so it is mocked alongside @/auth (module mocks match specifiers).
+vi.mock("@/auth/utils");
 
 describe("GET /api/statistics/users", () => {
   let app: FastifyInstanceWithZod;
@@ -159,5 +165,205 @@ describe("GET /api/statistics/users", () => {
     const body = response.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].userId).toBe(currentUser.id);
+  });
+});
+
+describe("GET /api/statistics/apps", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+    currentUser = await makeAdmin();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
+    vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
+      ReturnType<typeof hasPermission>
+    >);
+    // `app:admin` oversight, so the route reports on every app in the org.
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("splits build and runtime spend, with the chat baseline behind the estimate", async ({
+    makeAgent,
+    makeApp,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const built = await makeApp({
+      organizationId,
+      name: "Weekly Report",
+      authoringSessionId: "authoring-session",
+    });
+
+    await makeInteraction(agent.id, {
+      sessionId: "authoring-session",
+      source: "chat",
+      cost: "0.5000000000",
+    });
+    await makeInteraction(agent.id, {
+      appId: built.id,
+      source: "app:llm_complete",
+      cost: "0.0200000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/apps?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const row = body.data.find(
+      (entry: { appId: string }) => entry.appId === built.id,
+    );
+    expect(row).toMatchObject({
+      appName: "Weekly Report",
+      buildRequests: 1,
+      runtimeLlmRequests: 1,
+      hasBuildSession: true,
+    });
+    expect(row.buildCost).toBeCloseTo(0.5, 10);
+    expect(row.runtimeCost).toBeCloseTo(0.02, 10);
+    // The counterfactual's multiplier travels with the page so it can be judged.
+    expect(body).toHaveProperty("chatBaselineCostPerSession");
+    expect(body).toHaveProperty("chatBaselineSessions");
+  });
+
+  test("omits apps the caller cannot see", async ({ makeApp, makeUser }) => {
+    // No app:admin, so only the caller's own personal app is in scope.
+    vi.mocked(userHasPermission).mockResolvedValue(false);
+    const someoneElse = await makeUser();
+    const mine = await makeApp({
+      organizationId,
+      name: "Mine",
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const theirs = await makeApp({
+      organizationId,
+      name: "Theirs",
+      authorId: someoneElse.id,
+      scope: "personal",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/apps?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const appIds = response
+      .json()
+      .data.map((entry: { appId: string }) => entry.appId);
+    expect(appIds).toContain(mine.id);
+    expect(appIds).not.toContain(theirs.id);
+  });
+});
+
+describe("GET /api/statistics/skills", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+    currentUser = await makeAdmin();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
+    vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
+      ReturnType<typeof hasPermission>
+    >);
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+    // `skill:admin` oversight, so the route reports on every skill in the org.
+    vi.mocked(getPermissionsForUserContext).mockResolvedValue({
+      skill: ["read", "admin"],
+    } as Awaited<ReturnType<typeof getPermissionsForUserContext>>);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("reports the skill's own context footprint alongside the spend it rode", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        authorId: null,
+        name: "Reporting",
+        description: "desc",
+        content: "# body",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const activatedAt = new Date(Date.now() - 60_000);
+    await db.insert(schema.skillUsageEventsTable).values({
+      skillId: skill.id,
+      userId: currentUser.id,
+      sessionId: "skill-session",
+      contextTokens: 900,
+      createdAt: activatedAt,
+    });
+    await makeInteraction(agent.id, {
+      sessionId: "skill-session",
+      source: "chat",
+      cost: "0.2500000000",
+      createdAt: new Date(Date.now() - 30_000),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/skills?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      skillId: skill.id,
+      skillName: "Reporting",
+      activations: 1,
+      contextTokens: 900,
+      measuredActivations: 1,
+      attributedSessions: 1,
+      attributedRequests: 1,
+    });
+    expect(body.data[0].attributedCost).toBeCloseTo(0.25, 10);
   });
 });

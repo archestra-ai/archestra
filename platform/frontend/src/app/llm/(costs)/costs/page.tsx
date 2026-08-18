@@ -52,9 +52,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  useAppStatistics,
   useCostSavingsStatistics,
   useModelStatistics,
   useProfileStatistics,
+  useSkillStatistics,
   useTeamStatistics,
   useUserStatistics,
 } from "@/lib/statistics.query";
@@ -114,6 +116,8 @@ const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
  */
 const USER_STATISTICS_PAGE_SIZE = 10;
 const USER_MODEL_BADGE_LIMIT = 2;
+/** Apps and skills are paginated for the same reason as people. */
+const ENTITY_STATISTICS_PAGE_SIZE = 10;
 
 export default function StatisticsPage() {
   const router = useRouter();
@@ -156,6 +160,23 @@ export default function StatisticsPage() {
   });
   const userStatistics = userStatisticsPage?.data ?? [];
   const userStatisticsTotal = userStatisticsPage?.pagination?.total ?? 0;
+  const { data: appStatisticsPage } = useAppStatistics({
+    timeframe,
+    limit: ENTITY_STATISTICS_PAGE_SIZE,
+    enabled: isTimeframeResolved,
+  });
+  const appStatistics = appStatisticsPage?.data ?? [];
+  const appStatisticsTotal = appStatisticsPage?.pagination?.total ?? 0;
+  const chatBaselineCostPerSession =
+    appStatisticsPage?.chatBaselineCostPerSession ?? 0;
+  const chatBaselineSessions = appStatisticsPage?.chatBaselineSessions ?? 0;
+  const { data: skillStatisticsPage } = useSkillStatistics({
+    timeframe,
+    limit: ENTITY_STATISTICS_PAGE_SIZE,
+    enabled: isTimeframeResolved,
+  });
+  const skillStatistics = skillStatisticsPage?.data ?? [];
+  const skillStatisticsTotal = skillStatisticsPage?.pagination?.total ?? 0;
 
   /**
    * Initialize from URL parameters or localStorage
@@ -1275,7 +1296,285 @@ export default function StatisticsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Apps</CardTitle>
+          <CardDescription>
+            What each app cost to build, and what it costs to run. Building an
+            app is a one-off spend; running it is UI and tool calls, plus any
+            LLM completions the app itself requests. The chat-equivalent
+            estimate assumes one run of an app replaces one chat session, priced
+            at this organization&apos;s measured average
+            {chatBaselineSessions > 0 ? (
+              <span>
+                {" "}
+                of ${chatBaselineCostPerSession.toFixed(2)} across{" "}
+                {chatBaselineSessions.toLocaleString()}{" "}
+                {chatBaselineSessions === 1 ? "chat session" : "chat sessions"}{" "}
+                in this period.
+              </span>
+            ) : (
+              <span>
+                {" "}
+                — no chat sessions in this period, so no estimate is made.
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatisticsTablePanel>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    App
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Runs
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Tool calls
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Build cost
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Runtime cost
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    As chat (est.)
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Net saving (est.)
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {appStatistics.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      {/* Every app is listed regardless of activity — an app with
+                          none simply reports zeros — so an empty table means
+                          there are no apps, not none in this timeframe. */}
+                      No apps have been created yet
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  appStatistics.map((app) => (
+                    <TableRow key={app.appId}>
+                      <TableCell>
+                        <div className="font-medium">{app.appName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {app.authorName ?? "Unknown author"}
+                        </div>
+                      </TableCell>
+                      <TableCell>{app.runs.toLocaleString()}</TableCell>
+                      <TableCell>{app.toolCalls.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <AppBuildCostCell app={app} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${app.runtimeCost.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        ${app.estimatedChatEquivalentCost.toFixed(2)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right ${
+                          app.estimatedNetSavings < 0 ? "text-destructive" : ""
+                        }`}
+                      >
+                        ${app.estimatedNetSavings.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </StatisticsTablePanel>
+          {appStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
+              {appStatisticsTotal.toLocaleString()} apps by total cost
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Skills</CardTitle>
+          <CardDescription>
+            A skill works by injecting instructions into the model&apos;s
+            context, so &ldquo;context&rdquo; is the tokens its activations
+            added — the part of the cost that is the skill&apos;s alone.
+            &ldquo;On turns that used it&rdquo; is the spend of the turns that
+            then ran with the skill in context, which the skill shares with
+            everything else in those turns.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatisticsTablePanel>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Skill
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Activations
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    People
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Context tokens
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Turns that used it
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Cost on those turns
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Last used
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {skillStatistics.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No skill activations for the selected timeframe
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  skillStatistics.map((skill) => (
+                    <TableRow key={skill.skillId}>
+                      <TableCell className="font-medium">
+                        {skill.skillName}
+                      </TableCell>
+                      <TableCell>
+                        {skill.activations.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {skill.distinctUsers.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <SkillContextTokensCell skill={skill} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {skill.attributedRequests.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${skill.attributedCost.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {skill.lastActivatedAt
+                          ? format(
+                              new Date(skill.lastActivatedAt),
+                              "MMM d, HH:mm",
+                            )
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </StatisticsTablePanel>
+          {skillStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
+              {skillStatisticsTotal.toLocaleString()} skills by context tokens
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+/**
+ * An app's build cost, with the caveat attached where one applies: an app with
+ * no authoring session recorded (created from the Apps page, or before the link
+ * existed) has no build cost to report, and a session that built several apps
+ * reports its whole spend against each of them.
+ */
+function AppBuildCostCell({
+  app,
+}: {
+  app: archestraApiTypes.GetAppStatisticsResponses["200"]["data"][number];
+}) {
+  if (!app.hasBuildSession) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-default">—</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          No authoring session is recorded for this app, so there is no build
+          spend to attribute to it.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (app.buildSessionAppCount > 1) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-default underline decoration-dotted">
+            ${app.buildCost.toFixed(2)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          This is the whole authoring session&apos;s spend, and that session
+          also built {app.buildSessionAppCount - 1}{" "}
+          {app.buildSessionAppCount === 2 ? "other app" : "other apps"} — the
+          same cost is reported for each rather than being split between them.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return <span>${app.buildCost.toFixed(2)}</span>;
+}
+
+/**
+ * A skill's injected context size, flagged when only some activations could be
+ * measured — activations recorded before the measurement existed contribute
+ * nothing, which would otherwise read as a smaller footprint.
+ */
+function SkillContextTokensCell({
+  skill,
+}: {
+  skill: archestraApiTypes.GetSkillStatisticsResponses["200"]["data"][number];
+}) {
+  const unmeasured = skill.activations - skill.measuredActivations;
+  if (unmeasured <= 0) {
+    return <span>{skill.contextTokens.toLocaleString()}</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-default underline decoration-dotted">
+          {skill.contextTokens.toLocaleString()}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        {unmeasured} of {skill.activations} activations have no recorded context
+        size, so this total covers only the {skill.measuredActivations} that do.
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -32,6 +32,7 @@ export function makeConfig(
     features: {
       betaEnabled: false,
       orchestratorK8sRuntime: false,
+      mcpIdleHibernationBetaEnabled: false,
       sandbox: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

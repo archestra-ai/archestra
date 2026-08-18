@@ -79,6 +79,9 @@ archestra:
     # token the deploy workflow injects): no release carries the package yet.
     # Remove both once the first release ships with the .mfappx asset.
     ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
+    # BETA: MCP idle hibernation (off by default everywhere else). Explicit so
+    # staging keeps the feature even if ARCHESTRA_BETA is ever flipped off.
+    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"

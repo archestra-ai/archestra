@@ -1623,6 +1623,15 @@ async function discoverLocalMcpServerTools(params: {
       throw new Error("Deployment manager not found");
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // An install can adopt an existing shared (multitenant) deployment that
+    // idle hibernation scaled to zero; wake it so the readiness wait below
+    // isn't a guaranteed timeout.
+    await McpServerRuntimeManager.ensureAwake(mcpServer.id);
+    // SPDX-SnippetEnd
+
     await k8sDeployment.waitForDeploymentReady(60, 2000);
     await McpServerModel.update(mcpServer.id, {
       localInstallationStatus: "discovering-tools",

@@ -55,6 +55,11 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
+// SPDX-SnippetEnd
 import config, {
   shouldRunRenderer,
   shouldRunWebServer,
@@ -105,6 +110,12 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -1222,6 +1233,13 @@ const registerSandboxRoute = (
 const startMcpServerRuntime = async (
   fastify: ReturnType<typeof createFastifyInstance>,
 ) => {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Demand can be served while K8s initialization is still running or after it
+  // fails. Start protection first so long calls keep heartbeating either way.
+  mcpActiveUseTracker.start();
+  // SPDX-SnippetEnd
   // Initialize MCP Server Runtime (K8s-based)
   if (McpServerRuntimeManager.isEnabled) {
     try {
@@ -1431,6 +1449,14 @@ const startWebServer = async () => {
     });
 
     startMcpServerRuntime(fastify);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Wire pooled-connection invalidation to hibernation events. Done here —
+    // not at mcp-client module scope — because the manager module sits in an
+    // import cycle with mcp-client.
+    registerMcpClientHibernationInvalidation();
+    // SPDX-SnippetEnd
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
     skillSandboxRuntimeService.init().catch((error) => {
@@ -1846,6 +1872,26 @@ const startWorker = async () => {
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Worker task handlers call MCP servers through mcp-client too — wire its
+    // pooled-connection invalidation to hibernation events (see `start`).
+    registerMcpClientHibernationInvalidation();
+    // The idle sweeper runs on the web replicas, but it decides from a row
+    // THIS process's calls keep honest. Without the heartbeat, a worker-side
+    // call that outlives the idle window — an MCP Task makes that ordinary —
+    // ages out of its own protection: the worker's active counter is invisible
+    // cross-process, and the web sweeper hibernates the pod mid-call.
+    // Heartbeat only; a worker never sweeps. Keep this running across rolling
+    // configuration changes because web replicas with the previous flags can
+    // still be sweeping from the same database timestamp.
+    mcpActiveUseTracker.start();
+    // The mirror-image staleness: a web replica can hibernate a deployment this
+    // worker woke. Watchers therefore stay active across flag skew too;
+    // reconcile/sweep remain web-side.
+    McpServerRuntimeManager.startStateWatchersOnly();
+    // SPDX-SnippetEnd
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
@@ -1923,6 +1969,11 @@ const startWorker = async () => {
 
       try {
         await healthServer.close();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        mcpActiveUseTracker.stop();
+        // SPDX-SnippetEnd
         cacheManager.shutdown();
         await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();

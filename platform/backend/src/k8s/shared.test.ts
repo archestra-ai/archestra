@@ -11,7 +11,15 @@ vi.mock("@kubernetes/client-node", () => {
     loadFromFile() {}
     loadFromString() {}
     makeApiClient() {
-      return {};
+      return {
+        api: {
+          configuration: {
+            httpApi: {
+              send: vi.fn((request: unknown) => ({ request })),
+            },
+          },
+        },
+      };
     }
   }
   return {
@@ -23,6 +31,7 @@ vi.mock("@kubernetes/client-node", () => {
     NetworkingV1Api: vi.fn(),
     CustomObjectsApi: vi.fn(),
     Attach: vi.fn(),
+    Exec: vi.fn(),
     Log: vi.fn(),
   };
 });
@@ -40,6 +49,32 @@ vi.mock("@/config", async () =>
 );
 
 describe("shared K8s utilities", () => {
+  test("generated API clients bound requests with an abort signal", async () => {
+    const { KubeConfig } = await import("@kubernetes/client-node");
+    const { createK8sClients } = await import("./shared");
+    const clients = createK8sClients(new KubeConfig(), "test-namespace");
+    const httpApi = (
+      clients.coreApi as unknown as {
+        api: {
+          configuration: {
+            httpApi: { send: (request: unknown) => unknown };
+          };
+        };
+      }
+    ).api.configuration.httpApi;
+    let signal: AbortSignal | undefined;
+
+    httpApi.send({
+      getSignal: () => undefined,
+      setSignal: (value: AbortSignal) => {
+        signal = value;
+      },
+    });
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+  });
+
   describe("sanitizeLabelValue", () => {
     async function getSanitizeLabelValue() {
       const { sanitizeLabelValue } = await import("./shared");

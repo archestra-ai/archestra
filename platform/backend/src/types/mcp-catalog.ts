@@ -17,6 +17,11 @@ import {
   CatalogTeamInputSchema,
 } from "./catalog-team-level";
 import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { McpServerHibernationModeSchema } from "./mcp-hibernation";
+// SPDX-SnippetEnd
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
@@ -242,6 +247,14 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Operational per-server idle-hibernation override, cascaded by the PUT
+    // route onto every live install of the catalog — never stored on the
+    // catalog row itself.
+    hibernationMode: McpServerHibernationModeSchema.optional(),
+    // SPDX-SnippetEnd
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
       .record(z.string(), UserConfigFieldSchema)

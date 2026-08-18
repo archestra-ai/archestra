@@ -29,7 +29,19 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     isEnabled: true,
     restartServer: k8sRestartServerMock,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ensureAwake: vi.fn(),
+    isDeploymentDormant: vi.fn(() => false),
+    registerHibernationListener: vi.fn(),
+    // SPDX-SnippetEnd
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerWakeError: class McpServerWakeError extends Error {},
+  // SPDX-SnippetEnd
 }));
 
 const hasPermissionMock = vi.mocked(hasPermission);

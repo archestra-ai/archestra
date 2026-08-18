@@ -71,6 +71,11 @@ export {
   selectionKey,
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export type { ClusterLeaseGuard } from "./mcp-deployment-lease";
+export {
+  ClusterLeaseHeldError,
+  default as McpDeploymentLeaseModel,
+} from "./mcp-deployment-lease";
 export { default as McpGatewayTaskModel } from "./mcp-gateway-task";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpOauthClientModel } from "./mcp-oauth-client";

@@ -39,7 +39,22 @@ import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerDeploymentFailedError,
+  // SPDX-SnippetEnd
+  McpServerRuntimeManager,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerWakeError,
+  McpServerWakePendingError,
+  wakeResponseBudgetMs,
+  withDeadline,
+  // SPDX-SnippetEnd
+} from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -69,6 +84,12 @@ import {
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import {
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
@@ -104,6 +125,36 @@ const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
 } as const;
+
+type PassiveMcpClient = {
+  execute: <T>(operation: (client: Client) => Promise<T>) => Promise<
+    | { ran: true; value: T }
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    | { ran: false }
+    // SPDX-SnippetEnd
+  >;
+};
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// Runtime startup wires this after module initialization to avoid the
+// manager -> model -> client import cycle. Both web and worker startup paths
+// call it, so registration must be idempotent.
+let hibernationInvalidationRegistered = false;
+export function registerMcpClientHibernationInvalidation(): void {
+  if (hibernationInvalidationRegistered) return;
+
+  hibernationInvalidationRegistered = true;
+  McpServerRuntimeManager.registerHibernationListener(async (mcpServerIds) => {
+    for (const mcpServerId of mcpServerIds) {
+      await mcpClient.invalidateConnectionsForServer(mcpServerId);
+    }
+  });
+}
+// SPDX-SnippetEnd
 
 export class McpServerNotReadyError extends Error {
   constructor(message: string) {
@@ -588,563 +639,359 @@ class McpClient {
     }
     const { targetMcpServerId, mcpServerName, resolvedServer } =
       targetMcpServerIdResult;
-    const effectiveEnterpriseManagedConfig =
-      catalogItem.enterpriseManagedConfig ?? null;
-    if (
-      tool.credentialResolutionMode === "enterprise_managed" &&
-      !effectiveEnterpriseManagedConfig
-    ) {
-      return this.createErrorResult({
-        toolCall,
-        owner,
-        error:
-          "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
-        mcpServerName,
-        authInfo,
-        lockedChatContent,
-      });
-    }
-    // A catalog-level enterprise-managed config is authoritative: assignments
-    // created before enterprise mode existed (or via paths that didn't infer
-    // it) still carry the default "static"/"dynamic" mode, and connecting
-    // with static secrets would hit the protected server without any
-    // credential. Fail closed through the exchange instead.
-    const usesEnterpriseManagedCredential =
-      tool.credentialResolutionMode === "enterprise_managed" ||
-      effectiveEnterpriseManagedConfig !== null;
-    const enterpriseTransportCredential = usesEnterpriseManagedCredential
-      ? await this.resolveCachedEnterpriseTransportCredential({
-          owner,
-          tokenAuth,
-          enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
-        })
-      : null;
 
-    if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
-      const authError =
-        await this.buildEnterpriseManagedIdentityProviderAuthMessage(
-          catalogItem.name,
-          catalogItem.id,
-          effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
-          tokenAuth,
-          options,
-        );
-      return this.createErrorResult({
-        toolCall,
-        owner,
-        error: authError.message,
-        mcpServerName,
-        authInfo,
-        structuredError: authError,
-        lockedChatContent,
-      });
-    }
-
-    const secretsResult = await this.getSecretsForMcpServer({
-      targetMcpServerId: targetMcpServerId,
-      toolCall,
-      owner,
-      lockedChatContent,
-    });
-    if ("error" in secretsResult) {
-      return secretsResult.error;
-    }
-    const { secrets, secretId, serverState } = secretsResult;
-
-    // The outbound credential is fully settled here (install secrets loaded,
-    // enterprise exchange done), so every result below can name the identity
-    // it ran as — including the ones the token-refresh retry produces.
-    const executedAs = await this.describeExecutedAs({
-      resolvedServer,
-      tokenAuth,
-      enterpriseTransportCredential,
-      catalogItem,
-      secrets,
-    });
-    if (executedAs) {
-      authInfo = { ...authInfo, executedAs };
-    }
-
-    // Build connection cache key using the resolved target server ID.
-    // Agents: when conversationId is provided, each (agent, conversation) gets
-    // its own connection for per-session browser context isolation.
-    // Apps: keyed by (app, viewing user, session) so one app's upstream session
-    // never leaks across users or browser sessions.
-    // When authenticated via external IdP, each user additionally gets its own
-    // connection since the JWT is propagated to the underlying server per-user.
-    const externalIdpUserId = tokenAuth?.isExternalIdp
-      ? tokenAuth.userId
-      : undefined;
-    let connectionKey: string;
-    if (owner.type === "agent") {
-      connectionKey = options?.conversationId
-        ? `${catalogItem.id}:${targetMcpServerId}:${owner.id}:${options.conversationId}`
-        : `${catalogItem.id}:${targetMcpServerId}`;
-    } else {
-      // An app call must carry the viewing user (session auth). Without one we
-      // must never collapse distinct callers onto a shared literal — that would
-      // let them reuse each other's persisted upstream session. Isolate the call
-      // with a per-request nonce instead, and surface the misuse.
-      let userSegment = tokenAuth?.userId;
-      if (!userSegment) {
-        userSegment = `anon:${randomUUID()}`;
-        logger.warn(
-          { appId: owner.id, catalogId: catalogItem.id },
-          "App tool call has no viewing user; isolating the connection per-request",
-        );
-      }
-      const sessionSegment = options?.conversationId ?? "default";
-      connectionKey = `${catalogItem.id}:${targetMcpServerId}:app:${owner.id}:${userSegment}:${sessionSegment}`;
-    }
-    if (externalIdpUserId) {
-      connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
-    }
-    if (options?.elicitationHandler) {
-      // Elicitation support is declared during MCP initialize. Keep these
-      // clients separate so a connection opened without the capability is not
-      // reused for a tool call that may receive elicitation/create requests.
-      // This intentionally keeps a second cached client per server/session
-      // when both interactive and non-interactive callers use the same MCP
-      // server.
-      connectionKey = `${connectionKey}:elicitation`;
-    }
-
-    const executeToolCall = async (
-      getTransport: () => Promise<Transport>,
-      currentSecrets: Record<string, unknown>,
-      isRetry = false,
-    ): Promise<CommonToolResult> => {
-      try {
-        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
-          .refresh_token;
-        const shouldRefreshBeforeCall =
-          !isRetry &&
-          !!catalogItem.oauthConfig &&
-          !!secretId &&
-          hasRefreshToken &&
-          shouldProactivelyRefreshOAuthToken(currentSecrets);
-
-        if (shouldRefreshBeforeCall) {
-          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
-            secretId,
-            catalogId: catalogItem.id,
-            connectionKey,
-            toolCall,
-            owner,
-            mcpServerName,
-            catalogItem,
-            targetMcpServerId,
-            tokenAuth,
-            lockedChatContent,
-            enterpriseTransportCredential,
-            toolCatalogId: tool.catalogId,
-            toolCatalogName: tool.catalogName,
-            executeRetry: (nextGetTransport, secrets) =>
-              executeToolCall(nextGetTransport, secrets, true),
-          });
-
-          if (retryToolCallResult) {
-            return retryToolCallResult;
-          }
-
-          logger.warn(
-            { toolName: toolCall.name, secretId, catalogId: catalogItem.id },
-            "Proactive OAuth refresh failed, falling back to existing token",
-          );
-        }
-
-        // Get the appropriate transport
-        const transport = await getTransport();
-
-        // Get or create client
-        const client = await this.getOrCreateClient(
-          connectionKey,
-          transport,
-          targetMcpServerId,
-          serverState,
-          options?.elicitationHandler,
-        );
-
-        // Determine the actual upstream tool name. Prefer the stored raw name
-        // (tools.raw_name): it is exact even when the slug's server-prefix was
-        // truncated to fit the 64-char cap or the raw name itself contains the
-        // `__` separator. Fall back to prefix-stripping the slug for legacy rows
-        // whose raw_name has not been backfilled/re-synced yet.
-        let targetToolName: string;
-        if (tool.rawName) {
-          targetToolName = tool.rawName;
-        } else {
-          // We prioritize the `catalogName` prefix, which is standard for local
-          // MCP servers. If the tool name doesn't match the catalog prefix, we
-          // fall back to the resolved `mcpServerName`.
-          targetToolName = this.stripServerPrefix(
-            toolCall.name,
-            tool.catalogName || "",
-          );
-
-          if (targetToolName === toolCall.name) {
-            // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-            targetToolName = this.stripServerPrefix(
-              toolCall.name,
-              mcpServerName,
-            );
-          }
-
-          if (targetToolName === toolCall.name) {
-            // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
-            // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
-            targetToolName = parseFullToolName(toolCall.name).toolName;
-          }
-        }
-
-        const resourceUri = getSyntheticResourceToolUri(tool.meta);
-        if (resourceUri) {
-          const result = await client.readResource(
-            { uri: resourceUri },
-            {
-              signal: options?.abortSignal,
-              timeout: config.mcpGateway.toolCallTimeoutMs,
-            },
-          );
-          return await this.createSuccessResult({
-            toolCall,
-            owner,
-            mcpServerName,
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result.contents),
-              },
-            ],
-            isError: false,
-            _meta: { resourceUri },
-            authInfo,
-            lockedChatContent,
-            structuredContent: {
-              contents: result.contents as unknown,
-            },
-          });
-        }
-
-        // Resolve the actual tool name from the server (preserving original casing).
-        // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
-        // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
-        targetToolName = await this.resolveActualToolName(
-          client,
-          connectionKey,
-          targetToolName,
-          options?.abortSignal,
-        );
-
-        const result = await client.callTool(
-          {
-            name: targetToolName,
-            arguments: toolCall.arguments,
-          },
-          undefined,
-          {
-            signal: options?.abortSignal,
-            // A detached task answers its client immediately, so the
-            // synchronous patience window no longer applies — the task TTL
-            // does. Without this, a task outliving the sync timeout dies at
-            // the timeout even though nobody is waiting on it.
-            timeout:
-              options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs,
-          },
-        );
-
-        const isOAuthServer = !!catalogItem.oauthConfig;
-        const toolResultAuthError = isAuthRelatedToolResult(result);
-        if (
-          toolResultAuthError &&
-          isOAuthServer &&
-          secretId &&
-          hasRefreshToken &&
-          !isRetry
-        ) {
-          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
-            secretId,
-            catalogId: catalogItem.id,
-            connectionKey,
-            toolCall,
-            owner,
-            mcpServerName,
-            catalogItem,
-            targetMcpServerId,
-            tokenAuth,
-            lockedChatContent,
-            enterpriseTransportCredential,
-            toolCatalogId: tool.catalogId,
-            toolCatalogName: tool.catalogName,
-            executeRetry: (nextGetTransport, secrets) =>
-              executeToolCall(nextGetTransport, secrets, true),
-          });
-
-          if (retryToolCallResult) {
-            return retryToolCallResult;
-          }
-        }
-
-        if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
-          const catalogDisplayName = tool.catalogName || catalogItem.name;
-          const authError = await this.buildExpiredAuthMessage({
-            catalogDisplayName,
-            catalogId: tool.catalogId,
+    // Hold demand from before wake through dispatch. Registering only around
+    // transport use leaves wake and credential resolution exposed to a sweep.
+    const runDemandPath = async (): Promise<CommonToolResult> => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (catalogItem.serverType === "local") {
+        try {
+          await waitForMcpServerWake({
             mcpServerId: targetMcpServerId,
-            tokenAuth,
+            mcpServerName,
+            abortSignal: options?.abortSignal,
           });
+        } catch (error) {
+          if (options?.abortSignal?.aborted) {
+            await this.persistToolCall({
+              owner,
+              mcpServerName,
+              toolCall,
+              toolResult: this.buildCancelledResult(toolCall, authInfo),
+              authInfo,
+              lockedChatContent,
+            });
+            throw error;
+          }
+
+          const { agentMessage, unexpected } = describeWakeFailure(
+            error,
+            mcpServerName,
+          );
+          logger[unexpected ? "error" : "warn"](
+            { err: error, mcpServerId: targetMcpServerId, mcpServerName },
+            "MCP server wake failed; answering the tool call with the failure",
+          );
           return await this.createErrorResult({
             toolCall,
             owner,
-            error: authError.message,
+            error: agentMessage,
             mcpServerName,
             authInfo,
-            structuredError: authError,
             lockedChatContent,
           });
         }
+      }
+      // SPDX-SnippetEnd
 
-        // Apply template and return
-        return await this.createSuccessResult({
+      const effectiveEnterpriseManagedConfig =
+        catalogItem.enterpriseManagedConfig ?? null;
+      if (
+        tool.credentialResolutionMode === "enterprise_managed" &&
+        !effectiveEnterpriseManagedConfig
+      ) {
+        return this.createErrorResult({
           toolCall,
           owner,
+          error:
+            "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
           mcpServerName,
-          content: result.content as ContentBlock[],
-          isError: !!result.isError,
-          _meta: result._meta,
           authInfo,
           lockedChatContent,
-          structuredContent: result.structuredContent as
-            | Record<string, unknown>
-            | undefined,
         });
-      } catch (error) {
-        // A stopped chat run aborts the request; the SDK rejects it as an
-        // McpError(RequestTimeout) — indistinguishable by shape from a real
-        // timeout — so key off the signal, not the error. Rethrow before any
-        // recovery so an aborted call is never retried (token refresh / fresh
-        // session).
-        //
-        // Persist the cancellation first: a call the user stopped mid-flight
-        // used to vanish from the tool-call log entirely, which is exactly
-        // the kind of half-finished action an operator later needs to see
-        // (the upstream may have committed work before the abort landed).
-        // The structured `cancelled` marker — not `isError` — is what log
-        // surfaces key off, because a user-initiated stop is not a tool
-        // failure. Best-effort by design: for a chat-stop abort this runs in
-        // the AI SDK's abandoned tool-execute promise, so the write races
-        // process shutdown; for a background-task cancel the promise is held
-        // by the task's detached continuation and the write is reliable.
-        if (options?.abortSignal?.aborted) {
-          await this.persistToolCall({
+      }
+      // A catalog-level enterprise-managed config is authoritative: assignments
+      // created before enterprise mode existed (or via paths that didn't infer
+      // it) still carry the default "static"/"dynamic" mode, and connecting
+      // with static secrets would hit the protected server without any
+      // credential. Fail closed through the exchange instead.
+      const usesEnterpriseManagedCredential =
+        tool.credentialResolutionMode === "enterprise_managed" ||
+        effectiveEnterpriseManagedConfig !== null;
+      const enterpriseTransportCredential = usesEnterpriseManagedCredential
+        ? await this.resolveCachedEnterpriseTransportCredential({
             owner,
-            mcpServerName,
-            toolCall,
-            toolResult: this.buildCancelledResult(toolCall, authInfo),
-            authInfo,
-            lockedChatContent,
-          });
-          throw error;
+            tokenAuth,
+            enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
+          })
+        : null;
+
+      if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
+        const authError =
+          await this.buildEnterpriseManagedIdentityProviderAuthMessage(
+            catalogItem.name,
+            catalogItem.id,
+            effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
+            tokenAuth,
+            options,
+          );
+        return this.createErrorResult({
+          toolCall,
+          owner,
+          error: authError.message,
+          mcpServerName,
+          authInfo,
+          structuredError: authError,
+          lockedChatContent,
+        });
+      }
+
+      const secretsResult = await this.getSecretsForMcpServer({
+        targetMcpServerId: targetMcpServerId,
+        toolCall,
+        owner,
+        lockedChatContent,
+      });
+      if ("error" in secretsResult) {
+        return secretsResult.error;
+      }
+      const { secrets, secretId, serverState } = secretsResult;
+
+      // The outbound credential is fully settled here (install secrets loaded,
+      // enterprise exchange done), so every result below can name the identity
+      // it ran as — including the ones the token-refresh retry produces.
+      const executedAs = await this.describeExecutedAs({
+        resolvedServer,
+        tokenAuth,
+        enterpriseTransportCredential,
+        catalogItem,
+        secrets,
+      });
+      if (executedAs) {
+        authInfo = { ...authInfo, executedAs };
+      }
+
+      // Build connection cache key using the resolved target server ID.
+      // Agents: when conversationId is provided, each (agent, conversation) gets
+      // its own connection for per-session browser context isolation.
+      // Apps: keyed by (app, viewing user, session) so one app's upstream session
+      // never leaks across users or browser sessions.
+      // When authenticated via external IdP, each user additionally gets its own
+      // connection since the JWT is propagated to the underlying server per-user.
+      const externalIdpUserId = tokenAuth?.isExternalIdp
+        ? tokenAuth.userId
+        : undefined;
+      let connectionKey: string;
+      if (owner.type === "agent") {
+        connectionKey = options?.conversationId
+          ? `${catalogItem.id}:${targetMcpServerId}:${owner.id}:${options.conversationId}`
+          : `${catalogItem.id}:${targetMcpServerId}`;
+      } else {
+        // An app call must carry the viewing user (session auth). Without one we
+        // must never collapse distinct callers onto a shared literal — that would
+        // let them reuse each other's persisted upstream session. Isolate the call
+        // with a per-request nonce instead, and surface the misuse.
+        let userSegment = tokenAuth?.userId;
+        if (!userSegment) {
+          userSegment = `anon:${randomUUID()}`;
+          logger.warn(
+            { appId: owner.id, catalogId: catalogItem.id },
+            "App tool call has no viewing user; isolating the connection per-request",
+          );
         }
+        const sessionSegment = options?.conversationId ?? "default";
+        connectionKey = `${catalogItem.id}:${targetMcpServerId}:app:${owner.id}:${userSegment}:${sessionSegment}`;
+      }
+      if (externalIdpUserId) {
+        connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+      }
+      if (options?.elicitationHandler) {
+        // Elicitation support is declared during MCP initialize. Keep these
+        // clients separate so a connection opened without the capability is not
+        // reused for a tool call that may receive elicitation/create requests.
+        // This intentionally keeps a second cached client per server/session
+        // when both interactive and non-interactive callers use the same MCP
+        // server.
+        connectionKey = `${connectionKey}:elicitation`;
+      }
 
-        // Handle stale HTTP session.  The MCP SDK skips the `initialize`
-        // handshake when `transport.sessionId` is already set (session
-        // resumption), so `client.connect()` succeeds without making any
-        // HTTP request.  The stale session only surfaces later as a
-        // StreamableHTTPError "Session not found" during the first real
-        // RPC call (listTools / callTool).  Detect this and retry with a
-        // fresh session.
-        const isStaleSession = isStaleSessionError(error);
+      const executeToolCall = async (
+        getTransport: () => Promise<Transport>,
+        currentSecrets: Record<string, unknown>,
+        isRetry = false,
+      ): Promise<CommonToolResult> => {
+        try {
+          const hasRefreshToken = !!(
+            currentSecrets as { refresh_token?: string }
+          ).refresh_token;
+          const shouldRefreshBeforeCall =
+            !isRetry &&
+            !!catalogItem.oauthConfig &&
+            !!secretId &&
+            hasRefreshToken &&
+            shouldProactivelyRefreshOAuthToken(currentSecrets);
 
-        if (isStaleSession && !isRetry) {
-          // Check if another concurrent call is already recovering this
-          // connection (e.g. multiple browser-stream ticks firing at once).
-          // If so, wait for it and reuse the fresh client it creates.
-          const existingRecovery = this.sessionRecoveryLocks.get(connectionKey);
-          if (existingRecovery) {
-            logger.info(
-              { connectionKey },
-              "Waiting for concurrent session recovery",
+          if (shouldRefreshBeforeCall) {
+            const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              secretId,
+              catalogId: catalogItem.id,
+              connectionKey,
+              toolCall,
+              owner,
+              mcpServerName,
+              catalogItem,
+              targetMcpServerId,
+              tokenAuth,
+              lockedChatContent,
+              enterpriseTransportCredential,
+              toolCatalogId: tool.catalogId,
+              toolCatalogName: tool.catalogName,
+              executeRetry: (nextGetTransport, secrets) =>
+                executeToolCall(nextGetTransport, secrets, true),
+            });
+
+            if (retryToolCallResult) {
+              return retryToolCallResult;
+            }
+
+            logger.warn(
+              { toolName: toolCall.name, secretId, catalogId: catalogItem.id },
+              "Proactive OAuth refresh failed, falling back to existing token",
             );
-            await existingRecovery;
-            return executeToolCall(getTransport, currentSecrets, true);
           }
 
-          logger.info(
-            { connectionKey },
-            "Stale session detected, retrying with fresh session",
+          // Get the appropriate transport
+          const transport = await getTransport();
+
+          // Get or create client
+          const client = await this.getOrCreateClient(
+            connectionKey,
+            transport,
+            targetMcpServerId,
+            serverState,
+            options?.elicitationHandler,
           );
 
-          // Acquire recovery lock so concurrent callers wait for us.
-          let resolveRecovery!: () => void;
-          const recoveryPromise = new Promise<void>((resolve) => {
-            resolveRecovery = resolve;
-          });
-          this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
+          // Determine the actual upstream tool name. Prefer the stored raw name
+          // (tools.raw_name): it is exact even when the slug's server-prefix was
+          // truncated to fit the 64-char cap or the raw name itself contains the
+          // `__` separator. Fall back to prefix-stripping the slug for legacy rows
+          // whose raw_name has not been backfilled/re-synced yet.
+          let targetToolName: string;
+          if (tool.rawName) {
+            targetToolName = tool.rawName;
+          } else {
+            // We prioritize the `catalogName` prefix, which is standard for local
+            // MCP servers. If the tool name doesn't match the catalog prefix, we
+            // fall back to the resolved `mcpServerName`.
+            targetToolName = this.stripServerPrefix(
+              toolCall.name,
+              tool.catalogName || "",
+            );
 
-          try {
-            try {
-              await McpHttpSessionModel.deleteStaleSession(connectionKey);
-            } catch (err) {
-              logger.warn(
-                { connectionKey, err },
-                "Failed to delete stale MCP HTTP session",
+            if (targetToolName === toolCall.name) {
+              // No prefix match with catalogName; attempt to strip using mcpServerName instead.
+              targetToolName = this.stripServerPrefix(
+                toolCall.name,
+                mcpServerName,
               );
             }
-            // Close the stale client so its AbortController is cleaned up
-            const staleClient = this.activeConnections.get(connectionKey);
-            if (staleClient) {
-              try {
-                await staleClient.close();
-              } catch {
-                logger.warn(
-                  { connectionKey },
-                  "Failed to close stale MCP client",
-                );
-              }
+
+            if (targetToolName === toolCall.name) {
+              // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
+              // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+              targetToolName = parseFullToolName(toolCall.name).toolName;
             }
-            this.clearConnectionState(connectionKey);
-            return await executeToolCall(getTransport, currentSecrets, true);
-          } finally {
-            resolveRecovery();
-            this.sessionRecoveryLocks.delete(connectionKey);
           }
-        }
 
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+          const resourceUri = getSyntheticResourceToolUri(tool.meta);
+          if (resourceUri) {
+            const result = await client.readResource(
+              { uri: resourceUri },
+              {
+                signal: options?.abortSignal,
+                timeout: config.mcpGateway.toolCallTimeoutMs,
+              },
+            );
+            return await this.createSuccessResult({
+              toolCall,
+              owner,
+              mcpServerName,
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result.contents),
+                },
+              ],
+              isError: false,
+              _meta: { resourceUri },
+              authInfo,
+              lockedChatContent,
+              structuredContent: {
+                contents: result.contents as unknown,
+              },
+            });
+          }
 
-        // Check if this is an authentication error - either by type/status code
-        // or by detecting auth-related keywords in the error message (some servers
-        // return non-401 status codes with auth error messages in the body)
-        const isAuthError =
-          error instanceof UnauthorizedError ||
-          (error instanceof StreamableHTTPError && error.code === 401) ||
-          isAuthRelatedError(errorMessage);
-
-        // Only attempt token refresh for OAuth servers with a refresh token
-        const isOAuthServer = !!catalogItem.oauthConfig;
-        const usesClientCredentials = usesOAuthClientCredentials(catalogItem);
-        const hasRefreshToken = !!(currentSecrets as { refresh_token?: string })
-          .refresh_token;
-
-        // Track and skip recovery if no refresh token available
-        if (
-          isAuthError &&
-          isOAuthServer &&
-          targetMcpServerId &&
-          !hasRefreshToken &&
-          !usesClientCredentials
-        ) {
-          await McpServerModel.update(targetMcpServerId, {
-            oauthRefreshError: "no_refresh_token",
-            oauthRefreshErrorMessage: "no_refresh_token",
-            oauthRefreshErrorDescription: null,
-            oauthRefreshFailedAt: new Date(),
-          });
-          logger.warn(
-            { toolName: toolCall.name, targetMcpServerId },
-            "OAuth authentication error: no refresh token available",
-          );
-        }
-
-        // Attempt recovery if possible
-        const canAttemptRecovery =
-          !isRetry &&
-          isAuthError &&
-          isOAuthServer &&
-          secretId &&
-          hasRefreshToken;
-
-        if (canAttemptRecovery) {
-          const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
-            secretId,
-            catalogId: catalogItem.id,
+          // Resolve the actual tool name from the server (preserving original casing).
+          // Tool names in the DB are lowercased by slugifyName(), but remote MCP servers
+          // may use camelCase or mixed-case names (e.g., "atlassianUserInfo" vs "atlassianuserinfo").
+          targetToolName = await this.resolveActualToolName(
+            client,
             connectionKey,
-            toolCall,
-            owner,
-            mcpServerName,
-            catalogItem,
-            targetMcpServerId,
-            tokenAuth,
-            lockedChatContent,
-            enterpriseTransportCredential,
-            toolCatalogId: tool.catalogId,
-            toolCatalogName: tool.catalogName,
-            executeRetry: (getTransport, secrets) =>
-              executeToolCall(getTransport, secrets, true),
-          });
-
-          if (retryToolCallResult) {
-            return retryToolCallResult;
-          }
-          // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
-        }
-
-        if (!isRetry && isAuthError && usesClientCredentials && secretId) {
-          const resetSecrets = {
-            ...currentSecrets,
-            access_token: null,
-            client_credentials_expires_at: null,
-            client_credentials_refresh_at: null,
-          };
-          await secretManager().updateSecret(secretId, resetSecrets);
-          this.secretsCache.set(targetMcpServerId, {
-            secrets: resetSecrets,
-            secretId,
-          });
-          this.clearConnectionState(connectionKey);
-
-          return await executeToolCall(
-            () =>
-              this.getTransport(
-                catalogItem,
-                targetMcpServerId,
-                resetSecrets,
-                secretId,
-                connectionKey,
-                tokenAuth,
-                enterpriseTransportCredential ?? undefined,
-              ),
-            resetSecrets,
-            true,
+            targetToolName,
+            options?.abortSignal,
           );
-        }
 
-        // For auth errors, return an actionable message with re-auth URL
-        if (isAuthError && tool.catalogId) {
-          const catalogDisplayName = tool.catalogName || catalogItem.name;
-          // Credentials exist but failed → "expired/invalid" message with manage link
-          if (targetMcpServerId) {
-            const [targetServer] = await McpServerModel.findByIdsBasic([
+          const result = await client.callTool(
+            {
+              name: targetToolName,
+              arguments: toolCall.arguments,
+            },
+            undefined,
+            {
+              signal: options?.abortSignal,
+              // A detached task answers its client immediately, so the
+              // synchronous patience window no longer applies — the task TTL
+              // does. Without this, a task outliving the sync timeout dies at
+              // the timeout even though nobody is waiting on it.
+              timeout:
+                options?.upstreamTimeoutMs ??
+                config.mcpGateway.toolCallTimeoutMs,
+            },
+          );
+
+          const isOAuthServer = !!catalogItem.oauthConfig;
+          const toolResultAuthError = isAuthRelatedToolResult(result);
+          if (
+            toolResultAuthError &&
+            isOAuthServer &&
+            secretId &&
+            hasRefreshToken &&
+            !isRetry
+          ) {
+            const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              secretId,
+              catalogId: catalogItem.id,
+              connectionKey,
+              toolCall,
+              owner,
+              mcpServerName,
+              catalogItem,
               targetMcpServerId,
-            ]);
-            if (
-              targetServer?.ownerId &&
-              !targetServer.teamId &&
-              tokenAuth?.userId !== targetServer.ownerId
-            ) {
-              const assignmentError =
-                this.buildAssignedCredentialUnavailableMessage(
-                  catalogDisplayName,
-                  tool.catalogId,
-                );
-              return await this.createErrorResult({
-                toolCall,
-                owner,
-                error: assignmentError.message,
-                mcpServerName,
-                authInfo,
-                structuredError: assignmentError,
-                lockedChatContent,
-              });
+              tokenAuth,
+              lockedChatContent,
+              enterpriseTransportCredential,
+              toolCatalogId: tool.catalogId,
+              toolCatalogName: tool.catalogName,
+              executeRetry: (nextGetTransport, secrets) =>
+                executeToolCall(nextGetTransport, secrets, true),
+            });
+
+            if (retryToolCallResult) {
+              return retryToolCallResult;
             }
+          }
+
+          if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
+            const catalogDisplayName = tool.catalogName || catalogItem.name;
             const authError = await this.buildExpiredAuthMessage({
               catalogDisplayName,
               catalogId: tool.catalogId,
               mcpServerId: targetMcpServerId,
               tokenAuth,
-              resolvedServer: targetServer,
             });
             return await this.createErrorResult({
               toolCall,
@@ -1156,89 +1003,362 @@ class McpClient {
               lockedChatContent,
             });
           }
-          // No server resolved → "auth required" message with install link
-          const authError = this.buildAuthRequiredMessage(
-            catalogDisplayName,
-            tool.catalogId,
-            tokenAuth,
-          );
-          return await this.createErrorResult({
+
+          // Apply template and return
+          return await this.createSuccessResult({
             toolCall,
             owner,
-            error: authError.message,
             mcpServerName,
+            content: result.content as ContentBlock[],
+            isError: !!result.isError,
+            _meta: result._meta,
             authInfo,
-            structuredError: authError,
             lockedChatContent,
+            structuredContent: result.structuredContent as
+              | Record<string, unknown>
+              | undefined,
           });
-        }
+        } catch (error) {
+          // A stopped chat run aborts the request; the SDK rejects it as an
+          // McpError(RequestTimeout) — indistinguishable by shape from a real
+          // timeout — so key off the signal, not the error. Rethrow before any
+          // recovery so an aborted call is never retried (token refresh / fresh
+          // session).
+          //
+          // Persist the cancellation first: a call the user stopped mid-flight
+          // used to vanish from the tool-call log entirely, which is exactly
+          // the kind of half-finished action an operator later needs to see
+          // (the upstream may have committed work before the abort landed).
+          // The structured `cancelled` marker — not `isError` — is what log
+          // surfaces key off, because a user-initiated stop is not a tool
+          // failure. Best-effort by design: for a chat-stop abort this runs in
+          // the AI SDK's abandoned tool-execute promise, so the write races
+          // process shutdown; for a background-task cancel the promise is held
+          // by the task's detached continuation and the write is reliable.
+          if (options?.abortSignal?.aborted) {
+            await this.persistToolCall({
+              owner,
+              mcpServerName,
+              toolCall,
+              toolResult: this.buildCancelledResult(toolCall, authInfo),
+              authInfo,
+              lockedChatContent,
+            });
+            throw error;
+          }
 
-        return await this.createErrorResult({
-          toolCall,
-          owner,
-          error: errorMessage,
-          mcpServerName,
-          authInfo,
-          lockedChatContent,
-        });
-      }
-    };
+          // Handle stale HTTP session.  The MCP SDK skips the `initialize`
+          // handshake when `transport.sessionId` is already set (session
+          // resumption), so `client.connect()` succeeds without making any
+          // HTTP request.  The stale session only surfaces later as a
+          // StreamableHTTPError "Session not found" during the first real
+          // RPC call (listTools / callTool).  Detect this and retry with a
+          // fresh session.
+          const isStaleSession = isStaleSessionError(error);
 
-    if (!this.shouldLimitConcurrency()) {
-      return executeToolCall(
-        () =>
-          this.getTransport(
-            catalogItem,
-            targetMcpServerId,
-            secrets,
-            secretId,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          ),
-        secrets,
-      );
-    }
+          if (isStaleSession && !isRetry) {
+            // Check if another concurrent call is already recovering this
+            // connection (e.g. multiple browser-stream ticks firing at once).
+            // If so, wait for it and reuse the fresh client it creates.
+            const existingRecovery =
+              this.sessionRecoveryLocks.get(connectionKey);
+            if (existingRecovery) {
+              logger.info(
+                { connectionKey },
+                "Waiting for concurrent session recovery",
+              );
+              await existingRecovery;
+              return executeToolCall(getTransport, currentSecrets, true);
+            }
 
-    const transportKind = await this.getTransportKind(
-      catalogItem,
-      targetMcpServerId,
-    );
-    // The MCP SDK stores request handlers on the client by method. Serialize
-    // elicitation-capable calls so a cached client's elicitation handler is
-    // not replaced while another tool call on the same connection is active.
-    const concurrencyLimit = options?.elicitationHandler
-      ? 1
-      : this.getConcurrencyLimit(transportKind);
+            logger.info(
+              { connectionKey },
+              "Stale session detected, retrying with fresh session",
+            );
 
-    return this.connectionLimiter.runWithLimit(
-      connectionKey,
-      concurrencyLimit,
-      () =>
-        executeToolCall(async () => {
-          const resolvedSecrets = await this.resolveSecretsForTransport({
-            catalogItem,
-            secrets,
-            secretId,
-          });
-          if (resolvedSecrets !== secrets) {
+            // Acquire recovery lock so concurrent callers wait for us.
+            let resolveRecovery!: () => void;
+            const recoveryPromise = new Promise<void>((resolve) => {
+              resolveRecovery = resolve;
+            });
+            this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
+
+            try {
+              try {
+                await McpHttpSessionModel.deleteStaleSession(connectionKey);
+              } catch (err) {
+                logger.warn(
+                  { connectionKey, err },
+                  "Failed to delete stale MCP HTTP session",
+                );
+              }
+              // Close the stale client so its AbortController is cleaned up
+              const staleClient = this.activeConnections.get(connectionKey);
+              if (staleClient) {
+                try {
+                  await staleClient.close();
+                } catch {
+                  logger.warn(
+                    { connectionKey },
+                    "Failed to close stale MCP client",
+                  );
+                }
+              }
+              this.clearConnectionState(connectionKey);
+              return await executeToolCall(getTransport, currentSecrets, true);
+            } finally {
+              resolveRecovery();
+              this.sessionRecoveryLocks.delete(connectionKey);
+            }
+          }
+
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+
+          // Check if this is an authentication error - either by type/status code
+          // or by detecting auth-related keywords in the error message (some servers
+          // return non-401 status codes with auth error messages in the body)
+          const isAuthError =
+            error instanceof UnauthorizedError ||
+            (error instanceof StreamableHTTPError && error.code === 401) ||
+            isAuthRelatedError(errorMessage);
+
+          // Only attempt token refresh for OAuth servers with a refresh token
+          const isOAuthServer = !!catalogItem.oauthConfig;
+          const usesClientCredentials = usesOAuthClientCredentials(catalogItem);
+          const hasRefreshToken = !!(
+            currentSecrets as { refresh_token?: string }
+          ).refresh_token;
+
+          // Track and skip recovery if no refresh token available
+          if (
+            isAuthError &&
+            isOAuthServer &&
+            targetMcpServerId &&
+            !hasRefreshToken &&
+            !usesClientCredentials
+          ) {
+            await McpServerModel.update(targetMcpServerId, {
+              oauthRefreshError: "no_refresh_token",
+              oauthRefreshErrorMessage: "no_refresh_token",
+              oauthRefreshErrorDescription: null,
+              oauthRefreshFailedAt: new Date(),
+            });
+            logger.warn(
+              { toolName: toolCall.name, targetMcpServerId },
+              "OAuth authentication error: no refresh token available",
+            );
+          }
+
+          // Attempt recovery if possible
+          const canAttemptRecovery =
+            !isRetry &&
+            isAuthError &&
+            isOAuthServer &&
+            secretId &&
+            hasRefreshToken;
+
+          if (canAttemptRecovery) {
+            const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
+              secretId,
+              catalogId: catalogItem.id,
+              connectionKey,
+              toolCall,
+              owner,
+              mcpServerName,
+              catalogItem,
+              targetMcpServerId,
+              tokenAuth,
+              lockedChatContent,
+              enterpriseTransportCredential,
+              toolCatalogId: tool.catalogId,
+              toolCatalogName: tool.catalogName,
+              executeRetry: (getTransport, secrets) =>
+                executeToolCall(getTransport, secrets, true),
+            });
+
+            if (retryToolCallResult) {
+              return retryToolCallResult;
+            }
+            // If recovery returned null, the error was already recorded in attemptTokenRefreshAndRetry
+          }
+
+          if (!isRetry && isAuthError && usesClientCredentials && secretId) {
+            const resetSecrets = {
+              ...currentSecrets,
+              access_token: null,
+              client_credentials_expires_at: null,
+              client_credentials_refresh_at: null,
+            };
+            await secretManager().updateSecret(secretId, resetSecrets);
             this.secretsCache.set(targetMcpServerId, {
-              secrets: resolvedSecrets,
-              ...(secretId ? { secretId } : {}),
+              secrets: resetSecrets,
+              secretId,
+            });
+            this.clearConnectionState(connectionKey);
+
+            return await executeToolCall(
+              () =>
+                this.getTransport(
+                  catalogItem,
+                  targetMcpServerId,
+                  resetSecrets,
+                  secretId,
+                  connectionKey,
+                  tokenAuth,
+                  enterpriseTransportCredential ?? undefined,
+                ),
+              resetSecrets,
+              true,
+            );
+          }
+
+          // For auth errors, return an actionable message with re-auth URL
+          if (isAuthError && tool.catalogId) {
+            const catalogDisplayName = tool.catalogName || catalogItem.name;
+            // Credentials exist but failed → "expired/invalid" message with manage link
+            if (targetMcpServerId) {
+              const [targetServer] = await McpServerModel.findByIdsBasic([
+                targetMcpServerId,
+              ]);
+              if (
+                targetServer?.ownerId &&
+                !targetServer.teamId &&
+                tokenAuth?.userId !== targetServer.ownerId
+              ) {
+                const assignmentError =
+                  this.buildAssignedCredentialUnavailableMessage(
+                    catalogDisplayName,
+                    tool.catalogId,
+                  );
+                return await this.createErrorResult({
+                  toolCall,
+                  owner,
+                  error: assignmentError.message,
+                  mcpServerName,
+                  authInfo,
+                  structuredError: assignmentError,
+                  lockedChatContent,
+                });
+              }
+              const authError = await this.buildExpiredAuthMessage({
+                catalogDisplayName,
+                catalogId: tool.catalogId,
+                mcpServerId: targetMcpServerId,
+                tokenAuth,
+                resolvedServer: targetServer,
+              });
+              return await this.createErrorResult({
+                toolCall,
+                owner,
+                error: authError.message,
+                mcpServerName,
+                authInfo,
+                structuredError: authError,
+                lockedChatContent,
+              });
+            }
+            // No server resolved → "auth required" message with install link
+            const authError = this.buildAuthRequiredMessage(
+              catalogDisplayName,
+              tool.catalogId,
+              tokenAuth,
+            );
+            return await this.createErrorResult({
+              toolCall,
+              owner,
+              error: authError.message,
+              mcpServerName,
+              authInfo,
+              structuredError: authError,
+              lockedChatContent,
             });
           }
 
-          return this.getTransportWithKind(
-            catalogItem,
-            targetMcpServerId,
-            resolvedSecrets,
-            transportKind,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          );
-        }, secrets),
-    );
+          return await this.createErrorResult({
+            toolCall,
+            owner,
+            error: errorMessage,
+            mcpServerName,
+            authInfo,
+            lockedChatContent,
+          });
+        }
+      };
+
+      if (!this.shouldLimitConcurrency()) {
+        return executeToolCall(
+          () =>
+            this.getTransport(
+              catalogItem,
+              targetMcpServerId,
+              secrets,
+              secretId,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            ),
+          secrets,
+        );
+      }
+
+      const transportKind = await this.getTransportKind(
+        catalogItem,
+        targetMcpServerId,
+      );
+      // The MCP SDK stores request handlers on the client by method. Serialize
+      // elicitation-capable calls so a cached client's elicitation handler is
+      // not replaced while another tool call on the same connection is active.
+      const concurrencyLimit = options?.elicitationHandler
+        ? 1
+        : this.getConcurrencyLimit(transportKind);
+
+      return this.connectionLimiter.runWithLimit(
+        connectionKey,
+        concurrencyLimit,
+        () =>
+          executeToolCall(async () => {
+            const resolvedSecrets = await this.resolveSecretsForTransport({
+              catalogItem,
+              secrets,
+              secretId,
+            });
+            if (resolvedSecrets !== secrets) {
+              this.secretsCache.set(targetMcpServerId, {
+                secrets: resolvedSecrets,
+                ...(secretId ? { secretId } : {}),
+              });
+            }
+
+            return this.getTransportWithKind(
+              catalogItem,
+              targetMcpServerId,
+              resolvedSecrets,
+              transportKind,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            );
+          }, secrets),
+      );
+    };
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (catalogItem.serverType === "local") {
+      if (options?.abortSignal?.aborted) {
+        throw options.abortSignal.reason instanceof Error
+          ? options.abortSignal.reason
+          : new Error("The tool call was aborted before dispatch");
+      }
+      return mcpActiveUseTracker.trackActiveUse(
+        targetMcpServerId,
+        runDemandPath,
+      );
+    }
+    // SPDX-SnippetEnd
+    return runDemandPath();
   }
 
   /**
@@ -3678,23 +3798,37 @@ class McpClient {
       }
     };
 
-    try {
-      return await runInspection();
-    } catch (error) {
-      // The upstream dropped the session between connecting and the call.
-      // Tool calls recover from this transparently (see executeToolCall);
-      // inspection used to surface it to the operator as a failed server,
-      // which reads as "this server is broken" for what a second attempt
-      // resolves. Build a fresh transport and try once more.
-      if (!isStaleSessionError(error)) {
-        throw error;
+    const inspectWithStaleSessionRetry = async (): Promise<unknown> => {
+      try {
+        return await runInspection();
+      } catch (error) {
+        // The upstream dropped the session between connecting and the call.
+        // Tool calls recover from this transparently (see executeToolCall);
+        // inspection used to surface it to the operator as a failed server,
+        // which reads as "this server is broken" for what a second attempt
+        // resolves. Build a fresh transport and try once more.
+        if (!isStaleSessionError(error)) {
+          throw error;
+        }
+        logger.info(
+          { mcpServerId, method },
+          "Stale session during MCP inspection, retrying with a fresh session",
+        );
+        return await runInspection();
       }
-      logger.info(
-        { mcpServerId, method },
-        "Stale session during MCP inspection, retrying with a fresh session",
-      );
-      return await runInspection();
+    };
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (catalogItem.serverType === "local") {
+      return mcpActiveUseTracker.trackActiveUse(mcpServerId, async () => {
+        await McpServerRuntimeManager.ensureAwake(mcpServerId);
+        return inspectWithStaleSessionRetry();
+      });
     }
+    // SPDX-SnippetEnd
+    return inspectWithStaleSessionRetry();
   }
 
   /**
@@ -3722,29 +3856,43 @@ class McpClient {
     if (!catalogItem) {
       throw new Error(`Catalog not found for MCP server ${mcpServerId}`);
     }
-    const { secrets } = await this.fetchSecretsForLoadedMcpServer({
-      id: mcpServerId,
-      secretId: server.secretId,
-    });
-    const transport = await this.getTransport(
-      catalogItem,
-      mcpServerId,
-      secrets,
-      server.secretId ?? undefined,
-    );
-    const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
-      capabilities: {},
-    });
-    try {
-      await this.raceWithTimeout(
-        client.connect(transport),
-        30000,
-        new McpServerConnectionTimeoutError(),
+    const runWithClient = async (): Promise<T> => {
+      const { secrets } = await this.fetchSecretsForLoadedMcpServer({
+        id: mcpServerId,
+        secretId: server.secretId,
+      });
+      const transport = await this.getTransport(
+        catalogItem,
+        mcpServerId,
+        secrets,
+        server.secretId ?? undefined,
       );
-      return await run(client);
-    } finally {
-      await client.close().catch(() => {});
+      const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
+        capabilities: {},
+      });
+      try {
+        await this.raceWithTimeout(
+          client.connect(transport),
+          30000,
+          new McpServerConnectionTimeoutError(),
+        );
+        return await run(client);
+      } finally {
+        await client.close().catch(() => {});
+      }
+    };
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (catalogItem.serverType === "local") {
+      return mcpActiveUseTracker.trackActiveUse(mcpServerId, async () => {
+        await McpServerRuntimeManager.ensureAwake(mcpServerId);
+        return runWithClient();
+      });
     }
+    // SPDX-SnippetEnd
+    return runWithClient();
   }
 
   /** Read a UI (`ui://`) resource directly from one installed server. */
@@ -4148,56 +4296,89 @@ class McpClient {
       >;
     },
     tokenAuth?: TokenAuthContext,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    options?: { wake?: boolean },
+    // SPDX-SnippetEnd
   ): Promise<ResourceContents> {
     const { server, catalogItem } = mcpServer;
 
-    const secretResult = await this.getSecretsForMcpServer({
-      targetMcpServerId: server.id,
-      toolCall: { id: "resource-read", name: "read", arguments: {} },
-      owner: agentOwner(agentId),
-    });
+    const readFromServer = async (): Promise<ResourceContents> => {
+      const secretResult = await this.getSecretsForMcpServer({
+        targetMcpServerId: server.id,
+        toolCall: { id: "resource-read", name: "read", arguments: {} },
+        owner: agentOwner(agentId),
+      });
 
-    if ("error" in secretResult) {
-      throw new Error(`Secret resolution failed: ${secretResult.error}`);
-    }
-    const { secrets, secretId } = secretResult;
+      if ("error" in secretResult) {
+        throw new Error(`Secret resolution failed: ${secretResult.error}`);
+      }
+      const { secrets, secretId } = secretResult;
 
-    // Resource reads hit the same upstream as tool calls, so they must carry
-    // the same enterprise-managed credential. Without it the transport falls
-    // back to forwarding the caller's raw IdP token as `Authorization: Bearer`,
-    // bypassing the catalog's configured injection mode entirely.
-    const enterpriseTransportCredential = catalogItem.enterpriseManagedConfig
-      ? await this.resolveCachedEnterpriseTransportCredential({
-          owner: agentOwner(agentId),
-          tokenAuth,
-          enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
-        })
-      : null;
-    if (catalogItem.enterpriseManagedConfig && !enterpriseTransportCredential) {
-      throw new Error(
-        `Enterprise-managed credential could not be resolved for ${catalogItem.name}`,
+      // Resource reads hit the same upstream as tool calls, so they must carry
+      // the same enterprise-managed credential. Without it the transport falls
+      // back to forwarding the caller's raw IdP token as `Authorization: Bearer`,
+      // bypassing the catalog's configured injection mode entirely.
+      const enterpriseTransportCredential = catalogItem.enterpriseManagedConfig
+        ? await this.resolveCachedEnterpriseTransportCredential({
+            owner: agentOwner(agentId),
+            tokenAuth,
+            enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+          })
+        : null;
+      if (
+        catalogItem.enterpriseManagedConfig &&
+        !enterpriseTransportCredential
+      ) {
+        throw new Error(
+          `Enterprise-managed credential could not be resolved for ${catalogItem.name}`,
+        );
+      }
+
+      const transport = await this.getTransport(
+        catalogItem,
+        server.id,
+        secrets,
+        secretId,
+        undefined,
+        tokenAuth,
+        enterpriseTransportCredential ?? undefined,
       );
+      const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+      const client = await this.getOrCreateClient(
+        connectionKey,
+        transport,
+        server.id,
+        secretResult.serverState,
+      );
+
+      return await client.readResource({ uri });
+    };
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (catalogItem.serverType === "local") {
+      if (options?.wake !== false) {
+        return mcpActiveUseTracker.trackActiveUse(server.id, async () => {
+          await McpServerRuntimeManager.ensureAwake(server.id);
+          return readFromServer();
+        });
+      }
+      const passiveRead = await McpServerRuntimeManager.runIfDeploymentServing(
+        server.id,
+        readFromServer,
+      );
+      if (!passiveRead.ran) {
+        throw new McpServerNotReadyError(
+          `MCP server ${server.name} is dormant; passive resource refresh skipped`,
+        );
+      }
+      return passiveRead.value;
     }
-
-    const transport = await this.getTransport(
-      catalogItem,
-      server.id,
-      secrets,
-      secretId,
-      undefined,
-      tokenAuth,
-      enterpriseTransportCredential ?? undefined,
-    );
-    const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
-    const client = await this.getOrCreateClient(
-      connectionKey,
-      transport,
-      server.id,
-      secretResult.serverState,
-    );
-
-    const result = await client.readResource({ uri });
-    return result;
+    // SPDX-SnippetEnd
+    return readFromServer();
   }
 
   private async refreshResourceInBackground(
@@ -4221,11 +4402,32 @@ class McpClient {
         return;
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Cache maintenance is passive: never wake an otherwise idle server.
+      if (
+        mcpServer.catalogItem.serverType === "local" &&
+        McpServerRuntimeManager.isDeploymentDormant(mcpServer.server.id)
+      ) {
+        logger.debug(
+          { uri, agentId, serverId: mcpServer.server.id },
+          "readResource: Skipping background refresh for dormant MCP server",
+        );
+        return;
+      }
+      // SPDX-SnippetEnd
+
       const newResult = await this.doReadResource(
         uri,
         agentId,
         mcpServer,
         _tokenAuth,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        { wake: false },
+        // SPDX-SnippetEnd
       );
       this.resourceCache.set(cacheKey, {
         result: newResult,
@@ -4251,7 +4453,7 @@ class McpClient {
     agentId: string,
     tokenAuth?: TokenAuthContext,
     exclusionSets?: AgentToolExclusionSets,
-  ): Promise<Client[]> {
+  ): Promise<PassiveMcpClient[]> {
     // Per-agent exclusions (Auto-tool mode): an excluded catalog/tool must not
     // make its upstream server reachable via resources/prompts listing. A
     // catalog stays reachable while it has at least one non-excluded assigned
@@ -4282,7 +4484,7 @@ class McpClient {
       }
     }
 
-    const clients: Client[] = [];
+    const clients: PassiveMcpClient[] = [];
 
     for (const [catalogId, tool] of toolsByCatalogId) {
       try {
@@ -4304,6 +4506,23 @@ class McpClient {
         if ("error" in targetResult) continue;
 
         const { targetMcpServerId } = targetResult;
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Pooled resource/prompt listings are passive reads. Do not wake a
+        // dormant server or stamp an awake one, otherwise polling keeps every
+        // assigned deployment alive forever.
+        if (
+          catalogItem.serverType === "local" &&
+          McpServerRuntimeManager.isDeploymentDormant(targetMcpServerId)
+        ) {
+          logger.debug(
+            { agentId, catalogId, targetMcpServerId },
+            "Skipping dormant MCP server in list operation",
+          );
+          continue;
+        }
+        // SPDX-SnippetEnd
         // Catalog-level enterprise-managed config is authoritative — see
         // executeToolCall for why stale assignment modes are overridden.
         const usesEnterpriseManagedCredential =
@@ -4335,22 +4554,39 @@ class McpClient {
         if (externalIdpUserId) {
           connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
         }
-        const transport = await this.getTransport(
-          catalogItem,
-          targetMcpServerId,
-          secretResult.secrets,
-          secretResult.secretId,
-          connectionKey,
-          tokenAuth,
-          enterpriseTransportCredential ?? undefined,
-        );
-        const client = await this.getOrCreateClient(
-          connectionKey,
-          transport,
-          targetMcpServerId,
-          secretResult.serverState,
-        );
-        clients.push(client);
+        clients.push({
+          execute: async <T>(operation: (client: Client) => Promise<T>) => {
+            const connectAndRun = async () => {
+              const transport = await this.getTransport(
+                catalogItem,
+                targetMcpServerId,
+                secretResult.secrets,
+                secretResult.secretId,
+                connectionKey,
+                tokenAuth,
+                enterpriseTransportCredential ?? undefined,
+              );
+              const client = await this.getOrCreateClient(
+                connectionKey,
+                transport,
+                targetMcpServerId,
+                secretResult.serverState,
+              );
+              return operation(client);
+            };
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            if (catalogItem.serverType === "local") {
+              return McpServerRuntimeManager.runIfDeploymentServing(
+                targetMcpServerId,
+                connectAndRun,
+              );
+            }
+            // SPDX-SnippetEnd
+            return { ran: true, value: await connectAndRun() };
+          },
+        });
       } catch (error) {
         logger.warn(
           { agentId, catalogId, error },
@@ -4381,7 +4617,15 @@ class McpClient {
     await Promise.all(
       clients.map(async (client) => {
         try {
-          const result = await client.listResources();
+          const execution = await client.execute((upstream) =>
+            upstream.listResources(),
+          );
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (!execution.ran) return;
+          // SPDX-SnippetEnd
+          const result = execution.value;
           allResources.push(
             ...(result.resources as unknown as Array<Record<string, unknown>>),
           );
@@ -4427,7 +4671,15 @@ class McpClient {
     await Promise.all(
       clients.map(async (client) => {
         try {
-          const result = await client.listResourceTemplates();
+          const execution = await client.execute((upstream) =>
+            upstream.listResourceTemplates(),
+          );
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (!execution.ran) return;
+          // SPDX-SnippetEnd
+          const result = execution.value;
           allTemplates.push(
             ...(result.resourceTemplates as unknown as Array<
               Record<string, unknown>
@@ -4471,7 +4723,15 @@ class McpClient {
     await Promise.all(
       clients.map(async (client) => {
         try {
-          const result = await client.listPrompts();
+          const execution = await client.execute((upstream) =>
+            upstream.listPrompts(),
+          );
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (!execution.ran) return;
+          // SPDX-SnippetEnd
+          const result = execution.value;
           allPrompts.push(
             ...(result.prompts as unknown as Array<Record<string, unknown>>),
           );
@@ -4709,6 +4969,78 @@ function makeSyntheticResourceToolName(uri: string): string {
     .toLowerCase();
   return `read_resource_${slug || "resource"}`.slice(0, 128);
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function waitForMcpServerWake(params: {
+  mcpServerId: string;
+  mcpServerName: string;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  if (params.abortSignal?.aborted) {
+    throw params.abortSignal.reason instanceof Error
+      ? params.abortSignal.reason
+      : new Error("The tool call was aborted before the wake");
+  }
+  const budgetMs = wakeResponseBudgetMs();
+  const wake = withDeadline(
+    McpServerRuntimeManager.ensureAwake(params.mcpServerId),
+    budgetMs,
+    () => new McpServerWakePendingError(params.mcpServerName, budgetMs),
+  );
+  if (!params.abortSignal) {
+    await wake;
+    return;
+  }
+
+  const { abortSignal } = params;
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      reject(
+        abortSignal.reason instanceof Error
+          ? abortSignal.reason
+          : new Error("The tool call was aborted during the wake"),
+      );
+    };
+    if (abortSignal.aborted) {
+      onAbort();
+      return;
+    }
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+  });
+
+  try {
+    await Promise.race([wake, aborted]);
+  } finally {
+    if (onAbort) abortSignal.removeEventListener("abort", onAbort);
+  }
+}
+
+function describeWakeFailure(
+  error: unknown,
+  mcpServerName: string,
+): { agentMessage: string; unexpected: boolean } {
+  if (error instanceof McpServerWakeError) {
+    return { agentMessage: error.message, unexpected: false };
+  }
+  if (error instanceof McpServerDeploymentFailedError) {
+    return {
+      agentMessage: `MCP server ${mcpServerName} cannot start, and retrying will not help until its image or configuration is fixed - edit or reinstall it from the registry. ${deploymentFailureCause(error.message)}`,
+      unexpected: false,
+    };
+  }
+  return {
+    agentMessage: `MCP server ${mcpServerName} could not be woken from idle hibernation: the platform failed to complete the wake. This is not a problem with the tool call - retrying may work, and an administrator can see the full failure in the platform logs.`,
+    unexpected: true,
+  };
+}
+
+function deploymentFailureCause(message: string): string {
+  return message.replace(/^Deployment \S+ failed: /, "");
+}
+// SPDX-SnippetEnd
 
 function isMethodNotFoundError(error: unknown): boolean {
   if (error instanceof Error && error.message.includes("Method not found")) {

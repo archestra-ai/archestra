@@ -453,6 +453,12 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Enterprise-gated on the route: scaling idle MCP servers to zero replicas.
+  mcpIdleHibernationEnabled: z.boolean().optional(),
+  // SPDX-SnippetEnd
 });
 
 export const UpdateSkillsSettingsSchema = z.object({

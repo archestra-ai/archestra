@@ -7,6 +7,15 @@ import logger from "@/logging";
 const SMALL_TEAM_THRESHOLD = 30;
 const REFRESH_INTERVAL_MS = 60_000;
 
+/**
+ * Refusal shown when an unlicensed deployment tries to configure idle
+ * hibernation, from either end of it (the organization toggle or a
+ * per-install override). One constant so both routes say the same thing.
+ * @public — consumed by the organization and MCP server routes
+ */
+export const MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE =
+  "Idle hibernation is an enterprise feature. Please contact sales@archestra.ai to enable it.";
+
 interface EnterpriseTierState {
   userCount: number;
   threshold: number;

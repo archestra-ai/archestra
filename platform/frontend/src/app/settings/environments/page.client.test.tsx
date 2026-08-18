@@ -43,7 +43,7 @@ async function renderPageAction() {
     .map(([node]) => node as ReactNode)
     .filter(Boolean)
     .at(-1);
-  render(<>{action}</>);
+  render(action);
 }
 
 describe("EnvironmentsPageClient action buttons", () => {

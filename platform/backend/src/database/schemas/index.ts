@@ -137,6 +137,7 @@ export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpCatalogUsersTable } from "./mcp-catalog-user";
+export { default as mcpDeploymentLeasesTable } from "./mcp-deployment-lease";
 export { default as mcpGatewayTasksTable } from "./mcp-gateway-task";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";

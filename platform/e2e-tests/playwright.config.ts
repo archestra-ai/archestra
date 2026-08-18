@@ -20,6 +20,11 @@ const projectNames = {
   identityProviders: "identity-providers",
   api: "api",
   apiK8s: "api-k8s",
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  apiK8sHibernation: "api-k8s-hibernation",
+  // SPDX-SnippetEnd
   vaultK8s: "vault-k8s",
 };
 
@@ -84,6 +89,14 @@ const apiTestMatch = [
 // kubectl access (image-pull-secrets), NetworkPolicy enforcement (ssrf,
 // jwt-propagation), or helm-deployed fixture servers (oauth-self-hosted,
 // enterprise-managed). Everything else belongs in apiTestMatch above.
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// Idle hibernation also needs a host cluster but has its own project below:
+// it flips the organization-wide toggle and waits out real idle windows, so
+// it can neither share workers with specs that own MCP servers of their own
+// nor fit the budget this leg is sized for.
+// SPDX-SnippetEnd
 const apiK8sTestMatch = [
   "**/image-pull-secrets.spec.ts",
   "**/mcp-enterprise-managed.ee.spec.ts",
@@ -91,6 +104,20 @@ const apiK8sTestMatch = [
   "**/oauth-self-hosted.spec.ts",
   "**/ssrf-protection.spec.ts",
 ];
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// Every idle-hibernation spec. Run serially in their own CI leg: one of them
+// turns the organization-wide toggle on to exercise the real sweeper, which
+// would otherwise be free to hibernate a sibling spec's server mid-test.
+const hibernationTestMatch = [
+  "**/mcp-hibernation.spec.ts",
+  "**/mcp-hibernation-capacity.spec.ts",
+  "**/mcp-hibernation-recovery.spec.ts",
+  "**/mcp-hibernation-topology.spec.ts",
+];
+// SPDX-SnippetEnd
 
 const quickstartTestMatch = [
   "**/auth-origin.spec.ts",
@@ -274,6 +301,28 @@ export default defineConfig({
       },
       dependencies: dependencies.testProjects,
     },
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Idle hibernation against a real cluster: sweeper, wake, capacity,
+    // topology and administrator recovery.
+    {
+      name: projectNames.apiK8sHibernation,
+      testDir: "./tests",
+      testMatch: hibernationTestMatch,
+      // One retry, not the global two: these specs run serially and re-run
+      // their heavyweight fixtures (a cold pod install alone approaches
+      // 7 min) on every retry, so the global setting can push one genuinely
+      // bad file past the CI step budget — the run then reports as a timeout
+      // with no artifacts instead of as results.
+      retries: IS_CI ? 1 : 0,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // SPDX-SnippetEnd
     // Vault K8s startup test — validates platform starts with DB URL from Vault via K8s auth
     {
       name: projectNames.vaultK8s,

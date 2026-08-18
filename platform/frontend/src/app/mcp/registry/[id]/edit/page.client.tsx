@@ -24,6 +24,11 @@ import {
   useTestConnectionTarget,
 } from "../../_parts/catalog-setup-wizard";
 import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
+// SPDX-SnippetEnd
 import type { CatalogItem } from "../../_parts/mcp-server-card";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
@@ -117,6 +122,11 @@ function SetupWizard({ item }: { item: CatalogItem }) {
 
       {step === "configuration" && (
         <div className="flex flex-col rounded-lg border">
+          {/* SPDX-SnippetBegin */}
+          {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+          {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          <IdleHibernationSection item={item} />
+          {/* SPDX-SnippetEnd */}
           <EditCatalogContent
             item={item}
             onClose={() => {}}

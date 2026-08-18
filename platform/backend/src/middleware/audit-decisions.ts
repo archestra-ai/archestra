@@ -243,6 +243,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
   },
+  mcpDeploymentLeasesTable: {
+    audited: false,
+    reason:
+      "Ephemeral cross-replica mutual-exclusion rows; the actions they serialize (hard resets) are audited themselves",
+  },
   mcpHttpSessionsTable: {
     audited: false,
     reason: "MCP session-level transport state",

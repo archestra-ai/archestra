@@ -72,6 +72,14 @@ class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
   private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Event-driven metrics: short-lived states (a deployment waking from
+  // hibernation lives for a couple of seconds) would never survive until the
+  // next interval tick, so the gauge is also rewritten on every state refresh.
+  private deploymentMetricsRefreshUnsubscribe: (() => void) | null = null;
+  // SPDX-SnippetEnd
   // One poller shared by all deployment-status subscribers; runs while the
   // subscription map is non-empty.
   private mcpDeploymentStatusPollInterval: NodeJS.Timeout | null = null;
@@ -638,8 +646,21 @@ class WebSocketService {
       }
     };
 
-    // Report immediately, then every 30 seconds
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Report immediately, on every manager state refresh (so states shorter
+    // than the interval — waking, a brief pending — reach the gauge the moment
+    // they happen), and every 30 seconds as a reconciler for servers that
+    // appear or vanish without a refresh event.
+    // SPDX-SnippetEnd
     reportMetrics();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    this.deploymentMetricsRefreshUnsubscribe =
+      McpServerRuntimeManager.onDeploymentStatesRefreshed(reportMetrics);
+    // SPDX-SnippetEnd
     this.deploymentMetricsInterval = setInterval(reportMetrics, 30_000);
   }
 
@@ -926,6 +947,12 @@ class WebSocketService {
   stop() {
     this.mcpDeploymentStatusRefreshUnsubscribe?.();
     this.mcpDeploymentStatusRefreshUnsubscribe = null;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    this.deploymentMetricsRefreshUnsubscribe?.();
+    this.deploymentMetricsRefreshUnsubscribe = null;
+    // SPDX-SnippetEnd
 
     if (this.deploymentMetricsInterval) {
       clearInterval(this.deploymentMetricsInterval);

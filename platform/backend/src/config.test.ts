@@ -20,6 +20,11 @@ import config, {
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  getMcpImagePrepullConfig,
+  // SPDX-SnippetEnd
   getOtelExporterOtlpEndpoint,
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
@@ -48,8 +53,18 @@ import config, {
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
   parseHackathonRecorderMaxFinalCutMs,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseHelmReleaseName,
+  // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseLogFormat,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  parseMcpIdleHibernationSeconds,
+  // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
   parseOptionalPort,
@@ -2385,6 +2400,224 @@ describe("parseK8sResourceQuantity", () => {
     );
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("parseMcpIdleHibernationSeconds", () => {
+  test("unset means the default window, NOT disabled", () => {
+    // The env var stopped being the on/off switch when hibernation became an
+    // organization setting: leaving it unset must not silently veto a toggle
+    // an administrator turned on.
+    expect(parseMcpIdleHibernationSeconds(undefined)).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+  });
+
+  test('an explicit "0" is the operator kill switch', () => {
+    // The one value that overrides the organization: a deployment that must
+    // never see a scaled-to-zero MCP pod.
+    expect(parseMcpIdleHibernationSeconds("0")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: true,
+    });
+    expect(parseMcpIdleHibernationSeconds(" 0 ")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: true,
+    });
+  });
+
+  test("every numerically-zero spelling kills, none of them arm", () => {
+    // The failure mode this pins: "00" used to miss the literal-"0" test AND
+    // the positive-int parse, silently arming hibernation with the default
+    // window — the exact opposite of what the operator wrote.
+    for (const spelling of ["00", "0.0", "+0", "000 "]) {
+      expect(parseMcpIdleHibernationSeconds(spelling)).toEqual({
+        windowSeconds: 1800,
+        hardDisabled: true,
+      });
+    }
+  });
+
+  test("values below the floor are clamped to 120", () => {
+    expect(parseMcpIdleHibernationSeconds("60")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("1")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+  });
+
+  test("values at or above the floor pass through", () => {
+    expect(parseMcpIdleHibernationSeconds("120")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("600")).toEqual({
+      windowSeconds: 600,
+      hardDisabled: false,
+    });
+  });
+
+  test("garbage and negative values fall back to the default window", () => {
+    // Unparseable configuration is an operator mistake, not a kill switch —
+    // only the literal "0" turns the feature off.
+    expect(parseMcpIdleHibernationSeconds("soon")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("-300")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+  });
+});
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("parseHelmReleaseName", () => {
+  test("takes the release name the chart injected", () => {
+    expect(parseHelmReleaseName("my-release")).toBe("my-release");
+    expect(parseHelmReleaseName("  my-release  ")).toBe("my-release");
+    expect(parseHelmReleaseName("archestra1")).toBe("archestra1");
+  });
+
+  test("an absent release name stays absent — it is never approximated", () => {
+    // Callers name a cluster object with this. A stand-in value would have
+    // them create an object under a name nothing else looks for, so "unknown"
+    // has to survive all the way to them.
+    expect(parseHelmReleaseName(undefined)).toBeUndefined();
+    expect(parseHelmReleaseName("")).toBeUndefined();
+    expect(parseHelmReleaseName("   ")).toBeUndefined();
+  });
+
+  test("a value Helm could not have produced is rejected, not repaired", () => {
+    // Repairing it would invent a name: "My_Release" and "my-release" would
+    // both resolve to the same object, which is exactly the collision the
+    // release name exists to prevent.
+    expect(parseHelmReleaseName("My-Release")).toBeUndefined();
+    expect(parseHelmReleaseName("my_release")).toBeUndefined();
+    expect(parseHelmReleaseName("-my-release")).toBeUndefined();
+    expect(parseHelmReleaseName("my-release-")).toBeUndefined();
+    expect(parseHelmReleaseName("my release")).toBeUndefined();
+    expect(parseHelmReleaseName("a".repeat(54))).toBeUndefined();
+    expect(parseHelmReleaseName("a".repeat(53))).toBe("a".repeat(53));
+  });
+});
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+describe("getMcpImagePrepullConfig", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED;
+    delete process.env
+      .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME;
+    delete process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST;
+    delete process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST;
+    delete process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT;
+    delete process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE;
+    delete process.env
+      .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("unset means on: pre-pulling follows idle hibernation", () => {
+    // The opposite default from the hibernation flag, and deliberately so:
+    // this is not a feature gate but a kill switch for the extra per-node pod,
+    // and hibernation's own gates already decide whether anything runs.
+    expect(getMcpImagePrepullConfig().enabled).toBe(true);
+
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED = "";
+    expect(getMcpImagePrepullConfig().enabled).toBe(true);
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED = "true";
+    expect(getMcpImagePrepullConfig().enabled).toBe(true);
+  });
+
+  test("the bootstrap image defaults to static busybox and honors an override", () => {
+    // Never the MCP server base image: that one is an operator's choice, and
+    // assuming anything about its contents wedges every pre-pull pod in init.
+    // Static linking also lets the copied noop run in images using another libc.
+    expect(getMcpImagePrepullConfig().bootstrapImage).toBe(
+      "docker.io/library/busybox:1.36-musl",
+    );
+
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE =
+      "  registry.internal.example.com/busybox:1.36  ";
+    expect(getMcpImagePrepullConfig().bootstrapImage).toBe(
+      "registry.internal.example.com/busybox:1.36",
+    );
+
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE = "";
+    expect(getMcpImagePrepullConfig().bootstrapImage).toBe(
+      "docker.io/library/busybox:1.36-musl",
+    );
+  });
+
+  test("bootstrap image pull secrets are trimmed and deduplicated", () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS =
+      " mirror-auth, shared-auth,mirror-auth ";
+    expect(getMcpImagePrepullConfig().bootstrapImagePullSecrets).toEqual([
+      "mirror-auth",
+      "shared-auth",
+    ]);
+  });
+
+  test('only an explicit "false" turns pre-pulling off', () => {
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED = "false";
+    expect(getMcpImagePrepullConfig().enabled).toBe(false);
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED = " false ";
+    expect(getMcpImagePrepullConfig().enabled).toBe(false);
+
+    // A typo must not silently disable it — the operator asked for nothing
+    // recognizable, and the safe reading of that is "leave the cache warm".
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED = "no";
+    expect(getMcpImagePrepullConfig().enabled).toBe(true);
+  });
+
+  test("no priority class unless one is configured", () => {
+    expect(getMcpImagePrepullConfig().priorityClassName).toBeUndefined();
+
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME =
+      "  best-effort ";
+    expect(getMcpImagePrepullConfig().priorityClassName).toBe("best-effort");
+  });
+
+  test("footprint defaults are tiny, and an invalid quantity keeps them", () => {
+    // Paid on every node in the cluster.
+    expect(getMcpImagePrepullConfig().resources).toEqual({
+      requests: { cpu: "10m", memory: "16Mi" },
+      limits: { memory: "64Mi" },
+    });
+
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST = "25m";
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST =
+      "not-a-quantity";
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT = "128Mi";
+
+    expect(getMcpImagePrepullConfig().resources).toEqual({
+      requests: { cpu: "25m", memory: "16Mi" },
+      limits: { memory: "128Mi" },
+    });
+  });
+});
+// SPDX-SnippetEnd
 
 describe("parseTrustProxy", () => {
   test("should return false when undefined", () => {

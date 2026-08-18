@@ -203,22 +203,21 @@ tests:
       postgresql.auth.username: testuser
       postgresql.auth.database: testdb
     asserts:
-      # First env var should be PGPASSWORD from secret
+      # Built-in pod identity and migration mode occupy the first three slots.
       - equal:
-          path: spec.template.spec.containers[0].env[0].name
+          path: spec.template.spec.containers[0].env[3].name
           value: PGPASSWORD
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: password
       - matchRegex:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
           pattern: -archestra-platform-postgresql$
-      # Second env var should be ARCHESTRA_DATABASE_URL using $(PGPASSWORD) expansion
       - equal:
-          path: spec.template.spec.containers[0].env[1].name
+          path: spec.template.spec.containers[0].env[4].name
           value: ARCHESTRA_DATABASE_URL
       - matchRegex:
-          path: spec.template.spec.containers[0].env[1].value
+          path: spec.template.spec.containers[0].env[4].value
           pattern: ^postgresql://testuser:\$\(PGPASSWORD\)@.*-archestra-platform-postgresql:5432/testdb$
 
   - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
@@ -228,13 +227,13 @@ tests:
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].env[0].name
+          path: spec.template.spec.containers[0].env[3].name
           value: ARCHESTRA_DATABASE_URL
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
           value: RELEASE-NAME-archestra-platform-auth
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: database-url
 
   # Vault sentinel value tests
@@ -274,7 +273,7 @@ tests:
           value: wait-for-postgres
       - equal:
           path: spec.template.spec.initContainers[1].image
-          value: busybox:1.36
+          value: docker.io/library/busybox:1.36
 
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
@@ -417,13 +416,13 @@ tests:
       postgresql.external_database_url: postgres://external:pass@external-host:5434/externaldb
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].env[0].name
+          path: spec.template.spec.containers[0].env[3].name
           value: ARCHESTRA_DATABASE_URL
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
           value: RELEASE-NAME-archestra-platform-auth
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: database-url
 
   - it: when archestra.env is empty should set a specific set of environment variables
@@ -435,6 +434,16 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
+              value: "true"
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
@@ -461,6 +470,12 @@ tests:
                   optional: true
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
+            - name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+              value: RELEASE-NAME
+            - name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP
+              value: RELEASE-NAME-archestra-platform-mcp-runtime
+            - name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+              value: "docker.io/library/busybox:1.36-musl"
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
             - name: ARCHESTRA_CODE_RUNTIME_ENABLED
@@ -783,6 +798,234 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS when configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationSeconds: 900
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+            value: "900"
+
+  # 0 is a meaningful value (hibernation off), not an absent one, so an
+  # operator who sets it explicitly must get it on the pod.
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS when set to 0 (disabled)
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationSeconds: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+            value: "0"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when the beta flag is configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationEnabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+            value: "true"
+
+  # "false" wins over the ARCHESTRA_BETA master switch, so an operator who
+  # sets it explicitly must get it on the pod.
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when explicitly disabled
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationEnabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+            value: "false"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+
+  # The backend names the objects it creates for itself (the MCP image pre-pull
+  # DaemonSet) after the release, so it has to be TOLD the release name: a name
+  # inferred from a cluster read can come out different after a blip, and the
+  # object written under the other name is orphaned forever.
+  - it: should tell the backend the Helm release name
+    documentIndex: 1
+    release:
+      name: "my-release"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+            value: "my-release"
+
+  - it: should let archestra.env override the injected Helm release name
+    documentIndex: 1
+    release:
+      name: "my-release"
+    set:
+      archestra.env:
+        ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME: "pinned-release"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+            value: "pinned-release"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
+            value: "my-release"
+
+  - it: should tell the backend which Helm anchor owns runtime-created MCP resources
+    documentIndex: 1
+    release:
+      name: "my-release"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP
+            value: "my-release-archestra-platform-mcp-runtime"
+
+  # MCP image pre-pull tests
+  - it: should configure pull secrets for a private pre-pull bootstrap image
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.bootstrapImagePullSecrets:
+        - mirror-auth
+        - shared-auth
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS
+            value: "mirror-auth,shared-auth"
+
+  # "false" is the kill switch that stops pre-pulling while leaving hibernation
+  # on, so an operator who sets it explicitly must get it on the pod.
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED when explicitly disabled
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED
+            value: "false"
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED when explicitly enabled
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED
+            value: "true"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED
+
+  # The copied noop must be static so it runs inside MCP images using any libc.
+  - it: should not inherit the generic init-container busybox for pre-pulling
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "docker.io/library/busybox:1.36-musl"
+
+  - it: should let an explicit static pre-pull bootstrap image win
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: registry.internal.example.com/platform/busybox:1.36
+      archestra.orchestrator.mcpImagePrepull.bootstrapImage: registry.internal.example.com/platform/prepull-busybox:1.36-musl
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "registry.internal.example.com/platform/prepull-busybox:1.36-musl"
+
+  - it: should set the pre-puller priority class and resources when configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.priorityClassName: "archestra-best-effort"
+      archestra.orchestrator.mcpImagePrepull.resources.requests.cpu: "5m"
+      archestra.orchestrator.mcpImagePrepull.resources.requests.memory: "8Mi"
+      archestra.orchestrator.mcpImagePrepull.resources.limits.memory: "32Mi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME
+            value: "archestra-best-effort"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST
+            value: "5m"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST
+            value: "8Mi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT
+            value: "32Mi"
+
+  - it: should not set pre-puller priority class or resource env by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT
 
   # Kubeconfig volume mount tests
   - it: should not mount kubeconfig volume when kubeconfig is disabled
@@ -2416,6 +2659,35 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: NODE_IP
+
+  - it: should expose platform pod identity by default
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: should disable startup migrations with the migration job
+    documentIndex: 1
+    set:
+      archestra.migrationJob.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
+            value: "false"
 
   - it: should add env var with fieldRef for downward API
     documentIndex: 1

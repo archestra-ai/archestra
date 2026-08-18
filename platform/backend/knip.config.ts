@@ -10,6 +10,8 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // Container/Helm entrypoint; referenced outside the TypeScript module graph.
+    "scripts/migrate-with-lock.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
   ],

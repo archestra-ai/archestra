@@ -3,6 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { enterpriseTier } from "@/enterprise-tier";
+// SPDX-SnippetEnd
 import { McpServerModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
@@ -65,7 +70,19 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     restartServer: k8sRestartServerMock,
     stopServer: k8sStopServerMock,
     getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ensureAwake: vi.fn(),
+    isDeploymentDormant: vi.fn(() => false),
+    registerHibernationListener: vi.fn(),
+    // SPDX-SnippetEnd
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerWakeError: class McpServerWakeError extends Error {},
+  // SPDX-SnippetEnd
 }));
 
 const hasPermissionMock = vi.mocked(hasPermission);
@@ -4631,6 +4648,78 @@ describe("mcp server core route coverage", () => {
         "App servers run in-process and are not reinstallable; manage them via the Apps API.",
       );
     });
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    test("a personal owner cannot change hibernation for an install sharing a multitenant deployment", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(true);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+        multitenant: true,
+        localConfig: { command: "node", arguments: ["server.js"] },
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      // The owner passes the lifecycle gate on their own connection; what is
+      // under test is the shared-blast-radius gate behind it: a multitenant
+      // catalog runs ONE pod for every install, so "disabled" here would pin
+      // it awake for the whole organization.
+      hasPermissionMock.mockResolvedValue({ success: false, error: null });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+        payload: { hibernationMode: "disabled" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("multitenant");
+      const [row] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+      expect(row.hibernationMode).toBe("inherit");
+    });
+
+    test("an installation admin can change hibernation on a multitenant install", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      vi.spyOn(enterpriseTier, "isCoreActive").mockReturnValue(true);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+        multitenant: true,
+        localConfig: { command: "node", arguments: ["server.js"] },
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+        payload: { hibernationMode: "disabled" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, mcpServer.id));
+      expect(row.hibernationMode).toBe("disabled");
+    });
+    // SPDX-SnippetEnd
   });
 
   describe("POST /api/mcp_server", () => {

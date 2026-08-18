@@ -36,8 +36,15 @@ export async function ensureEgressBaselineNetworkPolicy(params: {
   customObjectsApi: k8s.CustomObjectsApi;
   namespace: string;
   capabilities: K8sNetworkPolicyCapabilities;
+  ownerReferences?: k8s.V1OwnerReference[];
 }): Promise<boolean> {
-  const { networkingApi, customObjectsApi, namespace, capabilities } = params;
+  const {
+    networkingApi,
+    customObjectsApi,
+    namespace,
+    capabilities,
+    ownerReferences,
+  } = params;
 
   if (capabilities.provider === "none") {
     logger.warn(
@@ -48,10 +55,18 @@ export async function ensureEgressBaselineNetworkPolicy(params: {
 
   try {
     if (isAwsApplicationNetworkPolicyProvider(capabilities)) {
-      await upsertBaselineApplicationNetworkPolicy(customObjectsApi, namespace);
+      await upsertBaselineApplicationNetworkPolicy(
+        customObjectsApi,
+        namespace,
+        ownerReferences,
+      );
       await deleteBaselineNetworkPolicy(networkingApi, namespace);
     } else {
-      await upsertBaselineNetworkPolicy(networkingApi, namespace);
+      await upsertBaselineNetworkPolicy(
+        networkingApi,
+        namespace,
+        ownerReferences,
+      );
       await deleteBaselineApplicationNetworkPolicy(customObjectsApi, namespace);
     }
     return true;
@@ -84,10 +99,12 @@ const AWS_APPLICATION_NETWORK_POLICY = {
 async function upsertBaselineNetworkPolicy(
   networkingApi: k8s.NetworkingV1Api,
   namespace: string,
+  ownerReferences?: k8s.V1OwnerReference[],
 ): Promise<void> {
   const body = buildEgressBaselineNetworkPolicy({
     name: MCP_EGRESS_BASELINE_POLICY_NAME,
     labels: BASELINE_LABELS,
+    ownerReferences,
   });
   try {
     await networkingApi.createNamespacedNetworkPolicy({ namespace, body });
@@ -118,10 +135,12 @@ async function deleteBaselineNetworkPolicy(
 async function upsertBaselineApplicationNetworkPolicy(
   customObjectsApi: k8s.CustomObjectsApi,
   namespace: string,
+  ownerReferences?: k8s.V1OwnerReference[],
 ): Promise<void> {
   const body = buildEgressBaselineAwsApplicationNetworkPolicy({
     name: MCP_EGRESS_BASELINE_POLICY_NAME,
     labels: BASELINE_LABELS,
+    ownerReferences,
   });
   try {
     await customObjectsApi.createNamespacedCustomObject({

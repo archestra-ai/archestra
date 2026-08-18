@@ -1,6 +1,12 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import type {
   InternalMcpCatalog,
@@ -360,6 +366,8 @@ export async function autoReinstallServer(
   server: McpServer,
   catalogItem: InternalMcpCatalog,
   options?: {
+    /** Pull the current image on the recreate rollout (refresh-image flow). */
+    freshImagePull?: boolean;
     getTools?: (params: {
       server: McpServer;
       catalogItem: InternalMcpCatalog;
@@ -417,18 +425,48 @@ export async function autoReinstallServer(
         organizationId: catalogItem.organizationId,
       });
     }
-    await McpServerRuntimeManager.restartServer(server.id);
+    // An ordinary reinstall redeploys the CURRENT image reference, so the
+    // node's cached copy is correct and keeps the redeploy independent of the
+    // registry. Pulling afresh is what the registry's own refresh-image action
+    // is for, and it passes this explicitly.
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await mcpActiveUseTracker.trackActiveUse(server.id, async () => {
+      // SPDX-SnippetEnd
+      await McpServerRuntimeManager.restartServer(server.id, {
+        freshImagePull: options?.freshImagePull ?? false,
+      });
 
-    // Wait for deployment to be ready
-    const deployment = await McpServerRuntimeManager.getOrLoadDeployment(
-      server.id,
-    );
-    if (deployment) {
-      await deployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
-    }
+      // Wait for deployment to be ready
+      const deployment = await McpServerRuntimeManager.getOrLoadDeployment(
+        server.id,
+      );
+      if (deployment) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // restartServer leaves a hibernated multitenant deployment scaled to
+        // zero (its sibling guard skips the K8s restart), so without a wake the
+        // readiness wait below is a guaranteed two-minute timeout.
+        await McpServerRuntimeManager.ensureAwake(server.id);
+        // SPDX-SnippetEnd
+        await deployment.waitForDeploymentReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+      }
+
+      await syncToolsForServer(server, catalogItem, {
+        getTools: options?.getTools,
+      });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    });
+    // SPDX-SnippetEnd
+  } else {
+    await syncToolsForServer(server, catalogItem, {
+      getTools: options?.getTools,
+    });
   }
-
-  await syncToolsForServer(server, catalogItem, options);
 
   // Clear reinstall flag
   await McpServerModel.update(server.id, {
@@ -499,8 +537,26 @@ async function syncToolsForServer(
  * it operates per-catalog, so it cascades to every install sharing the
  * catalog. Throws if the catalog item is missing; propagates the connection
  * error if the live server is unreachable.
+ *
+ * SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+ * SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+ *
+ * `options.wake` (default true) controls what happens to a hibernated local
+ * deployment: user-triggered reloads wake it on demand; background callers
+ * (the periodic tools refresher) pass false, which skips both the wake and —
+ * as a belt for the caller's memory-only hibernation fast path — the sync
+ * itself when the deployment is hibernated.
+ * SPDX-SnippetEnd
  */
-export async function reloadToolsForServer(server: McpServer): Promise<{
+export async function reloadToolsForServer(
+  server: McpServer,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  options?: { wake: boolean },
+  // SPDX-SnippetEnd
+): Promise<{
   created: number;
   updated: number;
   unchanged: number;
@@ -514,6 +570,33 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
       `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,
     );
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Reload connects to the live pod, so wake a hibernated local deployment
+  // first. The destructive paths (restartServer, reinstallSharedDeployment)
+  // recreate the Deployment at full replicas and deliberately do not wake.
+  if (catalogItem.serverType === "local") {
+    if (options?.wake ?? true) {
+      return mcpActiveUseTracker.trackActiveUse(server.id, async () => {
+        await McpServerRuntimeManager.ensureAwake(server.id);
+        const result = await syncToolsForServer(server, catalogItem);
+        return {
+          created: result.created.length,
+          updated: result.updated.length,
+          unchanged: result.unchanged.length,
+          deleted: result.deleted.length,
+        };
+      });
+    } else if (McpServerRuntimeManager.isDeploymentDormant(server.id)) {
+      logger.debug(
+        { serverId: server.id, serverName: server.name },
+        "Skipping tool reload for dormant MCP server (background caller)",
+      );
+      return { created: 0, updated: 0, unchanged: 0, deleted: 0 };
+    }
+  }
+  // SPDX-SnippetEnd
   const result = await syncToolsForServer(server, catalogItem);
   return {
     created: result.created.length,
@@ -548,6 +631,7 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
  */
 export async function reinstallMultitenantCatalog(
   catalogItem: InternalMcpCatalog,
+  options?: { freshImagePull?: boolean },
 ): Promise<void> {
   // Re-enforce the trusted-image-registry gate before recreating the shared
   // pod. The shared deployment is built from the catalog's CURRENT image, so
@@ -587,7 +671,9 @@ export async function reinstallMultitenantCatalog(
 
   // Phase 1 — recreate the shared pod.
   try {
-    await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id);
+    await McpServerRuntimeManager.reinstallSharedDeployment(catalogItem.id, {
+      freshImagePull: options?.freshImagePull ?? false,
+    });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
@@ -614,7 +700,15 @@ export async function reinstallMultitenantCatalog(
   await Promise.allSettled(
     installs.map(async (install) => {
       try {
-        await syncToolsForServer(install, catalogItem);
+        const syncInstallTools = () => syncToolsForServer(install, catalogItem);
+        let runToolSync = syncInstallTools;
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        runToolSync = () =>
+          mcpActiveUseTracker.trackActiveUse(install.id, syncInstallTools);
+        // SPDX-SnippetEnd
+        await runToolSync();
         await McpServerModel.update(install.id, {
           localInstallationStatus: "success",
           localInstallationError: null,

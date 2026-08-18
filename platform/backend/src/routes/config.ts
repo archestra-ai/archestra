@@ -10,6 +10,12 @@ import config from "@/config";
 import { isLockedChatEnabled } from "@/content-encryption/locked-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
+// SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
   isGoogleDriveOAuthConfigured,
@@ -68,6 +74,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             features: z.strictObject({
               betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
+              // SPDX-SnippetBegin
+              // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+              // Deployment-level gate for MCP idle hibernation (the beta flag
+              // AND the operator kill switch); the licence and the
+              // organization toggle sit behind it.
+              mcpIdleHibernationBetaEnabled: z.boolean(),
+              // SPDX-SnippetEnd
               sandbox: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -175,6 +189,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         features: {
           betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          // The whole deployment-level gate, not the beta flag alone: an
+          // operator's hard kill switch must take the settings toggle and the
+          // per-server control with it, or the UI renders an operational
+          // feature nothing behind it will ever run.
+          mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+          // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

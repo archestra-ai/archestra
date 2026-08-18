@@ -22,6 +22,10 @@ describe("StatisticsTimeFrameSchema", () => {
     ["unparseable bounds", "custom:not-a-date_also-not-a-date"],
     ["one unparseable bound", "custom:2026-07-01T00:00:00.000Z_later"],
     ["no separator", "custom:2026-07-01T00:00:00.000Z"],
+    [
+      "an inverted range",
+      "custom:2026-07-31T00:00:00.000Z_2026-07-01T00:00:00.000Z",
+    ],
     ["an unknown preset", "3d"],
   ])("rejects %s", (_case, timeframe) => {
     expect(StatisticsTimeFrameSchema.safeParse(timeframe).success).toBe(false);
@@ -44,6 +48,16 @@ describe("parseCustomStatisticsTimeframe", () => {
     ["a preset timeframe", "24h"],
     ["a missing separator", "custom:2026-07-01T00:00:00.000Z"],
     ["unparseable bounds", "custom:not-a-date_also-not-a-date"],
+    // Neither describes a window, and both would otherwise reach the query
+    // builder as an unsatisfiable pair of conditions.
+    [
+      "a range that ends before it starts",
+      "custom:2026-07-31T00:00:00.000Z_2026-07-01T00:00:00.000Z",
+    ],
+    [
+      "a zero-length range",
+      "custom:2026-07-01T00:00:00.000Z_2026-07-01T00:00:00.000Z",
+    ],
   ])("returns null for %s", (_case, timeframe) => {
     expect(parseCustomStatisticsTimeframe(timeframe)).toBeNull();
   });

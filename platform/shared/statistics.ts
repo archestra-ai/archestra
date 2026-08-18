@@ -1,15 +1,29 @@
 import { z } from "zod";
 
+const StatisticsTimeFramePresetSchema = z.enum([
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "24h",
+  "7d",
+  "30d",
+  "90d",
+  "12m",
+  "all",
+]);
+
 export const StatisticsTimeFrameSchema = z.union([
-  z.enum(["5m", "15m", "30m", "1h", "24h", "7d", "30d", "90d", "12m", "all"]),
+  StatisticsTimeFramePresetSchema,
   z
     .templateLiteral(["custom:", z.string(), "_", z.string()])
-    // The shape alone is not enough: bounds that are not dates parse to null
-    // further down, and a null range contributes no date predicate at all,
-    // silently widening a "custom range" query to every interaction ever
-    // recorded. Reject them at the boundary instead.
+    // The shape alone is not enough: bounds that are not dates, or that run
+    // backwards, parse to null further down, and a null range contributes no
+    // date predicate at all — silently widening a "custom range" query to every
+    // interaction ever recorded. Reject them at the boundary instead.
     .refine((timeframe) => parseCustomStatisticsTimeframe(timeframe) !== null, {
-      message: "Custom timeframe bounds must be parseable dates",
+      message:
+        "Custom timeframe bounds must be parseable dates, with the end after the start",
     })
     .describe("Custom timeframe must be in format 'custom:startTime_endTime'"),
 ]);
@@ -28,8 +42,10 @@ export type StatisticsAxisLabelPrecision =
   | "monthYear";
 
 /**
- * Parse a `custom:<start>_<end>` timeframe into its bounds, or return null when
- * the timeframe is a preset or its bounds are malformed.
+ * Parse a `custom:<start>_<end>` timeframe into its bounds. Returns null for a
+ * preset, for bounds that are not dates, and for a range that ends at or before
+ * it starts — the last of which describes no window at all, and would otherwise
+ * reach the query builder as an unsatisfiable pair of conditions.
  */
 export function parseCustomStatisticsTimeframe(
   timeframe: string,
@@ -53,6 +69,10 @@ export function parseCustomStatisticsTimeframe(
     return null;
   }
 
+  if (endTime.getTime() <= startTime.getTime()) {
+    return null;
+  }
+
   return { startTime, endTime };
 }
 
@@ -73,30 +93,7 @@ export function getStatisticsBucketIntervalMinutes(
     return MINUTES_PER_WEEK;
   }
 
-  switch (timeframe) {
-    case "5m":
-    case "15m":
-      return 1;
-    case "30m":
-    case "1h":
-      return 5;
-    case "24h":
-      return MINUTES_PER_HOUR;
-    case "7d":
-      return 6 * MINUTES_PER_HOUR;
-    case "30d":
-      return MINUTES_PER_DAY;
-    case "90d":
-      return 3 * MINUTES_PER_DAY;
-    case "12m":
-      return MINUTES_PER_WEEK;
-    case "all":
-      // Nominal: all-time series are aggregated by calendar month, whose real
-      // width varies. Only the order of magnitude is read off this value.
-      return MINUTES_PER_MONTH;
-    default:
-      return MINUTES_PER_HOUR;
-  }
+  return getPresetTimeframe(timeframe).bucketMinutes;
 }
 
 /**
@@ -139,6 +136,8 @@ export function getStatisticsAxisLabelPrecision(
     : "dateTime";
 }
 
+// ─── Internal ───────────────────────────────────────────────────────────────
+
 /**
  * Total span, in minutes, covered by a timeframe, or null when it is unbounded
  * ("all", whose span depends on how far back the data goes).
@@ -151,30 +150,15 @@ function getTimeframeSpanMinutes(
     return getRangeDurationMinutes(customRange);
   }
 
-  switch (timeframe) {
-    case "5m":
-      return 5;
-    case "15m":
-      return 15;
-    case "30m":
-      return 30;
-    case "1h":
-      return MINUTES_PER_HOUR;
-    case "24h":
-      return MINUTES_PER_DAY;
-    case "7d":
-      return 7 * MINUTES_PER_DAY;
-    case "30d":
-      return 30 * MINUTES_PER_DAY;
-    case "90d":
-      return 90 * MINUTES_PER_DAY;
-    case "12m":
-      return MINUTES_PER_YEAR;
-    case "all":
-      return null;
-    default:
-      return MINUTES_PER_DAY;
-  }
+  return getPresetTimeframe(timeframe).spanMinutes;
+}
+
+function getPresetTimeframe(timeframe: StatisticsTimeFrame) {
+  return PRESET_TIMEFRAMES[
+    timeframe in PRESET_TIMEFRAMES
+      ? (timeframe as StatisticsTimeFramePreset)
+      : "24h"
+  ];
 }
 
 function getRangeDurationMinutes({
@@ -187,9 +171,42 @@ function getRangeDurationMinutes({
   return (endTime.getTime() - startTime.getTime()) / MS_PER_MINUTE;
 }
 
+type StatisticsTimeFramePreset = z.infer<
+  typeof StatisticsTimeFramePresetSchema
+>;
+
 const MS_PER_MINUTE = 60 * 1000;
 const MINUTES_PER_HOUR = 60;
 const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
 const MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
 const MINUTES_PER_MONTH = 30 * MINUTES_PER_DAY;
 const MINUTES_PER_YEAR = 365 * MINUTES_PER_DAY;
+
+/**
+ * Window and bucket width of each preset, side by side so the two cannot drift
+ * apart: the axis-label precision is chosen from both at once, and a bucket is
+ * only ever meaningful relative to the window it subdivides.
+ */
+const PRESET_TIMEFRAMES: Record<
+  StatisticsTimeFramePreset,
+  { spanMinutes: number | null; bucketMinutes: number }
+> = {
+  "5m": { spanMinutes: 5, bucketMinutes: 1 },
+  "15m": { spanMinutes: 15, bucketMinutes: 1 },
+  "30m": { spanMinutes: 30, bucketMinutes: 5 },
+  "1h": { spanMinutes: MINUTES_PER_HOUR, bucketMinutes: 5 },
+  "24h": { spanMinutes: MINUTES_PER_DAY, bucketMinutes: MINUTES_PER_HOUR },
+  "7d": {
+    spanMinutes: 7 * MINUTES_PER_DAY,
+    bucketMinutes: 6 * MINUTES_PER_HOUR,
+  },
+  "30d": { spanMinutes: 30 * MINUTES_PER_DAY, bucketMinutes: MINUTES_PER_DAY },
+  "90d": {
+    spanMinutes: 90 * MINUTES_PER_DAY,
+    bucketMinutes: 3 * MINUTES_PER_DAY,
+  },
+  "12m": { spanMinutes: MINUTES_PER_YEAR, bucketMinutes: MINUTES_PER_WEEK },
+  // Unbounded, and aggregated by calendar month — whose real width varies, so
+  // only the order of magnitude is ever read off `bucketMinutes` here.
+  all: { spanMinutes: null, bucketMinutes: MINUTES_PER_MONTH },
+};

@@ -173,6 +173,15 @@ describe("GET /api/statistics/users", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("rejects a custom timeframe that ends before it starts", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:2026-07-31T00:00:00.000Z_2026-07-01T00:00:00.000Z",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("accepts a well-formed custom timeframe", async () => {
     const response = await app.inject({
       method: "GET",

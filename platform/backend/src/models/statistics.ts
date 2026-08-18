@@ -153,11 +153,11 @@ class StatisticsModel {
   ): T[] {
     const intervalMinutes = getStatisticsBucketIntervalMinutes(timeframe);
 
-    // If the interval is standard (60 minutes or more), no custom grouping needed.
+    // Nothing to regroup when SQL already truncated to the final bucket width.
     // Still coerce numeric fields since PostgreSQL DOUBLE PRECISION / DECIMAL
     // values are returned as strings by node-postgres, which causes Zod schema
     // validation failures (z.number() rejects string values).
-    if (intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d") {
+    if (!StatisticsModel.needsRebucketing(timeframe, intervalMinutes)) {
       return timeSeriesData.map((row) => ({
         ...row,
         requests: Number(row.requests) || 0,
@@ -932,10 +932,12 @@ class StatisticsModel {
     const grouped = new Map<string, CostSavingsRow>();
 
     for (const row of rawTimeSeriesData) {
-      const bucketKey =
-        intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d"
-          ? row.timeBucket
-          : StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes);
+      const bucketKey = StatisticsModel.needsRebucketing(
+        timeframe,
+        intervalMinutes,
+      )
+        ? StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes)
+        : row.timeBucket;
 
       if (!grouped.has(bucketKey)) {
         grouped.set(bucketKey, {
@@ -1034,6 +1036,25 @@ class StatisticsModel {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
+   * Whether the rows coming back from SQL still have to be merged into wider
+   * buckets in JS.
+   *
+   * `getTimeBucket` can only ask `DATE_TRUNC` for a whole calendar unit, so a
+   * timeframe whose bucket is a multiple of one — 7d's six hours cut from
+   * hourly rows, 90d's three days cut from daily rows, and every sub-hour
+   * timeframe, cut from per-minute rows — arrives finer than it should be and
+   * is regrouped here. For the rest, the SQL truncation is already the final
+   * bucket. Both bucketing paths ask this so they cannot disagree about which
+   * rows are already final.
+   */
+  private static needsRebucketing(
+    timeframe: StatisticsTimeFrame,
+    intervalMinutes: number,
+  ): boolean {
+    return intervalMinutes < 60 || timeframe === "7d" || timeframe === "90d";
+  }
+
+  /**
    * WHERE conditions restricting `interactions` to a timeframe, covering both
    * the relative presets and `custom:<start>_<end>` ranges.
    */
@@ -1051,7 +1072,12 @@ class StatisticsModel {
 
     const customRange = parseCustomStatisticsTimeframe(timeframe);
     if (!customRange) {
-      return [];
+      // Fail closed. `StatisticsTimeFrameSchema` rejects unparseable custom
+      // ranges at the API boundary, so this is unreachable from a route — but
+      // returning no conditions would drop the date predicate from `and(...)`
+      // and silently turn a bounded request into an unbounded scan of
+      // `interactions`. An impossible condition is the safe answer.
+      return [sql`FALSE`];
     }
     return [
       gte(schema.interactionsTable.createdAt, customRange.startTime),

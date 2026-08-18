@@ -9,6 +9,7 @@ import {
 } from "@/app/batch-analyses/_parts/analysis-columns-field";
 import { AnalysisScopeSelector } from "@/app/batch-analyses/_parts/analysis-scope-selector";
 import { toColumnKey } from "@/app/batch-analyses/_parts/column-key";
+import { TemplatePicker } from "@/app/batch-analyses/_parts/template-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,30 @@ export function EditAnalysisDialog({
           />
 
           <AnalysisColumnsField form={form} />
+          <div className="space-y-1.5">
+            <p className="text-muted-foreground text-xs">
+              Add a template&apos;s columns — appended to the ones above, so
+              existing answers stay attached to their columns.
+            </p>
+            <TemplatePicker
+              compact
+              onPick={(template) =>
+                form.setValue(
+                  "columns",
+                  [
+                    ...form.getValues("columns"),
+                    ...template.columns.map((column) => ({
+                      name: column.name,
+                      prompt: column.prompt,
+                      format: column.format,
+                      flag: column.flag ?? false,
+                    })),
+                  ],
+                  { shouldDirty: true },
+                )
+              }
+            />
+          </div>
 
           <AnalysisScopeSelector
             scope={scope}

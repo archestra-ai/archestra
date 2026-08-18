@@ -22,6 +22,7 @@ import {
   type Column,
   DataGrid,
   type DataGridHandle,
+  type SortColumn,
 } from "react-data-grid";
 import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import type { PreviewableSourceText } from "@/app/batch-analyses/_parts/source-text-dialog";
@@ -53,6 +54,8 @@ export function AnalysisGrid({
   deleteRowDisabled,
   onAddRow,
   onAddColumn,
+  sortColumns,
+  onSortColumnsChange,
 }: {
   /** Exposes the grid element so the page can hand focus back after dialogs. */
   gridRef?: React.Ref<DataGridHandle>;
@@ -66,6 +69,8 @@ export function AnalysisGrid({
   deleteRowDisabled: boolean;
   onAddRow: () => void;
   onAddColumn: () => void;
+  sortColumns: readonly SortColumn[];
+  onSortColumnsChange: (sortColumns: SortColumn[]) => void;
 }) {
   const gridColumns = useMemo<readonly Column<Row, SummaryRow>[]>(
     () => [
@@ -107,6 +112,7 @@ export function AnalysisGrid({
           key: column.key,
           name: column.name,
           resizable: true,
+          sortable: true,
           minWidth: 220,
           cellClass: (row) =>
             cn(
@@ -226,6 +232,8 @@ export function AnalysisGrid({
       headerRowHeight={52}
       bottomSummaryRows={SUMMARY_ROWS}
       summaryRowHeight={40}
+      sortColumns={sortColumns}
+      onSortColumnsChange={onSortColumnsChange}
       onCellClick={(args: CellMouseArgs<Row, SummaryRow>) => openCell(args)}
       onCellKeyDown={handleCellKeyDown}
       onCellCopy={handleCellCopy}

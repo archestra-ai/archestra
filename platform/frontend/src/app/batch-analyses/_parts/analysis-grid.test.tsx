@@ -79,6 +79,8 @@ function renderGrid(overrides: Partial<GridProps> = {}) {
       deleteRowDisabled={false}
       onAddRow={onAddRow}
       onAddColumn={vi.fn()}
+      sortColumns={[]}
+      onSortColumnsChange={vi.fn()}
       {...overrides}
     />,
   );

@@ -12,6 +12,7 @@ const {
   addBatchAnalysisRows,
   deleteBatchAnalysisRow,
   startBatchAnalysisRun,
+  getBatchAnalysisTemplates,
   retryBatchAnalysisCell,
   verifyBatchAnalysisCells,
 } = archestraApiSdk;
@@ -82,6 +83,23 @@ export function useBatchAnalysis(analysisId: string | undefined) {
 }
 
 // ===== Mutations =====
+
+export function useBatchAnalysisTemplates() {
+  return useQuery({
+    queryKey: ["batch-analyses", "templates"],
+    queryFn: async () => {
+      const { data, error } = await getBatchAnalysisTemplates();
+      throwOnApiError(error);
+      return data ?? [];
+    },
+    // Static server constants — no reason to refetch per mount.
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export type BatchAnalysisTemplate = NonNullable<
+  Awaited<ReturnType<typeof getBatchAnalysisTemplates>>["data"]
+>[number];
 
 export function useCreateBatchAnalysis() {
   const queryClient = useQueryClient();

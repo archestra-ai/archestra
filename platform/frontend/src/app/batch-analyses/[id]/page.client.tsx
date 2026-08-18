@@ -4,10 +4,17 @@ import { ArrowLeft, Loader2, Pencil, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import type { DataGridHandle } from "react-data-grid";
+import type { DataGridHandle, SortColumn } from "react-data-grid";
 import { AddRowsDialog } from "@/app/batch-analyses/_parts/add-rows-dialog";
 import { AnalysisGrid } from "@/app/batch-analyses/_parts/analysis-grid";
+import {
+  type AnswerViewFilter,
+  computeVisibleRows,
+  EMPTY_ANSWER_FILTER,
+  isFilterActive,
+} from "@/app/batch-analyses/_parts/answer-view";
 import { CellDetailSheet } from "@/app/batch-analyses/_parts/cell-detail-sheet";
+import { CELL_FLAG_META } from "@/app/batch-analyses/_parts/cell-flag";
 import { EditAnalysisDialog } from "@/app/batch-analyses/_parts/edit-analysis-dialog";
 import {
   type PreviewableSourceText,
@@ -20,6 +27,7 @@ import {
 } from "@/components/files/file-preview-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -80,6 +88,8 @@ export default function BatchAnalysisDetailPage() {
     columnKey: string;
   } | null>(null);
   const gridRef = useRef<DataGridHandle>(null);
+  const [sortColumns, setSortColumns] = useState<SortColumn[]>([]);
+  const [filter, setFilter] = useState<AnswerViewFilter>(EMPTY_ANSWER_FILTER);
 
   const { data, isLoading, isLoadingError, refetch } =
     useBatchAnalysis(analysisId);
@@ -142,6 +152,14 @@ export default function BatchAnalysisDetailPage() {
   }
 
   const { analysis, rows, latestRun } = data;
+  const visibleRows = computeVisibleRows({
+    rows,
+    columns: analysis.columns,
+    cellsByRowAndColumn,
+    filter,
+    sortColumns,
+  });
+  const filtering = isFilterActive(filter);
   const isRunning = latestRun?.status === "running";
   const selectedCell = selected
     ? cellsByRowAndColumn.get(`${selected.row.id}:${selected.columnKey}`)
@@ -228,19 +246,84 @@ export default function BatchAnalysisDetailPage() {
           </PermissionButton>
         </Card>
       ) : (
-        <AnalysisGrid
-          gridRef={gridRef}
-          columns={analysis.columns}
-          rows={rows}
-          cellsByRowAndColumn={cellsByRowAndColumn}
-          onSelectCell={(row, columnKey) => setSelected({ row, columnKey })}
-          onPreviewFile={setPreviewFile}
-          onPreviewText={setPreviewText}
-          onDeleteRow={setRowPendingDelete}
-          deleteRowDisabled={deleteRow.isPending}
-          onAddRow={() => setAddRowsOpen(true)}
-          onAddColumn={() => setEditOpen(true)}
-        />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={filter.query}
+              onSearchChange={(query) =>
+                setFilter((prev) => ({ ...prev, query }))
+              }
+              syncQueryParams={false}
+              placeholder="Filter rows and answers..."
+              className="w-64"
+            />
+            {analysis.columns.some((column) => column.flag) && (
+              <div className="flex items-center gap-1">
+                {(["red", "yellow", "green", "grey"] as const).map((flag) => (
+                  <button
+                    key={flag}
+                    type="button"
+                    title={CELL_FLAG_META[flag].label}
+                    aria-pressed={filter.flag === flag}
+                    className={`flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors ${
+                      filter.flag === flag
+                        ? "border-primary bg-accent"
+                        : "hover:bg-accent"
+                    }`}
+                    onClick={() =>
+                      setFilter((prev) => ({
+                        ...prev,
+                        flag: prev.flag === flag ? null : flag,
+                      }))
+                    }
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${CELL_FLAG_META[flag].dotClass}`}
+                    />
+                    <span>{CELL_FLAG_META[flag].label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              aria-pressed={filter.verifiedOnly}
+              className={`flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors ${
+                filter.verifiedOnly
+                  ? "border-primary bg-accent"
+                  : "hover:bg-accent"
+              }`}
+              onClick={() =>
+                setFilter((prev) => ({
+                  ...prev,
+                  verifiedOnly: !prev.verifiedOnly,
+                }))
+              }
+            >
+              <span>Verified only</span>
+            </button>
+            {filtering && (
+              <span className="text-muted-foreground text-xs">
+                {visibleRows.length} of {rows.length} rows
+              </span>
+            )}
+          </div>
+          <AnalysisGrid
+            gridRef={gridRef}
+            columns={analysis.columns}
+            rows={visibleRows}
+            cellsByRowAndColumn={cellsByRowAndColumn}
+            onSelectCell={(row, columnKey) => setSelected({ row, columnKey })}
+            onPreviewFile={setPreviewFile}
+            onPreviewText={setPreviewText}
+            onDeleteRow={setRowPendingDelete}
+            deleteRowDisabled={deleteRow.isPending}
+            onAddRow={() => setAddRowsOpen(true)}
+            onAddColumn={() => setEditOpen(true)}
+            sortColumns={sortColumns}
+            onSortColumnsChange={setSortColumns}
+          />
+        </div>
       )}
 
       <AddRowsDialog

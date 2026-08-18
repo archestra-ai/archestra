@@ -21,6 +21,7 @@ import {
   RowSourcePicker,
   useUploadRowSourceFiles,
 } from "@/app/batch-analyses/_parts/row-source-picker";
+import { TemplatePicker } from "@/app/batch-analyses/_parts/template-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
@@ -243,6 +244,28 @@ export default function NewBatchAnalysisPage() {
 
           {step === "columns" && (
             <div className="space-y-6">
+              <div className="space-y-1.5">
+                <p className="font-medium text-sm">Start from a template</p>
+                <p className="text-muted-foreground text-xs">
+                  Picking one replaces the draft columns below — you can edit
+                  every question afterwards.
+                </p>
+                <TemplatePicker
+                  compact
+                  onPick={(template) =>
+                    form.setValue(
+                      "columns",
+                      template.columns.map((column) => ({
+                        name: column.name,
+                        prompt: column.prompt,
+                        format: column.format,
+                        flag: column.flag ?? false,
+                      })),
+                      { shouldDirty: true },
+                    )
+                  }
+                />
+              </div>
               <AnalysisColumnsField form={form} />
               <AnalysisScopeSelector
                 scope={scope}

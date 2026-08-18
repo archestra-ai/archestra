@@ -134,6 +134,7 @@ export function csvField(value: string): string {
 function neutralizeFormula(value: string): string {
   // Spreadsheets skip leading whitespace and control characters before
   // deciding a cell is a formula, so the guard must too.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the control-character prefix is exactly what the injection guard must match
   return /^[\s\u0000-\u001f]*[=+\-@\t]/.test(value) ? `'${value}` : value;
 }
 

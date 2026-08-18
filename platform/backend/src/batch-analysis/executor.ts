@@ -8,10 +8,7 @@ import type {
   BatchAnalysisRow,
 } from "@/types";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
-import {
-  describeModelCallError,
-  resolveBatchAnalysisModel,
-} from "./llm";
+import { describeModelCallError, resolveBatchAnalysisModel } from "./llm";
 import {
   BATCH_ANALYSIS_RESULT_TAG,
   buildBatchAnalysisSystemPrompt,
@@ -202,4 +199,3 @@ function buildCitations(params: {
 function failAll(columnKeys: string[], error: string): CellOutcome[] {
   return columnKeys.map((columnKey) => ({ columnKey, ok: false, error }));
 }
-

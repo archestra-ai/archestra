@@ -3,12 +3,12 @@ import {
   type InteractionSource,
   providerHasMultipleSurfaces,
 } from "@archestra/shared";
+import { APICallError } from "ai";
 import {
   createLLMModel,
   isApiKeyRequired,
   type LLMModel,
 } from "@/clients/llm-client";
-import { APICallError } from "ai";
 import ModelModel from "@/models/model";
 import type { Agent } from "@/types";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";

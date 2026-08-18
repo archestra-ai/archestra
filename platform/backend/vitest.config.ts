@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
 
@@ -97,6 +98,7 @@ export default defineConfig({
     },
   },
   test: {
+    ...vitestLogPolicy,
     globals: true,
     environment: "node",
     // Build the migrated schema once and snapshot it (see global-setup.ts); each test

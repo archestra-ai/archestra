@@ -22,7 +22,7 @@ import logger from "@/logging";
  * How a skill entered the context: a chat slash command, a `load_skill` tool
  * call, or dispatch to the skill's designated agent.
  */
-export type SkillActivationType = "slash_command" | "load_skill" | "delegation";
+type SkillActivationType = "slash_command" | "load_skill" | "delegation";
 
 let skillActivationsTotal: client.Counter<string>;
 let skillContextTokensTotal: client.Counter<string>;

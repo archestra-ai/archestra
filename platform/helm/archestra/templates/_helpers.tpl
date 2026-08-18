@@ -23,9 +23,9 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 {{- end }}
 
-{{/* Same-namespace owner for runtime-created MCP resources. */}}
-{{- define "archestra-platform.mcpRuntimeAnchorName" -}}
-{{- printf "%s-mcp-runtime" (include "archestra-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{/* Helm-managed same-namespace Role that owns runtime-created MCP resources. */}}
+{{- define "archestra-platform.mcpRuntimeOwnerRoleName" -}}
+{{- printf "%s-mcp-manager" (include "archestra-platform.fullname" .) }}
 {{- end }}
 
 {{/*
@@ -196,9 +196,9 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
   value: {{ .Release.Name | quote }}
 {{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP") }}
-- name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_CONFIG_MAP
-  value: {{ include "archestra-platform.mcpRuntimeAnchorName" . | quote }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.create (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE")) }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE
+  value: {{ include "archestra-platform.mcpRuntimeOwnerRoleName" . | quote }}
 {{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
@@ -468,6 +468,10 @@ by the release-namespace Role and the per-namespace Roles generated from
 rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 */}}
 {{- define "archestra-platform.mcpManagerRules" -}}
+{{- $runtimeOwnerRoleName := include "archestra-platform.mcpRuntimeOwnerRoleName" . -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE" -}}
+{{- $runtimeOwnerRoleName = toString (get .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE") -}}
+{{- end -}}
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
@@ -501,6 +505,14 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["daemonsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+# The Helm-managed manager Role is also the same-namespace owner for resources
+# created at runtime. Reading it supplies the UID required by ownerReferences.
+{{- if $runtimeOwnerRoleName }}
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles"]
+  resourceNames: [{{ $runtimeOwnerRoleName | quote }}]
+  verbs: ["get"]
+{{- end }}
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]

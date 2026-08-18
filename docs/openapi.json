@@ -77041,6 +77041,7 @@
                 "mcpServer.deleted",
                 "mcpServer.restored",
                 "mcpServer.reinstalled",
+                "mcpServer.hardReset",
                 "mcpServerInstallationRequest.created",
                 "mcpServerInstallationRequest.updated",
                 "member.created",
@@ -77345,6 +77346,7 @@
                                   "mcpServer.deleted",
                                   "mcpServer.restored",
                                   "mcpServer.reinstalled",
+                                  "mcpServer.hardReset",
                                   "mcpServerInstallationRequest.created",
                                   "mcpServerInstallationRequest.updated",
                                   "member.created",
@@ -77952,6 +77954,7 @@
                             "mcpServer.deleted",
                             "mcpServer.restored",
                             "mcpServer.reinstalled",
+                            "mcpServer.hardReset",
                             "mcpServerInstallationRequest.created",
                             "mcpServerInstallationRequest.updated",
                             "member.created",
@@ -121593,6 +121596,9 @@
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
+                        "mcpIdleHibernationBetaEnabled": {
+                          "type": "boolean"
+                        },
                         "sandbox": {
                           "type": "boolean"
                         },
@@ -121753,6 +121759,7 @@
                       "required": [
                         "betaEnabled",
                         "orchestratorK8sRuntime",
+                        "mcpIdleHibernationBetaEnabled",
                         "sandbox",
                         "sandboxArtifactBytesLimit",
                         "chatAttachmentStorageBytesLimit",
@@ -208970,6 +208977,14 @@
                   "catalogReinstallRequired": {
                     "type": "boolean"
                   },
+                  "hibernationMode": {
+                    "type": "string",
+                    "enum": [
+                      "inherit",
+                      "enabled",
+                      "disabled"
+                    ]
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -250806,6 +250821,19 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "lastUsedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "hibernationMode": {
+                        "type": "string",
+                        "enum": [
+                          "inherit",
+                          "enabled",
+                          "disabled"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -250994,6 +251022,8 @@
                       "oauthRefreshErrorMessage",
                       "oauthRefreshErrorDescription",
                       "oauthRefreshFailedAt",
+                      "lastUsedAt",
+                      "hibernationMode",
                       "createdAt",
                       "updatedAt",
                       "deletedAt"
@@ -251475,6 +251505,19 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hibernationMode": {
+                      "type": "string",
+                      "enum": [
+                        "inherit",
+                        "enabled",
+                        "disabled"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -251663,6 +251706,8 @@
                     "oauthRefreshErrorMessage",
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
+                    "lastUsedAt",
+                    "hibernationMode",
                     "createdAt",
                     "updatedAt",
                     "deletedAt"
@@ -252062,6 +252107,19 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hibernationMode": {
+                      "type": "string",
+                      "enum": [
+                        "inherit",
+                        "enabled",
+                        "disabled"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -252250,6 +252308,8 @@
                     "oauthRefreshErrorMessage",
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
+                    "lastUsedAt",
+                    "hibernationMode",
                     "createdAt",
                     "updatedAt",
                     "deletedAt"
@@ -252958,6 +253018,19 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hibernationMode": {
+                      "type": "string",
+                      "enum": [
+                        "inherit",
+                        "enabled",
+                        "disabled"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -253146,6 +253219,8 @@
                     "oauthRefreshErrorMessage",
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
+                    "lastUsedAt",
+                    "hibernationMode",
                     "createdAt",
                     "updatedAt",
                     "deletedAt"
@@ -253545,6 +253620,19 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hibernationMode": {
+                      "type": "string",
+                      "enum": [
+                        "inherit",
+                        "enabled",
+                        "disabled"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -253733,6 +253821,8 @@
                     "oauthRefreshErrorMessage",
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
+                    "lastUsedAt",
+                    "hibernationMode",
                     "createdAt",
                     "updatedAt",
                     "deletedAt"
@@ -254922,6 +255012,14 @@
                   },
                   "serviceAccount": {
                     "type": "string"
+                  },
+                  "hibernationMode": {
+                    "type": "string",
+                    "enum": [
+                      "inherit",
+                      "enabled",
+                      "disabled"
+                    ]
                   }
                 }
               }
@@ -255073,6 +255171,19 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hibernationMode": {
+                      "type": "string",
+                      "enum": [
+                        "inherit",
+                        "enabled",
+                        "disabled"
+                      ]
                     },
                     "createdAt": {
                       "type": "string",
@@ -255262,6 +255373,8 @@
                     "oauthRefreshErrorMessage",
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
+                    "lastUsedAt",
+                    "hibernationMode",
                     "createdAt",
                     "updatedAt",
                     "deletedAt"
@@ -255504,6 +255617,521 @@
           "kind": "static",
           "permissions": [
             "mcpServerInstallation:create"
+          ]
+        }
+      }
+    },
+    "/api/mcp_server/{id}/hard-reset": {
+      "post": {
+        "operationId": "hardResetMcpServer",
+        "tags": [
+          "MCP Server"
+        ],
+        "description": "Destroy and redeploy a stuck MCP server deployment from a clean slate\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:admin`: Approve or manage all MCP server installations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "completed"
+                          ]
+                        },
+                        "mcpServerId": {
+                          "type": "string"
+                        },
+                        "physicalDeployment": {
+                          "type": "string"
+                        },
+                        "resetServerIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "teardown": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "terminated"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "outcome"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "force-killed"
+                                  ]
+                                },
+                                "pods": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "pods"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unverified"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "recreated": {
+                          "anyOf": [
+                            {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "target": {
+                                      "type": "string",
+                                      "enum": [
+                                        "shared-catalog-deployment"
+                                      ]
+                                    },
+                                    "catalogId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "target",
+                                    "catalogId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "target": {
+                                      "type": "string",
+                                      "enum": [
+                                        "install-deployment"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "target"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "rebuild": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ready"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "outcome"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not-ready"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "mcpServerId",
+                        "physicalDeployment",
+                        "resetServerIds",
+                        "teardown",
+                        "recreated",
+                        "rebuild"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "in-progress"
+                          ]
+                        },
+                        "mcpServerId": {
+                          "type": "string"
+                        },
+                        "physicalDeployment": {
+                          "type": "string"
+                        },
+                        "resetServerIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "mcpServerId",
+                        "physicalDeployment",
+                        "resetServerIds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_service_unavailable_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:admin"
           ]
         }
       }
@@ -279160,6 +279788,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -279240,6 +279871,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -280211,6 +280843,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -280291,6 +280926,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -281555,6 +282191,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -281635,6 +282274,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -282462,6 +283102,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -282542,6 +283185,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -282794,7 +283438,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update MCP settings (online catalog availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpSettings:update`: Modify MCP settings",
+        "description": "Update MCP settings (online catalog availability, idle hibernation)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpSettings:update`: Modify MCP settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -282803,6 +283447,9 @@
                 "type": "object",
                 "properties": {
                   "onlineMcpCatalogEnabled": {
+                    "type": "boolean"
+                  },
+                  "mcpIdleHibernationEnabled": {
                     "type": "boolean"
                   }
                 }
@@ -283362,6 +284009,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -283442,6 +284092,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -284262,6 +284913,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -284342,6 +284996,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -285177,6 +285832,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -285257,6 +285915,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -286171,6 +286830,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -286251,6 +286913,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -287112,6 +287775,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -287192,6 +287858,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -288085,6 +288752,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -288165,6 +288835,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -289001,6 +289672,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -289081,6 +289755,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -289929,6 +290604,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -290009,6 +290687,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -290814,6 +291493,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -290894,6 +291576,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"
@@ -292596,6 +293279,9 @@
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
+                    "mcpIdleHibernationEnabled": {
+                      "type": "boolean"
+                    },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
                     },
@@ -292676,6 +293362,7 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
+                    "mcpIdleHibernationEnabled",
                     "appsHackathonRecorderEnabled",
                     "newAppsDisabledByDefault",
                     "newAppsLockedByDefault"

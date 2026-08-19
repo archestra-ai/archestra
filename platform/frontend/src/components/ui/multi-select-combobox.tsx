@@ -21,6 +21,10 @@ export interface MultiSelectOption {
   label: string;
   /** Optional leading icon (provider/client logo, …). */
   icon?: React.ReactNode;
+  /** Secondary line under the label, for options that need explaining. */
+  description?: string;
+  /** Offered but not selectable — say why in `description`. */
+  disabled?: boolean;
 }
 
 interface MultiSelectComboboxProps {
@@ -199,7 +203,11 @@ export function MultiSelectCombobox({
                     <CommandItem
                       key={option.value}
                       value={option.value}
-                      onSelect={() => handleSelect(option.value)}
+                      disabled={option.disabled}
+                      onSelect={() => {
+                        if (option.disabled) return;
+                        handleSelect(option.value);
+                      }}
                       onMouseDown={(e) => e.preventDefault()}
                       className="justify-between gap-2"
                     >
@@ -209,7 +217,14 @@ export function MultiSelectCombobox({
                             {option.icon}
                           </span>
                         )}
-                        <span className="truncate">{option.label}</span>
+                        <span className="block min-w-0">
+                          <span className="block truncate">{option.label}</span>
+                          {option.description && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {option.description}
+                            </span>
+                          )}
+                        </span>
                       </span>
                       <Check
                         className={cn(

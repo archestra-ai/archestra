@@ -93,11 +93,12 @@ describe("ProfileCard", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Original Name");
   });
 
-  it("shows the name beside the avatar", () => {
+  it("shows the name once, in the field that edits it", () => {
     render(<ProfileCard />);
 
-    // Distinct from the editable field below, which holds the same value.
-    expect(screen.getByText("Original Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Original Name");
+    // Not repeated as static text beside the avatar.
+    expect(screen.queryByText("Original Name")).toBeNull();
   });
 
   it("keeps email and role as read-only fields", () => {

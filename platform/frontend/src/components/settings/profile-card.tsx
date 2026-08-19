@@ -53,18 +53,16 @@ export function ProfileCard() {
             stretched to a 1400px card are hard to scan and imply far more
             input than a name. */}
         <div className="max-w-xl space-y-6">
-          <div className="flex items-center gap-4">
-            {/* Display-only: there is no self-service upload endpoint. */}
-            <Avatar className="size-16">
-              {image && <AvatarImage src={image} alt="" />}
-              <AvatarFallback className="text-base">
-                {(name || email).slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <p className="min-w-0 truncate text-lg font-medium">
-              {name || "—"}
-            </p>
-          </div>
+          {/* Display-only: there is no self-service upload endpoint. The name
+              is not repeated beside it — the Name field below holds the same
+              value, and printing it twice just makes the reader check whether
+              the two agree. */}
+          <Avatar className="size-16">
+            {image && <AvatarImage src={image} alt="" />}
+            <AvatarFallback className="text-base">
+              {(name || email).slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
 
           <Separator />
 
@@ -192,10 +190,7 @@ function ProfileSkeleton() {
         {/* Shaped like the form it replaces, so the section does not jump
             when the session lands. */}
         <div className="max-w-xl space-y-6">
-          <div className="flex items-center gap-4">
-            <Skeleton className="size-16 rounded-full" />
-            <Skeleton className="h-6 w-40" />
-          </div>
+          <Skeleton className="size-16 rounded-full" />
           <Separator />
           {["name", "email", "role"].map((field) => (
             <div key={field} className="grid gap-2">

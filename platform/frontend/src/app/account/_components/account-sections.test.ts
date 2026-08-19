@@ -36,10 +36,11 @@ describe("resolveAccountSection", () => {
     ).toBe("api-keys");
   });
 
-  it("leaves the change-password highlight on the default section", () => {
-    // That dialog is page-level, so it opens from whichever section is shown.
+  it("opens the security section for the change-password highlight", () => {
+    // The dialog opens over the control that reopens it, so closing it leaves
+    // the reader somewhere that makes sense.
     expect(
       resolveAccountSection({ section: null, highlight: "change-password" }),
-    ).toBe("profile");
+    ).toBe("security");
   });
 });

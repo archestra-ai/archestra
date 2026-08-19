@@ -57,7 +57,7 @@ describe("RolePermissionsCard", () => {
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByText("Original Name")).toBeNull();
+    expect(screen.queryByDisplayValue("Original Name")).toBeNull();
   });
 
   it("keeps the skeleton up until the role arrives when the session has an active organization", () => {
@@ -71,7 +71,7 @@ describe("RolePermissionsCard", () => {
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByText("Original Name")).toBeNull();
+    expect(screen.queryByDisplayValue("Original Name")).toBeNull();
   });
 
   it("renders the account details when the user has no active organization", () => {
@@ -95,20 +95,34 @@ describe("RolePermissionsCard", () => {
 
     render(<RolePermissionsCard />);
 
-    expect(screen.getByText("Original Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Original Name");
   });
 
-  it("updates the account name from the top account section", async () => {
+  it("shows the email and role as read-only fields", () => {
     render(<RolePermissionsCard />);
 
-    expect(screen.getByText("Original Name")).toBeInTheDocument();
+    const email = screen.getByLabelText("Email");
+    expect(email).toHaveValue("admin@example.com");
+    expect(email).toHaveAttribute("readonly");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit name" }));
-    expect(screen.getByRole("textbox")).toHaveFocus();
-    fireEvent.change(screen.getByRole("textbox"), {
+    const role = screen.getByLabelText("Role");
+    expect(role).toHaveValue("admin");
+    expect(role).toHaveAttribute("readonly");
+  });
+
+  it("submits a changed name and keeps the button idle until it changes", async () => {
+    render(<RolePermissionsCard />);
+
+    const submit = screen.getByRole("button", { name: "Update profile" });
+    // Nothing edited yet, so there is nothing to save.
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Updated Name" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(submit).toBeEnabled());
+
+    fireEvent.click(submit);
 
     await waitFor(() => {
       expect(mockUpdateNameMutateAsync).toHaveBeenCalledWith("Updated Name");

@@ -9,17 +9,11 @@ import {
   resourceLabels,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Pencil,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,11 +25,14 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
+  FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
@@ -95,25 +92,13 @@ export function RolePermissionsCard() {
 
   return (
     <Card>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-          <span className="flex h-8 items-center text-muted-foreground">
-            Name:
-          </span>
-          <EditableName value={session?.user?.name ?? ""} />
-          <span className="flex h-8 items-center text-muted-foreground">
-            Email:
-          </span>
-          <span className="flex h-8 items-center">
-            {session?.user?.email || "—"}
-          </span>
-          <span className="flex h-8 items-center text-muted-foreground">
-            Role:
-          </span>
-          <span className="flex h-8 items-center capitalize">
-            {role || "—"}
-          </span>
-        </div>
+      <CardContent className="space-y-8">
+        <ProfileForm
+          name={session?.user?.name ?? ""}
+          email={session?.user?.email ?? ""}
+          image={session?.user?.image ?? null}
+          role={role ?? ""}
+        />
         {permissions && (
           <>
             <Separator />
@@ -128,92 +113,116 @@ export function RolePermissionsCard() {
   );
 }
 
-function EditableName({ value }: { value: string }) {
-  const [isEditing, setIsEditing] = useState(false);
+function ProfileForm({
+  name,
+  email,
+  image,
+  role,
+}: {
+  name: string;
+  email: string;
+  image: string | null;
+  role: string;
+}) {
   const updateName = useUpdateAccountNameMutation();
   const form = useForm<NameFormValues>({
     resolver: zodResolver(NameFormSchema),
-    values: { name: value },
+    values: { name },
   });
 
   async function onSubmit(values: NameFormValues) {
     const updated = await updateName.mutateAsync(values.name.trim());
     if (updated) {
-      setIsEditing(false);
+      // Re-baseline the form so the Update button goes back to disabled;
+      // the session refetch behind `values` lands a moment later.
+      form.reset({ name: values.name.trim() });
     }
   }
 
-  if (isEditing) {
-    return (
+  const initials = (name || email).slice(0, 2).toUpperCase();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Avatar className="size-20">
+          {image && <AvatarImage src={image} alt="" />}
+          <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Avatar</p>
+          <p className="text-sm text-muted-foreground">
+            Shown next to you across the app. It comes from your identity
+            provider and can&apos;t be changed here.
+          </p>
+        </div>
+      </div>
+
       <Form {...form}>
-        <form
-          className="flex min-w-0 flex-wrap items-start gap-2"
-          onSubmit={form.handleSubmit(onSubmit)}
-        >
+        <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
-              <FormItem className="min-w-52 flex-1">
+              <FormItem>
+                <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
-                    autoFocus
                     autoComplete="name"
-                    className="h-8"
                     disabled={updateName.isPending}
                   />
                 </FormControl>
+                <FormDescription>
+                  This is the name your teammates see on your chats, agents, and
+                  audit records.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          {/* Email and role are read-only here: neither has a self-service
+              endpoint. They stay real inputs so the section reads as one form
+              and the values can still be selected and copied. */}
+          <div className="space-y-2">
+            <Label htmlFor="account-email">Email</Label>
+            <Input
+              id="account-email"
+              value={email || "\u2014"}
+              readOnly
+              className="bg-muted text-muted-foreground"
+            />
+            <p className="text-sm text-muted-foreground">
+              You sign in with this address. It can&apos;t be changed here.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="account-role">Role</Label>
+            <Input
+              id="account-role"
+              value={role || "\u2014"}
+              readOnly
+              className="bg-muted capitalize text-muted-foreground"
+            />
+            <p className="text-sm text-muted-foreground">
+              Your role decides what you can reach across the platform. Only an
+              admin can change it.
+            </p>
+          </div>
+
           <Button
             type="submit"
-            size="icon"
-            className="h-8 w-8"
-            disabled={updateName.isPending}
-            aria-label="Save name"
+            disabled={updateName.isPending || !form.formState.isDirty}
           >
-            {updateName.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
+            {updateName.isPending && (
+              <Loader2 className="size-4 animate-spin" />
             )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={updateName.isPending}
-            onClick={() => {
-              form.reset({ name: value });
-              setIsEditing(false);
-            }}
-            aria-label="Cancel name edit"
-          >
-            <X className="h-4 w-4" />
+            <span>Update profile</span>
           </Button>
         </form>
       </Form>
-    );
-  }
-
-  return (
-    <span className="flex h-8 min-w-0 items-center gap-2">
-      <span className="truncate">{value || "—"}</span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6"
-        onClick={() => setIsEditing(true)}
-        aria-label="Edit name"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
-    </span>
+    </div>
   );
 }
 

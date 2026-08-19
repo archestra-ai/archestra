@@ -2,9 +2,11 @@
 
 import {
   allowedFromCatalog,
+  builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
   collapseAllowList,
+  integrationLabel,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   ROLE_RESOURCE_KIND_LABELS,
@@ -25,7 +27,7 @@ import {
   MultiSelectCombobox,
   type MultiSelectOption,
 } from "@/components/ui/multi-select-combobox";
-import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useOrganization } from "@/lib/organization.query";
 
 /**
  * One chip multiselect per gated catalog, for the role being edited.
@@ -48,10 +50,20 @@ export function RoleResourceAccessBuilder({
   onChange: (access: RoleResourceAccess) => void;
   readOnly?: boolean;
 }) {
-  const providerCatalog = useModelProviderCatalog();
+  // The organization's provider names, not the viewer's catalog: this editor
+  // shows the full catalog whatever the admin's own role may reach.
+  const { data: organization } = useOrganization();
+  const providerOverrides = organization?.modelProviderOverrides ?? null;
   const sections = useMemo(
-    () => buildSections(providerCatalog.label),
-    [providerCatalog.label],
+    () =>
+      buildSections((provider) =>
+        integrationLabel(
+          providerOverrides,
+          provider,
+          builtInProviderLabel(provider),
+        ),
+      ),
+    [providerOverrides],
   );
 
   return (

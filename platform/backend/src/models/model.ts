@@ -536,6 +536,12 @@ class ModelModel {
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,
               customPricePerMillionCacheWrite: sql`NULL`,
+              // Reset with the custom prices beside them: this path exists to
+              // put a row back to what the provider says, and leaving an
+              // admin-set window in place would keep overriding exactly the
+              // column the refresh just replaced.
+              customContextLength: sql`NULL`,
+              customOutputLength: sql`NULL`,
               discoveredViaLlmProxy: sql`false`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
@@ -650,6 +656,12 @@ class ModelModel {
     }
     if (data.configuredParameters !== undefined) {
       set.configuredParameters = data.configuredParameters;
+    }
+    if (data.customContextLength !== undefined) {
+      set.customContextLength = data.customContextLength;
+    }
+    if (data.customOutputLength !== undefined) {
+      set.customOutputLength = data.customOutputLength;
     }
 
     const [result] = await db
@@ -958,6 +970,36 @@ class ModelModel {
   }
 
   /**
+   * The model's architectural context window: the admin-set override when one
+   * exists, otherwise whatever the provider reported. This is the ceiling
+   * `num_ctx` is validated against and the input to
+   * {@link ModelModel.resolveEffectiveContextLength} — not what to display,
+   * since an Ollama Modelfile can still cap the window below it.
+   */
+  static resolveArchitecturalContextLength(
+    model: Pick<Model, "contextLength" | "customContextLength">,
+  ): number | null {
+    return (
+      sanitizeOutputLimit(model.customContextLength) ??
+      sanitizeOutputLimit(model.contextLength)
+    );
+  }
+
+  /**
+   * The model's maximum output tokens: the admin-set override when one exists,
+   * otherwise the synced limit. Null when neither is known, which callers read
+   * as "unknown" and answer with their own fallback budget.
+   */
+  static resolveEffectiveOutputLength(
+    model: Pick<Model, "outputLength" | "customOutputLength">,
+  ): number | null {
+    return (
+      sanitizeOutputLimit(model.customOutputLength) ??
+      sanitizeOutputLimit(model.outputLength)
+    );
+  }
+
+  /**
    * Get model capabilities for API response.
    * Uses getEffectivePricing for pricing resolution.
    */
@@ -987,7 +1029,7 @@ class ModelModel {
    * loaded. Setting `num_ctx` explicitly is the escape hatch for that case.
    */
   static resolveEffectiveContextLength(model: Model): number | null {
-    const architectural = model.contextLength;
+    const architectural = ModelModel.resolveArchitecturalContextLength(model);
     const isOllama =
       model.provider === "ollama" || model.provider === "ollama-native";
 
@@ -1128,6 +1170,11 @@ class ModelModel {
       // be unanswerable. `contextLength` below only reflects `num_ctx`.
       configuredParameters: row.configuredParameters ?? null,
       contextLength: caps.contextLength,
+      // Both limits are the *resolved* numbers, so an override shows up here as
+      // the value it actually changes. Without `outputLength` a save that only
+      // sets the max-output override moves nothing but `updatedAt` (which the
+      // audit hook strips), leaving an empty before/after diff.
+      outputLength: ModelModel.resolveEffectiveOutputLength(row),
       pricePerMillionInput: caps.pricePerMillionInput,
       pricePerMillionOutput: caps.pricePerMillionOutput,
       isCustomPrice: caps.isCustomPrice,

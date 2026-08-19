@@ -416,25 +416,42 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the only permission check: model rows are global, but so are the pricing
       // and `ignored` fields an editor can already write, so singling out
       // generation parameters bought a 403 class without a matching guarantee.
-      if (body.configuredParameters !== undefined) {
-        if (existing.provider !== "ollama-native") {
-          throw new ApiError(
-            400,
-            `Generation parameters are only supported for Ollama (Native) models, not "${existing.provider}"`,
-          );
-        }
+      if (
+        body.configuredParameters !== undefined &&
+        existing.provider !== "ollama-native"
+      ) {
+        throw new ApiError(
+          400,
+          `Generation parameters are only supported for Ollama (Native) models, not "${existing.provider}"`,
+        );
+      }
 
-        const numCtx = body.configuredParameters?.num_ctx;
-        if (
-          numCtx !== undefined &&
-          existing.contextLength !== null &&
-          numCtx > existing.contextLength
-        ) {
-          throw new ApiError(
-            400,
-            `num_ctx (${numCtx}) exceeds the model's context length of ${existing.contextLength}`,
-          );
-        }
+      // Checked against the post-patch state, and on either field changing:
+      // lowering the custom context window below an already-configured num_ctx
+      // is the same inconsistency as raising num_ctx above the window, and only
+      // one of the two arrives in any given request.
+      const numCtx =
+        body.configuredParameters !== undefined
+          ? body.configuredParameters?.num_ctx
+          : existing.configuredParameters?.num_ctx;
+      const contextCeiling = ModelModel.resolveArchitecturalContextLength({
+        contextLength: existing.contextLength,
+        customContextLength:
+          body.customContextLength !== undefined
+            ? body.customContextLength
+            : existing.customContextLength,
+      });
+      if (
+        (body.configuredParameters !== undefined ||
+          body.customContextLength !== undefined) &&
+        numCtx !== undefined &&
+        contextCeiling !== null &&
+        numCtx > contextCeiling
+      ) {
+        throw new ApiError(
+          400,
+          `num_ctx (${numCtx}) exceeds the model's context length of ${contextCeiling}`,
+        );
       }
 
       // The knowledge base reads embedding dimensions from this row at embed

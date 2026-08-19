@@ -61265,6 +61265,8 @@ export type GetModelsWithApiKeysResponses = {
         description: string | null;
         contextLength: number | null;
         outputLength: number | null;
+        customContextLength: number | null;
+        customOutputLength: number | null;
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
@@ -61338,6 +61340,8 @@ export type UpdateModelData = {
         customPricePerMillionOutput?: string | null;
         customPricePerMillionCacheRead?: string | null;
         customPricePerMillionCacheWrite?: string | null;
+        customContextLength?: number | null;
+        customOutputLength?: number | null;
         ignored?: boolean;
         embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
@@ -61440,6 +61444,8 @@ export type UpdateModelResponses = {
         description: string | null;
         contextLength: number | null;
         outputLength: number | null;
+        customContextLength: number | null;
+        customOutputLength: number | null;
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;

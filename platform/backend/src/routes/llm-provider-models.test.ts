@@ -1,4 +1,4 @@
-import { TimeInMs } from "@archestra/shared";
+import { MAX_CUSTOM_MODEL_TOKEN_LIMIT, TimeInMs } from "@archestra/shared";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -1371,6 +1371,196 @@ describe("chat model routes", () => {
         });
         expect(response.statusCode).toBe(400);
       }
+    });
+  });
+
+  describe("PATCH /api/llm-models/:id — custom context/output limits", () => {
+    async function makeUnreportedModel() {
+      // A row created from an observed proxy request: no catalog entry behind
+      // it, so the provider reports neither limit.
+      return ModelModel.create({
+        externalId: "vllm/local-llama",
+        provider: "vllm",
+        modelId: "local-llama",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    async function makeNativeModel(contextLength: number | null = null) {
+      return ModelModel.create({
+        externalId: "ollama/llama3.2",
+        provider: "ollama-native",
+        modelId: "llama3.2",
+        contextLength,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    async function settleAuditWrites() {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    test("sets both limits on a model the provider reports nothing for", async () => {
+      const model = await makeUnreportedModel();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customContextLength: 128000, customOutputLength: 8192 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        customContextLength: 128000,
+        customOutputLength: 8192,
+        // The synced columns stay untouched, which is what makes the override
+        // clearable back to the provider's own figures.
+        contextLength: null,
+        outputLength: null,
+      });
+    });
+
+    test("clears the overrides with null", async () => {
+      const model = await makeUnreportedModel();
+      await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customContextLength: 128000, customOutputLength: 8192 },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customContextLength: null, customOutputLength: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        customContextLength: null,
+        customOutputLength: null,
+      });
+    });
+
+    test("records a non-empty audit diff for a max-output-only save", async () => {
+      const model = await makeUnreportedModel();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customOutputLength: 8192 },
+      });
+      expect(response.statusCode).toBe(200);
+
+      await settleAuditWrites();
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmModel",
+        sortDirection: "asc",
+        limit: 50,
+        offset: 0,
+      });
+
+      // The output limit is the only field this save moves besides `updatedAt`,
+      // which the audit hook strips — so without it in the snapshot "who raised
+      // the output ceiling on a globally shared row" is unanswerable.
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("llmModel.updated");
+      expect(rows[0].before).toMatchObject({ outputLength: null });
+      expect(rows[0].after).toMatchObject({ outputLength: 8192 });
+    });
+
+    test("rejects a limit that is not a positive whole number of tokens", async () => {
+      const model = await makeUnreportedModel();
+
+      for (const payload of [
+        { customContextLength: 0 },
+        { customContextLength: -1 },
+        { customContextLength: 8192.5 },
+        { customOutputLength: 0 },
+        { customOutputLength: 4096.5 },
+        { customOutputLength: MAX_CUSTOM_MODEL_TOKEN_LIMIT + 1 },
+      ]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: `/api/llm-models/${model.id}`,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      }
+
+      const unchanged = await ModelModel.findById(model.id);
+      expect(unchanged?.customContextLength).toBeNull();
+      expect(unchanged?.customOutputLength).toBeNull();
+    });
+
+    test("an admin-set window becomes the num_ctx ceiling", async () => {
+      // Nothing capped `num_ctx` on this row before — the schema backstop was
+      // the only bound — so stating the window has to start bounding it.
+      const model = await makeNativeModel();
+      await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customContextLength: 8192 },
+      });
+
+      const tooLarge = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_ctx: 16384 } },
+      });
+      expect(tooLarge.statusCode).toBe(400);
+      expect(tooLarge.json().error.message).toContain("8192");
+
+      const withinWindow = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_ctx: 8192 } },
+      });
+      expect(withinWindow.statusCode).toBe(200);
+    });
+
+    test("rejects lowering the window below an already-configured num_ctx", async () => {
+      const model = await makeNativeModel(131072);
+      await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_ctx: 65536 } },
+      });
+
+      // The inconsistency the num_ctx check exists to prevent, reached from the
+      // other side: only one of the two fields moves in a given request.
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { customContextLength: 8192 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("65536");
+      expect((await ModelModel.findById(model.id))?.customContextLength).toBe(
+        null,
+      );
+    });
+
+    test("accepts raising the window and num_ctx together", async () => {
+      const model = await makeNativeModel(null);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: {
+          customContextLength: 65536,
+          configuredParameters: { num_ctx: 65536 },
+        },
+      });
+
+      // Validated against the post-patch pair; against the stored row this
+      // would have been rejected for a window that no longer applies.
+      expect(response.statusCode).toBe(200);
     });
   });
 });

@@ -62,6 +62,7 @@ const uiTestMatch = [
   "**/llm-logs-slack-source.spec.ts",
   "**/mcp-edit.spec.ts",
   "**/mcp-install.spec.ts",
+  "**/model-limits.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",
   "**/skill-version-history.spec.ts",

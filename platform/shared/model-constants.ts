@@ -996,6 +996,18 @@ export const MODELS_DEV_ENRICHMENT_PROVIDER_MAP: Record<
  */
 export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
 
+/**
+ * Absolute ceiling for an admin-set context window or max-output-token count on
+ * the models page. Like {@link MAX_CONFIGURABLE_NUM_CTX} it is a runaway-typo
+ * guard rather than a claim about any real model: these overrides exist because
+ * a provider reported nothing, so there is no per-row limit to check them
+ * against.
+ *
+ * Shared so the models-page form mirrors the server rule instead of letting an
+ * out-of-range value reach the backend and come back as a bare 400.
+ */
+export const MAX_CUSTOM_MODEL_TOKEN_LIMIT = 10_000_000;
+
 /** Ollama only ever honours a handful of stop sequences. */
 export const MAX_STOP_SEQUENCES = 16;
 export const MAX_STOP_SEQUENCE_LENGTH = 256;

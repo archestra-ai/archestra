@@ -18,7 +18,6 @@ import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/conn
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -348,17 +347,6 @@ function ConnectorsList() {
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
-      extraActions={
-        <IntegrationSettingsDialog
-          field="knowledgeConnectorOverrides"
-          title="Connector settings"
-          description="Admin only — turn off the connector types your organization does not allow. A turned-off type disappears from the create dialog and cannot be created."
-          entityNamePlural="connector types"
-          items={connectorSettingsItems}
-          overrides={connectorCatalog.overrides}
-          testId="knowledge-connector-page-settings"
-        />
-      }
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">

@@ -7,7 +7,7 @@ import {
 import { Bot, Mail } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
-import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
+import { CHANNEL_ICON_SRC } from "@/components/channel-icon";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -54,38 +54,9 @@ function TabLabel({
   );
 }
 
-/** Tab icons, kept next to the labels the admin can override. */
-const CHANNEL_ICON_SRC = {
-  "ms-teams": "/icons/ms-teams.png",
-  slack: "/icons/slack.png",
-  telegram: "/icons/telegram.png",
-} as const;
-
-const CHANNEL_ICONS: Record<MessagingChannelId, ReactNode> = {
-  "ms-teams": (
-    <img
-      src={CHANNEL_ICON_SRC["ms-teams"]}
-      alt=""
-      className="h-[18px] w-[18px]"
-    />
-  ),
-  slack: (
-    <img src={CHANNEL_ICON_SRC.slack} alt="" className="h-[18px] w-[18px]" />
-  ),
-  telegram: (
-    <img src={CHANNEL_ICON_SRC.telegram} alt="" className="h-[18px] w-[18px]" />
-  ),
-  email: <Mail className="h-[18px] w-[18px]" />,
-  a2a: <Bot className="h-[18px] w-[18px]" />,
-};
-
-const CHANNEL_SETTINGS_ITEMS = (
-  Object.keys(MESSAGING_CHANNEL_LABELS) as MessagingChannelId[]
-).map((id) => ({
-  id,
-  label: MESSAGING_CHANNEL_LABELS[id],
-  icon: CHANNEL_ICONS[id],
-}));
+const CHANNEL_IDS = Object.keys(
+  MESSAGING_CHANNEL_LABELS,
+) as MessagingChannelId[];
 
 export default function AgentTriggersLayout({
   children,
@@ -212,24 +183,12 @@ export default function AgentTriggersLayout({
           : `Manage how agents are invoked through ${describeChannels(
               // Catalog order, not tab order: the tabs re-sort as channels
               // connect, and a sentence that reshuffles itself reads like a bug.
-              CHANNEL_SETTINGS_ITEMS.filter((item) =>
-                tabs.some((tab) => tab.id === item.id),
-              ).map((item) => MESSAGING_CHANNEL_LABELS[item.id]),
+              CHANNEL_IDS.filter((id) => tabs.some((tab) => tab.id === id)).map(
+                (id) => MESSAGING_CHANNEL_LABELS[id],
+              ),
             )}`
       }
       tabs={tabs}
-      actionButton={
-        <IntegrationSettingsDialog
-          field="messagingChannelOverrides"
-          title="Messaging channel settings"
-          description="Admin only — turn off the channels your organization does not allow. A turned-off channel stops listening and disappears from this page."
-          entityNamePlural="channels"
-          items={CHANNEL_SETTINGS_ITEMS}
-          compact
-          overrides={channelCatalog.overrides}
-          testId="messaging-channel-page-settings"
-        />
-      }
     >
       {noChannels ? (
         <ChannelsOffNotice

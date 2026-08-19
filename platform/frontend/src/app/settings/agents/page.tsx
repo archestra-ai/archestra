@@ -1,14 +1,21 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  MESSAGING_CHANNEL_LABELS,
+  type MessagingChannelId,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -48,6 +55,10 @@ import {
 } from "./agent-settings-utils";
 
 type FileUploadsEnabled = "enabled" | "disabled";
+
+const MESSAGING_CHANNEL_LABELS_KEYS = Object.keys(
+  MESSAGING_CHANNEL_LABELS,
+) as MessagingChannelId[];
 
 export default function AgentSettingsPage() {
   const appName = useAppName();
@@ -511,6 +522,21 @@ export default function AgentSettingsPage() {
         permissions={{ agentSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
+      />
+      <IntegrationAvailabilitySection
+        id="available-messaging-channels"
+        catalogKey="messagingChannelOverrides"
+        catalog={MESSAGING_CHANNEL_LABELS_KEYS}
+        title="Available messaging channels"
+        description="Which channels agents can be configured on and reached through. A channel you remove stops listening — a connected Slack bot stops answering, and email stops reaching agents."
+        options={MESSAGING_CHANNEL_LABELS_KEYS.map((channel) => ({
+          value: channel,
+          label: MESSAGING_CHANNEL_LABELS[channel],
+          icon: <ChannelIcon channel={channel} />,
+        }))}
+        placeholder="Select channels…"
+        emptyMessage="No channels found."
+        savedMessage="Available messaging channels updated"
       />
     </SettingsSectionStack>
   );

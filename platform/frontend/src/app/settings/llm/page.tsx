@@ -4,15 +4,20 @@ import {
   ADVISOR_AGENT_NAME,
   archestraApiSdk,
   type archestraApiTypes,
+  builtInProviderLabel,
+  SupportedProviders,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
+import { ProviderNamesSection } from "@/app/settings/llm/_parts/provider-names-section";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner } from "@/components/loading";
+import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -316,6 +321,22 @@ export default function LlmSettingsPage() {
       >
         <DefaultUserLimitsSection />
       </WithPermissions>
+      <IntegrationAvailabilitySection
+        id="available-providers"
+        catalogKey="modelProviderOverrides"
+        catalog={SupportedProviders}
+        title="Available model providers"
+        description="Which providers this deployment offers. A provider you remove leaves every picker, and the API refuses to configure it. Keys that already exist keep working."
+        options={SupportedProviders.map((provider) => ({
+          value: provider,
+          label: builtInProviderLabel(provider),
+          icon: <ProviderIcon provider={provider} size={18} />,
+        }))}
+        placeholder="Select providers…"
+        emptyMessage="No providers found."
+        savedMessage="Available providers updated"
+      />
+      <ProviderNamesSection />
     </SettingsSectionStack>
   );
 }

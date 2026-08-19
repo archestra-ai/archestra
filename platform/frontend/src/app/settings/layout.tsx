@@ -44,6 +44,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     description:
       "Configure embedding, reranking, and knowledge system defaults.",
   },
+  "/settings/connection": {
+    title: "Connection",
+    description:
+      "Configure the connect page: which clients it offers, the defaults it pre-selects, and the base URLs it hands out.",
+  },
   "/settings/llm": {
     title: "LLM",
     description:

@@ -14,15 +14,17 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## Turning Providers Off
 
-Most organizations only allow a few providers. As an admin, open **Page settings** on Model Providers and switch **Available** off for the rest. A turned-off provider disappears from every picker, and the API refuses to configure it.
+Most organizations only allow a few providers. Go to **Settings → LLM → Available model providers**, and remove the chip for every provider your organization does not allow. A provider you remove disappears from every picker, and the API refuses to configure it.
 
-![The Model Providers page with the admin-only Page settings dialog open](/docs/automated_screenshots/platform-supported-llm-providers_page-settings.webp)
+![Available model providers on the LLM settings page](/docs/automated_screenshots/platform-supported-llm-providers_available-providers.webp)
+
+Removing the last chip leaves the deployment with no providers at all. A provider added by a later release arrives switched on.
 
 Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
 
 ## Renaming a Provider
 
-A provider row also takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave it empty to keep the name the provider ships with.
+Under **Settings → LLM → Provider names**, each provider takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave a field empty to keep the name the provider ships with.
 
 Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
 

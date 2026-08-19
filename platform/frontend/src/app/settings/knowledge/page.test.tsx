@@ -68,6 +68,7 @@ import {
   useTestEmbeddingConnection,
   useTestOcrConnection,
   useTestRerankerConnection,
+  useUpdateIntegrationSettings,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
 
@@ -224,6 +225,10 @@ function makeCapabilities(
 }
 
 beforeEach(() => {
+  vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateIntegrationSettings>);
   vi.clearAllMocks();
   localStorage.clear();
   vi.mocked(useAppName).mockReturnValue("Archestra");

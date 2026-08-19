@@ -40,11 +40,16 @@ import {
 } from "@/lib/auth/auth.query";
 import {
   useOrganization,
+  useUpdateIntegrationSettings,
   useUpdateLlmSettings,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 beforeEach(() => {
+  vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateIntegrationSettings>);
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
     isPending: false,

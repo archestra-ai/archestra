@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-08-13
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -152,6 +152,14 @@ n8n is a workflow tool, so you configure nodes inside n8n — there is no script
 ### Any Client
 
 Selecting **Any Client** gives copy-paste instructions instead of a one-command script. The page shows the MCP gateway URL with its authentication, and the LLM proxy base URL and key. You apply them to whatever tool you use — an editor plugin or a custom agent, for example.
+
+## Configuring the Page
+
+Go to **Settings → Connection** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
+
+The same page holds the defaults it pre-selects — an MCP gateway, an LLM proxy, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
+
+Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Available model providers**.
 
 ## Use Case
 

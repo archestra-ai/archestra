@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Palette,
   Plug,
+  PlugZap,
   ShieldCheck,
   UserCog,
   Users,
@@ -48,6 +49,9 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/mcp"]
       ? [{ label: "MCP", href: "/settings/mcp", Icon: Plug }]
+      : []),
+    ...(permissionMap?.["/settings/connection"]
+      ? [{ label: "Connection", href: "/settings/connection", Icon: PlugZap }]
       : []),
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills", Icon: BookOpen }]

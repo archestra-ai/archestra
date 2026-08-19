@@ -3,16 +3,27 @@
 import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
-  SupportedProviders,
 } from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { ClientIcon } from "@/app/connection/client-icon";
+import { CONNECT_CLIENTS } from "@/app/connection/clients";
+import {
+  applyDefaultBaseUrl,
+  applyVisibility,
+  buildBaseUrlMeta,
+  collapseBaseUrlMeta,
+  resolveDefaultBaseUrl,
+} from "@/app/connection/connection-base-urls.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { CodeText } from "@/components/code-text";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import {
+  SettingsSaveBar,
+  SettingsSectionStack,
+} from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -27,25 +38,14 @@ import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
-import { ClientIcon } from "./client-icon";
-import { CONNECT_CLIENTS } from "./clients";
-import {
-  applyDefaultBaseUrl,
-  applyVisibility,
-  buildBaseUrlMeta,
-  collapseBaseUrlMeta,
-  resolveDefaultBaseUrl,
-} from "./connection-base-urls.utils";
-import { getShownProviders } from "./connection-flow.utils";
 
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
 const FILTERABLE_CLIENTS = CONNECT_CLIENTS.filter((c) => c.id !== "generic");
 const ALL_CLIENT_IDS = FILTERABLE_CLIENTS.map((c) => c.id);
-const ALL_PROVIDER_IDS = [...SupportedProviders] as SupportedProvider[];
 const NO_DEFAULT_URL = "__none__";
 
-export function ConnectSettingsSection() {
+export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
@@ -60,8 +60,6 @@ export function ConnectSettingsSection() {
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
     useState<string[]>(ALL_CLIENT_IDS);
-  const [shownProviders, setShownProviders] =
-    useState<SupportedProvider[]>(ALL_PROVIDER_IDS);
   const [baseUrlMeta, setBaseUrlMeta] = useState<
     Record<
       string,
@@ -85,7 +83,6 @@ export function ConnectSettingsSection() {
     setProxyId(organization.connectionDefaultLlmProxyId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
-    setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setDefaultProviderKeys(
       (organization.connectionDefaultProviderKeys ?? {}) as Record<
@@ -105,11 +102,6 @@ export function ConnectSettingsSection() {
   const serverDefaultClientId = organization?.connectionDefaultClientId ?? null;
   const serverShownClients = (
     organization?.connectionShownClientIds ?? ALL_CLIENT_IDS
-  )
-    .slice()
-    .sort();
-  const serverShownProviders = (
-    getShownProviders(organization) ?? ALL_PROVIDER_IDS
   )
     .slice()
     .sort();
@@ -146,8 +138,6 @@ export function ConnectSettingsSection() {
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
-    JSON.stringify([...shownProviders].sort()) !==
-      JSON.stringify(serverShownProviders) ||
     baseUrlsDirty;
 
   // Collapse "all selected" back to null so future clients/providers are
@@ -163,7 +153,6 @@ export function ConnectSettingsSection() {
       connectionDefaultLlmProxyId: proxyId,
       connectionDefaultClientId: defaultClientId,
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
-      connectionShownProviders: collapseIfAll(shownProviders, ALL_PROVIDER_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
         Object.keys(defaultProviderKeys).length > 0
@@ -177,7 +166,6 @@ export function ConnectSettingsSection() {
     setProxyId(serverProxyId);
     setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
-    setShownProviders(serverShownProviders);
     setBaseUrlMeta(serverBaseUrlMeta);
     setDefaultProviderKeys(serverDefaultProviderKeys);
   };
@@ -221,7 +209,7 @@ export function ConnectSettingsSection() {
         const locked = updateMutation.isPending || !hasPermission;
         return (
           <>
-            <DialogBody className="flex flex-col gap-6 py-5">
+            <SettingsSectionStack className="space-y-6">
               <SettingRow
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."
@@ -451,8 +439,8 @@ export function ConnectSettingsSection() {
               )}
 
               <SettingSection
-                title="Visible clients"
-                description="Which clients are offered. “Any client” is always shown."
+                title="Available clients"
+                description="Which clients this deployment offers setup instructions for. “Any client” is always shown."
               >
                 <MultiSelectCombobox
                   options={FILTERABLE_CLIENTS.map((c) => ({
@@ -467,43 +455,14 @@ export function ConnectSettingsSection() {
                   disabled={locked}
                 />
               </SettingSection>
-
-              <SettingSection
-                title="Visible providers"
-                description="Which LLM providers are offered."
-              >
-                <MultiSelectCombobox
-                  options={ALL_PROVIDER_IDS.map((p) => ({
-                    value: p,
-                    label: providerCatalog.label(p),
-                    icon: <ProviderIcon provider={p} size={18} />,
-                  }))}
-                  value={shownProviders}
-                  onChange={(values) =>
-                    setShownProviders(values as SupportedProvider[])
-                  }
-                  placeholder="Select providers…"
-                  emptyMessage="No providers found."
-                  disabled={locked}
-                />
-              </SettingSection>
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={handleCancel}
-                disabled={!hasChanges || updateMutation.isPending}
-              >
-                Reset
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={!hasChanges || locked}
-                data-testid="connect-settings-save"
-              >
-                {updateMutation.isPending ? "Saving…" : "Save"}
-              </Button>
-            </DialogFooter>
+            </SettingsSectionStack>
+            <SettingsSaveBar
+              hasChanges={hasChanges}
+              isSaving={updateMutation.isPending}
+              permissions={{ organizationSettings: ["update"] }}
+              onSave={handleSave}
+              onCancel={handleCancel}
+            />
           </>
         );
       }}
@@ -515,7 +474,7 @@ export function ConnectSettingsSection() {
 // Internal pieces
 // ===================================================================
 
-/** Compact dialog row: label + description left, a single control right. */
+/** Compact settings row: label + description left, a single control right. */
 function SettingRow({
   title,
   description,

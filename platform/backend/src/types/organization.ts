@@ -510,9 +510,19 @@ export const UpdateConnectionSettingsSchema = z.object({
     .max(50)
     .nullable()
     .optional(),
+  /**
+   * Retired: the connect page carried its own provider list, which only ever
+   * narrowed what it displayed rather than what could be configured. One
+   * deployment-wide list under LLM settings now answers both.
+   *
+   * Rejected rather than stripped, so a browser tab left open across the
+   * upgrade cannot appear to gate providers and change nothing.
+   */
   connectionShownProviders: z
-    .array(SupportedProvidersSchema)
-    .nullable()
+    .never({
+      error:
+        "connectionShownProviders was retired. Set provider availability under Settings → LLM → Available model providers.",
+    })
     .optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)

@@ -33,7 +33,7 @@ export async function assertModelProviderAllowed(params: {
       modelProviderOverrides,
       params.provider,
       builtInProviderLabel(params.provider),
-    )} is turned off for this organization. Ask an administrator to re-enable it under model providers.`,
+    )} is turned off for this organization. Ask an administrator to re-enable it under Settings → LLM → Available model providers.`,
   );
 }
 
@@ -47,7 +47,7 @@ export async function assertMessagingChannelAllowed(params: {
   if (!isIntegrationHidden(messagingChannelOverrides, params.channel)) return;
   throw new ApiError(
     400,
-    `${MESSAGING_CHANNEL_LABELS[params.channel]} is turned off for this organization. Ask an administrator to re-enable it under messaging channels.`,
+    `${MESSAGING_CHANNEL_LABELS[params.channel]} is turned off for this organization. Ask an administrator to re-enable it under Settings → Chat → Available messaging channels.`,
   );
 }
 
@@ -70,7 +70,7 @@ export async function hiddenKnowledgeConnectorViolation(params: {
     return null;
   }
   const label = CONNECTOR_TYPE_LABELS[connectorType] ?? connectorType;
-  return `${label} connectors are turned off for this organization. Ask an administrator to re-enable the connector type.`;
+  return `${label} connectors are turned off for this organization. Ask an administrator to re-enable the connector type under Settings → Knowledge → Available connectors.`;
 }
 
 /**

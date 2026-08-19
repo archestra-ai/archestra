@@ -2052,6 +2052,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
+  "/settings/connection": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

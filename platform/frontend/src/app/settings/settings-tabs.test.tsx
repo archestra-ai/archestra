@@ -288,6 +288,7 @@ describe("useSettingsTabs", () => {
         "Service Accounts",
         "Chat",
         "LLM",
+        "Connection",
         "Security",
         "Users",
         "Teams",

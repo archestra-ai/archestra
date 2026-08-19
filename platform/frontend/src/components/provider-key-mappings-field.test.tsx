@@ -17,6 +17,7 @@ global.ResizeObserver = class ResizeObserver {
 Element.prototype.scrollIntoView = vi.fn();
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/role-resource-access.query");
 
 beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({

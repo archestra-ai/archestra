@@ -10,6 +10,7 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 import { CreateOAuthClientDialog } from "./create-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/role-resource-access.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
 vi.mock("@/lib/organization.query");

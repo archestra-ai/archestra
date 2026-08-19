@@ -31,6 +31,7 @@ vi.mock("@archestra/shared", async () => {
 });
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/role-resource-access.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/auth/auth.query");
 
@@ -40,6 +41,7 @@ import {
 } from "@/lib/auth/auth.query";
 import {
   useOrganization,
+  useUpdateIntegrationSettings,
   useUpdateLlmSettings,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -59,6 +61,10 @@ beforeEach(() => {
         isPending: false,
       }) as ReturnType<typeof useOrganization>,
   );
+  vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateIntegrationSettings>);
   vi.mocked(useUpdateLlmSettings).mockReturnValue({
     mutateAsync: mockUpdateLlmSettingsMutateAsync,
     isPending: false,

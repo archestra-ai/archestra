@@ -93,13 +93,25 @@ describe("ProfileCard", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Original Name");
   });
 
-  it("shows the email and role without turning them into labelled fields", () => {
+  it("shows the name beside the avatar", () => {
     render(<ProfileCard />);
 
-    expect(screen.getByText("admin@example.com")).toBeInTheDocument();
-    expect(screen.getByText("admin")).toBeInTheDocument();
-    // Name is the only editable field, so it is the only one with a label.
-    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    // Distinct from the editable field below, which holds the same value.
+    expect(screen.getByText("Original Name")).toBeInTheDocument();
+  });
+
+  it("keeps email and role as read-only fields", () => {
+    render(<ProfileCard />);
+
+    const email = screen.getByLabelText("Email");
+    expect(email).toHaveValue("admin@example.com");
+    expect(email).toHaveAttribute("readonly");
+
+    const role = screen.getByLabelText("Role");
+    expect(role).toHaveValue("admin");
+    expect(role).toHaveAttribute("readonly");
+
+    expect(screen.getByLabelText("Name")).not.toHaveAttribute("readonly");
   });
 
   it("submits a changed name and keeps the button idle until it changes", async () => {

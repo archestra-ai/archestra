@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -17,6 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
@@ -55,10 +55,8 @@ export function ProfileCard() {
   return (
     <Card>
       <CardContent className="space-y-6">
-        {/* Identity is display-only — there is no self-service endpoint for
-            the avatar, the email or the role — so it reads as a header rather
-            than as three read-only fields that each need a label to explain
-            what they are. */}
+        {/* The avatar has no self-service upload endpoint, so it sits in the
+            header as identity rather than as a field. */}
         <div className="flex items-center gap-4">
           <Avatar className="size-16">
             {image && <AvatarImage src={image} alt="" />}
@@ -66,25 +64,26 @@ export function ProfileCard() {
               {(name || email).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 space-y-1.5">
-            <p className="truncate text-sm">{email || "—"}</p>
-            {role && (
-              <Badge variant="secondary" className="capitalize">
-                {role}
-              </Badge>
-            )}
-          </div>
+          <p className="min-w-0 truncate text-lg font-medium">{name || "—"}</p>
         </div>
 
         <Separator />
 
-        <ProfileNameForm name={name} />
+        <ProfileForm name={name} email={email} role={role ?? ""} />
       </CardContent>
     </Card>
   );
 }
 
-function ProfileNameForm({ name }: { name: string }) {
+function ProfileForm({
+  name,
+  email,
+  role,
+}: {
+  name: string;
+  email: string;
+  role: string;
+}) {
   const updateName = useUpdateAccountNameMutation();
   const form = useForm<NameFormValues>({
     resolver: zodResolver(NameFormSchema),
@@ -108,9 +107,6 @@ function ProfileNameForm({ name }: { name: string }) {
           name="name"
           render={({ field }) => (
             <FormItem>
-              {/* The one field that is editable, and the one label worth
-                  keeping: an input holding a bare word is ambiguous without
-                  it. */}
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input
@@ -123,6 +119,30 @@ function ProfileNameForm({ name }: { name: string }) {
             </FormItem>
           )}
         />
+
+        {/* Neither has a self-service endpoint, so both are read-only. They
+            stay real fields so the section reads as one form and the values
+            can still be selected and copied. */}
+        <div className="space-y-2">
+          <Label htmlFor="account-email">Email</Label>
+          <Input
+            id="account-email"
+            value={email || "\u2014"}
+            readOnly
+            className="bg-muted text-muted-foreground"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="account-role">Role</Label>
+          <Input
+            id="account-role"
+            value={role || "\u2014"}
+            readOnly
+            className="bg-muted capitalize text-muted-foreground"
+          />
+        </div>
+
         <Button
           type="submit"
           disabled={updateName.isPending || !form.formState.isDirty}

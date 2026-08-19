@@ -1,9 +1,7 @@
 "use client";
 
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -22,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
-import { usePermissionMap, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const NameFormSchema = z.object({
@@ -40,14 +39,7 @@ export function ProfileCard() {
   // organization (it never enables), so its wait only counts when the session
   // says there is an organization to have a role in.
   if (isSessionPending || (hasActiveOrganization && isRolePending)) {
-    return (
-      <Card>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </CardContent>
-      </Card>
-    );
+    return <ProfileSkeleton />;
   }
 
   const name = session?.user?.name ?? "";
@@ -56,22 +48,28 @@ export function ProfileCard() {
 
   return (
     <Card>
-      <CardContent className="space-y-6">
-        {/* The avatar has no self-service upload endpoint, so it sits in the
-            header as identity rather than as a field. */}
-        <div className="flex items-center gap-4">
-          <Avatar className="size-16">
-            {image && <AvatarImage src={image} alt="" />}
-            <AvatarFallback className="text-base">
-              {(name || email).slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <p className="min-w-0 truncate text-lg font-medium">{name || "—"}</p>
+      <CardContent>
+        {/* A settings form is read left-to-right at a fixed measure: fields
+            stretched to a 1400px card are hard to scan and imply far more
+            input than a name. */}
+        <div className="max-w-xl space-y-6">
+          <div className="flex items-center gap-4">
+            {/* Display-only: there is no self-service upload endpoint. */}
+            <Avatar className="size-16">
+              {image && <AvatarImage src={image} alt="" />}
+              <AvatarFallback className="text-base">
+                {(name || email).slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <p className="min-w-0 truncate text-lg font-medium">
+              {name || "—"}
+            </p>
+          </div>
+
+          <Separator />
+
+          <ProfileForm name={name} email={email} role={role ?? ""} />
         </div>
-
-        <Separator />
-
-        <ProfileForm name={name} email={email} role={role ?? ""} />
       </CardContent>
     </Card>
   );
@@ -86,8 +84,6 @@ function ProfileForm({
   email: string;
   role: string;
 }) {
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const canManageUsers = permissionMap?.["/settings/users"] ?? false;
   const updateName = useUpdateAccountNameMutation();
   const form = useForm<NameFormValues>({
     resolver: zodResolver(NameFormSchema),
@@ -105,12 +101,12 @@ function ProfileForm({
 
   return (
     <Form {...form}>
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+      <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
         <FormField
           control={form.control}
           name="name"
           render={({ field }) => (
-            <FormItem>
+            <FormItem className="gap-2">
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input
@@ -119,55 +115,28 @@ function ProfileForm({
                   disabled={updateName.isPending}
                 />
               </FormControl>
+              <FormDescription className="text-pretty">
+                Shown next to you across the app.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Neither has a self-service endpoint, so both are read-only. They
-            stay real fields so the section reads as one form and the values
-            can still be selected and copied — each says why it is locked and,
-            where one exists, who can unlock it. */}
-        <div className="space-y-2">
-          <Label htmlFor="account-email">Email</Label>
-          <Input
-            id="account-email"
-            value={email || "\u2014"}
-            readOnly
-            className="bg-muted text-muted-foreground"
-          />
-          <p className="text-sm text-muted-foreground">
-            The address you sign in with. It can&apos;t be changed.
-          </p>
-        </div>
+        <ReadOnlyField
+          id="account-email"
+          label="Email"
+          value={email}
+          note="The address you sign in with. It can't be changed."
+        />
 
-        <div className="space-y-2">
-          <Label htmlFor="account-role">Role</Label>
-          <Input
-            id="account-role"
-            value={role || "\u2014"}
-            readOnly
-            className="bg-muted capitalize text-muted-foreground"
-          />
-          <p className="text-sm text-muted-foreground">
-            {/* Only linked for readers who can actually open that page — for
-                everyone else the link would 403. */}
-            {canManageUsers ? (
-              <>
-                Set by an admin in{" "}
-                <Link
-                  href="/settings/users"
-                  className="font-medium underline underline-offset-4"
-                >
-                  Settings → Users
-                </Link>
-                .
-              </>
-            ) : (
-              <>Only an admin can change this.</>
-            )}
-          </p>
-        </div>
+        <ReadOnlyField
+          id="account-role"
+          label="Role"
+          value={role}
+          valueClassName="capitalize"
+          note="Set by an organization admin. You can't change your own role."
+        />
 
         <Button
           type="submit"
@@ -178,5 +147,66 @@ function ProfileForm({
         </Button>
       </form>
     </Form>
+  );
+}
+
+/**
+ * A value with no self-service endpoint behind it. It stays a real input so
+ * the block matches the editable fields around it and the value can still be
+ * selected and copied, but it keeps full-contrast text — muted text on a
+ * muted fill drops under the contrast floor (WCAG AA 4.5:1) — and says why it
+ * is locked.
+ */
+function ReadOnlyField({
+  id,
+  label,
+  value,
+  note,
+  valueClassName,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  note: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value || "—"}
+        readOnly
+        aria-readonly
+        className={`cursor-default bg-muted ${valueClassName ?? ""}`}
+      />
+      <p className="text-pretty text-sm text-muted-foreground">{note}</p>
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <Card>
+      <CardContent>
+        {/* Shaped like the form it replaces, so the section does not jump
+            when the session lands. */}
+        <div className="max-w-xl space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="size-16 rounded-full" />
+            <Skeleton className="h-6 w-40" />
+          </div>
+          <Separator />
+          {["name", "email", "role"].map((field) => (
+            <div key={field} className="grid gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ))}
+          <Skeleton className="h-9 w-32" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

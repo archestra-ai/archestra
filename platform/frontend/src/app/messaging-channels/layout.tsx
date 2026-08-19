@@ -149,8 +149,8 @@ export default function AgentTriggersLayout({
         href: "/messaging-channels/a2a",
         active: a2aActive,
       },
-      // Channels the admins turned off leave the page entirely — their routes
-      // render a "turned off" notice, so a bookmark cannot walk back in.
+      // Channels the role excludes leave the page entirely — their routes
+      // render a "not available" notice, so a bookmark cannot walk back in.
     ].filter((tab) => !channelCatalog.isHidden(tab.id));
   }, [
     msTeamsActive,

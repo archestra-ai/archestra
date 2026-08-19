@@ -300,7 +300,7 @@ export class ChatOpsManager {
       }),
     ]);
 
-    // A channel an admin switched off must actually stop listening — a bot
+    // A channel no role can use must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
     // allows that channel to carry.
     //

@@ -138,7 +138,7 @@ export function CreateConnectorDialog({
       ? "auto-sync-permissions"
       : "org-wide";
   // SPDX-SnippetEnd
-  // Connector types the organization's admins turned off are never offered —
+  // Connector types the caller's role excludes are never offered —
   // the create API refuses them too.
   const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
     (option) =>

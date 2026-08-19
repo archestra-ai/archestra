@@ -408,7 +408,7 @@ export default function ApiKeysPage() {
 
     return [
       // "Connect subscription" rows are offers, not existing credentials, so a
-      // provider the admins turned off drops out of the list entirely. Keys
+      // provider the caller's role excludes drops out of the list entirely. Keys
       // that already exist stay listed (flagged in the Provider column) so an
       // admin can still see and delete them.
       ...subscriptions.filter(

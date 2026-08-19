@@ -988,7 +988,7 @@ export function LlmProviderApiKeyForm({
                             (!isOllamaProvider(key) ||
                               key === ollamaListedTransport),
                         )
-                        // Providers the admins turned off are not offered. The
+                        // Providers the caller's role excludes are not offered. The
                         // one already selected stays in the list even when
                         // hidden, so an existing key's disabled trigger still
                         // renders its own provider.

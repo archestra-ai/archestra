@@ -15,8 +15,9 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { ConnectSettingsSection } from "./connect-settings-section";
 
 /**
- * Admin-only entry point to the connect-page configuration (defaults,
- * visible clients/providers, base URLs). Renders nothing for members.
+ * Admin-only entry point to the connect-page configuration (defaults and base
+ * URLs). Renders nothing for members. Which clients and providers the page
+ * offers is a per-role allow-list now, edited under Settings → Roles.
  */
 export function ConnectSettingsDialog() {
   const { data: canUpdateSettings } = useHasPermissions({
@@ -43,8 +44,9 @@ export function ConnectSettingsDialog() {
         <DialogHeader>
           <DialogTitle>Connect page settings</DialogTitle>
           <DialogDescription>
-            Admin only — these defaults and visibility settings configure the
-            connect page for everyone in your organization.
+            Admin only — these defaults configure the connect page for everyone
+            in your organization. Which clients and providers it offers is set
+            per role, under Settings → Roles.
           </DialogDescription>
         </DialogHeader>
         <ConnectSettingsSection />

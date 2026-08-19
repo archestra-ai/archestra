@@ -443,7 +443,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user, headers }, reply) => {
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
-      // …and providers the organization's admins switched off entirely.
+      // …and providers the caller's role does not include.
       await assertModelProviderAllowed({
         userId: user.id,
         organizationId,

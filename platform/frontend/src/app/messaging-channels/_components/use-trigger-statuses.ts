@@ -59,7 +59,7 @@ export function useTriggerStatuses() {
   const a2aActive = (internalAgents?.length ?? 0) > 0;
 
   // Landing candidates are the channels that actually have a tab: one the
-  // admins turned off, or that this deployment never enabled, would otherwise
+  // the role excludes, or that this deployment never enabled, would otherwise
   // be a redirect straight onto a dead page.
   const triggers = (
     [

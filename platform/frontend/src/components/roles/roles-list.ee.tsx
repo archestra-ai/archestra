@@ -169,11 +169,15 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   }, []);
 
   // Cancel any pending `?edit=<id>` deep link before opening create, or the
-  // by-id fetch could land and overwrite the shared create form state.
+  // by-id fetch could land and overwrite the shared create form state. The
+  // reset matters for the same reason: the three dialogs share one form, so a
+  // role viewed a moment ago would otherwise hand its access lists to the new
+  // role.
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
+    resetRoleForm();
     setCreateDialogOpen(true);
-  }, [closeEditDialog]);
+  }, [closeEditDialog, resetRoleForm]);
 
   useEffect(() => {
     setActionButton(

@@ -61,6 +61,19 @@ test.describe("per-role resource access", () => {
       await expect(
         reopened.getByText("Anthropic", { exact: true }),
       ).toHaveCount(0);
+
+      // Create, edit and view share one form. A restricted role viewed a
+      // moment ago must not hand its lists to the next new role.
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: /cancel/i })
+        .click();
+      await page.getByRole("button", { name: /create custom role/i }).click();
+      const fresh = page
+        .getByRole("dialog")
+        .getByTestId("role-access-modelProviders");
+      await fresh.scrollIntoViewIfNeeded();
+      await expect(fresh.getByText("Anthropic", { exact: true })).toBeVisible();
     } finally {
       await makeApiRequest({
         request,

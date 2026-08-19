@@ -11,8 +11,9 @@ import { TwoFactorCard } from "@/app/account/_components/two-factor-card";
 import { LoadingSpinner } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ApiKeysCard } from "@/components/settings/api-keys-card";
+import { PermissionsCard } from "@/components/settings/permissions-card";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
-import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
+import { ProfileCard } from "@/components/settings/profile-card";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -55,7 +56,8 @@ function AccountContent() {
         {/* Only the selected section mounts, so each card fetches its own data
             lazily rather than all five firing on every visit. */}
         <div className="min-w-0">
-          {activeSection === "profile" && <RolePermissionsCard />}
+          {activeSection === "profile" && <ProfileCard />}
+          {activeSection === "permissions" && <PermissionsCard />}
           {activeSection === "api-keys" && <ApiKeysCard />}
           {activeSection === "gateway-token" && <PersonalTokenCard />}
           {activeSection === "two-factor" && (

@@ -1,5 +1,6 @@
 import {
   KeyRound,
+  ListChecks,
   MonitorSmartphone,
   ShieldCheck,
   Ticket,
@@ -8,6 +9,7 @@ import {
 
 export const accountSections = [
   { id: "profile", label: "Profile", Icon: User },
+  { id: "permissions", label: "Permissions", Icon: ListChecks },
   { id: "api-keys", label: "API Keys", Icon: KeyRound },
   { id: "gateway-token", label: "Gateway Token", Icon: Ticket },
   { id: "two-factor", label: "Two-Factor", Icon: ShieldCheck },

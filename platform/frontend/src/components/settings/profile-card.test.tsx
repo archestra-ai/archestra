@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RolePermissionsCard } from "@/components/settings/role-permissions-card";
-import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
+import { ProfileCard } from "@/components/settings/profile-card";
+import { useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
@@ -17,14 +17,10 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/organization.query");
 
-describe("RolePermissionsCard", () => {
+describe("ProfileCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
-    vi.mocked(useAllPermissions).mockReturnValue({
-      data: null,
-      isLoading: false,
-    } as unknown as ReturnType<typeof useAllPermissions>);
     vi.mocked(useActiveMemberRole).mockReturnValue({
       data: "admin",
       isPending: false,
@@ -52,7 +48,7 @@ describe("RolePermissionsCard", () => {
       isPending: true,
     } as unknown as ReturnType<typeof useActiveMemberRole>);
 
-    const { container } = render(<RolePermissionsCard />);
+    const { container } = render(<ProfileCard />);
 
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
@@ -66,12 +62,11 @@ describe("RolePermissionsCard", () => {
       isPending: true,
     } as unknown as ReturnType<typeof useActiveMemberRole>);
 
-    const { container } = render(<RolePermissionsCard />);
+    const { container } = render(<ProfileCard />);
 
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByDisplayValue("Original Name")).toBeNull();
   });
 
   it("renders the account details when the user has no active organization", () => {
@@ -93,28 +88,24 @@ describe("RolePermissionsCard", () => {
       isPending: true,
     } as unknown as ReturnType<typeof useActiveMemberRole>);
 
-    render(<RolePermissionsCard />);
+    render(<ProfileCard />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("Original Name");
   });
 
-  it("shows the email and role as read-only fields", () => {
-    render(<RolePermissionsCard />);
+  it("shows the email and role without turning them into labelled fields", () => {
+    render(<ProfileCard />);
 
-    const email = screen.getByLabelText("Email");
-    expect(email).toHaveValue("admin@example.com");
-    expect(email).toHaveAttribute("readonly");
-
-    const role = screen.getByLabelText("Role");
-    expect(role).toHaveValue("admin");
-    expect(role).toHaveAttribute("readonly");
+    expect(screen.getByText("admin@example.com")).toBeInTheDocument();
+    expect(screen.getByText("admin")).toBeInTheDocument();
+    // Name is the only editable field, so it is the only one with a label.
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
   });
 
   it("submits a changed name and keeps the button idle until it changes", async () => {
-    render(<RolePermissionsCard />);
+    render(<ProfileCard />);
 
     const submit = screen.getByRole("button", { name: "Update profile" });
-    // Nothing edited yet, so there is nothing to save.
     expect(submit).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Name"), {

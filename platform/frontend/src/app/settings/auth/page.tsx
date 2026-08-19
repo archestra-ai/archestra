@@ -4,12 +4,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
-  SettingsCardHeader,
+  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
-import { Card } from "@/components/ui/card";
 import { Form, FormField } from "@/components/ui/form";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
@@ -164,56 +163,52 @@ export default function AuthSettingsPage() {
               without a license; the API refuses the writes regardless. */}
           {enterpriseCoreActive && (
             <>
-              <Card>
-                <SettingsCardHeader
-                  title="Require Two-Factor Authentication"
-                  description={
-                    isBasicAuthDisabled
-                      ? "Unavailable while email/password sign-in is disabled: enrolling in 2FA requires confirming a password, so requiring it would lock every member out. Enforce multi-factor authentication at your identity provider instead."
-                      : "Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
-                  }
-                  action={
-                    <FormField
-                      control={form.control}
-                      name="requireTwoFactor"
-                      render={({ field }) => (
-                        <Switch
-                          id="requireTwoFactor"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          disabled={isBasicAuthDisabled}
-                        />
-                      )}
-                    />
-                  }
-                />
-              </Card>
+              <SettingsBlock
+                title="Require Two-Factor Authentication"
+                description={
+                  isBasicAuthDisabled
+                    ? "Unavailable while email/password sign-in is disabled: enrolling in 2FA requires confirming a password, so requiring it would lock every member out. Enforce multi-factor authentication at your identity provider instead."
+                    : "Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
+                }
+                control={
+                  <FormField
+                    control={form.control}
+                    name="requireTwoFactor"
+                    render={({ field }) => (
+                      <Switch
+                        id="requireTwoFactor"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isBasicAuthDisabled}
+                      />
+                    )}
+                  />
+                }
+              />
 
               <SessionLifetimeSection form={form} />
             </>
           )}
 
-          <Card>
-            <SettingsCardHeader
-              title="Default Role for New Users"
-              description="Role assigned to users who join via email/password self-signup or ChatOps auto-provisioning. SSO users are governed by their identity provider's role mapping."
-              action={
-                <FormField
-                  control={form.control}
-                  name="defaultMemberRole"
-                  render={({ field }) => (
-                    <RoleSelect
-                      id="defaultMemberRole"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      data-testid="default-member-role-select"
-                      className="w-40"
-                    />
-                  )}
-                />
-              }
-            />
-          </Card>
+          <SettingsBlock
+            title="Default Role for New Users"
+            description="Role assigned to users who join via email/password self-signup or ChatOps auto-provisioning. SSO users are governed by their identity provider's role mapping."
+            control={
+              <FormField
+                control={form.control}
+                name="defaultMemberRole"
+                render={({ field }) => (
+                  <RoleSelect
+                    id="defaultMemberRole"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    data-testid="default-member-role-select"
+                    className="w-40"
+                  />
+                )}
+              />
+            }
+          />
 
           <OrganizationTokenSection />
 

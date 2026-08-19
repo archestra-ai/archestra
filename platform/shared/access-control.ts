@@ -2041,6 +2041,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { mcpSettings: ["read"] },
   "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/apps": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },

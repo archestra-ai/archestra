@@ -96,7 +96,7 @@ Agents can be triggered through:
 
 Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
-Go to **Settings → Chat → Available messaging channels** to remove any channel your organization does not allow. A channel you remove disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
+Go to **Settings → Agents → Available messaging channels** to remove any channel your organization does not allow. A channel you remove disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
 
 ## Knowledge Sources
 
@@ -147,7 +147,7 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 
 Every member starts with a personal chat agent, **My Assistant**, and it is their **personal default**: the agent preselected when they start a new chat, open an app in chat, or otherwise reach a chat without naming an agent. A member can move their personal default to any other personal agent they own from the **Agents** page — the row's menu offers **Set as my default** and **Unset as my default**, and the current one wears a **My default** badge. There is at most one; the first personal agent a member creates takes the role automatically whenever they have none.
 
-Admins can also set an organization-wide **Default Agent** in **Settings → Chat**. A member's personal default wins over it; the organization default applies to members who have unset theirs, or who have no personal agent left. A [project](/docs/platform-projects)'s pinned agent outranks both inside that project.
+Admins can also set an organization-wide **Default Agent** in **Settings → Agents**. A member's personal default wins over it; the organization default applies to members who have unset theirs, or who have no personal agent left. A [project](/docs/platform-projects)'s pinned agent outranks both inside that project.
 
 Deleting a member's personal default moves them to their next personal agent, or — with none left — leaves them on the organization default. When there is neither, the delete is refused: set another agent as default first.
 

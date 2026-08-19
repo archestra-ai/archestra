@@ -85,7 +85,7 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Service Accounts");
-      expect(labels).toContain("Chat");
+      expect(labels).toContain("Agents");
       expect(labels).toContain("Security");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
@@ -286,9 +286,10 @@ describe("useSettingsTabs", () => {
         "Appearance",
         "Auth",
         "Service Accounts",
-        "Chat",
+        "Agents",
         "LLM",
         "Connection",
+        "Apps",
         "Security",
         "Users",
         "Teams",

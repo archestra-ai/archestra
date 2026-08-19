@@ -1,5 +1,6 @@
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import {
+  AppWindow,
   BookOpen,
   Bot,
   Boxes,
@@ -42,7 +43,7 @@ export function useSettingsTabs() {
         ]
       : []),
     ...(permissionMap?.["/settings/agents"]
-      ? [{ label: "Chat", href: "/settings/agents", Icon: MessageSquare }]
+      ? [{ label: "Agents", href: "/settings/agents", Icon: MessageSquare }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm", Icon: Brain }]
@@ -52,6 +53,9 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/connection"]
       ? [{ label: "Connection", href: "/settings/connection", Icon: PlugZap }]
+      : []),
+    ...(permissionMap?.["/settings/apps"]
+      ? [{ label: "Apps", href: "/settings/apps", Icon: AppWindow }]
       : []),
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills", Icon: BookOpen }]

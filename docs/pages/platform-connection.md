@@ -159,7 +159,7 @@ Go to **Settings → Connection** to set what the page offers everyone. **Availa
 
 The same page holds the defaults it pre-selects — an MCP gateway, an LLM proxy, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 
-Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Available model providers**.
+Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Model providers**.
 
 ## Use Case
 

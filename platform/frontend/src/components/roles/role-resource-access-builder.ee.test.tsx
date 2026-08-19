@@ -6,7 +6,6 @@ import { useOrganization } from "@/lib/organization.query";
 import { RoleResourceAccessBuilder } from "./role-resource-access-builder.ee";
 
 vi.mock("@/lib/organization.query");
-vi.mock("@/lib/role-resource-access.query");
 
 const providers = () => screen.getByTestId("role-access-modelProviders");
 

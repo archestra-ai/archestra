@@ -12,7 +12,7 @@ export const accountSections = [
   { id: "permissions", label: "Permissions", Icon: ListChecks },
   { id: "api-keys", label: "API Keys", Icon: KeyRound },
   { id: "gateway-token", label: "Gateway Token", Icon: Ticket },
-  { id: "security", label: "Security", Icon: ShieldCheck },
+  { id: "two-factor", label: "Two-Factor", Icon: ShieldCheck },
   { id: "sessions", label: "Sessions", Icon: MonitorSmartphone },
 ] as const;
 
@@ -21,13 +21,12 @@ export type AccountSectionId = (typeof accountSections)[number]["id"];
 /**
  * Picks the section to show from the URL.
  *
- * Both `?highlight=` deep links have to name a section. Only the visible
- * section mounts, so `personal-token` — used by the connection instructions
- * and the token-management links — must select the gateway-token section, or
- * the card owning that dialog never renders and the link silently does
- * nothing. `change-password`, used by the default-credentials warnings, must
- * select security for the same reason: its dialog opens over that section,
- * and closing it should leave the reader on the control that reopens it.
+ * `?highlight=personal-token` is the deep link the connection instructions and
+ * token-management links use to pop the gateway-token dialog. Only the visible
+ * section is mounted, so that highlight has to select the gateway-token
+ * section or the card that owns the dialog never renders and the link
+ * silently does nothing. `?highlight=change-password` needs no such mapping —
+ * both its button and its dialog sit on the page itself, above the sections.
  */
 export function resolveAccountSection({
   section,
@@ -39,6 +38,5 @@ export function resolveAccountSection({
   const match = accountSections.find(({ id }) => id === section);
   if (match) return match.id;
   if (highlight === "personal-token") return "gateway-token";
-  if (highlight === "change-password") return "security";
   return "profile";
 }

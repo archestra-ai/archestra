@@ -14,10 +14,6 @@ import { ApiKeysCard } from "@/components/settings/api-keys-card";
 import { PermissionsCard } from "@/components/settings/permissions-card";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
 import { ProfileCard } from "@/components/settings/profile-card";
-import {
-  SettingsBlock,
-  SettingsSectionStack,
-} from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -47,6 +43,16 @@ function AccountContent() {
     <PageLayout
       title="Personal Settings"
       description="Manage your personal profile, API keys, sessions, and sign-in settings."
+      // Page-level, not tucked inside a section: changing a password is the
+      // thing people arrive here to do, and it should stay one click away
+      // from whichever section they happen to be on.
+      actionButton={
+        showChangePasswordButton ? (
+          <Button type="button" onClick={() => setIsChangePasswordOpen(true)}>
+            Change Password
+          </Button>
+        ) : null
+      }
     >
       <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <AccountSectionNav activeSection={activeSection} />
@@ -57,30 +63,8 @@ function AccountContent() {
           {activeSection === "permissions" && <PermissionsCard />}
           {activeSection === "api-keys" && <ApiKeysCard />}
           {activeSection === "gateway-token" && <PersonalTokenCard />}
-          {activeSection === "security" && (
-            <SettingsSectionStack>
-              {/* Password and two-factor are the two things guarding the
-                  sign-in, so they sit together. The button used to be the
-                  page's header action, which put one credential control above
-                  every unrelated section. */}
-              {showChangePasswordButton && (
-                <SettingsBlock
-                  title="Password"
-                  description="The password you sign in with."
-                  control={
-                    <Button
-                      type="button"
-                      onClick={() => setIsChangePasswordOpen(true)}
-                    >
-                      Change password
-                    </Button>
-                  }
-                />
-              )}
-              <TwoFactorCard
-                required={organization?.requireTwoFactor ?? false}
-              />
-            </SettingsSectionStack>
+          {activeSection === "two-factor" && (
+            <TwoFactorCard required={organization?.requireTwoFactor ?? false} />
           )}
           {activeSection === "sessions" && <SessionsCard />}
         </div>

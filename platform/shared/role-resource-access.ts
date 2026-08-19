@@ -123,43 +123,6 @@ export function unionAllowLists(
   return [...union];
 }
 
-/**
- * One kind of over-grant: `ids` names the entries the author's own role does
- * not hold, or is `null` when the request asks for "unrestricted" while the
- * author is restricted.
- */
-export type ResourceAccessViolation = {
-  kind: RoleResourceKind;
-  ids: string[] | null;
-};
-
-/**
- * The access `requested` would grant beyond what `author` holds.
- *
- * Mirrors the permission rule the roles API already enforces — you cannot grant
- * what you do not have — so an admin who is themselves restricted to two
- * providers cannot mint a role with all of them.
- */
-export function ungrantableResourceAccess(params: {
-  author: RoleResourceAccess;
-  requested: RoleResourceAccessInput;
-}): ResourceAccessViolation[] {
-  const violations: ResourceAccessViolation[] = [];
-  for (const kind of ROLE_RESOURCE_KINDS) {
-    const requested = params.requested[kind];
-    if (requested === undefined) continue;
-    const authorList = params.author[kind];
-    if (authorList == null) continue;
-    if (requested === null) {
-      violations.push({ kind, ids: null });
-      continue;
-    }
-    const extra = requested.filter((id) => !authorList.includes(id));
-    if (extra.length > 0) violations.push({ kind, ids: extra });
-  }
-  return violations;
-}
-
 /** Human-readable heading for each section of the role access control. */
 export const ROLE_RESOURCE_KIND_LABELS: Record<RoleResourceKind, string> = {
   modelProviders: "Model providers",

@@ -315,6 +315,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 }));
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/role-resource-access.query");
 
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),

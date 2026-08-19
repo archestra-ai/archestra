@@ -1,16 +1,20 @@
 "use client";
 
 import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useOrganization } from "@/lib/organization.query";
+import { useMyResourceAccess } from "@/lib/role-resource-access.query";
 import { ConnectSettingsDialog } from "./connect-settings-dialog";
 import { ConnectionFlow } from "./connection-flow";
-import { getConnectableProviders } from "./connection-flow.utils";
 import { ConnectionHero } from "./connection-hero";
 
 export default function ConnectionPage() {
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const { data: defaultLlmProxy } = useDefaultLlmProxy();
   const { data: organization } = useOrganization();
+  // What the viewer's role offers, not what the organization owns.
+  const { connectClients } = useMyResourceAccess();
+  const providerCatalog = useModelProviderCatalog();
 
   const adminDefaultMcpGatewayId =
     organization?.connectionDefaultMcpGatewayId ?? null;
@@ -32,8 +36,8 @@ export default function ConnectionPage() {
           adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
           adminDefaultLlmProxyId={adminDefaultLlmProxyId}
           adminDefaultClientId={adminDefaultClientId}
-          shownClientIds={organization?.connectionShownClientIds ?? null}
-          shownProviders={getConnectableProviders(organization)}
+          shownClientIds={connectClients}
+          shownProviders={providerCatalog.visibleIds}
           connectionBaseUrls={organization?.connectionBaseUrls ?? null}
         />
       </div>

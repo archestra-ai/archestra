@@ -1,82 +1,80 @@
 "use client";
 
 import {
+  allowedFromCatalog,
   builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
-  type IntegrationToggle,
   integrationLabel,
-  isIntegrationHidden,
+  isResourceAllowed,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
-  type ModelProviderOverride,
+  type ModelProviderOverrides,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
 import { useMemo } from "react";
 import { useOrganization } from "@/lib/organization.query";
+import { useMyResourceAccess } from "@/lib/role-resource-access.query";
 
 /**
- * Which entries of a built-in catalog the admins left switched on.
+ * Which entries of a built-in catalog the signed-in user's role allows.
  *
- * Messaging channels and knowledge connectors are toggle-only: each names one
- * external service, so renaming them would only make the setup instructions
- * harder to follow. Model providers additionally carry a name — see
- * {@link useModelProviderCatalog}.
+ * The lists live on the role (see Settings → Roles), so what a picker offers
+ * depends on who is looking. Model providers additionally carry an
+ * organization-wide name — see {@link useModelProviderCatalog}.
  */
 export type IntegrationCatalog<Id extends string> = {
-  overrides: Partial<Record<Id, IntegrationToggle>> | null;
-  /** Entries the admin switched off — never offer these anywhere. */
+  /** Entries this role may not use — never offer these anywhere. */
   isHidden: (id: Id) => boolean;
-  /** Every catalog id the admin left switched on, in catalog order. */
+  /** Every catalog id this role may use, in catalog order. */
   visibleIds: Id[];
 };
 
-/** A catalog whose entries the organization can also rename. */
+/** A catalog whose entries the organization also renames. */
 export type NamedIntegrationCatalog<Id extends string> =
   IntegrationCatalog<Id> & {
-    overrides: Partial<Record<Id, ModelProviderOverride>> | null;
+    overrides: ModelProviderOverrides | null;
     /** The organization's name for an entry, or the built-in one. */
     label: (id: Id) => string;
   };
 
 export function useModelProviderCatalog(): NamedIntegrationCatalog<SupportedProvider> {
   const { data: organization } = useOrganization();
+  const { modelProviders } = useMyResourceAccess();
   const overrides = organization?.modelProviderOverrides ?? null;
   return useMemo(
     () => ({
-      ...buildCatalog(overrides, SupportedProviders),
+      ...buildCatalog(modelProviders, SupportedProviders),
       overrides,
       label: (id: SupportedProvider) =>
         integrationLabel(overrides, id, builtInProviderLabel(id)),
     }),
-    [overrides],
+    [overrides, modelProviders],
   );
 }
 
 export function useMessagingChannelCatalog(): IntegrationCatalog<MessagingChannelId> {
-  const { data: organization } = useOrganization();
-  const overrides = organization?.messagingChannelOverrides ?? null;
+  const { messagingChannels } = useMyResourceAccess();
   return useMemo(
     () =>
       buildCatalog(
-        overrides,
+        messagingChannels,
         Object.keys(MESSAGING_CHANNEL_LABELS) as MessagingChannelId[],
       ),
-    [overrides],
+    [messagingChannels],
   );
 }
 
 export function useKnowledgeConnectorCatalog(): IntegrationCatalog<ConnectorType> {
-  const { data: organization } = useOrganization();
-  const overrides = organization?.knowledgeConnectorOverrides ?? null;
+  const { knowledgeConnectors } = useMyResourceAccess();
   return useMemo(
     () =>
       buildCatalog(
-        overrides,
+        knowledgeConnectors,
         Object.keys(CONNECTOR_TYPE_LABELS) as ConnectorType[],
       ),
-    [overrides],
+    [knowledgeConnectors],
   );
 }
 
@@ -85,12 +83,11 @@ export function useKnowledgeConnectorCatalog(): IntegrationCatalog<ConnectorType
 // ===================================================================
 
 function buildCatalog<Id extends string>(
-  overrides: Partial<Record<Id, IntegrationToggle>> | null,
+  allowed: readonly string[] | null,
   ids: readonly Id[],
 ): IntegrationCatalog<Id> {
   return {
-    overrides,
-    isHidden: (id) => isIntegrationHidden(overrides, id),
-    visibleIds: ids.filter((id) => !isIntegrationHidden(overrides, id)),
+    isHidden: (id) => !isResourceAllowed(allowed, id),
+    visibleIds: allowedFromCatalog(allowed, ids),
   };
 }

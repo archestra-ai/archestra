@@ -4,7 +4,9 @@ import {
   type archestraApiTypes,
   type Permissions,
   type PredefinedRoleName,
+  type RoleResourceAccess,
   roleDescriptions,
+  UNRESTRICTED_ROLE_RESOURCE_ACCESS,
 } from "@archestra/shared";
 
 import type { ColumnDef } from "@tanstack/react-table";
@@ -33,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
-import { useAllPermissions } from "@/lib/auth/auth.query";
+import { useAllPermissions, useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -45,6 +47,7 @@ import {
 } from "@/lib/role.query";
 import { downloadRoleAsJson } from "./role-export";
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
+import { RoleResourceAccessBuilder } from "./role-resource-access-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
@@ -56,6 +59,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   // The permission builder disables what the author cannot grant — the same
   // subset rule the server enforces on create/update.
   const { data: authorPermissions } = useAllPermissions();
+  const { data: canUpdateRoles } = useHasPermissions({ ac: ["update"] });
   const setActionButton = useSetSettingsAction();
   const {
     pageIndex,
@@ -110,6 +114,9 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
+  const [resourceAccess, setResourceAccess] = useState<RoleResourceAccess>(
+    UNRESTRICTED_ROLE_RESOURCE_ACCESS,
+  );
 
   // Seed the edit form whenever a role's edit dialog opens, whether from a
   // row click or a deep-linked URL.
@@ -118,8 +125,48 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       setRoleName(selectedRole.name);
       setRoleDescription(selectedRole.description ?? "");
       setPermission(selectedRole.permission);
+      setResourceAccess(selectedRole.resourceAccess);
     }
   }, [selectedRole]);
+
+  // The view dialog edits the same `resourceAccess` state the create/edit
+  // forms use; only one of the three is ever open.
+  useEffect(() => {
+    if (viewPermissionsRole) {
+      setResourceAccess(viewPermissionsRole.resourceAccess);
+    }
+  }, [viewPermissionsRole]);
+
+  const handleSavePredefinedResourceAccess = useCallback(() => {
+    if (!viewPermissionsRole) return;
+    updateMutation.mutate(
+      {
+        roleId: viewPermissionsRole.id,
+        data: { resourceAccess },
+      } as Parameters<typeof updateMutation.mutate>[0],
+      {
+        onSuccess: () => {
+          closeViewPermissionsDialog();
+          toast.success("Resource access updated");
+        },
+        onError: (error: Error) => {
+          toast.error(error.message || "Failed to update resource access");
+        },
+      },
+    );
+  }, [
+    viewPermissionsRole,
+    resourceAccess,
+    updateMutation,
+    closeViewPermissionsDialog,
+  ]);
+
+  const resetRoleForm = useCallback(() => {
+    setRoleName("");
+    setRoleDescription("");
+    setPermission({});
+    setResourceAccess(UNRESTRICTED_ROLE_RESOURCE_ACCESS);
+  }, []);
 
   // Cancel any pending `?edit=<id>` deep link before opening create, or the
   // by-id fetch could land and overwrite the shared create form state.
@@ -159,13 +206,12 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         name: roleName,
         description: roleDescription || undefined,
         permission,
+        resourceAccess,
       } as Parameters<typeof createMutation.mutate>[0],
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
-          setRoleName("");
-          setRoleDescription("");
-          setPermission({});
+          resetRoleForm();
           toast.success("Role created successfully");
         },
         onError: (error: Error) => {
@@ -173,7 +219,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         },
       },
     );
-  }, [roleDescription, roleName, permission, createMutation]);
+  }, [
+    roleDescription,
+    roleName,
+    permission,
+    resourceAccess,
+    createMutation,
+    resetRoleForm,
+  ]);
 
   const handleEditRole = useCallback(() => {
     if (!selectedRole) return;
@@ -196,14 +249,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           name: roleName,
           description: roleDescription || undefined,
           permission,
+          resourceAccess,
         },
       } as Parameters<typeof updateMutation.mutate>[0],
       {
         onSuccess: () => {
           closeEditDialog();
-          setRoleName("");
-          setRoleDescription("");
-          setPermission({});
+          resetRoleForm();
           toast.success("Role updated successfully");
         },
         onError: (error: Error) => {
@@ -216,8 +268,10 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     roleDescription,
     roleName,
     permission,
+    resourceAccess,
     updateMutation,
     closeEditDialog,
+    resetRoleForm,
   ]);
 
   const handleDeleteRole = useCallback(() => {
@@ -252,6 +306,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             : ""),
       );
       setPermission(role.permission);
+      setResourceAccess(role.resourceAccess);
       setCreateDialogOpen(true);
     },
     [closeEditDialog],
@@ -445,6 +500,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 userPermissions={authorPermissions ?? {}}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Resource access</Label>
+              <RoleResourceAccessBuilder
+                resourceAccess={resourceAccess}
+                onChange={setResourceAccess}
+              />
+            </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button
@@ -452,9 +514,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
               variant="outline"
               onClick={() => {
                 setCreateDialogOpen(false);
-                setRoleName("");
-                setRoleDescription("");
-                setPermission({});
+                resetRoleForm();
               }}
             >
               Cancel
@@ -509,6 +569,13 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 userPermissions={authorPermissions ?? {}}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Resource access</Label>
+              <RoleResourceAccessBuilder
+                resourceAccess={resourceAccess}
+                onChange={setResourceAccess}
+              />
+            </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button
@@ -516,9 +583,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
               variant="outline"
               onClick={() => {
                 closeEditDialog();
-                setRoleName("");
-                setRoleDescription("");
-                setPermission({});
+                resetRoleForm();
               }}
             >
               Cancel
@@ -530,6 +595,12 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         </DialogForm>
       </FormDialog>
 
+      {/*
+        A predefined role's definition is code, so its name, description and
+        permissions stay read-only — but its resource access is organization
+        data, and "member" is the role most organizations actually need to
+        restrict. So this dialog is a viewer with one editable section.
+      */}
       <FormDialog
         open={!!viewPermissionsRole}
         onOpenChange={(open) => {
@@ -537,8 +608,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             closeViewPermissionsDialog();
           }
         }}
-        title="View Predefined Role"
-        description="This is a predefined role. It cannot be modified."
+        title="Predefined Role"
+        description="Permissions are built in and cannot be modified. Resource access is yours to set."
         size="large"
       >
         {viewPermissionsRole && (
@@ -576,6 +647,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 readOnlyTooltip="This is a predefined role. Permissions cannot be modified."
               />
             </div>
+            <div className="space-y-2">
+              <Label>Resource access</Label>
+              <RoleResourceAccessBuilder
+                resourceAccess={resourceAccess}
+                onChange={setResourceAccess}
+                readOnly={!canUpdateRoles}
+              />
+            </div>
           </DialogBody>
         )}
         <DialogStickyFooter className="mt-0">
@@ -586,6 +665,17 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           >
             Close
           </Button>
+          {canUpdateRoles && (
+            <Button
+              type="button"
+              onClick={handleSavePredefinedResourceAccess}
+              disabled={updateMutation.isPending}
+            >
+              <span>
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </span>
+            </Button>
+          )}
         </DialogStickyFooter>
       </FormDialog>
 

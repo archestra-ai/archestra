@@ -2,22 +2,17 @@ import type { MessagingChannelId } from "@archestra/shared";
 import {
   PermissionsSchema,
   PredefinedRoleNameSchema,
-  ROLE_RESOURCE_KIND_LABELS,
   type RoleResourceAccess,
   type RoleResourceAccessInput,
   RoleResourceAccessInputSchema,
   RouteId,
   UNRESTRICTED_ROLE_RESOURCE_ACCESS,
-  ungrantableResourceAccess,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { betterAuth } from "@/auth";
-import {
-  getDisallowedMessagingChannels,
-  getUserResourceAccess,
-} from "@/services/role-resource-access";
+import { getDisallowedMessagingChannels } from "@/services/role-resource-access";
 import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
 import logger from "@/logging";
 import {
@@ -66,6 +61,12 @@ const generateRoleIdentifier = (title: string): string => {
  * GET routes are in organization-role.ts (open-source)
  */
 const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Note there is deliberately no "you cannot grant resource access you do not
+  // have" rule mirroring the permission one. `ac:update` is already the
+  // permission that decides what every role in the organization may reach, so
+  // binding its holder to their own role's list closes no boundary — and it
+  // produces a one-way door, where an admin who narrows the admin role can
+  // never widen it again.
   fastify.post(
     "/api/roles",
     {
@@ -103,12 +104,6 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
         );
       }
-
-      await assertResourceAccessGrantable({
-        userId: user.id,
-        organizationId,
-        requested: resourceAccess,
-      });
 
       const channelsBefore = await getDisallowedMessagingChannels();
       const roleIdentifier = generateRoleIdentifier(name);
@@ -204,12 +199,6 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      await assertResourceAccessGrantable({
-        userId: user.id,
-        organizationId,
-        requested: resourceAccess,
-      });
-
       // A predefined role's definition is code, so its name, description and
       // permissions stay immutable — but its catalog allow-lists are ordinary
       // organization data, and "member" is the role most organizations need to
@@ -433,38 +422,6 @@ async function reinitializeChatOpsIfChannelAccessChanged(
   if (changed) await chatOpsManager.reinitialize();
 }
 
-/**
- * You cannot grant catalog access you do not have yourself — the same subset
- * rule the permission builder enforces, so an admin restricted to two
- * providers cannot mint a role that reaches all of them.
- */
-async function assertResourceAccessGrantable(params: {
-  userId: string;
-  organizationId: string;
-  requested: RoleResourceAccessInput | undefined;
-}): Promise<void> {
-  if (!params.requested) return;
-  const author = await getUserResourceAccess({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
-  const violations = ungrantableResourceAccess({
-    author,
-    requested: params.requested,
-  });
-  if (violations.length === 0) return;
-  const detail = violations
-    .map(({ kind, ids }) =>
-      ids === null
-        ? `${ROLE_RESOURCE_KIND_LABELS[kind]} (all)`
-        : `${ROLE_RESOURCE_KIND_LABELS[kind]}: ${ids.join(", ")}`,
-    )
-    .join("; ");
-  throw new ApiError(
-    403,
-    `You cannot grant resource access you don't have: ${detail}`,
-  );
-}
 
 function parsePermissions(value: unknown) {
   return OrganizationRoleModel.sanitizePermissions(value);

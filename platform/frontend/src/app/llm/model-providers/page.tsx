@@ -28,7 +28,6 @@ import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
 import {
   deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -172,25 +171,6 @@ export default function ApiKeysPage() {
   });
   const { data: organization } = useOrganization();
   const providerCatalog = useModelProviderCatalog();
-  const providerSettingsItems = useMemo(
-    () =>
-      Object.entries(PROVIDER_CONFIG)
-        .map(([provider, config]) => ({
-          id: provider as LlmProviderApiKeyResponse["provider"],
-          label: config.name,
-          icon: (
-            <Image
-              src={config.icon}
-              alt=""
-              width={18}
-              height={18}
-              className="rounded dark:invert"
-            />
-          ),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [],
-  );
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
@@ -385,16 +365,6 @@ export default function ApiKeysPage() {
 
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
-      <IntegrationSettingsDialog
-        field="modelProviderOverrides"
-        title="Model provider settings"
-        description="Admin only — turn off the providers your organization does not allow, and rename the ones it does. Turned-off providers disappear from every picker and cannot be given credentials."
-        allowRename
-        entityNamePlural="providers"
-        items={providerSettingsItems}
-        overrides={providerCatalog.overrides}
-        testId="model-provider-page-settings"
-      />
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}

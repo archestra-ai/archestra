@@ -1,10 +1,4 @@
-import {
-  type archestraApiTypes,
-  isIntegrationHidden,
-  isSupportedProvider,
-  type SupportedProvider,
-  SupportedProviders,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 const DEFAULT_MCP_SERVER_SLUG = "archestra";
 
@@ -65,43 +59,6 @@ export function deriveMcpServerName(params: {
   return trimmed
     ? trimmed.toLowerCase().replace(/\s+/g, "_")
     : toMcpServerSlug(params.appName);
-}
-
-/**
- * Narrow `organization.connectionShownProviders` (typed as `string[] | null`
- * by the generated API client) to `SupportedProvider[] | null`, dropping any
- * provider IDs the frontend doesn't know about.
- */
-export function getShownProviders(
-  organization:
-    | { connectionShownProviders?: readonly string[] | null }
-    | null
-    | undefined,
-): SupportedProvider[] | null {
-  const raw = organization?.connectionShownProviders;
-  if (!raw) return null;
-  return raw.filter(isSupportedProvider);
-}
-
-/**
- * The providers /connection may actually offer: the admin's connect-page
- * selection, minus every provider the organization has turned off outright.
- * Kept separate from {@link getShownProviders} so the connect-page settings
- * editor still shows its own stored selection unfiltered — narrowing it there
- * would silently rewrite the selection on the next save.
- */
-export function getConnectableProviders(
-  organization:
-    | {
-        connectionShownProviders?: readonly string[] | null;
-        modelProviderOverrides?: Record<string, { hidden?: boolean }> | null;
-      }
-    | null
-    | undefined,
-): SupportedProvider[] {
-  const shown = getShownProviders(organization) ?? [...SupportedProviders];
-  const overrides = organization?.modelProviderOverrides ?? null;
-  return shown.filter((provider) => !isIntegrationHidden(overrides, provider));
 }
 
 /**

@@ -42,6 +42,7 @@ const mockModels = [
 ];
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/role-resource-access.query");
 
 // The components under test resolve provider labels through
 // useModelProviderCatalog() -> useOrganization(); no organization data means

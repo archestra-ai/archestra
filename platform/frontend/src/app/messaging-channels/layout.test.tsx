@@ -1,15 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import {
-  useAppearanceSettings,
-  useOrganization,
-} from "@/lib/organization.query";
+import { useAppearanceSettings } from "@/lib/organization.query";
+import { useMyResourceAccess } from "@/lib/role-resource-access.query";
 import AgentTriggersLayout from "./layout";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/role-resource-access.query");
 vi.mock("./_components/use-trigger-statuses", () => ({
   useTriggerStatuses: () => ({
     msTeams: false,
@@ -25,10 +24,14 @@ vi.mock("./_components/use-trigger-statuses", () => ({
 
 import { usePathname, useSearchParams } from "next/navigation";
 
-function renderLayout(overrides: Record<string, { hidden?: boolean }> | null) {
-  vi.mocked(useOrganization).mockReturnValue({
-    data: { messagingChannelOverrides: overrides },
-  } as unknown as ReturnType<typeof useOrganization>);
+/** `null` = the role is unrestricted; a list = exactly those channels. */
+function renderLayout(messagingChannels: string[] | null) {
+  vi.mocked(useMyResourceAccess).mockReturnValue({
+    modelProviders: null,
+    knowledgeConnectors: null,
+    messagingChannels,
+    connectClients: null,
+  });
   return render(
     <AgentTriggersLayout>
       <div>channel configuration</div>
@@ -36,13 +39,7 @@ function renderLayout(overrides: Record<string, { hidden?: boolean }> | null) {
   );
 }
 
-const ALL_OFF = {
-  slack: { hidden: true },
-  "ms-teams": { hidden: true },
-  telegram: { hidden: true },
-  email: { hidden: true },
-  a2a: { hidden: true },
-};
+const NOTHING_ALLOWED: string[] = [];
 
 describe("messaging channels layout", () => {
   beforeEach(() => {
@@ -60,7 +57,7 @@ describe("messaging channels layout", () => {
   });
 
   it("lists the channels still available in its description", () => {
-    renderLayout({ "ms-teams": { hidden: true } });
+    renderLayout(["slack", "telegram", "email", "a2a"]);
 
     expect(screen.getByText(/Manage how agents are invoked/)).toHaveTextContent(
       "Slack, Email and A2A",
@@ -68,15 +65,13 @@ describe("messaging channels layout", () => {
     expect(screen.getByText("channel configuration")).toBeInTheDocument();
   });
 
-  // Every channel off used to leave a page describing an empty list, with the
-  // index route redirecting onto a channel that then said it was turned off.
-  it("collapses to a single explanation when every channel is off", () => {
-    renderLayout(ALL_OFF);
+  // A role with no channels used to leave a page describing an empty list,
+  // with the index route redirecting onto a channel that then said it was off.
+  it("collapses to a single explanation when the role has no channels", () => {
+    renderLayout(NOTHING_ALLOWED);
 
     expect(
-      screen.getByText(
-        "Every messaging channel is turned off for this organization.",
-      ),
+      screen.getByText("Your role has no messaging channels."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("No messaging channels are available"),
@@ -85,19 +80,21 @@ describe("messaging channels layout", () => {
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
-  it("keeps the admin settings dialog reachable when every channel is off", () => {
-    renderLayout(ALL_OFF);
+  it("explains a channel the role lacks when reached by its own URL", () => {
+    vi.mocked(usePathname).mockReturnValue("/messaging-channels/slack");
+    renderLayout(["ms-teams", "telegram", "email", "a2a"]);
 
     expect(
-      screen.getByTestId("messaging-channel-page-settings"),
+      screen.getByText("Slack is not available to your role"),
     ).toBeInTheDocument();
+    expect(screen.queryByText("channel configuration")).not.toBeInTheDocument();
   });
 
-  it("explains a single turned-off channel reached by its own URL", () => {
-    vi.mocked(usePathname).mockReturnValue("/messaging-channels/slack");
-    renderLayout({ slack: { hidden: true } });
+  it("shows every channel when the role is unrestricted", () => {
+    renderLayout(null);
 
-    expect(screen.getByText("Slack is turned off")).toBeInTheDocument();
-    expect(screen.queryByText("channel configuration")).not.toBeInTheDocument();
+    expect(screen.getByText(/Manage how agents are invoked/)).toHaveTextContent(
+      "Slack, MS Teams, Email and A2A",
+    );
   });
 });

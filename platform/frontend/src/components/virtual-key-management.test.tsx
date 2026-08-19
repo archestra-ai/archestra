@@ -11,6 +11,7 @@ import {
 import { VirtualKeyManagement } from "./virtual-key-management";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/role-resource-access.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: vi.fn(),

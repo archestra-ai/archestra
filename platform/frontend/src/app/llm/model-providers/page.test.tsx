@@ -32,6 +32,7 @@ vi.mock("@/components/page-layout", () => ({
 }));
 
 vi.mock("next/navigation");
+vi.mock("@/lib/role-resource-access.query");
 
 vi.mock("@/lib/auth/auth.query");
 

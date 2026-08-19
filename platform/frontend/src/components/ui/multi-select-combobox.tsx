@@ -154,8 +154,11 @@ export function MultiSelectCombobox({
               <button
                 type="button"
                 aria-label="Remove selected option"
+                // A disabled control must not be editable through its chips
+                // either — the input being disabled is not enough.
+                disabled={disabled}
                 onClick={(e) => handleRemove(option.value, e)}
-                className="hover:bg-muted-foreground/20 rounded-sm"
+                className="hover:bg-muted-foreground/20 rounded-sm disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <X className="h-3 w-3" />
               </button>

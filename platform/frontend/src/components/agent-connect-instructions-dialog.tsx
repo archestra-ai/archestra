@@ -12,7 +12,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  getConnectableProviders,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
@@ -78,7 +77,8 @@ export function LlmProxyConnectInstructionsDialog({
   proxy: ConnectTarget | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { baseUrl, organization } = useConnectionBaseUrl();
+  const { baseUrl } = useConnectionBaseUrl();
+  const providerCatalog = useModelProviderCatalog();
   // Local selection — the dialog must not write providerId into the list URL.
   const [selected, setSelected] = useState<"model-router" | SupportedProvider>(
     "model-router",
@@ -86,7 +86,7 @@ export function LlmProxyConnectInstructionsDialog({
 
   if (!proxy) return null;
 
-  const providers = getConnectableProviders(organization);
+  const providers = providerCatalog.visibleIds;
 
   return (
     <ConnectDialog agent={proxy} open onOpenChange={onOpenChange}>

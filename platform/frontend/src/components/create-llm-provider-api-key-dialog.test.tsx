@@ -55,6 +55,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/role-resource-access.query");
 
 vi.mock("@/lib/auth/auth.query");
 

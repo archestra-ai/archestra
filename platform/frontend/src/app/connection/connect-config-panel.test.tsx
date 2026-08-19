@@ -14,6 +14,7 @@ import { ConnectConfigPanel } from "./connect-config-panel";
 import { useAllSkills } from "./skills-marketplace-step";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/role-resource-access.query");
 
 // Default impls survive vi.clearAllMocks (which resets call history, not
 // implementations); the skills suite overrides them to resolve real key values.

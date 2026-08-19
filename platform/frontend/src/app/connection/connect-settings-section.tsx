@@ -3,7 +3,6 @@
 import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
-  SupportedProviders,
 } from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -15,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
@@ -36,13 +34,8 @@ import {
   collapseBaseUrlMeta,
   resolveDefaultBaseUrl,
 } from "./connection-base-urls.utils";
-import { getShownProviders } from "./connection-flow.utils";
 
 const DEFAULT_VALUE = "__default__";
-// "Any client" is always visible on the connection page; admins cannot hide it.
-const FILTERABLE_CLIENTS = CONNECT_CLIENTS.filter((c) => c.id !== "generic");
-const ALL_CLIENT_IDS = FILTERABLE_CLIENTS.map((c) => c.id);
-const ALL_PROVIDER_IDS = [...SupportedProviders] as SupportedProvider[];
 const NO_DEFAULT_URL = "__none__";
 
 export function ConnectSettingsSection() {
@@ -57,11 +50,6 @@ export function ConnectSettingsSection() {
   const [gatewayId, setGatewayId] = useState<string | null>(null);
   const [proxyId, setProxyId] = useState<string | null>(null);
   const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
-  // UI stores the set of visible clients/providers; null in DB = show all.
-  const [shownClientIds, setShownClientIds] =
-    useState<string[]>(ALL_CLIENT_IDS);
-  const [shownProviders, setShownProviders] =
-    useState<SupportedProvider[]>(ALL_PROVIDER_IDS);
   const [baseUrlMeta, setBaseUrlMeta] = useState<
     Record<
       string,
@@ -84,8 +72,6 @@ export function ConnectSettingsSection() {
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setProxyId(organization.connectionDefaultLlmProxyId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
-    setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
-    setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setDefaultProviderKeys(
       (organization.connectionDefaultProviderKeys ?? {}) as Record<
@@ -103,16 +89,6 @@ export function ConnectSettingsSection() {
   const serverGatewayId = organization?.connectionDefaultMcpGatewayId ?? null;
   const serverProxyId = organization?.connectionDefaultLlmProxyId ?? null;
   const serverDefaultClientId = organization?.connectionDefaultClientId ?? null;
-  const serverShownClients = (
-    organization?.connectionShownClientIds ?? ALL_CLIENT_IDS
-  )
-    .slice()
-    .sort();
-  const serverShownProviders = (
-    getShownProviders(organization) ?? ALL_PROVIDER_IDS
-  )
-    .slice()
-    .sort();
   const serverBaseUrlMeta = useMemo(
     () => buildBaseUrlMeta(organization?.connectionBaseUrls ?? null),
     [organization?.connectionBaseUrls],
@@ -144,26 +120,13 @@ export function ConnectSettingsSection() {
     gatewayId !== serverGatewayId ||
     proxyId !== serverProxyId ||
     defaultClientId !== serverDefaultClientId ||
-    JSON.stringify([...shownClientIds].sort()) !==
-      JSON.stringify(serverShownClients) ||
-    JSON.stringify([...shownProviders].sort()) !==
-      JSON.stringify(serverShownProviders) ||
     baseUrlsDirty;
-
-  // Collapse "all selected" back to null so future clients/providers are
-  // visible by default (null = show all).
-  const collapseIfAll = <T,>(selected: T[], all: readonly T[]): T[] | null =>
-    selected.length === all.length && all.every((v) => selected.includes(v))
-      ? null
-      : selected;
 
   const handleSave = () => {
     updateMutation.mutate({
       connectionDefaultMcpGatewayId: gatewayId,
       connectionDefaultLlmProxyId: proxyId,
       connectionDefaultClientId: defaultClientId,
-      connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
-      connectionShownProviders: collapseIfAll(shownProviders, ALL_PROVIDER_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
         Object.keys(defaultProviderKeys).length > 0
@@ -176,8 +139,6 @@ export function ConnectSettingsSection() {
     setGatewayId(serverGatewayId);
     setProxyId(serverProxyId);
     setDefaultClientId(serverDefaultClientId);
-    setShownClientIds(serverShownClients);
-    setShownProviders(serverShownProviders);
     setBaseUrlMeta(serverBaseUrlMeta);
     setDefaultProviderKeys(serverDefaultProviderKeys);
   };
@@ -449,44 +410,6 @@ export function ConnectSettingsSection() {
                   </RadioGroup>
                 </SettingSection>
               )}
-
-              <SettingSection
-                title="Visible clients"
-                description="Which clients are offered. “Any client” is always shown."
-              >
-                <MultiSelectCombobox
-                  options={FILTERABLE_CLIENTS.map((c) => ({
-                    value: c.id,
-                    label: c.label,
-                    icon: <ClientIcon client={c} size={18} />,
-                  }))}
-                  value={shownClientIds}
-                  onChange={setShownClientIds}
-                  placeholder="Select clients…"
-                  emptyMessage="No clients found."
-                  disabled={locked}
-                />
-              </SettingSection>
-
-              <SettingSection
-                title="Visible providers"
-                description="Which LLM providers are offered."
-              >
-                <MultiSelectCombobox
-                  options={ALL_PROVIDER_IDS.map((p) => ({
-                    value: p,
-                    label: providerCatalog.label(p),
-                    icon: <ProviderIcon provider={p} size={18} />,
-                  }))}
-                  value={shownProviders}
-                  onChange={(values) =>
-                    setShownProviders(values as SupportedProvider[])
-                  }
-                  placeholder="Select providers…"
-                  emptyMessage="No providers found."
-                  disabled={locked}
-                />
-              </SettingSection>
             </DialogBody>
             <DialogFooter>
               <Button

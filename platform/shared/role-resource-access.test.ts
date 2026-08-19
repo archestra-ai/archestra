@@ -74,10 +74,9 @@ describe("unionAllowLists", () => {
   });
 
   it("merges the restricted lists", () => {
-    expect(unionAllowLists([["openai"], ["gemini", "openai"]]).sort()).toEqual([
-      "gemini",
-      "openai",
-    ]);
+    expect(unionAllowLists([["openai"], ["gemini", "openai"]])?.sort()).toEqual(
+      ["gemini", "openai"],
+    );
   });
 
   it("is empty when every role allows nothing", () => {

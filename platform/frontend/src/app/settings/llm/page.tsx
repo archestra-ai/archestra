@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
+import { ProviderNamesSection } from "@/app/settings/llm/_parts/provider-names-section";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -315,6 +316,12 @@ export default function LlmSettingsPage() {
         noPermissionHandle="hide"
       >
         <DefaultUserLimitsSection />
+      </WithPermissions>
+      <WithPermissions
+        permissions={{ organizationSettings: ["update"] }}
+        noPermissionHandle="hide"
+      >
+        <ProviderNamesSection />
       </WithPermissions>
     </SettingsSectionStack>
   );

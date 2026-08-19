@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveMcpServerName,
-  getShownProviders,
   resolveEffectiveId,
   resolveInitialClientId,
   toMcpServerSlug,
@@ -161,32 +160,6 @@ describe("resolveInitialClientId", () => {
         visibleClientIds,
       }),
     ).toBe("claude-code");
-  });
-});
-
-describe("getShownProviders", () => {
-  it("returns null when organization is undefined", () => {
-    expect(getShownProviders(undefined)).toBeNull();
-  });
-
-  it("returns null when the field is null (show all)", () => {
-    expect(getShownProviders({ connectionShownProviders: null })).toBeNull();
-  });
-
-  it("returns known providers unchanged", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
-  });
-
-  it("drops unknown provider IDs silently", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "not-a-provider", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
   });
 });
 

@@ -706,33 +706,10 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("refuses to grant catalog access the author does not have", async ({
-    restrictRoleResourceAccess,
-  }) => {
-    // The author is an "admin" member; restrict that role and the subset rule
-    // applies to them exactly as it does to permissions.
-    await restrictRoleResourceAccess(
-      organizationId,
-      { modelProviders: ["openai"] },
-      "admin",
-    );
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/roles",
-      payload: {
-        name: "Too Much",
-        permission: { agent: ["read"] },
-        resourceAccess: { modelProviders: ["openai", "anthropic"] },
-      },
-    });
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain("anthropic");
-    expect(createOrgRoleMock).not.toHaveBeenCalled();
-  });
-
-  test("refuses to hand a new role unrestricted access from a restricted author", async ({
+  // `ac:update` already decides what every role may reach, so there is no
+  // subset rule here — and without one, narrowing the admin role is not a
+  // one-way door.
+  test("lets a restricted author widen their own role again", async ({
     restrictRoleResourceAccess,
   }) => {
     await restrictRoleResourceAccess(
@@ -742,16 +719,13 @@ describe("custom role routes", () => {
     );
 
     const response = await app.inject({
-      method: "POST",
-      url: "/api/roles",
-      payload: {
-        name: "Wide Open",
-        permission: { agent: ["read"] },
-        resourceAccess: { modelProviders: null },
-      },
+      method: "PUT",
+      url: "/api/roles/admin",
+      payload: { resourceAccess: { modelProviders: null } },
     });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().resourceAccess.modelProviders).toBeNull();
   });
 
   test("DELETE /api/roles/:roleId takes the role's allow-lists with it", async ({

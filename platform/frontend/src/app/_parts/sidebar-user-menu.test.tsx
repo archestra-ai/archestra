@@ -29,6 +29,16 @@ function renderMenu() {
   );
 }
 
+function mockSignedInSession() {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: {
+      user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
+      session: { id: "session-1" },
+    },
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
+}
+
 describe("SidebarUserMenu", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,13 +62,7 @@ describe("SidebarUserMenu", () => {
 
   it("shows the user and exposes Settings and Sign Out links", async () => {
     const user = userEvent.setup();
-    vi.mocked(authClient.getSession).mockResolvedValue({
-      data: {
-        user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
-        session: { id: "session-1" },
-      },
-      error: null,
-    } as Awaited<ReturnType<typeof authClient.getSession>>);
+    mockSignedInSession();
 
     renderMenu();
 
@@ -82,13 +86,7 @@ describe("SidebarUserMenu", () => {
 
   it("orders the menu as theme switcher, Personal Settings, then Sign Out", async () => {
     const user = userEvent.setup();
-    vi.mocked(authClient.getSession).mockResolvedValue({
-      data: {
-        user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
-        session: { id: "session-1" },
-      },
-      error: null,
-    } as Awaited<ReturnType<typeof authClient.getSession>>);
+    mockSignedInSession();
 
     renderMenu();
 
@@ -118,13 +116,7 @@ describe("SidebarUserMenu", () => {
     const user = userEvent.setup();
     const setTheme = vi.fn();
     mockUseTheme.mockReturnValue({ theme: "system", setTheme });
-    vi.mocked(authClient.getSession).mockResolvedValue({
-      data: {
-        user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
-        session: { id: "session-1" },
-      },
-      error: null,
-    } as Awaited<ReturnType<typeof authClient.getSession>>);
+    mockSignedInSession();
 
     renderMenu();
 

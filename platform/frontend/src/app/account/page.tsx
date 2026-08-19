@@ -42,7 +42,6 @@ function AccountContent() {
   return (
     <PageLayout
       title="Personal Settings"
-      description="Manage your personal profile, API keys, sessions, and sign-in settings."
       // Page-level, not tucked inside a section: changing a password is the
       // thing people arrive here to do, and it should stay one click away
       // from whichever section they happen to be on.

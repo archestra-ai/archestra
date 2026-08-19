@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useSettingsTabs } from "./settings-tabs";
+import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 vi.mock("@/lib/clients/auth/auth-client");
 
@@ -297,5 +297,34 @@ describe("useSettingsTabs", () => {
         "Secrets",
       ]);
     });
+  });
+});
+
+describe("resolveSettingsSection", () => {
+  const tabs = [
+    { href: "/settings/users" },
+    { href: "/settings/service-accounts" },
+    { href: "/settings/teams" },
+  ];
+
+  it("matches the section itself", () => {
+    expect(resolveSettingsSection("/settings/users", tabs)).toBe(
+      "/settings/users",
+    );
+  });
+
+  it("keeps a detail route on its parent section", () => {
+    expect(
+      resolveSettingsSection("/settings/service-accounts/abc-123", tabs),
+    ).toBe("/settings/service-accounts");
+  });
+
+  it("does not match a section that is only a name prefix", () => {
+    // "/settings/team" must not light up "/settings/teams".
+    expect(resolveSettingsSection("/settings/team", tabs)).toBe("");
+  });
+
+  it("returns nothing for a path outside the section list", () => {
+    expect(resolveSettingsSection("/account", tabs)).toBe("");
   });
 });

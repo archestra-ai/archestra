@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { useSettingsTabs } from "./settings-tabs";
+import { SectionNav } from "@/components/section-nav";
+import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {
@@ -133,10 +134,19 @@ export default function SettingsLayout({
       <PageLayout
         title={config.title}
         description={config.description}
-        tabs={tabs}
         actionButton={actionButton}
       >
-        {children}
+        {/* The section list sits beside the content rather than as a tab row
+            above it: at sixteen entries the row scrolled sideways, so the
+            settings you were not already looking at were off-screen. */}
+        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <SectionNav
+            label="Settings sections"
+            items={tabs}
+            activeHref={resolveSettingsSection(pathname, tabs)}
+          />
+          <div className="min-w-0">{children}</div>
+        </div>
       </PageLayout>
     </SettingsLayoutContext.Provider>
   );

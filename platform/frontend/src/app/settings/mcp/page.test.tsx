@@ -106,9 +106,9 @@ function renderPage() {
 
 /** The select belonging to one settings block, scoped by the block's title. */
 function blockSelect(title: string) {
-  const block = screen.getByText(title).closest('[data-slot="settings-block"]');
-  if (!block) throw new Error(`No settings block titled "${title}"`);
-  return within(block as HTMLElement).getByRole("combobox");
+  const card = screen.getByText(title).closest('[data-slot="card"]');
+  if (!card) throw new Error(`No settings block titled "${title}"`);
+  return within(card as HTMLElement).getByRole("combobox");
 }
 
 describe("McpSettingsPage", () => {

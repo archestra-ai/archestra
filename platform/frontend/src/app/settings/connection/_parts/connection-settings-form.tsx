@@ -20,6 +20,7 @@ import { CodeText } from "@/components/code-text";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
+  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
@@ -209,7 +210,7 @@ export function ConnectionSettingsForm() {
         const locked = updateMutation.isPending || !hasPermission;
         return (
           <>
-            <SettingsSectionStack className="space-y-6">
+            <SettingsSectionStack>
               <SettingRow
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."
@@ -474,7 +475,11 @@ export function ConnectionSettingsForm() {
 // Internal pieces
 // ===================================================================
 
-/** Compact settings row: label + description left, a single control right. */
+/**
+ * One setting whose control sits beside its label. Thin wrappers over
+ * {@link SettingsBlock} so this page reads as the same kind of card as every
+ * other settings page, rather than the dialog it was lifted out of.
+ */
 function SettingRow({
   title,
   description,
@@ -485,19 +490,11 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-foreground">{title}</div>
-        <div className="mt-0.5 text-[13px] text-muted-foreground">
-          {description}
-        </div>
-      </div>
-      {children}
-    </div>
+    <SettingsBlock title={title} description={description} control={children} />
   );
 }
 
-/** Full-width dialog section: header on top, content below. */
+/** One setting whose control needs the full width, below the header. */
 function SettingSection({
   title,
   description,
@@ -508,12 +505,8 @@ function SettingSection({
   children: ReactNode;
 }) {
   return (
-    <div>
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <div className="mb-3 mt-0.5 text-[13px] text-muted-foreground">
-        {description}
-      </div>
+    <SettingsBlock title={title} description={description} control={null}>
       {children}
-    </div>
+    </SettingsBlock>
   );
 }

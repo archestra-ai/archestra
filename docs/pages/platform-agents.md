@@ -20,22 +20,25 @@ An agent can include:
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
-## Load Tools When Needed
+## Tool Access Modes
 
-By default, an agent exposes every assigned tool through MCP `tools/list`.
+An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs in the agent dialog. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half.
 
-For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+### Custom Mode
 
-- `search_tools` can still discover them
-- `run_tool` can still execute them
+In **Custom** mode the agent uses only its explicitly assigned tools. New agents get a default set assigned by the backend, and the create form pre-selects that same set. Assignments resolve credentials at call time by default; you can pin a specific connection per server instead.
 
-Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+Sharing the agent shares its assigned tools. A teammate with agent access can call an assigned tool even when its MCP server is not shared with them — the server's own team assignment governs the [registry](/docs/platform-private-registry), not tool calls through the agent. [Credential resolution](/docs/mcp-authentication#credential-resolution) decides whose connection serves each call: a pinned connection serves every caller, and resolve-at-call-time looks for a connection the caller can reach.
 
-An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs in the agent dialog. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half. In **Custom** mode the agent uses only its explicitly assigned tools; new agents get a default set assigned by the backend, and the create form pre-selects that same set. Custom assignments resolve credentials at call time by default; you can pin a specific connection per server instead. In **Auto** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Default credential** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills) reference tools without pre-assigning every tool to every agent.
+### Auto Mode
+
+In **Auto** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply, so each caller of a shared agent may reach a different toolset. Tools explicitly assigned to the agent stay available to every caller.
+
+`run_tool` executes a discovered tool directly with [credentials resolved at call time](/docs/mcp-authentication#resolve-at-call-time), following the MCP server's **Default credential** setting: on behalf of the user by default, or one shared account when the server is configured that way. A caller with no reachable connection gets an actionable prompt to connect — another person's personal connection is never used.
+
+Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills) reference tools without pre-assigning every tool to every agent.
 
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
-
-See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 
 ### Excluding Servers and Tools
 
@@ -53,6 +56,19 @@ Only `search_tools` and `run_tool` can never be excluded; everything else can. A
 
 Exclusions are stored per agent and have no effect in **Custom** mode. Cloning an agent copies them. Agent export does not carry them — server and tool IDs are not portable across organizations — so an imported agent starts with no exclusions and they must be re-created. Exclusions track the specific tool record: if an MCP server renames a tool, the renamed tool counts as new and is no longer excluded.
 
+## Load Tools When Needed
+
+By default, an agent exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+
+- `search_tools` can still discover them
+- `run_tool` can still execute them
+
+Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
+
 ## Missing Tool Connections
 
 An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and a teammate who has not connected one of those servers finds out only when a tool from it runs.
@@ -65,7 +81,7 @@ An agent's tools can come from MCP servers that each person connects with their 
 
 A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account. Servers that need no credentials never count as missing.
 
-The setting does nothing in **Auto** mode, where each caller's tools come from what they can already reach.
+The setting does nothing in [**Auto** mode](#auto-mode), where each caller's tools come from what they can already reach.
 
 ## Invocation Paths
 

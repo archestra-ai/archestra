@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -138,6 +138,8 @@ A gateway can also publish your organization's skills to connecting clients as `
 Gateway access depends on both the caller and the gateway configuration. A user must be allowed to see the MCP Gateway, usually through organization visibility or team membership, and the gateway must have the specific tool assigned to it.
 
 If a gateway is scoped to one team, members outside that team cannot use it even if the underlying MCP server exists in the registry. This lets admins approve MCP servers centrally while still exposing different tool sets to different teams or clients.
+
+The reverse also holds: a caller with gateway access can call its assigned tools even when a tool's MCP server is not shared with them. The server's team assignment governs the registry, not tool calls. See [Agent Access vs MCP Server Access](/docs/platform-access-control#agent-access-vs-mcp-server-access).
 
 See [Access Control](/docs/platform-access-control) for the permission model.
 

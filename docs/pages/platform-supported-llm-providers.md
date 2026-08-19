@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-15
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,6 +11,20 @@ lastUpdated: 2026-08-15
 ## Overview
 
 Archestra Platform acts as a security proxy between your AI applications and LLM providers. It currently supports the following LLM providers.
+
+## Turning Providers Off
+
+Most organizations only allow a few providers. As an admin, open **Page settings** on Model Providers and switch **Available** off for the rest. A turned-off provider disappears from every picker, and the API refuses to configure it.
+
+![The Model Providers page with the admin-only Page settings dialog open](/docs/automated_screenshots/platform-supported-llm-providers_page-settings.webp)
+
+Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
+
+## Renaming a Provider
+
+A provider row also takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave it empty to keep the name the provider ships with.
+
+Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
 
 ## OpenAI-Compatible Model Router
 

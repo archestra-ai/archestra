@@ -96,6 +96,8 @@ Agents can be triggered through:
 
 Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
+As an admin, open **Page settings** on Messaging Channels and switch **Available** off for any channel your organization does not allow. A turned-off channel disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
+
 ## Knowledge Sources
 
 Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** in the agent dialog). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.

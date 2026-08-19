@@ -16,7 +16,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/lib/auth/auth.query";
@@ -96,14 +95,12 @@ export function SidebarUserMenu() {
             </Button>
           ))}
         </div>
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/account">
             <Settings className="size-4" />
             Personal Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/auth/sign-out">
             <LogOut className="size-4" />

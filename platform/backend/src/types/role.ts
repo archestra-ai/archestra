@@ -1,7 +1,4 @@
-import {
-  PermissionsSchema,
-  RoleResourceAccessSchema,
-} from "@archestra/shared";
+import { PermissionsSchema, RoleResourceAccessSchema } from "@archestra/shared";
 import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";

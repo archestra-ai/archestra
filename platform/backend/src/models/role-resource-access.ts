@@ -42,11 +42,12 @@ class RoleResourceAccessModel {
     organizationId: string,
   ): Promise<Record<string, RoleResourceAccess>> {
     const rows = await db
-      .select({ role: schema.roleResourceAccessTable.role, ...SELECTED_COLUMNS })
+      .select({
+        role: schema.roleResourceAccessTable.role,
+        ...SELECTED_COLUMNS,
+      })
       .from(schema.roleResourceAccessTable)
-      .where(
-        eq(schema.roleResourceAccessTable.organizationId, organizationId),
-      );
+      .where(eq(schema.roleResourceAccessTable.organizationId, organizationId));
     const byRole: Record<string, RoleResourceAccess> = {};
     for (const row of rows) {
       byRole[row.role] = toAccess(row);

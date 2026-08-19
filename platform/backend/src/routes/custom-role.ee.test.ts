@@ -688,7 +688,10 @@ describe("custom role routes", () => {
     // The role definition itself is still code, so better-auth is not involved.
     expect(updateOrgRoleMock).not.toHaveBeenCalled();
 
-    const reread = await app.inject({ method: "GET", url: "/api/roles/member" });
+    const reread = await app.inject({
+      method: "GET",
+      url: "/api/roles/member",
+    });
     expect(reread.json().resourceAccess.modelProviders).toEqual(["anthropic"]);
     expect(reread.json().predefined).toBe(true);
   });

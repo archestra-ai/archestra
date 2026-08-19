@@ -362,6 +362,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  roleResourceAccessTable: {
+    audited: false,
+    reason:
+      "per-role catalog allow-lists; parent (role) audited — the lists ride along in the role snapshot",
+  },
   agentVersionsTable: {
     audited: false,
     reason: "child of agent; immutable version snapshot, parent audited",

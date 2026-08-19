@@ -1,6 +1,4 @@
 import type {
-  KnowledgeConnectorOverrides,
-  MessagingChannelOverrides,
   ModelProviderOverrides,
   OrganizationCustomFont,
   OrganizationTheme,
@@ -299,12 +297,13 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultClientId: text("connection_default_client_id"),
 
   /**
-   * Client IDs shown on the /connection client grid. Null = show all.
-   * ("generic" is always shown regardless of this list.)
+   * Legacy connect-page visibility columns. Superseded by the per-role
+   * allow-lists in `role_resource_access` (migration 0424 copied
+   * `connection_shown_client_ids` onto every role). Retained inert —
+   * non-destructive, read by that migration only — and never exposed via the
+   * API.
    */
   connectionShownClientIds: text("connection_shown_client_ids").array(),
-
-  /** Providers shown in the /connection proxy step. Null = show all. */
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()
     .array(),
@@ -329,25 +328,29 @@ const organizationsTable = pgTable("organization", {
   ).$type<ConnectionDefaultProviderKeys>(),
 
   /**
-   * Admin overrides of the built-in model-provider catalog, keyed by provider
-   * id. A `hidden` entry is switched off everywhere: the provider disappears
-   * from the pickers and the API refuses to create a key for it. The other
-   * fields only change how the provider reads. NULL / a missing key = the
-   * provider ships as-is, so providers added later default to visible.
+   * The organization's own names for the built-in model providers, keyed by
+   * provider id. A missing key means the provider reads under the name it
+   * ships with. Naming is org-wide on purpose; *access* is per role (see
+   * `role_resource_access`).
+   *
+   * Rows written before 0424 may still carry a retired `hidden` flag, which is
+   * read by that migration and ignored afterwards.
    */
   modelProviderOverrides: jsonb(
     "model_provider_overrides",
   ).$type<ModelProviderOverrides>(),
 
-  /** Same, for the messaging channels on /messaging-channels. */
-  messagingChannelOverrides: jsonb(
-    "messaging_channel_overrides",
-  ).$type<MessagingChannelOverrides>(),
-
-  /** Same, for the knowledge connector types. */
-  knowledgeConnectorOverrides: jsonb(
-    "knowledge_connector_overrides",
-  ).$type<KnowledgeConnectorOverrides>(),
+  /**
+   * Legacy org-wide catalog off-switches, superseded by `role_resource_access`
+   * (migration 0424 copied them onto every role). Retained inert —
+   * non-destructive — and never exposed via the API.
+   */
+  messagingChannelOverrides: jsonb("messaging_channel_overrides").$type<
+    Record<string, { hidden?: boolean }>
+  >(),
+  knowledgeConnectorOverrides: jsonb("knowledge_connector_overrides").$type<
+    Record<string, { hidden?: boolean }>
+  >(),
 
   /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,

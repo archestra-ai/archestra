@@ -858,9 +858,11 @@ describe("knowledge base routes", () => {
       );
     });
 
-    test("rejects a connector type the organization turned off", async () => {
-      await OrganizationModel.patch(organizationId, {
-        knowledgeConnectorOverrides: { jira: { hidden: true } },
+    test("rejects a connector type the caller's role excludes", async ({
+      restrictRoleResourceAccess,
+    }) => {
+      await restrictRoleResourceAccess(organizationId, {
+        knowledgeConnectors: ["github"],
       });
 
       const response = await app.inject({
@@ -881,12 +883,16 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toContain("Jira");
-      expect(response.json().error.message).toContain("turned off");
+      expect(response.json().error.message).toContain(
+        "not available to your role",
+      );
     });
 
-    test("still creates connectors of types left switched on", async () => {
-      await OrganizationModel.patch(organizationId, {
-        knowledgeConnectorOverrides: { jira: { hidden: true } },
+    test("still creates connectors of types the role keeps", async ({
+      restrictRoleResourceAccess,
+    }) => {
+      await restrictRoleResourceAccess(organizationId, {
+        knowledgeConnectors: ["github"],
       });
 
       const response = await app.inject({

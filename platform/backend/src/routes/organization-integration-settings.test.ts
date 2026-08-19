@@ -8,12 +8,10 @@ vi.mock("@/auth");
 
 import { hasPermission } from "@/auth";
 
-vi.mock("@/agents/chatops/chatops-manager", () => ({
-  chatOpsManager: { reinitialize: vi.fn() },
-}));
-
-import { chatOpsManager } from "@/agents/chatops/chatops-manager";
-
+/**
+ * The endpoint carries one thing since per-role access moved to the roles API:
+ * the organization's own names for the built-in model providers.
+ */
 describe("PATCH /api/organization/integration-settings", () => {
   let app: FastifyInstanceWithZod;
   let adminUser: User;
@@ -54,45 +52,21 @@ describe("PATCH /api/organization/integration-settings", () => {
       payload,
     });
 
-  test("persists overrides for all three catalogs", async () => {
+  test("persists the organization's provider names", async () => {
     const response = await patch({
       modelProviderOverrides: {
-        anthropic: { hidden: true },
         openai: { displayName: "OpenAI (approved)" },
       },
-      messagingChannelOverrides: { telegram: { hidden: true } },
-      knowledgeConnectorOverrides: { dropbox: { hidden: true } },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.modelProviderOverrides).toEqual({
-      anthropic: { hidden: true },
-      openai: { displayName: "OpenAI (approved)" },
-    });
-    expect(body.messagingChannelOverrides).toEqual({
-      telegram: { hidden: true },
-    });
-    expect(body.knowledgeConnectorOverrides).toEqual({
-      dropbox: { hidden: true },
-    });
-  });
-
-  test("leaves catalogs the request omits untouched", async () => {
-    await patch({ modelProviderOverrides: { anthropic: { hidden: true } } });
-
-    const response = await patch({
-      messagingChannelOverrides: { slack: { hidden: true } },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json().modelProviderOverrides).toEqual({
-      anthropic: { hidden: true },
+      openai: { displayName: "OpenAI (approved)" },
     });
   });
 
-  test("clears a catalog's overrides with null", async () => {
-    await patch({ modelProviderOverrides: { anthropic: { hidden: true } } });
+  test("clears every name with null", async () => {
+    await patch({ modelProviderOverrides: { openai: { displayName: "X" } } });
 
     const response = await patch({ modelProviderOverrides: null });
 
@@ -100,41 +74,28 @@ describe("PATCH /api/organization/integration-settings", () => {
     expect(response.json().modelProviderOverrides).toBeNull();
   });
 
-  // Channels and connectors are toggle-only, so a name there is a mistake
-  // rather than a customization the API should silently accept.
-  test("rejects a display name on a toggle-only catalog", async () => {
-    expect(
-      (
-        await patch({
-          messagingChannelOverrides: { slack: { displayName: "Corp chat" } },
-        })
-      ).statusCode,
-    ).toBe(400);
-  });
-
-  test("rejects ids that are not part of a catalog", async () => {
-    expect(
-      (await patch({ messagingChannelOverrides: { discord: {} } })).statusCode,
-    ).toBe(400);
+  test("rejects a provider id that is not part of the catalog", async () => {
     expect(
       (await patch({ modelProviderOverrides: { notaprovider: {} } }))
         .statusCode,
     ).toBe(400);
+  });
+
+  // Access lives on roles now, so a `hidden` flag here is a client that has not
+  // caught up rather than a customization to accept quietly.
+  test("rejects the retired hidden flag", async () => {
     expect(
-      (await patch({ knowledgeConnectorOverrides: { carrierpigeon: {} } }))
+      (await patch({ modelProviderOverrides: { openai: { hidden: true } } }))
         .statusCode,
     ).toBe(400);
   });
 
-  test("restarts the ChatOps providers when the channel overrides change", async () => {
-    await patch({ messagingChannelOverrides: { slack: { hidden: true } } });
-
-    expect(chatOpsManager.reinitialize).toHaveBeenCalledTimes(1);
-  });
-
-  test("does not restart the ChatOps providers for an unrelated catalog", async () => {
-    await patch({ modelProviderOverrides: { anthropic: { hidden: true } } });
-
-    expect(chatOpsManager.reinitialize).not.toHaveBeenCalled();
+  // A browser tab left open across the upgrade would otherwise appear to gate
+  // a channel and silently change nothing.
+  test("no longer accepts the retired per-catalog toggles", async () => {
+    expect(
+      (await patch({ messagingChannelOverrides: { slack: { hidden: true } } }))
+        .statusCode,
+    ).toBe(400);
   });
 });

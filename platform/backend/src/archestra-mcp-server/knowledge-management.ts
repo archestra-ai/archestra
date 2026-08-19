@@ -52,7 +52,7 @@ import {
   UserModel,
 } from "@/models";
 import * as metrics from "@/observability/metrics";
-import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
+import { disallowedKnowledgeConnectorViolation } from "@/services/role-resource-access";
 import {
   type AclEntry,
   ConnectorTypeSchema,
@@ -905,14 +905,17 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult(mfilesViolation);
     }
 
-    // Same reason: connector types the organization's admins switched off
-    // must not be creatable through the gateway either.
-    const hiddenTypeViolation = await hiddenKnowledgeConnectorViolation({
-      organizationId: context.organizationId,
-      connectorType: args.connector_type,
-    });
-    if (hiddenTypeViolation) {
-      return errorResult(hiddenTypeViolation);
+    // Same reason: connector types the caller's role excludes must not be
+    // creatable through the gateway either.
+    const disallowedTypeViolation = await disallowedKnowledgeConnectorViolation(
+      {
+        userId: context.userId ?? null,
+        organizationId: context.organizationId,
+        connectorType: args.connector_type,
+      },
+    );
+    if (disallowedTypeViolation) {
+      return errorResult(disallowedTypeViolation);
     }
 
     // Environment isolation: a connector created through a gateway belongs to the

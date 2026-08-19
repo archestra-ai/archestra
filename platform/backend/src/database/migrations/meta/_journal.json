@@ -2969,6 +2969,13 @@
       "when": 1787085224831,
       "tag": "0423_gray_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 424,
+      "version": "7",
+      "when": 1787162399763,
+      "tag": "0424_pretty_guardian",
+      "breakpoints": true
     }
   ]
 }

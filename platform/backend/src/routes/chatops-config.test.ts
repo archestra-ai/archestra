@@ -1,8 +1,11 @@
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
-import { ChatOpsConfigModel, OrganizationModel } from "@/models";
+import { ChatOpsConfigModel } from "@/models";
+import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
 import chatopsRoutes from "./chatops";
 
 const { reinitializeMock } = vi.hoisted(() => ({
@@ -38,6 +41,20 @@ vi.mock("@slack/web-api", () => ({
   },
 }));
 
+/**
+ * These tests register the routes bare, without the auth middleware that
+ * guarantees `request.user` on every /api route in production. The channel
+ * guard resolves the caller's role, so stub a user in — one with no member
+ * record, which resolves to the organization-wide (here: unrestricted) access.
+ */
+const registerRoutes = async (app: FastifyInstanceWithZod) => {
+  app.addHook("onRequest", async (request) => {
+    const mutable = request as typeof request & { user?: User };
+    mutable.user ??= { id: "chatops-config-test-user" } as User;
+  });
+  await app.register(chatopsRoutes);
+};
+
 describe("PUT /api/chatops/config/ms-teams", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,7 +62,7 @@ describe("PUT /api/chatops/config/ms-teams", () => {
 
   test("saves config to DB and reinitializes", async () => {
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     const response = await app.inject({
       method: "PUT",
@@ -91,7 +108,7 @@ describe("PUT /api/chatops/config/ms-teams", () => {
     });
 
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     // Only update appId — other fields should be preserved
     const response = await app.inject({
@@ -120,7 +137,7 @@ describe("PUT /api/chatops/config/slack", () => {
 
   test("saves config to DB and reinitializes", async () => {
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     const response = await app.inject({
       method: "PUT",
@@ -169,7 +186,7 @@ describe("PUT /api/chatops/config/telegram", () => {
   test("rejects updates when the Telegram feature flag is off", async () => {
     config.chatops.telegramEnabled = false;
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     const response = await app.inject({
       method: "PUT",
@@ -185,7 +202,7 @@ describe("PUT /api/chatops/config/telegram", () => {
 
   test("validates the token via getMe, saves config, and reinitializes", async () => {
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     const response = await app.inject({
       method: "PUT",
@@ -215,7 +232,7 @@ describe("PUT /api/chatops/config/telegram", () => {
       new Response(JSON.stringify({ ok: false, error_code: 401 })),
     );
     const app = createFastifyInstance();
-    await app.register(chatopsRoutes);
+    await registerRoutes(app);
 
     const response = await app.inject({
       method: "PUT",
@@ -231,29 +248,37 @@ describe("PUT /api/chatops/config/telegram", () => {
   });
 });
 
-describe("channels the organization turned off", () => {
+describe("channels the caller's role excludes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  const createApp = async (organizationId: string) => {
+  const createApp = async (organizationId: string, user: User) => {
     const app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;
+      (request as typeof request & { user: User }).user = user;
     });
     await app.register(chatopsRoutes);
     return app;
   };
 
-  test("refuses to configure Slack once it is turned off", async ({
+  test("refuses to configure a channel the role does not allow", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
+    restrictRoleResourceAccess,
   }) => {
     const organization = await makeOrganization();
-    await OrganizationModel.patch(organization.id, {
-      messagingChannelOverrides: { slack: { hidden: true } },
-    });
-    const app = await createApp(organization.id);
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    await restrictRoleResourceAccess(
+      organization.id,
+      { messagingChannels: ["ms-teams"] },
+      MEMBER_ROLE_NAME,
+    );
+    const app = await createApp(organization.id, user);
 
     const response = await app.inject({
       method: "PUT",
@@ -262,21 +287,30 @@ describe("channels the organization turned off", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("turned off");
+    expect(response.json().error.message).toContain(
+      "not available to your role",
+    );
     expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
     expect(reinitializeMock).not.toHaveBeenCalled();
 
     await app.close();
   });
 
-  test("still configures a channel left switched on", async ({
+  test("still configures a channel the role keeps", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
+    restrictRoleResourceAccess,
   }) => {
     const organization = await makeOrganization();
-    await OrganizationModel.patch(organization.id, {
-      messagingChannelOverrides: { slack: { hidden: true } },
-    });
-    const app = await createApp(organization.id);
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    await restrictRoleResourceAccess(
+      organization.id,
+      { messagingChannels: ["ms-teams"] },
+      MEMBER_ROLE_NAME,
+    );
+    const app = await createApp(organization.id, user);
 
     const response = await app.inject({
       method: "PUT",

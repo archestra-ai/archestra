@@ -4,7 +4,14 @@ import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type RestrictRoleResourceAccess,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
 
@@ -1855,7 +1862,7 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
   });
 });
 
-describe("LLM Provider API Keys — providers the organization turned off", () => {
+describe("LLM Provider API Keys — providers the role excludes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
@@ -1878,21 +1885,24 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
     await app.close();
   });
 
-  const turnOffAnthropic = async (displayName?: string) => {
+  // The caller is an "admin" member, so restricting that role is what takes
+  // Anthropic away from them.
+  const takeAnthropicAway = (restrict: RestrictRoleResourceAccess) =>
+    restrict(organizationId, { modelProviders: ["openai"] }, "admin");
+
+  const renameAnthropic = async (displayName: string) => {
     const response = await app.inject({
       method: "PATCH",
       url: "/api/organization/integration-settings",
-      payload: {
-        modelProviderOverrides: {
-          anthropic: { hidden: true, ...(displayName ? { displayName } : {}) },
-        },
-      },
+      payload: { modelProviderOverrides: { anthropic: { displayName } } },
     });
     expect(response.statusCode).toBe(200);
   };
 
-  test("refuses to create a key for a turned-off provider", async () => {
-    await turnOffAnthropic();
+  test("refuses to create a key for a provider the role excludes", async ({
+    restrictRoleResourceAccess,
+  }) => {
+    await takeAnthropicAway(restrictRoleResourceAccess);
 
     const response = await app.inject({
       method: "POST",
@@ -1906,11 +1916,16 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("turned off");
+    expect(response.json().error.message).toContain(
+      "not available to your role",
+    );
   });
 
-  test("names the turned-off provider the way the admin renamed it", async () => {
-    await turnOffAnthropic("Anthropic (retired)");
+  test("names the excluded provider the way the organization renamed it", async ({
+    restrictRoleResourceAccess,
+  }) => {
+    await renameAnthropic("Anthropic (retired)");
+    await takeAnthropicAway(restrictRoleResourceAccess);
 
     const response = await app.inject({
       method: "POST",
@@ -1926,8 +1941,10 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
     expect(response.json().error.message).toContain("Anthropic (retired)");
   });
 
-  test("still allows providers left switched on", async () => {
-    await turnOffAnthropic();
+  test("still allows providers the role keeps", async ({
+    restrictRoleResourceAccess,
+  }) => {
+    await takeAnthropicAway(restrictRoleResourceAccess);
 
     const response = await app.inject({
       method: "POST",
@@ -1943,7 +1960,9 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
     expect(response.statusCode).toBe(200);
   });
 
-  test("freezes an existing key once its provider is turned off, but keeps it deletable", async () => {
+  test("freezes an existing key once its provider leaves the role, but keeps it deletable", async ({
+    restrictRoleResourceAccess,
+  }) => {
     const created = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -1957,7 +1976,7 @@ describe("LLM Provider API Keys — providers the organization turned off", () =
     expect(created.statusCode).toBe(200);
     const keyId = created.json().id;
 
-    await turnOffAnthropic();
+    await takeAnthropicAway(restrictRoleResourceAccess);
 
     const update = await app.inject({
       method: "PATCH",

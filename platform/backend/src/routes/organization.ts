@@ -9,7 +9,6 @@ import {
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
@@ -427,7 +426,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateIntegrationSettings,
         description:
-          "Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
+          "Rename the built-in model providers for this organization. Only the providers actually renamed need an entry; null clears every name. Which roles may use a provider is configured per role, not here.",
         tags: ["Organization"],
         body: UpdateIntegrationSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -438,13 +437,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
-      }
-
-      // Hiding a messaging channel has to actually stop it: a Slack or Teams
-      // bot left listening would keep answering after the admin switched the
-      // channel off. The manager re-reads the overrides on initialize.
-      if (body.messagingChannelOverrides !== undefined) {
-        await chatOpsManager.reinitialize();
       }
 
       return reply.send(organization);

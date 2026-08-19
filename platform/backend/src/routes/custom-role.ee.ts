@@ -1,14 +1,30 @@
+import type { MessagingChannelId } from "@archestra/shared";
 import {
   PermissionsSchema,
   PredefinedRoleNameSchema,
+  ROLE_RESOURCE_KIND_LABELS,
+  type RoleResourceAccess,
+  type RoleResourceAccessInput,
+  RoleResourceAccessInputSchema,
   RouteId,
+  UNRESTRICTED_ROLE_RESOURCE_ACCESS,
+  ungrantableResourceAccess,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { betterAuth } from "@/auth";
+import {
+  getDisallowedMessagingChannels,
+  getUserResourceAccess,
+} from "@/services/role-resource-access";
 import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
 import logger from "@/logging";
-import { OrganizationRoleModel, UserModel } from "@/models";
+import {
+  OrganizationRoleModel,
+  RoleResourceAccessModel,
+  UserModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -61,12 +77,13 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: CreateUpdateRoleNameSchema,
           description: RoleDescriptionSchema,
           permission: PermissionsSchema,
+          resourceAccess: RoleResourceAccessInputSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (request, reply) => {
-      const { name, description, permission } = request.body;
+      const { name, description, permission, resourceAccess } = request.body;
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
@@ -87,6 +104,13 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      await assertResourceAccessGrantable({
+        userId: user.id,
+        organizationId,
+        requested: resourceAccess,
+      });
+
+      const channelsBefore = await getDisallowedMessagingChannels();
       const roleIdentifier = generateRoleIdentifier(name);
 
       logger.info(
@@ -122,8 +146,18 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           result.roleData.role,
         );
 
+        const storedAccess = resourceAccess
+          ? await RoleResourceAccessModel.upsert({
+              organizationId,
+              role: result.roleData.role,
+              access: resourceAccess,
+            })
+          : { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS };
+
+        await reinitializeChatOpsIfChannelAccessChanged(channelsBefore);
+
         logger.info({ role: result.roleData }, "Role created successfully");
-        return reply.send(normalizeRoleResponse(result.roleData));
+        return reply.send(normalizeRoleResponse(result.roleData, storedAccess));
       } catch (error) {
         const err = error as {
           status?: string;
@@ -145,7 +179,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateRole,
-        description: "Update a custom role",
+        description:
+          "Update a role. Name, description and permissions are custom-role only; resourceAccess can also be set on a predefined role.",
         tags: ["Roles"],
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,
@@ -154,6 +189,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: CreateUpdateRoleNameSchema.optional(),
           description: RoleDescriptionSchema,
           permission: PermissionsSchema.optional(),
+          resourceAccess: RoleResourceAccessInputSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
@@ -161,16 +197,50 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { roleId },
-        body: { name, description, permission },
+        body: { name, description, permission, resourceAccess },
         user,
         organizationId,
         headers,
       },
       reply,
     ) => {
-      // Cannot update predefined roles
+      await assertResourceAccessGrantable({
+        userId: user.id,
+        organizationId,
+        requested: resourceAccess,
+      });
+
+      // A predefined role's definition is code, so its name, description and
+      // permissions stay immutable — but its catalog allow-lists are ordinary
+      // organization data, and "member" is the role most organizations need to
+      // restrict. So this one field is editable on them.
       if (OrganizationRoleModel.isPredefinedRole(roleId)) {
-        throw new ApiError(403, "Cannot update predefined roles");
+        if (
+          !resourceAccess ||
+          name !== undefined ||
+          description !== undefined ||
+          permission
+        ) {
+          throw new ApiError(
+            403,
+            "Cannot update predefined roles: only their resource access can be changed",
+          );
+        }
+        const channelsBefore = await getDisallowedMessagingChannels();
+        await RoleResourceAccessModel.upsert({
+          organizationId,
+          role: roleId,
+          access: resourceAccess,
+        });
+        await reinitializeChatOpsIfChannelAccessChanged(channelsBefore);
+        const updated = await OrganizationRoleModel.getById(
+          roleId,
+          organizationId,
+        );
+        if (!updated) {
+          throw new ApiError(404, "Role not found");
+        }
+        return reply.send(updated);
       }
 
       // Check if role exists
@@ -203,6 +273,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      const channelsBefore = await getDisallowedMessagingChannels();
+
       // Build update data
       const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
@@ -231,6 +303,17 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         result.roleData.role,
       );
 
+      const storedAccess = resourceAccess
+        ? await RoleResourceAccessModel.upsert({
+            organizationId,
+            role: result.roleData.role,
+            access: resourceAccess,
+          })
+        : existingRole.resourceAccess;
+      if (resourceAccess) {
+        await reinitializeChatOpsIfChannelAccessChanged(channelsBefore);
+      }
+
       // The role's member:impersonate grant may have appeared or vanished;
       // resync the system-level user.role of everyone holding it (the
       // better-auth admin plugin gates impersonation on that column).
@@ -241,7 +324,7 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      return reply.send(normalizeRoleResponse(result.roleData));
+      return reply.send(normalizeRoleResponse(result.roleData, storedAccess));
     },
   );
 
@@ -283,6 +366,16 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       });
 
+      // No foreign key ties the allow-lists to the role (predefined roles have
+      // no row to reference), so the rows are cleaned up here — otherwise a
+      // later role reusing the identifier would inherit them.
+      const channelsBefore = await getDisallowedMessagingChannels();
+      await RoleResourceAccessModel.deleteForRole({
+        organizationId,
+        role: role.role,
+      });
+      await reinitializeChatOpsIfChannelAccessChanged(channelsBefore);
+
       OrganizationRoleModel.invalidatePermissionsCacheForRole(
         organizationId,
         role.role,
@@ -297,16 +390,19 @@ export default customRoleRoutes;
 
 // === Internal helpers
 
-function normalizeRoleResponse(roleData: {
-  id: string;
-  organizationId: string;
-  role: string;
-  name: string;
-  description?: string | null;
-  permission: unknown;
-  createdAt: Date | string;
-  updatedAt?: Date | string | null;
-}) {
+function normalizeRoleResponse(
+  roleData: {
+    id: string;
+    organizationId: string;
+    role: string;
+    name: string;
+    description?: string | null;
+    permission: unknown;
+    createdAt: Date | string;
+    updatedAt?: Date | string | null;
+  },
+  resourceAccess: RoleResourceAccess,
+) {
   return {
     id: roleData.id,
     organizationId: roleData.organizationId,
@@ -317,7 +413,57 @@ function normalizeRoleResponse(roleData: {
     createdAt: toDate(roleData.createdAt),
     updatedAt: roleData.updatedAt ? toDate(roleData.updatedAt) : null,
     predefined: false,
+    resourceAccess,
   };
+}
+
+/**
+ * A messaging channel stops listening once no role may use it, and starts
+ * again as soon as one may — so a role edit that moves that line has to reach
+ * the running Slack/Teams bots. Compared rather than assumed: reinitializing
+ * drops live socket connections, which is not something to do on every role
+ * save.
+ */
+async function reinitializeChatOpsIfChannelAccessChanged(
+  before: Set<MessagingChannelId>,
+): Promise<void> {
+  const after = await getDisallowedMessagingChannels();
+  const changed =
+    before.size !== after.size || [...before].some((id) => !after.has(id));
+  if (changed) await chatOpsManager.reinitialize();
+}
+
+/**
+ * You cannot grant catalog access you do not have yourself — the same subset
+ * rule the permission builder enforces, so an admin restricted to two
+ * providers cannot mint a role that reaches all of them.
+ */
+async function assertResourceAccessGrantable(params: {
+  userId: string;
+  organizationId: string;
+  requested: RoleResourceAccessInput | undefined;
+}): Promise<void> {
+  if (!params.requested) return;
+  const author = await getUserResourceAccess({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const violations = ungrantableResourceAccess({
+    author,
+    requested: params.requested,
+  });
+  if (violations.length === 0) return;
+  const detail = violations
+    .map(({ kind, ids }) =>
+      ids === null
+        ? `${ROLE_RESOURCE_KIND_LABELS[kind]} (all)`
+        : `${ROLE_RESOURCE_KIND_LABELS[kind]}: ${ids.join(", ")}`,
+    )
+    .join("; ");
+  throw new ApiError(
+    403,
+    `You cannot grant resource access you don't have: ${detail}`,
+  );
 }
 
 function parsePermissions(value: unknown) {

@@ -51,7 +51,7 @@ import {
   UserModel,
 } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
+import { assertMessagingChannelAllowed } from "@/services/role-resource-access";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -1367,6 +1367,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { enabled, appId, appSecret, tenantId } = request.body;
       await assertMessagingChannelAllowed({
+        userId: request.user.id,
         organizationId: request.organizationId,
         channel: "ms-teams",
       });
@@ -1527,6 +1528,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         appLevelToken,
       } = request.body;
       await assertMessagingChannelAllowed({
+        userId: request.user.id,
         organizationId: request.organizationId,
         channel: "slack",
       });
@@ -1608,6 +1610,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       await assertMessagingChannelAllowed({
+        userId: request.user.id,
         organizationId: request.organizationId,
         channel: "telegram",
       });

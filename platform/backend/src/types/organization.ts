@@ -1,7 +1,5 @@
 import {
   EmbeddingDimensionsSchema,
-  KnowledgeConnectorOverridesSchema,
-  MessagingChannelOverridesSchema,
   ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
@@ -9,8 +7,6 @@ import {
   OrganizationThemeSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
-  StoredKnowledgeConnectorOverridesSchema,
-  StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -349,9 +345,6 @@ const extendedFields = {
   // The stored (lenient) shapes: a jsonb value written by an older build must
   // not 500 the organization read.
   modelProviderOverrides: StoredModelProviderOverridesSchema.nullable(),
-  messagingChannelOverrides: StoredMessagingChannelOverridesSchema.nullable(),
-  knowledgeConnectorOverrides:
-    StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
@@ -377,6 +370,13 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   presetEntityNamePlural: true,
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
+  // Org-wide catalog gating replaced by the per-role allow-lists in
+  // role_resource_access (migration 0424). Columns retained in the DB
+  // (non-destructive) but no longer read or exposed.
+  connectionShownClientIds: true,
+  connectionShownProviders: true,
+  messagingChannelOverrides: true,
+  knowledgeConnectorOverrides: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
@@ -505,15 +505,6 @@ export const UpdateConnectionSettingsSchema = z.object({
     ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
-  connectionShownClientIds: z
-    .array(z.string().max(64))
-    .max(50)
-    .nullable()
-    .optional(),
-  connectionShownProviders: z
-    .array(SupportedProvidersSchema)
-    .nullable()
-    .optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)
     .max(50)
@@ -543,17 +534,13 @@ export const UpdateConnectionSettingsSchema = z.object({
 });
 
 /**
- * Admin customization of the built-in integration catalogs. Each map is keyed
- * by the catalog entry's id and only needs entries for the ones the admin
- * actually changed; `null` clears every override for that catalog. Omitted
- * fields are left untouched, so the three surfaces can be saved independently.
+ * The organization's own names for the built-in model providers, keyed by
+ * provider id; only the providers actually renamed need an entry, and `null`
+ * clears every name. Which roles may *use* a provider is a separate, per-role
+ * question — see the `resourceAccess` field on the roles API.
  */
-export const UpdateIntegrationSettingsSchema = z.object({
+export const UpdateIntegrationSettingsSchema = z.strictObject({
   modelProviderOverrides: ModelProviderOverridesSchema.nullable().optional(),
-  messagingChannelOverrides:
-    MessagingChannelOverridesSchema.nullable().optional(),
-  knowledgeConnectorOverrides:
-    KnowledgeConnectorOverridesSchema.nullable().optional(),
 });
 
 /**

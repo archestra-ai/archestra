@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { betterAuth, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import OrganizationRoleModel from "@/models/organization-role";
+import RoleResourceAccessModel from "@/models/role-resource-access";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -597,6 +598,182 @@ describe("custom role routes", () => {
       toolPolicy: ["read", "create"],
     });
     expect(role.predefined).toBe(false);
+  });
+
+  // === Per-role catalog access ===
+
+  test("POST /api/roles stores the role's catalog allow-lists", async () => {
+    createOrgRoleMock.mockResolvedValue({
+      roleData: {
+        id: "role-gated",
+        organizationId,
+        role: "gated_role",
+        name: "Gated Role",
+        description: null,
+        permission: { agent: ["read"] },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/roles",
+      payload: {
+        name: "Gated Role",
+        permission: { agent: ["read"] },
+        resourceAccess: {
+          modelProviders: ["openai"],
+          messagingChannels: [],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().resourceAccess).toEqual({
+      modelProviders: ["openai"],
+      // An empty list is a real restriction, not an absent one.
+      messagingChannels: [],
+      knowledgeConnectors: null,
+      connectClients: null,
+    });
+
+    expect(
+      await RoleResourceAccessModel.getForRole({
+        organizationId,
+        role: "gated_role",
+      }),
+    ).toMatchObject({ modelProviders: ["openai"], messagingChannels: [] });
+  });
+
+  test("a role created without allow-lists reads back unrestricted", async () => {
+    createOrgRoleMock.mockResolvedValue({
+      roleData: {
+        id: "role-open",
+        organizationId,
+        role: "open_role",
+        name: "Open Role",
+        description: null,
+        permission: { agent: ["read"] },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/roles",
+      payload: { name: "Open Role", permission: { agent: ["read"] } },
+    });
+
+    expect(response.json().resourceAccess).toEqual({
+      modelProviders: null,
+      knowledgeConnectors: null,
+      messagingChannels: null,
+      connectClients: null,
+    });
+  });
+
+  test("PUT /api/roles/member sets a predefined role's allow-lists", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/roles/member",
+      payload: { resourceAccess: { modelProviders: ["anthropic"] } },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().resourceAccess.modelProviders).toEqual([
+      "anthropic",
+    ]);
+    // The role definition itself is still code, so better-auth is not involved.
+    expect(updateOrgRoleMock).not.toHaveBeenCalled();
+
+    const reread = await app.inject({ method: "GET", url: "/api/roles/member" });
+    expect(reread.json().resourceAccess.modelProviders).toEqual(["anthropic"]);
+    expect(reread.json().predefined).toBe(true);
+  });
+
+  test("PUT /api/roles/member still refuses to touch anything else", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/roles/member",
+      payload: {
+        name: "Renamed",
+        resourceAccess: { modelProviders: ["anthropic"] },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("refuses to grant catalog access the author does not have", async ({
+    restrictRoleResourceAccess,
+  }) => {
+    // The author is an "admin" member; restrict that role and the subset rule
+    // applies to them exactly as it does to permissions.
+    await restrictRoleResourceAccess(
+      organizationId,
+      { modelProviders: ["openai"] },
+      "admin",
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/roles",
+      payload: {
+        name: "Too Much",
+        permission: { agent: ["read"] },
+        resourceAccess: { modelProviders: ["openai", "anthropic"] },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("anthropic");
+    expect(createOrgRoleMock).not.toHaveBeenCalled();
+  });
+
+  test("refuses to hand a new role unrestricted access from a restricted author", async ({
+    restrictRoleResourceAccess,
+  }) => {
+    await restrictRoleResourceAccess(
+      organizationId,
+      { modelProviders: ["openai"] },
+      "admin",
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/roles",
+      payload: {
+        name: "Wide Open",
+        permission: { agent: ["read"] },
+        resourceAccess: { modelProviders: null },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("DELETE /api/roles/:roleId takes the role's allow-lists with it", async ({
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, { role: "recycled" });
+    await app.inject({
+      method: "PUT",
+      url: `/api/roles/${role.id}`,
+      payload: { resourceAccess: { modelProviders: ["openai"] } },
+    });
+    updateOrgRoleMock.mockClear();
+
+    await app.inject({ method: "DELETE", url: `/api/roles/${role.id}` });
+
+    // A later role reusing the identifier must not inherit the old lists.
+    expect(
+      await RoleResourceAccessModel.getForRole({
+        organizationId,
+        role: "recycled",
+      }),
+    ).toMatchObject({ modelProviders: null });
   });
 
   test("POST /api/roles rejects duplicate name via betterAuth error", async () => {

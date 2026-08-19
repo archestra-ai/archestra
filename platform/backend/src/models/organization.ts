@@ -1,9 +1,7 @@
 import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
-  type KnowledgeConnectorOverrides,
   MEMBER_ROLE_NAME,
-  type MessagingChannelOverrides,
   type ModelProviderOverrides,
   type OrganizationCustomFont,
   type SupportedProvider,
@@ -21,11 +19,9 @@ import type {
   OrganizationAnalyticsState,
 } from "@/types";
 
-/** @public — the shape {@link OrganizationModel.getIntegrationOverrides} resolves */
-export type IntegrationOverrideColumns = {
+/** @public — the shape {@link OrganizationModel.getModelProviderOverrides} resolves */
+export type ModelProviderOverrideColumns = {
   modelProviderOverrides: ModelProviderOverrides | null;
-  messagingChannelOverrides: MessagingChannelOverrides | null;
-  knowledgeConnectorOverrides: KnowledgeConnectorOverrides | null;
 };
 
 class OrganizationModel {
@@ -407,30 +403,25 @@ class OrganizationModel {
   }
 
   /**
-   * The admin's customization of the built-in integration catalogs. Reads only
-   * the three override columns, so callers on the cold configuration paths
-   * don't drag the row's base64 logo fields along. Pass `null` to resolve the
-   * deployment's organization, for callers with no request context (the
-   * ChatOps manager starts before any request).
+   * The organization's names for the built-in model providers. Reads only that
+   * column, so callers on the cold configuration paths don't drag the row's
+   * base64 logo fields along. Pass `null` to resolve the deployment's
+   * organization, for callers with no request context.
    */
-  static async getIntegrationOverrides(
+  static async getModelProviderOverrides(
     id: string | null,
-  ): Promise<IntegrationOverrideColumns> {
-    const columns = {
-      modelProviderOverrides: schema.organizationsTable.modelProviderOverrides,
-      messagingChannelOverrides:
-        schema.organizationsTable.messagingChannelOverrides,
-      knowledgeConnectorOverrides:
-        schema.organizationsTable.knowledgeConnectorOverrides,
-    };
-    const query = db.select(columns).from(schema.organizationsTable);
+  ): Promise<ModelProviderOverrideColumns> {
+    const query = db
+      .select({
+        modelProviderOverrides:
+          schema.organizationsTable.modelProviderOverrides,
+      })
+      .from(schema.organizationsTable);
     const [row] = await (id === null
       ? query.limit(1)
       : query.where(eq(schema.organizationsTable.id, id)).limit(1));
     return {
       modelProviderOverrides: row?.modelProviderOverrides ?? null,
-      messagingChannelOverrides: row?.messagingChannelOverrides ?? null,
-      knowledgeConnectorOverrides: row?.knowledgeConnectorOverrides ?? null,
     };
   }
 
@@ -766,8 +757,6 @@ class OrganizationModel {
       connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
       connectionDefaultClientId: org.connectionDefaultClientId ?? null,
       modelProviderOverrides: org.modelProviderOverrides ?? null,
-      messagingChannelOverrides: org.messagingChannelOverrides ?? null,
-      knowledgeConnectorOverrides: org.knowledgeConnectorOverrides ?? null,
       metadata: org.metadata ?? null,
       createdAt: org.createdAt.toISOString(),
     };

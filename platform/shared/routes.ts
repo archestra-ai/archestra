@@ -567,6 +567,7 @@ export const RouteId = {
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
+  GetUserResourceAccess: "getUserResourceAccess",
   GetImpersonableUsers: "getImpersonableUsers",
 
   // Team Token Routes

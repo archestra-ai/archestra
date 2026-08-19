@@ -7,8 +7,9 @@ import {
 } from "./model-constants";
 
 /**
- * Messaging channels an admin can hide or relabel. Mirrors the tabs on
- * /messaging-channels: the three ChatOps providers plus email and A2A.
+ * The messaging channel catalog. Mirrors the tabs on /messaging-channels: the
+ * three ChatOps providers plus email and A2A. Roles carry an allow-list over
+ * these ids — see `role-resource-access`.
  */
 export const MessagingChannelIdSchema = z.enum([
   "slack",
@@ -29,7 +30,7 @@ export const MESSAGING_CHANNEL_LABELS: Record<MessagingChannelId, string> = {
 
 /**
  * Keyed off the label map so a connector type added to
- * `CONNECTOR_TYPE_LABELS` is configurable without a second edit here.
+ * `CONNECTOR_TYPE_LABELS` is gateable without a second edit here.
  */
 export const KnowledgeConnectorIdSchema = z.enum(
   Object.keys(CONNECTOR_TYPE_LABELS) as [ConnectorType, ...ConnectorType[]],
@@ -38,38 +39,20 @@ export const KnowledgeConnectorIdSchema = z.enum(
 export const MAX_INTEGRATION_DISPLAY_NAME_LENGTH = 60;
 
 /**
- * An admin override of a built-in catalog entry.
+ * The organization's own name for a built-in model provider, which replaces
+ * the built-in one everywhere it is rendered.
  *
- * `hidden` is the off switch, and it is a real restriction rather than a
- * cosmetic one: a hidden entry disappears from the pickers and the API refuses
- * to configure it. An absent entry means "available, named as it ships".
- */
-const integrationToggleShape = { hidden: z.boolean().optional() };
-
-/**
- * Strict on input: a key this catalog does not take (a name on a toggle-only
- * catalog, say) is a client mistake worth a 400 rather than a silent strip.
- */
-export const IntegrationToggleSchema = z.strictObject(integrationToggleShape);
-export type IntegrationToggle = z.infer<typeof IntegrationToggleSchema>;
-
-/**
- * Lenient on the way out. These columns are jsonb, so a row written by an
- * older build can hold a key this one no longer knows; validating the stored
- * value strictly would turn that into a 500 on the organization endpoint —
- * one stale key taking the whole app down for everyone.
- */
-export const StoredIntegrationToggleSchema = z.object(integrationToggleShape);
-
-/**
- * Model providers additionally take the organization's own name for the
- * provider, which replaces the built-in one everywhere it is rendered.
- * Messaging channels and knowledge connectors are deliberately toggle-only:
- * they name a single external service each, so there is nothing to rename that
- * would not make the setup instructions harder to follow.
+ * Renaming is deliberately *not* part of the per-role access model: a provider
+ * that reads under two different names to two different people makes every
+ * setup instruction and support conversation ambiguous, so the name is one
+ * org-wide fact. Which roles may *use* the provider is the separate question
+ * `role-resource-access` answers.
+ *
+ * Messaging channels and knowledge connectors take no name at all: each names
+ * a single external service, and renaming those would only make their setup
+ * instructions harder to follow.
  */
 const modelProviderOverrideShape = {
-  ...integrationToggleShape,
   displayName: z
     .string()
     .trim()
@@ -77,6 +60,10 @@ const modelProviderOverrideShape = {
     .nullish(),
 };
 
+/**
+ * Strict on input: an unknown key is a client mistake worth a 400 rather than
+ * a silent strip.
+ */
 export const ModelProviderOverrideSchema = z.strictObject(
   modelProviderOverrideShape,
 );
@@ -89,40 +76,21 @@ export const ModelProviderOverridesSchema = z.partialRecord(
   ModelProviderOverrideSchema,
 );
 
-export const MessagingChannelOverridesSchema = z.partialRecord(
-  MessagingChannelIdSchema,
-  IntegrationToggleSchema,
-);
+// ---- Stored: what the organization column may actually hold ----
 
-export const KnowledgeConnectorOverridesSchema = z.partialRecord(
-  KnowledgeConnectorIdSchema,
-  IntegrationToggleSchema,
-);
-
-// ---- Stored: what the organization columns may actually hold ----
-
+/**
+ * Lenient on the way out. The column is jsonb, so a row written by an older
+ * build can hold a key this one no longer knows — the retired `hidden` flag,
+ * say, now expressed as a per-role allow-list. Validating the stored value
+ * strictly would turn that into a 500 on the organization endpoint: one stale
+ * key taking the whole app down for everyone.
+ */
 export const StoredModelProviderOverridesSchema = z.partialRecord(
   SupportedProvidersSchema,
   z.object(modelProviderOverrideShape),
 );
 export type ModelProviderOverrides = z.infer<
   typeof StoredModelProviderOverridesSchema
->;
-
-export const StoredMessagingChannelOverridesSchema = z.partialRecord(
-  MessagingChannelIdSchema,
-  StoredIntegrationToggleSchema,
-);
-export type MessagingChannelOverrides = z.infer<
-  typeof StoredMessagingChannelOverridesSchema
->;
-
-export const StoredKnowledgeConnectorOverridesSchema = z.partialRecord(
-  KnowledgeConnectorIdSchema,
-  StoredIntegrationToggleSchema,
-);
-export type KnowledgeConnectorOverrides = z.infer<
-  typeof StoredKnowledgeConnectorOverridesSchema
 >;
 
 /**
@@ -142,18 +110,6 @@ export function builtInProviderLabel(provider: SupportedProvider): string {
   return labels[provider];
 }
 
-type IntegrationOverrides<Id extends string> = Partial<
-  Record<Id, IntegrationToggle>
-> | null;
-
-/** True when an admin has switched this catalog entry off. */
-export function isIntegrationHidden<Id extends string>(
-  overrides: IntegrationOverrides<Id>,
-  id: Id,
-): boolean {
-  return overrides?.[id]?.hidden === true;
-}
-
 /**
  * The label to render for a catalog entry: the admin's override when they set
  * one, otherwise the built-in name.
@@ -168,9 +124,8 @@ export function integrationLabel<Id extends string>(
 }
 
 /**
- * Drops entries that carry no customization, so an admin who toggles a
- * provider off and back on leaves no residue behind and newly added catalog
- * entries keep defaulting to visible.
+ * Drops entries that carry no customization, so an admin who renames a
+ * provider and then clears the name leaves no residue behind.
  */
 export function pruneIntegrationOverrides<Id extends string>(
   overrides: Partial<Record<Id, ModelProviderOverride>>,
@@ -180,14 +135,9 @@ export function pruneIntegrationOverrides<Id extends string>(
     Id,
     ModelProviderOverride | undefined,
   ][]) {
-    if (!override) continue;
-    const displayName = override.displayName?.trim() || null;
-    const hidden = override.hidden === true;
-    if (!hidden && !displayName) continue;
-    pruned[id] = {
-      ...(hidden ? { hidden: true } : {}),
-      ...(displayName ? { displayName } : {}),
-    };
+    const displayName = override?.displayName?.trim();
+    if (!displayName) continue;
+    pruned[id] = { displayName };
   }
   return Object.keys(pruned).length > 0 ? pruned : null;
 }

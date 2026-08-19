@@ -6,7 +6,10 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
+  PredefinedRoleNameSchema,
+  type RoleResourceAccessInput,
   type SupportedProvider,
+  UNRESTRICTED_ROLE_RESOURCE_ACCESS,
 } from "@archestra/shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
@@ -19,6 +22,7 @@ import {
   AppVersionModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
+  RoleResourceAccessModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   SecretModel,
@@ -99,6 +103,7 @@ interface TestFixtures {
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
+  restrictRoleResourceAccess: typeof restrictRoleResourceAccess;
   makeMember: typeof makeMember;
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
@@ -625,7 +630,36 @@ async function makeCustomRole(
     ...result,
     predefined: false,
     permission: JSON.parse(result.permission),
+    resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
   };
+}
+
+/** The {@link restrictRoleResourceAccess} fixture, for tests that hoist it. */
+export type RestrictRoleResourceAccess = typeof restrictRoleResourceAccess;
+
+/**
+ * Narrows what a role may reach in the built-in catalogs.
+ *
+ * Pass a `role` to restrict one role, or omit it to restrict every predefined
+ * role at once — what a test needs when it exercises a decision made without a
+ * user (the ChatOps bots, the inbound email webhook), since those ask whether
+ * *any* role still allows the entry.
+ */
+async function restrictRoleResourceAccess(
+  organizationId: string,
+  access: RoleResourceAccessInput,
+  role?: string,
+): Promise<void> {
+  const roles = role
+    ? [role]
+    : Object.values(PredefinedRoleNameSchema.enum).map(String);
+  for (const target of roles) {
+    await RoleResourceAccessModel.upsert({
+      organizationId,
+      role: target,
+      access,
+    });
+  }
 }
 
 /**
@@ -1384,6 +1418,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);
+  },
+  restrictRoleResourceAccess: async ({}, use) => {
+    await use(restrictRoleResourceAccess);
   },
   makeMember: async ({}, use) => {
     await use(makeMember);

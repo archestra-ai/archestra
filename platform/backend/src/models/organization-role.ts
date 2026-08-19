@@ -11,6 +11,7 @@ import {
   roleDescriptions,
   roleDisplayNames,
   TimeInMs,
+  UNRESTRICTED_ROLE_RESOURCE_ACCESS,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -22,6 +23,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
+import RoleResourceAccessModel from "./role-resource-access";
 
 const ROLE_PERMISSIONS_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 const rolePermissionsCache = new LRUCacheManager<Permissions>({
@@ -40,6 +42,9 @@ const generatePredefinedRole = (
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
+  // Overwritten by attachResourceAccess on the async read paths; a synthesized
+  // role starts out unrestricted.
+  resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
   // we don't really care too much about the createdAt and updatedAt for predefined roles..
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -246,7 +251,11 @@ class OrganizationRoleModel {
         { identifier },
         "OrganizationRoleModel.getByIdentifier: returning predefined role",
       );
-      return generatePredefinedRole(identifier, organizationId);
+      const [predefined] = await attachResourceAccess(
+        [generatePredefinedRole(identifier, organizationId)],
+        organizationId,
+      );
+      return predefined;
     }
 
     const [result] = await db
@@ -275,10 +284,19 @@ class OrganizationRoleModel {
       { identifier },
       "OrganizationRoleModel.getByIdentifier: completed",
     );
-    return {
-      ...result,
-      permission: OrganizationRoleModel.sanitizePermissions(result.permission),
-    };
+    const [role] = await attachResourceAccess(
+      [
+        {
+          ...result,
+          permission: OrganizationRoleModel.sanitizePermissions(
+            result.permission,
+          ),
+          resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
+        },
+      ],
+      organizationId,
+    );
+    return role;
   }
 
   /**
@@ -298,7 +316,11 @@ class OrganizationRoleModel {
         { roleId },
         "OrganizationRoleModel.getById: returning predefined role",
       );
-      return generatePredefinedRole(roleId, organizationId);
+      const [predefined] = await attachResourceAccess(
+        [generatePredefinedRole(roleId, organizationId)],
+        organizationId,
+      );
+      return predefined;
     }
 
     // Query custom role from database by ID
@@ -322,10 +344,19 @@ class OrganizationRoleModel {
     }
 
     logger.debug({ roleId }, "OrganizationRoleModel.getById: completed");
-    return {
-      ...result,
-      permission: OrganizationRoleModel.sanitizePermissions(result.permission),
-    };
+    const [role] = await attachResourceAccess(
+      [
+        {
+          ...result,
+          permission: OrganizationRoleModel.sanitizePermissions(
+            result.permission,
+          ),
+          resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
+        },
+      ],
+      organizationId,
+    );
+    return role;
   }
 
   /**
@@ -418,15 +449,19 @@ class OrganizationRoleModel {
         },
         "OrganizationRoleModel.getAll: completed",
       );
-      return [
-        ...predefinedRoles,
-        ...customRoles.map((role) => ({
-          ...role,
-          permission: OrganizationRoleModel.sanitizePermissions(
-            role.permission,
-          ),
-        })),
-      ];
+      return attachResourceAccess(
+        [
+          ...predefinedRoles,
+          ...customRoles.map((role) => ({
+            ...role,
+            permission: OrganizationRoleModel.sanitizePermissions(
+              role.permission,
+            ),
+            resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
+          })),
+        ],
+        organizationId,
+      );
     } catch (_error) {
       logger.debug(
         { organizationId },
@@ -461,7 +496,7 @@ class OrganizationRoleModel {
     if (!isAdmin) {
       const pagedPredefined = predefinedRoles.slice(offset, offset + limit);
       return {
-        data: pagedPredefined,
+        data: await attachResourceAccess(pagedPredefined, organizationId),
         total: predefinedRoles.length,
       };
     }
@@ -506,15 +541,19 @@ class OrganizationRoleModel {
         : [];
 
     return {
-      data: [
-        ...takeFromPredefined,
-        ...customRoles.map((role) => ({
-          ...role,
-          permission: OrganizationRoleModel.sanitizePermissions(
-            role.permission,
-          ),
-        })),
-      ],
+      data: await attachResourceAccess(
+        [
+          ...takeFromPredefined,
+          ...customRoles.map((role) => ({
+            ...role,
+            permission: OrganizationRoleModel.sanitizePermissions(
+              role.permission,
+            ),
+            resourceAccess: { ...UNRESTRICTED_ROLE_RESOURCE_ACCESS },
+          })),
+        ],
+        organizationId,
+      ),
       total,
     };
   }
@@ -564,6 +603,7 @@ class OrganizationRoleModel {
       description: role.description ?? null,
       permission: role.permission,
       predefined: role.predefined,
+      resourceAccess: role.resourceAccess,
       createdAt: role.createdAt?.toISOString() ?? null,
     };
   }
@@ -607,4 +647,26 @@ function parseRolePermissionsValue(
     );
     return null;
   }
+}
+
+// ===================================================================
+// Internal
+// ===================================================================
+
+/**
+ * Fill in each role's per-role catalog allow-lists in one query, rather than
+ * one lookup per role. Roles with no stored row keep the unrestricted default
+ * the caller handed in.
+ */
+async function attachResourceAccess(
+  roles: OrganizationRole[],
+  organizationId: string,
+): Promise<OrganizationRole[]> {
+  if (roles.length === 0) return roles;
+  const byRole =
+    await RoleResourceAccessModel.getForOrganization(organizationId);
+  return roles.map((role) => {
+    const access = byRole[role.role];
+    return access ? { ...role, resourceAccess: access } : role;
+  });
 }

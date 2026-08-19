@@ -1,4 +1,7 @@
-import { PermissionsSchema } from "@archestra/shared";
+import {
+  PermissionsSchema,
+  RoleResourceAccessSchema,
+} from "@archestra/shared";
 import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -22,6 +25,16 @@ export const SelectOrganizationRoleSchema = z.object({
    * This dictates to clients whether or not the role is mutable
    */
   predefined: z.boolean(),
+  /**
+   * Which entries of the built-in catalogs (model providers, knowledge
+   * connectors, messaging channels, connection-page clients) this role may
+   * reach. A `null` list means unrestricted; an empty list means none.
+   *
+   * Unlike `permission`, this is editable on predefined roles too: it is
+   * organization data rather than part of the role's code-defined definition,
+   * and "member" is the role organizations most often need to restrict.
+   */
+  resourceAccess: RoleResourceAccessSchema,
 });
 export const InsertOrganizationRoleSchema = createInsertSchema(
   schema.organizationRolesTable,

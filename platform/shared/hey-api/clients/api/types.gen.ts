@@ -71207,6 +71207,12 @@ export type GetRolesResponses = {
             createdAt: string;
             updatedAt: string | null;
             predefined: boolean;
+            resourceAccess: {
+                modelProviders: Array<string> | null;
+                knowledgeConnectors: Array<string> | null;
+                messagingChannels: Array<string> | null;
+                connectClients: Array<string> | null;
+            };
         }>;
         pagination: {
             currentPage: number;
@@ -71227,6 +71233,12 @@ export type CreateRoleData = {
         description?: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        };
+        resourceAccess?: {
+            modelProviders?: Array<string> | null;
+            knowledgeConnectors?: Array<string> | null;
+            messagingChannels?: Array<string> | null;
+            connectClients?: Array<string> | null;
         };
     };
     path?: never;
@@ -71315,6 +71327,12 @@ export type CreateRoleResponses = {
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
+        resourceAccess: {
+            modelProviders: Array<string> | null;
+            knowledgeConnectors: Array<string> | null;
+            messagingChannels: Array<string> | null;
+            connectClients: Array<string> | null;
+        };
     };
 };
 
@@ -71501,6 +71519,12 @@ export type GetRoleResponses = {
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
+        resourceAccess: {
+            modelProviders: Array<string> | null;
+            knowledgeConnectors: Array<string> | null;
+            messagingChannels: Array<string> | null;
+            connectClients: Array<string> | null;
+        };
     };
 };
 
@@ -71512,6 +71536,12 @@ export type UpdateRoleData = {
         description?: string;
         permission?: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        };
+        resourceAccess?: {
+            modelProviders?: Array<string> | null;
+            knowledgeConnectors?: Array<string> | null;
+            messagingChannels?: Array<string> | null;
+            connectClients?: Array<string> | null;
         };
     };
     path: {
@@ -71605,6 +71635,12 @@ export type UpdateRoleResponses = {
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
+        resourceAccess: {
+            modelProviders: Array<string> | null;
+            knowledgeConnectors: Array<string> | null;
+            messagingChannels: Array<string> | null;
+            connectClients: Array<string> | null;
+        };
     };
 };
 
@@ -71750,8 +71786,6 @@ export type GetOrganizationResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -71763,18 +71797,7 @@ export type GetOrganizationResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72064,8 +72087,6 @@ export type UpdateAppearanceSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -72077,18 +72098,7 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72261,8 +72271,6 @@ export type UpdateSecuritySettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -72274,18 +72282,7 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72453,8 +72450,6 @@ export type UpdateLlmSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -72466,18 +72461,7 @@ export type UpdateLlmSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72645,8 +72629,6 @@ export type UpdateMcpSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -72658,18 +72640,7 @@ export type UpdateMcpSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -72836,8 +72807,6 @@ export type UpdateSkillsSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -72849,18 +72818,7 @@ export type UpdateSkillsSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73029,8 +72987,6 @@ export type UpdateAgentSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -73042,18 +72998,7 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73086,8 +73031,6 @@ export type UpdateConnectionSettingsData = {
         } | null;
         connectionDefaultLlmProxyId?: string | null;
         connectionDefaultClientId?: string | null;
-        connectionShownClientIds?: Array<string> | null;
-        connectionShownProviders?: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra'> | null;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;
@@ -73233,8 +73176,6 @@ export type UpdateConnectionSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -73246,18 +73187,7 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73286,18 +73216,7 @@ export type UpdateIntegrationSettingsData = {
     body: {
         modelProviderOverrides?: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides?: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides?: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
     };
@@ -73439,8 +73358,6 @@ export type UpdateIntegrationSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -73452,18 +73369,7 @@ export type UpdateIntegrationSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73641,8 +73547,6 @@ export type UpdateDefaultEnvironmentResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -73654,18 +73558,7 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -73835,8 +73728,6 @@ export type UpdateAuthSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -73848,18 +73739,7 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -74031,8 +73911,6 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -74044,18 +73922,7 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -74220,8 +74087,6 @@ export type DropEmbeddingConfigResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -74233,18 +74098,7 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -74672,8 +74526,6 @@ export type CompleteOnboardingResponses = {
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
             description: string;
@@ -74685,18 +74537,7 @@ export type CompleteOnboardingResponses = {
         } | null;
         modelProviderOverrides: {
             [key: string]: {
-                hidden?: boolean;
                 displayName?: string | null;
-            };
-        } | null;
-        messagingChannelOverrides: {
-            [key: string]: {
-                hidden?: boolean;
-            };
-        } | null;
-        knowledgeConnectorOverrides: {
-            [key: string]: {
-                hidden?: boolean;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -86052,6 +85893,92 @@ export type GetUserPermissionsResponses = {
 };
 
 export type GetUserPermissionsResponse = GetUserPermissionsResponses[keyof GetUserPermissionsResponses];
+
+export type GetUserResourceAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user/resource-access';
+};
+
+export type GetUserResourceAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetUserResourceAccessError = GetUserResourceAccessErrors[keyof GetUserResourceAccessErrors];
+
+export type GetUserResourceAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        modelProviders: Array<string> | null;
+        knowledgeConnectors: Array<string> | null;
+        messagingChannels: Array<string> | null;
+        connectClients: Array<string> | null;
+    };
+};
+
+export type GetUserResourceAccessResponse = GetUserResourceAccessResponses[keyof GetUserResourceAccessResponses];
 
 export type GetImpersonableUsersData = {
     body?: never;

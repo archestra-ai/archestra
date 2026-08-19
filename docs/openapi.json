@@ -277466,6 +277466,46 @@
                           },
                           "predefined": {
                             "type": "boolean"
+                          },
+                          "resourceAccess": {
+                            "type": "object",
+                            "properties": {
+                              "modelProviders": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "knowledgeConnectors": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messagingChannels": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "connectClients": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "modelProviders",
+                              "knowledgeConnectors",
+                              "messagingChannels",
+                              "connectClients"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -277477,7 +277517,8 @@
                           "permission",
                           "createdAt",
                           "updatedAt",
-                          "predefined"
+                          "predefined",
+                          "resourceAccess"
                         ],
                         "additionalProperties": false
                       }
@@ -277816,6 +277857,39 @@
                         ]
                       }
                     }
+                  },
+                  "resourceAccess": {
+                    "type": "object",
+                    "properties": {
+                      "modelProviders": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "knowledgeConnectors": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "messagingChannels": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "connectClients": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 },
                 "required": [
@@ -277888,6 +277962,46 @@
                     },
                     "predefined": {
                       "type": "boolean"
+                    },
+                    "resourceAccess": {
+                      "type": "object",
+                      "properties": {
+                        "modelProviders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "knowledgeConnectors": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "messagingChannels": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectClients": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "modelProviders",
+                        "knowledgeConnectors",
+                        "messagingChannels",
+                        "connectClients"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -277899,7 +278013,8 @@
                     "permission",
                     "createdAt",
                     "updatedAt",
-                    "predefined"
+                    "predefined",
+                    "resourceAccess"
                   ],
                   "additionalProperties": false
                 }
@@ -278238,6 +278353,46 @@
                     },
                     "predefined": {
                       "type": "boolean"
+                    },
+                    "resourceAccess": {
+                      "type": "object",
+                      "properties": {
+                        "modelProviders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "knowledgeConnectors": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "messagingChannels": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectClients": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "modelProviders",
+                        "knowledgeConnectors",
+                        "messagingChannels",
+                        "connectClients"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -278249,7 +278404,8 @@
                     "permission",
                     "createdAt",
                     "updatedAt",
-                    "predefined"
+                    "predefined",
+                    "resourceAccess"
                   ],
                   "additionalProperties": false
                 }
@@ -278497,7 +278653,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Update a custom role\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`ac:update`: Modify custom role permissions",
+        "description": "Update a role. Name, description and permissions are custom-role only; resourceAccess can also be set on a predefined role.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`ac:update`: Modify custom role permissions",
         "requestBody": {
           "required": true,
           "content": {
@@ -278538,6 +278694,39 @@
                           "share-org",
                           "impersonate"
                         ]
+                      }
+                    }
+                  },
+                  "resourceAccess": {
+                    "type": "object",
+                    "properties": {
+                      "modelProviders": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "knowledgeConnectors": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "messagingChannels": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "connectClients": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     }
                   }
@@ -278634,6 +278823,46 @@
                     },
                     "predefined": {
                       "type": "boolean"
+                    },
+                    "resourceAccess": {
+                      "type": "object",
+                      "properties": {
+                        "modelProviders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "knowledgeConnectors": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "messagingChannels": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectClients": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "modelProviders",
+                        "knowledgeConnectors",
+                        "messagingChannels",
+                        "connectClients"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -278645,7 +278874,8 @@
                     "permission",
                     "createdAt",
                     "updatedAt",
-                    "predefined"
+                    "predefined",
+                    "resourceAccess"
                   ],
                   "additionalProperties": false
                 }
@@ -279547,20 +279777,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -279610,39 +279826,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -279790,13 +279977,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -280602,20 +280785,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -280665,39 +280834,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -280845,13 +280985,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -281912,20 +282048,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -281975,39 +282097,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -282155,13 +282248,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -282823,20 +282912,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -282886,39 +282961,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -283066,13 +283112,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -283730,20 +283772,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -283793,39 +283821,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -283973,13 +283972,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -284634,20 +284629,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -284697,39 +284678,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -284877,13 +284829,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -285553,20 +285501,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -285616,39 +285550,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -285796,13 +285701,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -286097,46 +285998,6 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 64
-                  },
-                  "connectionShownClientIds": {
-                    "nullable": true,
-                    "maxItems": 50,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "connectionShownProviders": {
-                    "nullable": true,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "ollama-native",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "kimi",
-                        "azure",
-                        "github-copilot",
-                        "microsoft-365-copilot",
-                        "archestra"
-                      ]
-                    }
                   },
                   "connectionBaseUrls": {
                     "nullable": true,
@@ -286551,20 +286412,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -286614,39 +286461,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -286794,13 +286612,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -287062,7 +286876,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Rename the built-in model providers for this organization. Only the providers actually renamed need an entry; null clears every name. Which roles may use a provider is configured per role, not here.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -287076,39 +286890,10 @@
                     "additionalProperties": {
                       "type": "object",
                       "properties": {
-                        "hidden": {
-                          "type": "boolean"
-                        },
                         "displayName": {
                           "nullable": true,
                           "type": "string",
                           "maxLength": 60
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  },
-                  "messagingChannelOverrides": {
-                    "nullable": true,
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "hidden": {
-                          "type": "boolean"
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  },
-                  "knowledgeConnectorOverrides": {
-                    "nullable": true,
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "hidden": {
-                          "type": "boolean"
                         }
                       },
                       "additionalProperties": false
@@ -287496,20 +287281,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -287559,39 +287330,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -287739,13 +287481,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -288473,20 +288211,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -288536,39 +288260,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -288716,13 +288411,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -289393,20 +289084,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -289456,39 +289133,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -289636,13 +289284,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -290325,20 +289969,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -290388,39 +290018,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -290568,13 +290169,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -291214,20 +290811,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -291277,39 +290860,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -291457,13 +291011,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -293000,20 +292550,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "connectionShownClientIds": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "connectionShownProviders": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
                     "connectionBaseUrls": {
                       "nullable": true,
                       "type": "array",
@@ -293063,39 +292599,10 @@
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          },
                           "displayName": {
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "messagingChannelOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    },
-                    "knowledgeConnectorOverrides": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "hidden": {
-                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
@@ -293243,13 +292750,9 @@
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
-                    "connectionShownClientIds",
-                    "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
                     "modelProviderOverrides",
-                    "messagingChannelOverrides",
-                    "knowledgeConnectorOverrides",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -333585,6 +333088,297 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/user/resource-access": {
+      "get": {
+        "operationId": "getUserResourceAccess",
+        "tags": [
+          "User"
+        ],
+        "description": "Which entries of the built-in catalogs (model providers, knowledge connectors, messaging channels, connection-page clients) the caller's role allows. A null list means unrestricted; an empty list means none.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "modelProviders": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "knowledgeConnectors": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "messagingChannels": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connectClients": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "modelProviders",
+                    "knowledgeConnectors",
+                    "messagingChannels",
+                    "connectClients"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

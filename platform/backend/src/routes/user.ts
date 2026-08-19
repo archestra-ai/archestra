@@ -1,7 +1,12 @@
-import { PermissionsSchema, RouteId } from "@archestra/shared";
+import {
+  PermissionsSchema,
+  RoleResourceAccessSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { getUserResourceAccess } from "@/services/role-resource-access";
 import { getUserPermissions, listImpersonableUsers } from "@/services/user";
 import { ApiError, constructResponseSchema } from "@/types";
 
@@ -29,6 +34,26 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(permissions);
+    },
+  );
+
+  fastify.get(
+    "/api/user/resource-access",
+    {
+      schema: {
+        operationId: RouteId.GetUserResourceAccess,
+        description:
+          "Which entries of the built-in catalogs (model providers, knowledge connectors, messaging channels, connection-page clients) the caller's role allows. A null list means unrestricted; an empty list means none.",
+        tags: ["User"],
+        response: constructResponseSchema(RoleResourceAccessSchema),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const access = await getUserResourceAccess({
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(access);
     },
   );
 

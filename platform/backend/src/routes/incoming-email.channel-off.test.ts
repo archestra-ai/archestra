@@ -1,8 +1,14 @@
 import { vi } from "vitest";
-import { OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type RestrictRoleResourceAccess,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/agents/incoming-email", () => ({
@@ -26,36 +32,43 @@ describe("incoming email while the channel is turned off", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
+  let restrictAccess: RestrictRoleResourceAccess;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    vi.clearAllMocks();
-    vi.mocked(getEmailProvider).mockReturnValue({
-      providerId: "outlook",
-      generateEmailAddress: (agentId: string) => `agent-${agentId}@example.com`,
-    } as unknown as ReturnType<typeof getEmailProvider>);
+  beforeEach(
+    async ({ makeOrganization, makeUser, restrictRoleResourceAccess }) => {
+      vi.clearAllMocks();
+      vi.mocked(getEmailProvider).mockReturnValue({
+        providerId: "outlook",
+        generateEmailAddress: (agentId: string) =>
+          `agent-${agentId}@example.com`,
+      } as unknown as ReturnType<typeof getEmailProvider>);
 
-    user = await makeUser();
-    const organization = await makeOrganization();
-    organizationId = organization.id;
+      user = await makeUser();
+      const organization = await makeOrganization();
+      organizationId = organization.id;
+      restrictAccess = restrictRoleResourceAccess;
 
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: User }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-    const { default: incomingEmailRoutes } = await import("./incoming-email");
-    await app.register(incomingEmailRoutes);
-  });
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: User }).user = user;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = organizationId;
+      });
+      const { default: incomingEmailRoutes } = await import("./incoming-email");
+      await app.register(incomingEmailRoutes);
+    },
+  );
 
   afterEach(async () => {
     await app.close();
   });
 
+  // Every role, not just the caller's: the subscription-status route and the
+  // webhook itself have no user to resolve a role against, so they ask whether
+  // *any* role still allows the channel.
   const turnEmailOff = () =>
-    OrganizationModel.patch(organizationId, {
-      messagingChannelOverrides: { email: { hidden: true } },
-    });
+    restrictAccess(organizationId, { messagingChannels: ["slack"] });
 
   test("stops advertising an agent's email address", async ({ makeAgent }) => {
     const agent = await makeAgent({ organizationId, authorId: user.id });
@@ -121,6 +134,8 @@ describe("incoming email while the channel is turned off", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("turned off");
+    expect(response.json().error.message).toContain(
+      "not available to your role",
+    );
   });
 });

@@ -28,7 +28,7 @@ import {
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
-import { getHiddenMessagingChannels } from "@/services/integration-overrides";
+import { getDisallowedMessagingChannels } from "@/services/role-resource-access";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
@@ -310,13 +310,15 @@ export class ChatOpsManager {
     // chat channel offline until someone restarts or saves a config. The
     // window is also narrow: a database the overrides cannot be read from is
     // one the config loads above already failed on, leaving nothing to start.
-    const hiddenChannels = await getHiddenMessagingChannels().catch((error) => {
-      logger.error(
-        { error: errorMessage(error) },
-        "[ChatOps] Failed to load messaging channel overrides, treating all channels as enabled",
-      );
-      return new Set<MessagingChannelId>();
-    });
+    const hiddenChannels = await getDisallowedMessagingChannels().catch(
+      (error) => {
+        logger.error(
+          { error: errorMessage(error) },
+          "[ChatOps] Failed to load per-role channel access, treating all channels as enabled",
+        );
+        return new Set<MessagingChannelId>();
+      },
+    );
 
     // Create providers with their config
     if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {

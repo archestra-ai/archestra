@@ -42,7 +42,7 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
-import { assertModelProviderAllowed } from "@/services/integration-overrides";
+import { assertModelProviderAllowed } from "@/services/role-resource-access";
 import { modelSyncService } from "@/services/model-sync";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
@@ -141,7 +141,7 @@ async function resolveProviderLabel(params: {
   provider: SupportedProvider;
 }): Promise<string> {
   const { modelProviderOverrides } =
-    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+    await OrganizationModel.getModelProviderOverrides(params.organizationId);
   return integrationLabel(
     modelProviderOverrides,
     params.provider,
@@ -445,6 +445,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       validateProviderAllowed(body.provider);
       // …and providers the organization's admins switched off entirely.
       await assertModelProviderAllowed({
+        userId: user.id,
         organizationId,
         provider: body.provider,
       });
@@ -875,9 +876,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      // A key for a provider the admins switched off is frozen: it can be
+      // A key for a provider the caller's role excludes is frozen: it can be
       // deleted, but not renamed, rescoped, or rotated back into service.
       await assertModelProviderAllowed({
+        userId: user.id,
         organizationId,
         provider: apiKeyFromDB.provider,
       });

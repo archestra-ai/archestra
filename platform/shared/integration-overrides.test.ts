@@ -1,26 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   integrationLabel,
-  isIntegrationHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
   pruneIntegrationOverrides,
 } from "./integration-overrides";
 import { CONNECTOR_TYPE_LABELS } from "./knowledge-base";
-
-describe("isIntegrationHidden", () => {
-  it("treats a missing entry as visible so new catalog entries ship on", () => {
-    expect(isIntegrationHidden(null, "openai")).toBe(false);
-    expect(isIntegrationHidden({}, "openai")).toBe(false);
-    expect(isIntegrationHidden({ openai: {} }, "openai")).toBe(false);
-  });
-
-  it("hides only entries explicitly switched off", () => {
-    const overrides = { openai: { hidden: true }, gemini: { hidden: false } };
-    expect(isIntegrationHidden(overrides, "openai")).toBe(true);
-    expect(isIntegrationHidden(overrides, "gemini")).toBe(false);
-  });
-});
 
 describe("integrationLabel", () => {
   it("falls back to the built-in name when no override is set", () => {
@@ -46,33 +31,23 @@ describe("integrationLabel", () => {
 });
 
 describe("pruneIntegrationOverrides", () => {
-  it("drops entries that carry no customization", () => {
+  it("drops entries that carry no name", () => {
     expect(
       pruneIntegrationOverrides({
-        openai: { hidden: false, displayName: "" },
-        gemini: { hidden: false, displayName: "   " },
+        openai: { displayName: "" },
+        gemini: { displayName: "   " },
+        anthropic: {},
       }),
     ).toBeNull();
   });
 
-  it("keeps only the fields the admin actually set", () => {
+  it("keeps the trimmed names the admin actually set", () => {
     expect(
       pruneIntegrationOverrides({
-        openai: { hidden: true, displayName: "" },
-        gemini: { hidden: false, displayName: " Gemini Pro " },
+        openai: { displayName: "" },
+        gemini: { displayName: " Gemini Pro " },
       }),
-    ).toEqual({
-      openai: { hidden: true },
-      gemini: { displayName: "Gemini Pro" },
-    });
-  });
-
-  it("keeps a label on a turned-off provider so re-enabling restores the name", () => {
-    expect(
-      pruneIntegrationOverrides({
-        openai: { hidden: true, displayName: "OpenAI (retired)" },
-      }),
-    ).toEqual({ openai: { hidden: true, displayName: "OpenAI (retired)" } });
+    ).toEqual({ gemini: { displayName: "Gemini Pro" } });
   });
 });
 

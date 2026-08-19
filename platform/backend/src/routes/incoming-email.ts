@@ -13,8 +13,9 @@ import logger from "@/logging";
 import { AgentModel } from "@/models";
 import {
   assertMessagingChannelAllowed,
-  getHiddenMessagingChannels,
-} from "@/services/integration-overrides";
+  getDisallowedMessagingChannels,
+  isMessagingChannelAllowed,
+} from "@/services/role-resource-access";
 import {
   ApiError,
   constructResponseSchema,
@@ -140,22 +141,26 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // An admin who switched the email channel off expects mail to stop
-      // reaching agents, even while a provider subscription is still live.
+      // An organization that took the email channel away from every role
+      // expects mail to stop reaching agents, even while a provider
+      // subscription is still live. The webhook has no user to resolve a role
+      // against, so it asks the organization-wide question: mail keeps flowing
+      // while any role may still use the channel.
+      //
       // Sits behind the rate limiter so an unauthenticated caller cannot spend
       // a database round-trip per request on it.
       //
-      // A failure to read the overrides answers 503 rather than letting the
+      // A failure to read the access lists answers 503 rather than letting the
       // error surface as a 500: providers redeliver on 5xx, so an unreadable
       // switch defers the message instead of guessing at the policy and
       // delivering mail the organization may have turned off.
       let emailTurnedOff: boolean;
       try {
-        emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+        emailTurnedOff = (await getDisallowedMessagingChannels()).has("email");
       } catch (error) {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
-          "[IncomingEmail] Could not read messaging channel overrides",
+          "[IncomingEmail] Could not read per-role messaging channel access",
         );
         return reply.status(503).send({
           error: "Channel availability could not be determined — retry later",
@@ -278,10 +283,15 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const provider = getEmailProvider();
 
-      // A turned-off channel must read as off everywhere, not just where it is
-      // configured: this endpoint also backs the agent connect instructions,
-      // which would otherwise hand out an address the webhook refuses.
-      const emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+      // A channel the caller's role excludes must read as off everywhere, not
+      // just where it is configured: this endpoint also backs the agent connect
+      // instructions, which would otherwise hand out an address the caller
+      // cannot set up.
+      const emailTurnedOff = !(await isMessagingChannelAllowed({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        channel: "email",
+      }));
 
       if (!provider || emailTurnedOff) {
         return reply.send({
@@ -343,9 +353,11 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // The subscription itself is still reported — an admin needs to see what
-      // is left behind — but a turned-off channel is never "active", because
-      // the webhook it points at refuses every notification.
-      const emailTurnedOff = (await getHiddenMessagingChannels()).has("email");
+      // is left behind — but a channel no role can use is never "active",
+      // because the webhook it points at refuses every notification.
+      const emailTurnedOff = (await getDisallowedMessagingChannels()).has(
+        "email",
+      );
 
       return reply.send({
         isActive: status.isActive && !emailTurnedOff,
@@ -384,6 +396,7 @@ const incomingEmailRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Incoming email provider not configured");
       }
       await assertMessagingChannelAllowed({
+        userId: request.user.id,
         organizationId: request.organizationId,
         channel: "email",
       });

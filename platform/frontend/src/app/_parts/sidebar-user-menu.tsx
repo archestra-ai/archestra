@@ -23,9 +23,9 @@ import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 
 /**
- * Sidebar footer user menu: avatar + name/email trigger. The Personal
- * Settings item opens the account page; below it sit the theme switcher and
- * Sign Out. Renders nothing until a session exists.
+ * Sidebar footer user menu: avatar + name/email trigger. The theme switcher
+ * sits at the top; below it the Personal Settings item opens the account page,
+ * followed by Sign Out. Renders nothing until a session exists.
  *
  * The trigger markup (button > div > Avatar + text, chevron as direct svg
  * child) is load-bearing: the collapsed-sidebar styles in sidebar.tsx target
@@ -77,13 +77,6 @@ export function SidebarUserMenu() {
         // trigger's ring is focus-visible-only, so pointer-driven closes don't
         // show a stray border.
       >
-        <DropdownMenuItem asChild>
-          <Link href="/account">
-            <Settings className="size-4" />
-            Personal Settings
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <div className="flex gap-1 px-2 py-1.5">
           {themeOptions.map(({ value, label, Icon }) => (
             <Button
@@ -103,6 +96,13 @@ export function SidebarUserMenu() {
             </Button>
           ))}
         </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/account">
+            <Settings className="size-4" />
+            Personal Settings
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/auth/sign-out">

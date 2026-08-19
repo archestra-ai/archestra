@@ -80,6 +80,40 @@ describe("SidebarUserMenu", () => {
     );
   });
 
+  it("orders the menu as theme switcher, Personal Settings, then Sign Out", async () => {
+    const user = userEvent.setup();
+    vi.mocked(authClient.getSession).mockResolvedValue({
+      data: {
+        user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
+        session: { id: "session-1" },
+      },
+      error: null,
+    } as Awaited<ReturnType<typeof authClient.getSession>>);
+
+    renderMenu();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Ada Lovelace/ }),
+    );
+
+    const themeSwitcher = (
+      await screen.findByRole("button", { name: "System" })
+    ).parentElement as HTMLElement;
+    const settings = screen.getByRole("menuitem", {
+      name: /personal settings/i,
+    });
+    const signOut = screen.getByRole("menuitem", { name: /sign out/i });
+
+    expect(
+      themeSwitcher.compareDocumentPosition(settings) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      settings.compareDocumentPosition(signOut) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("switches the theme via the theme mode buttons", async () => {
     const user = userEvent.setup();
     const setTheme = vi.fn();

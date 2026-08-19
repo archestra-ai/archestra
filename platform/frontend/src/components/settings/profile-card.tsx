@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
 import { useSession } from "@/lib/auth/auth.query";
@@ -49,24 +48,23 @@ export function ProfileCard() {
   return (
     <Card>
       <CardContent>
-        {/* A settings form is read left-to-right at a fixed measure: fields
-            stretched to a 1400px card are hard to scan and imply far more
-            input than a name. */}
-        <div className="max-w-xl space-y-6">
-          {/* Display-only: there is no self-service upload endpoint. The name
-              is not repeated beside it — the Name field below holds the same
-              value, and printing it twice just makes the reader check whether
-              the two agree. */}
-          <Avatar className="size-16">
+        {/* The avatar sits in the gutter beside the fields, so the form starts
+            at one left edge instead of stepping in after a full-width header.
+            Display-only: there is no self-service upload endpoint, and the
+            name is not repeated here — the Name field holds it. */}
+        <div className="flex gap-4">
+          <Avatar className="size-16 shrink-0">
             {image && <AvatarImage src={image} alt="" />}
             <AvatarFallback className="text-base">
               {(name || email).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-
-          <Separator />
-
-          <ProfileForm name={name} email={email} role={role ?? ""} />
+          {/* A settings form is read at a fixed measure: fields stretched to a
+              1400px card are hard to scan and imply far more input than a
+              name. */}
+          <div className="w-full min-w-0 max-w-xl">
+            <ProfileForm name={name} email={email} role={role ?? ""} />
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -189,17 +187,18 @@ function ProfileSkeleton() {
       <CardContent>
         {/* Shaped like the form it replaces, so the section does not jump
             when the session lands. */}
-        <div className="max-w-xl space-y-6">
-          <Skeleton className="size-16 rounded-full" />
-          <Separator />
-          {["name", "email", "role"].map((field) => (
-            <div key={field} className="grid gap-2">
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          ))}
-          <Skeleton className="h-9 w-32" />
+        <div className="flex gap-4">
+          <Skeleton className="size-16 shrink-0 rounded-full" />
+          <div className="w-full min-w-0 max-w-xl space-y-6">
+            {["name", "email", "role"].map((field) => (
+              <div key={field} className="grid gap-2">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            ))}
+            <Skeleton className="h-9 w-32" />
+          </div>
         </div>
       </CardContent>
     </Card>

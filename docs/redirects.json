@@ -16,6 +16,6 @@
     { "source": "/docs/platform-knowledge-connectors", "destination": "/docs/platform-knowledge", "permanent": true },
     { "source": "/docs/platform-migration-kit", "destination": "/docs/platform-migrate-from-claude-openclaw-hermes", "permanent": true },
     { "source": "/docs/platform-mfiles-connector", "destination": "/docs/platform-knowledge#m-files", "permanent": true },
-    { "source": "/docs/platform-available-integrations", "destination": "/docs/platform-supported-llm-providers#turning-providers-off", "permanent": true }
+    { "source": "/docs/platform-available-integrations", "destination": "/docs/platform-access-control#built-in-catalog-access", "permanent": true }
   ]
 }

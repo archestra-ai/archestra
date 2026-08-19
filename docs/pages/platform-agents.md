@@ -96,7 +96,7 @@ Agents can be triggered through:
 
 Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
 
-As an admin, open **Page settings** on Messaging Channels and switch **Available** off for any channel your organization does not allow. A turned-off channel disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
+Each role carries its own list of the channels it may configure, under **Resource access** in Settings → Roles. A channel keeps listening while any role still includes it, so take it away from every role to switch it off — a connected Slack bot then stops answering, and email stops reaching agents.
 
 ## Knowledge Sources
 

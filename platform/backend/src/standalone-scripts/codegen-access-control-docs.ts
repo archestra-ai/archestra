@@ -197,6 +197,22 @@ Some MCP-related resources also apply runtime scope checks in addition to RBAC, 
 - Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
 
 When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
+
+### Built-In Catalog Access
+
+Roles also carry an allow-list per built-in catalog: model providers, knowledge connectors, messaging channels, and the clients offered on the connection page. Edit them under **Resource access** on the role, in Settings → Roles.
+
+![The resource access sections of a role, in Settings, Roles](/docs/automated_screenshots/platform-access-control_role-resource-access.webp)
+
+This is separate from the permission matrix. \`llmProviderApiKey:create\` decides whether a role can add a provider key at all; the model-provider list decides which providers it may add one for.
+
+A role with no list stored is unrestricted, so entries added by a later release are available to it automatically. An empty list means none of that catalog.
+
+An entry a role does not have disappears from that person's pickers, and the API refuses to configure it. Credentials and connectors that already exist keep working, so narrowing a role never breaks live traffic.
+
+A messaging channel is the one catalog read organization-wide: it keeps listening while any role still includes it. To switch Telegram off for everybody, take it away from every role.
+
+Predefined roles take these lists too — their permissions stay read-only, their resource access does not.
 `;
 }
 

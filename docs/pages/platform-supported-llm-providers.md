@@ -14,15 +14,15 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## Turning Providers Off
 
-Most organizations only allow a few providers. As an admin, open **Page settings** on Model Providers and switch **Available** off for the rest. A turned-off provider disappears from every picker, and the API refuses to configure it.
+Most organizations only allow a few providers. Each role carries its own list of the ones it may use, under **Resource access** in Settings → Roles. A provider a role does not have disappears from every picker, and the API refuses to configure it. See [Built-In Catalog Access](/docs/platform-access-control#built-in-catalog-access).
 
-![The Model Providers page with the admin-only Page settings dialog open](/docs/automated_screenshots/platform-supported-llm-providers_page-settings.webp)
-
-Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
+Keys that already exist keep working, so narrowing a role never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
 
 ## Renaming a Provider
 
-A provider row also takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave it empty to keep the name the provider ships with.
+Provider names are organization-wide, under **Settings → LLM → Provider names**. A name replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave a field empty to keep the name the provider ships with.
+
+Renaming is deliberately not per role. A provider that reads under two names to two people makes every setup instruction ambiguous.
 
 Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
 

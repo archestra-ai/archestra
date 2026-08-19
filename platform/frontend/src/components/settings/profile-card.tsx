@@ -48,23 +48,16 @@ export function ProfileCard() {
   return (
     <Card>
       <CardContent>
-        {/* The avatar sits in the gutter beside the fields, so the form starts
-            at one left edge instead of stepping in after a full-width header.
-            Display-only: there is no self-service upload endpoint, and the
-            name is not repeated here — the Name field holds it. */}
-        <div className="flex gap-4">
-          <Avatar className="size-16 shrink-0">
-            {image && <AvatarImage src={image} alt="" />}
-            <AvatarFallback className="text-base">
-              {(name || email).slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          {/* A settings form is read at a fixed measure: fields stretched to a
-              1400px card are hard to scan and imply far more input than a
-              name. */}
-          <div className="w-full min-w-0 max-w-xl">
-            <ProfileForm name={name} email={email} role={role ?? ""} />
-          </div>
+        {/* A settings form is read at a fixed measure: fields stretched to a
+            1400px card are hard to scan and imply far more input than a
+            name. */}
+        <div className="max-w-xl">
+          <ProfileForm
+            name={name}
+            email={email}
+            image={image}
+            role={role ?? ""}
+          />
         </div>
       </CardContent>
     </Card>
@@ -74,10 +67,12 @@ export function ProfileCard() {
 function ProfileForm({
   name,
   email,
+  image,
   role,
 }: {
   name: string;
   email: string;
+  image: string | null;
   role: string;
 }) {
   const updateName = useUpdateAccountNameMutation();
@@ -98,26 +93,39 @@ function ProfileForm({
   return (
     <Form {...form}>
       <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem className="gap-2">
-              <FormLabel>Name</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  autoComplete="name"
-                  disabled={updateName.isPending}
-                />
-              </FormControl>
-              <FormDescription className="text-pretty">
-                Shown next to you across the app.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* The avatar takes the gutter beside the first field only; the name
+            input flexes into what is left, so every input in the form still
+            ends on the same right edge. Display-only — there is no
+            self-service upload endpoint — and the name is not printed beside
+            it, since this field already holds it. */}
+        <div className="flex items-start gap-4">
+          <Avatar className="size-16 shrink-0">
+            {image && <AvatarImage src={image} alt="" />}
+            <AvatarFallback className="text-base">
+              {(name || email).slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="min-w-0 flex-1 gap-2">
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    autoComplete="name"
+                    disabled={updateName.isPending}
+                  />
+                </FormControl>
+                <FormDescription className="text-pretty">
+                  Shown next to you across the app.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <ReadOnlyField
           id="account-email"
@@ -187,18 +195,23 @@ function ProfileSkeleton() {
       <CardContent>
         {/* Shaped like the form it replaces, so the section does not jump
             when the session lands. */}
-        <div className="flex gap-4">
-          <Skeleton className="size-16 shrink-0 rounded-full" />
-          <div className="w-full min-w-0 max-w-xl space-y-6">
-            {["name", "email", "role"].map((field) => (
-              <div key={field} className="grid gap-2">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-4 w-2/3" />
-              </div>
-            ))}
-            <Skeleton className="h-9 w-32" />
+        <div className="max-w-xl space-y-6">
+          <div className="flex items-start gap-4">
+            <Skeleton className="size-16 shrink-0 rounded-full" />
+            <div className="grid min-w-0 flex-1 gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
           </div>
+          {["email", "role"].map((field) => (
+            <div key={field} className="grid gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ))}
+          <Skeleton className="h-9 w-32" />
         </div>
       </CardContent>
     </Card>

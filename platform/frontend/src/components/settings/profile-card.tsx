@@ -1,7 +1,9 @@
 "use client";
 
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -20,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
-import { useSession } from "@/lib/auth/auth.query";
+import { usePermissionMap, useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const NameFormSchema = z.object({
@@ -84,6 +86,8 @@ function ProfileForm({
   email: string;
   role: string;
 }) {
+  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const canManageUsers = permissionMap?.["/settings/users"] ?? false;
   const updateName = useUpdateAccountNameMutation();
   const form = useForm<NameFormValues>({
     resolver: zodResolver(NameFormSchema),
@@ -122,7 +126,8 @@ function ProfileForm({
 
         {/* Neither has a self-service endpoint, so both are read-only. They
             stay real fields so the section reads as one form and the values
-            can still be selected and copied. */}
+            can still be selected and copied — each says why it is locked and,
+            where one exists, who can unlock it. */}
         <div className="space-y-2">
           <Label htmlFor="account-email">Email</Label>
           <Input
@@ -131,6 +136,9 @@ function ProfileForm({
             readOnly
             className="bg-muted text-muted-foreground"
           />
+          <p className="text-sm text-muted-foreground">
+            The address you sign in with. It can&apos;t be changed.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -141,6 +149,24 @@ function ProfileForm({
             readOnly
             className="bg-muted capitalize text-muted-foreground"
           />
+          <p className="text-sm text-muted-foreground">
+            {/* Only linked for readers who can actually open that page — for
+                everyone else the link would 403. */}
+            {canManageUsers ? (
+              <>
+                Set by an admin in{" "}
+                <Link
+                  href="/settings/users"
+                  className="font-medium underline underline-offset-4"
+                >
+                  Settings → Users
+                </Link>
+                .
+              </>
+            ) : (
+              <>Only an admin can change this.</>
+            )}
+          </p>
         </div>
 
         <Button

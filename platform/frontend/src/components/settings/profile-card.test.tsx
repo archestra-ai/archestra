@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfileCard } from "@/components/settings/profile-card";
-import { useSession } from "@/lib/auth/auth.query";
+import { usePermissionMap, useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
@@ -21,6 +21,9 @@ describe("ProfileCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
+    vi.mocked(usePermissionMap).mockReturnValue({
+      "/settings/users": true,
+    } as unknown as ReturnType<typeof usePermissionMap>);
     vi.mocked(useActiveMemberRole).mockReturnValue({
       data: "admin",
       isPending: false,
@@ -112,6 +115,28 @@ describe("ProfileCard", () => {
     expect(role).toHaveAttribute("readonly");
 
     expect(screen.getByLabelText("Name")).not.toHaveAttribute("readonly");
+  });
+
+  it("says why the locked fields are locked, and points admins at the page that unlocks the role", () => {
+    render(<ProfileCard />);
+
+    expect(
+      screen.getByText("The address you sign in with. It can't be changed."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Settings → Users" }),
+    ).toHaveAttribute("href", "/settings/users");
+  });
+
+  it("does not link a reader who cannot open the users page", () => {
+    vi.mocked(usePermissionMap).mockReturnValue({
+      "/settings/users": false,
+    } as unknown as ReturnType<typeof usePermissionMap>);
+
+    render(<ProfileCard />);
+
+    expect(screen.getByText("Only an admin can change this.")).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Settings/ })).toBeNull();
   });
 
   it("submits a changed name and keeps the button idle until it changes", async () => {

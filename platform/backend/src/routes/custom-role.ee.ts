@@ -3,7 +3,6 @@ import {
   PermissionsSchema,
   PredefinedRoleNameSchema,
   type RoleResourceAccess,
-  type RoleResourceAccessInput,
   RoleResourceAccessInputSchema,
   RouteId,
   UNRESTRICTED_ROLE_RESOURCE_ACCESS,
@@ -12,7 +11,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { betterAuth } from "@/auth";
-import { getDisallowedMessagingChannels } from "@/services/role-resource-access";
 import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
 import logger from "@/logging";
 import {
@@ -20,6 +18,7 @@ import {
   RoleResourceAccessModel,
   UserModel,
 } from "@/models";
+import { getDisallowedMessagingChannels } from "@/services/role-resource-access";
 import {
   ApiError,
   constructResponseSchema,
@@ -421,7 +420,6 @@ async function reinitializeChatOpsIfChannelAccessChanged(
     before.size !== after.size || [...before].some((id) => !after.has(id));
   if (changed) await chatOpsManager.reinitialize();
 }
-
 
 function parsePermissions(value: unknown) {
   return OrganizationRoleModel.sanitizePermissions(value);

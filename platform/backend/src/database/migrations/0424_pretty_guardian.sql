@@ -1,3 +1,5 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=brand-new table (role_resource_access); no existing rows, so its FK constraint and unique constraint cannot fail on any data. The data migration below only INSERTs into that new table.
 CREATE TABLE "role_resource_access" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" text NOT NULL,

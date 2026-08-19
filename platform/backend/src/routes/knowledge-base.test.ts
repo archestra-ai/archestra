@@ -22,7 +22,6 @@ import {
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  OrganizationModel,
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";

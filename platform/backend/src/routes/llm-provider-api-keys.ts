@@ -42,8 +42,8 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
-import { assertModelProviderAllowed } from "@/services/role-resource-access";
 import { modelSyncService } from "@/services/model-sync";
+import { assertModelProviderAllowed } from "@/services/role-resource-access";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
   ApiError,

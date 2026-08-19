@@ -506,9 +506,6 @@ class MemberModel {
     return member?.defaultAgentId ?? null;
   }
 
-  /**
-   * Check if any member references the given agent as their default
-   */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -562,12 +559,41 @@ class MemberModel {
     };
   }
 
-  static async isAgentDefault(agentId: string): Promise<boolean> {
-    const [result] = await db
-      .select({ count: count() })
+  /**
+   * The user ids of every member (in any organization) whose default agent
+   * is `agentId`.
+   */
+  static async findUserIdsDefaultingTo(agentId: string): Promise<string[]> {
+    const rows = await db
+      .select({ userId: schema.membersTable.userId })
       .from(schema.membersTable)
       .where(eq(schema.membersTable.defaultAgentId, agentId));
-    return (result?.count ?? 0) > 0;
+    return rows.map((row) => row.userId);
+  }
+
+  /**
+   * Move members off `fromAgentId`, each onto their own replacement (or to
+   * null, so the organization default applies to them).
+   */
+  static async repointDefaultAgent(
+    params: {
+      fromAgentId: string;
+      moves: Array<{ userId: string; toAgentId: string | null }>;
+    },
+    tx?: Transaction,
+  ): Promise<void> {
+    const executor = tx ?? db;
+    for (const move of params.moves) {
+      await executor
+        .update(schema.membersTable)
+        .set({ defaultAgentId: move.toAgentId })
+        .where(
+          and(
+            eq(schema.membersTable.userId, move.userId),
+            eq(schema.membersTable.defaultAgentId, params.fromAgentId),
+          ),
+        );
+    }
   }
 }
 

@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-17
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -289,7 +289,7 @@ Global admins can also delete an entry from the trash for good, with **Delete pe
 
 ## Supported Connectors
 
-Archestra ships with these built-in connector types.
+Archestra ships with these built-in connector types. Go to **Settings → Knowledge → Available connectors** to remove any your organization does not allow. A connector type you remove disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
 
 A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 

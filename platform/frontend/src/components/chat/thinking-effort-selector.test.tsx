@@ -235,6 +235,62 @@ describe("ThinkingEffortSelector", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("offers the depths on a self-hosted model whose row says it reasons", async () => {
+    // The id is an operator's choice, so only the row can answer.
+    const user = userEvent.setup();
+    setModels([
+      {
+        ...GEMINI_FLASH,
+        provider: "vllm",
+        id: "Qwen/Qwen3.8-27B",
+        capabilities: {
+          supportsReasoningEffort: true,
+        } as LlmModel["capabilities"],
+      },
+    ]);
+
+    renderSelector();
+    await user.click(trigger());
+
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
+  });
+
+  it.each([
+    ["a self-hosted row that reports no reasoning", false],
+    ["a self-hosted row nothing could describe", null],
+  ] as const)("renders nothing for %s", (_label, supportsReasoningEffort) => {
+    setModels([
+      {
+        ...GEMINI_FLASH,
+        provider: "ollama",
+        id: "Qwen/Qwen3.8-27B",
+        capabilities: { supportsReasoningEffort } as LlmModel["capabilities"],
+      },
+    ]);
+
+    const { container } = renderSelector();
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing for native Ollama, whose thinking field is a boolean", () => {
+    // Low, Medium and High would all send `think: true`.
+    setModels([
+      {
+        ...GEMINI_FLASH,
+        provider: "ollama-native",
+        id: "Qwen/Qwen3.8-27B",
+        capabilities: {
+          supportsReasoningEffort: true,
+        } as LlmModel["capabilities"],
+      },
+    ]);
+
+    const { container } = renderSelector();
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("renders nothing while the model list is still loading", () => {
     mockUseLlmModels.mockReturnValue({ data: undefined });
 

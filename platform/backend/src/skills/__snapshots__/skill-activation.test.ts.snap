@@ -7,7 +7,7 @@ Do research.
 <skill_compatibility>Python 3.11</skill_compatibility>
 If this environment cannot meet that requirement, tell the user and proceed with what is possible.
 <skill_allowed_tools>slack__send jira__create</skill_allowed_tools>
-This skill expects these tools; enable any that are not already active.
+These are the tools this skill uses. Reach each one the same way you reach any other tool in this conversation; a name listed here is not necessarily directly callable.
 <skill_resources>
 references/REF.md (reference)
 scripts/run.py (script)

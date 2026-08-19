@@ -69,6 +69,9 @@ export async function enrichDiscoveredModel(params: {
     contextLength: selfHosted ? null : (metadata?.contextLength ?? null),
     outputLength: selfHosted ? null : (metadata?.outputLength ?? null),
     supportsToolCalling: metadata?.supportsToolCalling ?? null,
+    // Describes the model, not the deployment — so it survives the self-hosted
+    // filter above for the same reason tool support does.
+    supportsReasoningEffort: metadata?.supportsReasoningEffort ?? null,
   });
 
   logger.info(

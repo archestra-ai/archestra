@@ -16,7 +16,8 @@ interface SkillPillProps extends React.HTMLAttributes<HTMLDivElement> {
  * Shared "Skill: <name>" pill used both in the assistant's tool-call row
  * (`archestra__load_skill`) and in the user-message attribution badge for
  * skills invoked via slash command. When the user has `skill:read`, the name
- * deep-links to /skills with the editor pre-opened for that skill.
+ * links to the skills list searched for that name, which resolves it to an id
+ * and forwards to the skill's page.
  */
 export function SkillPill({
   skillName,

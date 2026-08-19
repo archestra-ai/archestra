@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  CONNECTOR_TYPE_LABELS,
+  type ConnectorType,
   isProviderApiKeyOptional,
   OCR_PDF_INPUT_PROVIDERS,
 } from "@archestra/shared";
@@ -23,6 +25,7 @@ import {
   EmbeddingModelImageSupportNotice,
   embeddingModelSupportsImages,
 } from "@/app/knowledge/_parts/embedding-model-image-support-notice";
+import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -36,6 +39,7 @@ import {
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsSaveBar,
   SettingsSectionStack,
@@ -1306,10 +1310,30 @@ function KnowledgeSettingsContent() {
           onSave={handleSave}
           onCancel={handleCancel}
         />
+
+        <IntegrationAvailabilitySection
+          id="available-connectors"
+          catalogKey="knowledgeConnectorOverrides"
+          catalog={CONNECTOR_TYPES}
+          title="Available connectors"
+          description="Which connector types this deployment offers. A type you remove leaves the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them."
+          options={CONNECTOR_TYPES.map((type) => ({
+            value: type,
+            label: CONNECTOR_TYPE_LABELS[type],
+            icon: (
+              <ConnectorTypeIcon type={type} className="h-[18px] w-[18px]" />
+            ),
+          }))}
+          placeholder="Select connector types…"
+          emptyMessage="No connector types found."
+          savedMessage="Available connectors updated"
+        />
       </SettingsSectionStack>
     </LoadingWrapper>
   );
 }
+
+const CONNECTOR_TYPES = Object.keys(CONNECTOR_TYPE_LABELS) as ConnectorType[];
 
 export default function KnowledgeSettingsPage() {
   return (

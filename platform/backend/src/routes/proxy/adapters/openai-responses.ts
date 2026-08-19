@@ -29,6 +29,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   OpenAi,
+  StreamAccumulatorState,
   ToolCompressionStats,
   UsageView,
 } from "@/types";
@@ -39,6 +40,11 @@ import {
 } from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  formatResponsesFunctionCallFrames,
+  rewriteResponsesOutput,
+  toSse,
+} from "./responses-tool-call-rewrite";
 import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
@@ -412,6 +418,15 @@ class OpenAiResponsesResponseAdapter
     return [this.response.status ?? "completed"];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): OpenAiResponsesResponse {
+    return {
+      ...this.response,
+      output: rewriteResponsesOutput(this.response.output, toolCalls),
+    } as unknown as OpenAiResponsesResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,
@@ -650,6 +665,40 @@ class OpenAiResponsesStreamAdapter
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
     return [this.formatTextDeltaSSE(text)];
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // The upstream `response.completed` envelope has already been streamed and
+    // it names the calls the model made directly. The client keeps the LAST
+    // completed envelope, so the repair ends by re-issuing one that names the
+    // rewritten calls — the same trick the refusal path relies on. That
+    // envelope also becomes the persisted one, so the interaction log matches
+    // what the client reconstructs.
+    const base = this.completedResponse ?? this.toProviderResponse();
+    const upstreamOutput = Array.isArray(base.output) ? base.output : [];
+    const firstOutputIndex = upstreamOutput.filter(
+      (item) => item.type !== "function_call",
+    ).length;
+    let sequence = Date.now();
+    const frames = formatResponsesFunctionCallFrames({
+      toolCalls,
+      firstOutputIndex,
+      nextSequenceNumber: () => sequence++,
+    });
+    const rewritten = {
+      ...base,
+      output: rewriteResponsesOutput(upstreamOutput, toolCalls),
+      usage: base.usage ?? toResponsesUsage(this.state.usage),
+    } as unknown as OpenAiResponsesResponse;
+    this.completedResponse = rewritten;
+    frames.push(
+      toSse({
+        type: "response.completed",
+        sequence_number: sequence++,
+        response: rewritten,
+      }),
+    );
+    return frames;
   }
 
   formatEndSSE(): string {
@@ -921,10 +970,6 @@ function isResponsesToolCallChunk(
     chunk.type === "response.function_call_arguments.delta" ||
     chunk.type === "response.function_call_arguments.done"
   );
-}
-
-function toSse(event: unknown): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
 }
 
 function getToolCallsByCallId(

@@ -66,7 +66,8 @@ export function PageLayout({
    * it reads as part of the header rather than as the first item of content.
    */
   backLink?: React.ReactNode;
-  description: React.ReactNode;
+  /** Omit on pages whose title needs no gloss — nothing is rendered. */
+  description?: React.ReactNode;
   actionButton?: React.ReactNode;
   mobileVisibleCount?: number;
 }) {
@@ -118,9 +119,11 @@ export function PageLayout({
               <h1 className="mb-2 text-2xl font-semibold tracking-tight">
                 <span key={pathname}>{title}</span>
               </h1>
-              <div className="text-sm text-muted-foreground">
-                <span key={pathname}>{description}</span>
-              </div>
+              {description && (
+                <div className="text-sm text-muted-foreground">
+                  <span key={pathname}>{description}</span>
+                </div>
+              )}
             </div>
             {actionButton && <div className="shrink-0">{actionButton}</div>}
           </div>

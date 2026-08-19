@@ -56,6 +56,8 @@ export interface CrossProviderMetadata {
   inputModalities: string[] | null;
   outputModalities: string[] | null;
   supportsToolCalling: boolean | null;
+  /** Whether the registry says these weights reason. Null when it does not say. */
+  supportsReasoningEffort: boolean | null;
 }
 
 /**
@@ -187,7 +189,68 @@ export function resolveSelfHostedModelMetadata(params: {
       ? preferred.modalities.output
       : null,
     supportsToolCalling: firstPresent(matches, (entry) => entry.tool_call),
+    // Resolved by `resolveSelfHostedModelReasoning` instead, which reads the
+    // whole registry and so still answers for the many open models no
+    // first-party entry above covers.
+    supportsReasoningEffort: null,
   };
+}
+
+/**
+ * Whether the weights a self-hosted server is running reason at all.
+ *
+ * Read across the WHOLE registry rather than the first-party providers the rest
+ * of this file is confined to. That confinement protects prices -- resellers
+ * republish each other's models at their own margins, so a reseller's number is
+ * a differently wrong number -- and a capability has no margin: whether a model
+ * thinks is a property of the weights, identical wherever they are loaded. The
+ * narrow set would meanwhile answer nothing for most open models, which is the
+ * whole population here: it carries `Qwen3.6-27B` but not `Qwen3.8-27B`, though
+ * twelve other providers list the latter and every one of them says it reasons.
+ *
+ * Decided by majority of the entries that state the flag, because a handful
+ * mislabel a family's non-thinking sibling under a near-identical id. Real
+ * spreads are lopsided enough for that to be safe -- 22:3 and 12:0 for the Qwen
+ * 3 line, 66:3 for gpt-oss, against 1:28 for Llama 3.3 -- and a tie claims
+ * nothing rather than guessing.
+ *
+ * What a given host lets a caller ASK FOR is deliberately not read: the
+ * registry's per-provider `reasoning_options` for one model disagree wildly
+ * (for `Qwen3.6-27B`: absent, a toggle, and two different effort value-sets
+ * across 25 entries), so the composer keeps offering its own levels.
+ */
+export function resolveSelfHostedModelReasoning(params: {
+  modelId: string;
+  modelsDevData: ModelsDevApiResponse;
+}): boolean | null {
+  const { modelId, modelsDevData } = params;
+  const wanted = bareModelName(modelId);
+  if (!wanted) {
+    return null;
+  }
+
+  let reasoning = 0;
+  let plain = 0;
+  for (const provider of Object.values(modelsDevData)) {
+    for (const [key, model] of Object.entries(provider?.models ?? {})) {
+      if (
+        model.reasoning == null ||
+        bareModelName(model.id ?? key) !== wanted
+      ) {
+        continue;
+      }
+      if (model.reasoning) {
+        reasoning += 1;
+      } else {
+        plain += 1;
+      }
+    }
+  }
+
+  if (reasoning === plain) {
+    return null;
+  }
+  return reasoning > plain;
 }
 
 /**
@@ -422,6 +485,7 @@ function metadataFromEntries(
       entry.modalities?.output?.length ? entry.modalities.output : null,
     ),
     supportsToolCalling: firstPresent(ordered, (entry) => entry.tool_call),
+    supportsReasoningEffort: firstPresent(ordered, (entry) => entry.reasoning),
   };
 }
 

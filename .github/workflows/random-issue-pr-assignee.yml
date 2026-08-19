@@ -21,8 +21,8 @@ on:
 permissions: {}
 
 env:
-  ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","divineforest"]'
-  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","divineforest","arsenyinfo"]'
+  ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","piercypixel"]'
+  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","piercypixel","arsenyinfo"]'
   # PRs opened by these bot accounts already have an owner shepherding them
   # (e.g. the task-env pipeline's requester), so skip reviewer auto-assignment.
   REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]"]'

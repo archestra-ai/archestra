@@ -191,10 +191,10 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       }
     }
 
-    // Org default always wins when set (admin-configured for the whole org).
-    // localStorage only overrides when no org default is configured and the
-    // user can change agents; otherwise a stale hidden picker value can trap
-    // restricted users on a previously selected agent.
+    // The member's personal default wins, then the org default (admin-
+    // configured for the whole org). localStorage only overrides when neither
+    // is configured and the user can change agents; otherwise a stale hidden
+    // picker value can trap restricted users on a previously selected agent.
     // Also skip if a URL param was consumed but state hasn't flushed yet.
     if (!agentId && !urlParamsConsumedRef.current) {
       if (isPermissionResolving) return;

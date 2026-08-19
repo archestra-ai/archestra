@@ -207,11 +207,16 @@ export async function resolveDefaultChatAgentId(params: {
 }): Promise<string> {
   const { userId, organizationId } = params;
 
-  // The org default outranks the member's personal default, mirroring the /chat
-  // page chain (resolveInitialAgentSelection). It only wins when it would appear
-  // in that page's picker for this caller: an internal (non-built-in) chat agent
-  // the caller can access — findById with a userId runs the access check and
-  // excludes soft-deleted rows. Anything else falls through.
+  // The member's personal default outranks the org default, mirroring the
+  // /chat page chain (resolveInitialAgentSelection). A member with none
+  // (they deleted their last personal agent) falls through to the org
+  // default; that only counts when it would appear in that page's picker for
+  // this caller: an internal (non-built-in) chat agent the caller can access —
+  // findById with a userId runs the access check and excludes soft-deleted
+  // rows.
+  const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
+  if (existing) return existing;
+
   const organization = await OrganizationModel.getById(organizationId);
   if (organization?.defaultAgentId) {
     const orgDefault = await AgentModel.findById(
@@ -229,15 +234,16 @@ export async function resolveDefaultChatAgentId(params: {
     }
   }
 
-  const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
-  if (existing) return existing;
-
   // No default anywhere (e.g. the member's first chat): bootstrap their
-  // personal chat agent.
+  // personal chat agent. A member who deleted their last personal agent is
+  // not re-seeded, so this can still come up empty.
   await AgentModel.ensurePersonalChatAgent({ userId, organizationId });
   const created = await MemberModel.getDefaultAgentId(userId, organizationId);
   if (!created) {
-    throw new ApiError(500, "Could not resolve a default chat agent.");
+    throw new ApiError(
+      400,
+      "You have no default agent. Create a personal agent or ask an admin to set an organization default.",
+    );
   }
   return created;
 }

@@ -47,6 +47,13 @@ export interface FetchedModelCapabilities {
    * - `undefined` — unknown (provider gave no capability data); the name heuristic decides.
    */
   embeddingDimensions?: number | null;
+  /**
+   * Whether the model reasons, when the server says so authoritatively (Ollama
+   * `/api/show` lists a `thinking` capability). Tri-state, like
+   * {@link embeddingDimensions}: `undefined` means the server reported no
+   * capability list at all, so a lower tier may still decide.
+   */
+  supportsReasoningEffort?: boolean | null;
   /** Provider-reported default generation parameters (Ollama `/api/show`). */
   defaultParameters?: ModelDefaultParameters | null;
   /**

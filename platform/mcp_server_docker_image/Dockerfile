@@ -123,6 +123,9 @@ RUN apk add --no-cache \
    # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
    # The base image ships 8.19.0-r0; the explicit `apk add curl` above installs it, so
    # curl/libcurl must be listed here to be upgraded to the fixed version.
+   # CVE-2026-11824, CVE-2026-11822: sqlite vulnerabilities (HIGH) fixed in 3.53.4-r0.
+   # The pinned python:3.12-alpine base ships sqlite-libs 3.51.2-r0 (a python3
+   # runtime dependency), so it must be upgraded explicitly here.
    # Go runtime is copied from the golang:1.26.6-alpine image below to pick up the
    # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
    # 1.25.11 (CVE-2026-42504), the CRITICAL fixed in 1.25.13 (CVE-2026-39821), and the
@@ -130,7 +133,7 @@ RUN apk add --no-cache \
    # No 1.25.x release carries the CVE-2026-46600 fix (the line ends at 1.25.13
    # upstream), so this moves to the same 1.26.6 toolchain the platform image's
    # go-builder stage already uses.
-   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl
+   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl sqlite-libs
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

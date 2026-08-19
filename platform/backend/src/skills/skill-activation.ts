@@ -104,9 +104,17 @@ export function formatSkillActivation({
       "and proceed with what is possible."
     : "";
 
+  // "enable any that are not already active" asked for something the model
+  // cannot do — nothing enables tools mid-conversation — and, worse, it implied
+  // the named tools were directly callable, which invites exactly the direct
+  // call a dispatch-mode agent cannot make. State what the names are for and
+  // leave the calling convention to the tool-loading instructions, which are
+  // the only place that knows whether this agent dispatches or calls directly.
   const allowedTools = skill.allowedTools
     ? `\n<skill_allowed_tools>${neutralizeFrameTags(skill.allowedTools)}</skill_allowed_tools>\n` +
-      "This skill expects these tools; enable any that are not already active."
+      "These are the tools this skill uses. Reach each one the same way you " +
+      "reach any other tool in this conversation; a name listed here is not " +
+      "necessarily directly callable."
     : "";
 
   return (

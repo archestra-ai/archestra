@@ -561,6 +561,7 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
   GetMemberDefaultModel: "getMemberDefaultModel",
   UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
@@ -583,6 +584,8 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetUserStatistics: "getUserStatistics",
+  GetAppStatistics: "getAppStatistics",
+  GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 

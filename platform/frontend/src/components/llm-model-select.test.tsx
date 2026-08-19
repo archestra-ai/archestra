@@ -182,6 +182,7 @@ describe("LlmModelSearchableSelect", () => {
               inputModalities: ["text", "image"],
               outputModalities: ["text"],
               supportsToolCalling: true,
+              supportsReasoningEffort: null,
               recommendedForAgents: true,
               pricePerMillionInput: null,
               pricePerMillionOutput: null,

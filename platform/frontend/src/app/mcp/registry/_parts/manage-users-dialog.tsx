@@ -72,6 +72,7 @@ import {
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { AddServiceAccountDialog } from "./add-service-account-dialog";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -82,7 +83,6 @@ import {
   STATE_PRIORITY,
 } from "./deployment-status";
 import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
-import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;

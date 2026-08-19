@@ -213,6 +213,12 @@ export interface ConverseToOpenaiSseEncoder {
   formatEnd(): Uint8Array;
   formatTextDelta(text: string): Uint8Array;
   formatCompleteText(text: string): Uint8Array[];
+  /**
+   * The turn's tool calls as one complete OpenAI tool_calls delta chunk, for
+   * the proxy's dispatch-mode repair (see `planDispatchModeToolCallRewrites`).
+   * The finish reason stays held for formatEnd, as for a live tool call.
+   */
+  formatToolCalls(toolCalls: StreamAccumulatorState["toolCalls"]): Uint8Array[];
   buildFinalResponseFromState(state: StreamAccumulatorState): OpenAiResponse;
 }
 
@@ -373,6 +379,29 @@ export function createConverseToOpenaiSseEncoder(
     ];
   }
 
+  function formatToolCalls(
+    toolCalls: StreamAccumulatorState["toolCalls"],
+  ): Uint8Array[] {
+    const parts: Uint8Array[] = [];
+    if (!rolePrepended) {
+      parts.push(sse(envelope({ role: "assistant" })));
+      rolePrepended = true;
+    }
+    parts.push(
+      sse(
+        envelope({
+          tool_calls: toolCalls.map((toolCall, index) => ({
+            index,
+            id: toolCall.id,
+            type: "function",
+            function: { name: toolCall.name, arguments: toolCall.arguments },
+          })),
+        }),
+      ),
+    );
+    return parts;
+  }
+
   function buildFinalResponseFromState(
     state: StreamAccumulatorState,
   ): OpenAiResponse {
@@ -413,6 +442,7 @@ export function createConverseToOpenaiSseEncoder(
     formatEnd,
     formatTextDelta,
     formatCompleteText,
+    formatToolCalls,
     buildFinalResponseFromState,
   };
 }

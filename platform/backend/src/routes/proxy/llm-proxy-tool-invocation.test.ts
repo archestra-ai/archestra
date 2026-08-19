@@ -54,6 +54,41 @@ const READ_FILE_TOOL = {
   },
 };
 
+/**
+ * The two tools a `search_and_run_only` agent actually advertises. Every
+ * third-party tool is reachable through `run_tool` but deliberately absent from
+ * the list, which is the whole condition this repair keys off.
+ */
+const DISPATCH_PAIR_TOOLS = [
+  {
+    type: "function" as const,
+    function: {
+      name: "archestra__search_tools",
+      description: "Find tools by capability",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "archestra__run_tool",
+      description: "Run a tool by exact name",
+      parameters: {
+        type: "object",
+        properties: {
+          tool_name: { type: "string" },
+          tool_args: { type: "object" },
+        },
+        required: ["tool_name"],
+      },
+    },
+  },
+];
+
 type StubToolCall = { name: string; arguments: string };
 
 /** OpenAI client stub whose completion returns the configured tool calls. */
@@ -246,6 +281,153 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     );
     expect(JSON.parse(readFile.function.arguments).file_path).toBe(
       "/etc/passwd",
+    );
+  });
+  // T-1111: in dispatch mode the model routinely calls a reachable tool by its
+  // exact name — learned from search_tools, a skill body, or its own earlier
+  // turn — and the batch used to be dropped, ending the turn with an internal
+  // steer the user read as an assistant message. The call is now re-addressed
+  // to run_tool instead of refused.
+  test("re-addresses a direct tool call through run_tool in dispatch mode", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "Dispatch Mode Agent",
+      agentType: "llm_proxy",
+    });
+
+    stubToolCalls = [
+      {
+        name: "gh-developer-agent__pull_request_read",
+        arguments: '{"pullNumber":7}',
+      },
+    ];
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "read PR 7" }],
+        tools: DISPATCH_PAIR_TOOLS,
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().choices[0].message;
+
+    // The turn still carries a tool call the client can execute — not a refusal.
+    expect(message.content).toBeNull();
+    expect(message.tool_calls).toHaveLength(1);
+    expect(message.tool_calls[0].function.name).toBe("archestra__run_tool");
+    expect(JSON.parse(message.tool_calls[0].function.arguments)).toEqual({
+      tool_name: "gh-developer-agent__pull_request_read",
+      tool_args: { pullNumber: 7 },
+    });
+
+    // The interaction log describes the turn the client received.
+    const interactions = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, agent.id));
+    expect(JSON.stringify(interactions[0].response)).toContain(
+      "archestra__run_tool",
+    );
+  });
+
+  // `full` exposure: a tool missing from the list really is disabled there, so
+  // the pre-existing refusal must survive untouched.
+  test("still refuses a disabled tool when the list has no dispatch pair", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "Full Exposure Agent",
+      agentType: "llm_proxy",
+    });
+
+    stubToolCalls = [
+      { name: "gh-developer-agent__pull_request_read", arguments: "{}" },
+    ];
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "read PR 7" }],
+        tools: [READ_FILE_TOOL],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().choices[0].message;
+    expect(message.tool_calls).toBeUndefined();
+    expect(message.content).toContain("not enabled for this conversation");
+  });
+
+  // The repaired call faces the same gate a run_tool dispatch the model wrote
+  // itself would face — the rewrite must not become a policy bypass.
+  test("still enforces the target tool's policy on a repaired call", async ({
+    makeOrganization,
+    makeAgent,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Dispatch Mode Policy Agent",
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+      considerContextUntrusted: true,
+    });
+
+    // A server-prefixed name, as every third-party tool actually has: a bare
+    // name colliding with an Archestra short name is deliberately never
+    // rewritten (see llm-proxy-helpers.test.ts).
+    const tool = await makeTool({ name: "files__read", agentId: agent.id });
+    await makeToolPolicy(tool.id, {
+      conditions: [{ key: "file_path", operator: "contains", value: "/etc/" }],
+      action: "block_always",
+      reason: "Reading /etc/ files is not allowed for security reasons",
+    });
+
+    stubToolCalls = [
+      { name: "files__read", arguments: '{"file_path":"/etc/passwd"}' },
+    ];
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "UNTRUSTED_DATA: read it" }],
+        tools: DISPATCH_PAIR_TOOLS,
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().choices[0].message;
+    expect(message.tool_calls).toBeUndefined();
+    expect(message.refusal || message.content).toContain(
+      "Archestra LLM Proxy blocked unsafe tool call",
     );
   });
 });

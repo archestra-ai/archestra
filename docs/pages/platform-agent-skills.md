@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,10 @@ Progressive disclosure leaves the choice to the model. When the user already kno
 Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdown convert this report`, activates that skill and sends the rest of the line as the prompt. The prompt is optional — `/pdf-to-markdown` on its own activates a skill meant to run as-is. The skill's `SKILL.md` is injected directly into that turn, so the model follows it without first calling `load_skill`. Slash commands build on the skill tools, so the toggle is locked until skills are enabled for the organization.
 
 ## Writing a skill
+
+**Add new skill** on the Skills page opens a three-step wizard: pick a source, write the `SKILL.md` and any resource files, then choose who can use the skill. Creating it takes you to the skill's own page. Picking a GitHub repo instead hands over to the import dialog described below.
+
+Every skill has a page of its own. The **Content** tab is the editor — the `SKILL.md` beside a file tree — and the **Access** tab holds visibility, teams, and environments. Version history, usage, chat, and delete sit in the page header.
 
 A skill is a `SKILL.md` plus optional resource files.
 

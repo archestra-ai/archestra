@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.3.42](https://github.com/archestra-ai/archestra/compare/platform-v1.3.41...platform-v1.3.42) (2026-08-19)
+
+
+### Features
+
+* **agents:** user-settable personal default agent ([#7341](https://github.com/archestra-ai/archestra/issues/7341)) ([01089c1](https://github.com/archestra-ai/archestra/commit/01089c1319a020d473a63582eeb0db9bf5558e8f))
+* **chat:** reasoning depth for self-hosted models (vLLM, Ollama) ([#7334](https://github.com/archestra-ai/archestra/issues/7334)) ([dfe636f](https://github.com/archestra-ai/archestra/commit/dfe636f0ee639ae7d75c9f63a34ec359861c57b1))
+* **cost:** per-app and per-skill cost tracking ([#7332](https://github.com/archestra-ai/archestra/issues/7332)) ([e0c700d](https://github.com/archestra-ai/archestra/commit/e0c700d175deb2eca4c6b6529e0ada7aa53ebd38))
+* **mcp-registry:** surface MCP servers that need attention ([#7340](https://github.com/archestra-ai/archestra/issues/7340)) ([7706322](https://github.com/archestra-ai/archestra/commit/7706322708d9f8f43b704e90c5011e14f5219601))
+* **skills:** create wizard and per-skill page instead of the editor dialog ([#7338](https://github.com/archestra-ai/archestra/issues/7338)) ([3f04cfc](https://github.com/archestra-ai/archestra/commit/3f04cfc35f0787d79eb97c35872b74fcab6e5e7b))
+
+
+### Bug Fixes
+
+* **chat:** keep the composer on Send when a follow-up can be queued ([#7333](https://github.com/archestra-ai/archestra/issues/7333)) ([f2626e3](https://github.com/archestra-ai/archestra/commit/f2626e3e08e8125fa5ea872e57fba2649c0c0b61))
+* **chat:** match the composer group radius to the controls it clips ([#7335](https://github.com/archestra-ai/archestra/issues/7335)) ([982c93e](https://github.com/archestra-ai/archestra/commit/982c93ef491d5cfc8c847b86f95dc187bac06eb3))
+* **costs:** stop People table badges overprinting, and restore the Models chart ([#7339](https://github.com/archestra-ai/archestra/issues/7339)) ([ff913a8](https://github.com/archestra-ai/archestra/commit/ff913a859dc1bf78317dd19cd547b3f31a76bbbd))
+* **llm-proxy:** dispatch direct tool calls through run_tool instead of dead-ending ([#7342](https://github.com/archestra-ai/archestra/issues/7342)) ([2b13d60](https://github.com/archestra-ai/archestra/commit/2b13d606839387717ce6f6aad57ae8f76bdd6fee))
+* **security:** upgrade sqlite-libs in MCP server base image ([#7344](https://github.com/archestra-ai/archestra/issues/7344)) ([34d852d](https://github.com/archestra-ai/archestra/commit/34d852daa8849401cd5871b5eb17f3f733ab19fb))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump github.com/moby/go-archive from 0.2.0 to 0.3.0 in /platform/docker/dagger-dockercompat ([#7343](https://github.com/archestra-ai/archestra/issues/7343)) ([e3bb628](https://github.com/archestra-ai/archestra/commit/e3bb6288bb0ab4434abc98d0d5d5ca9af1fa7ac9))
+
+## [1.3.41](https://github.com/archestra-ai/archestra/compare/platform-v1.3.40...platform-v1.3.41) (2026-08-18)
+
+
+### Features
+
+* **orchestrator:** hibernate idle MCP servers and wake them on demand ([#7135](https://github.com/archestra-ai/archestra/issues/7135)) ([6f5013a](https://github.com/archestra-ai/archestra/commit/6f5013a307add1c769aea7aaf802fa29a49308a3))
+
+
+### Bug Fixes
+
+* **auth:** don't mint personal user tokens for service-account principals ([#7326](https://github.com/archestra-ai/archestra/issues/7326)) ([0a6c69b](https://github.com/archestra-ai/archestra/commit/0a6c69bc4e4ca18d50a11f95ebace0c4f654c4b8))
+* **helm:** isolate runtime owner RBAC ([#7331](https://github.com/archestra-ai/archestra/issues/7331)) ([83374a5](https://github.com/archestra-ai/archestra/commit/83374a5a638d74219779143740328b950fff8355))
+* **helm:** reuse manager Role for runtime ownership ([#7325](https://github.com/archestra-ai/archestra/issues/7325)) ([70612ec](https://github.com/archestra-ai/archestra/commit/70612ec905415ee556ad174e3efb811a709778ff))
+* relay Cohere thinking blocks and group DB resource-exhaustion errors ([#7328](https://github.com/archestra-ai/archestra/issues/7328)) ([4467af3](https://github.com/archestra-ai/archestra/commit/4467af34592946be677b9723e0fab1da85b2f0c0))
+
+
+### Performance Improvements
+
+* slim hot-endpoint payloads (agents, MCP servers, conversations, logs SSR, appearance) ([#7327](https://github.com/archestra-ai/archestra/issues/7327)) ([70bf0d7](https://github.com/archestra-ai/archestra/commit/70bf0d7955dbcb8ab56381960349d082576bc116))
+
+
+### Miscellaneous Chores
+
+* **tests:** mute console output from passing tests across all workspaces ([#7329](https://github.com/archestra-ai/archestra/issues/7329)) ([850762c](https://github.com/archestra-ai/archestra/commit/850762cbd432e159dab28dc536ea8ad153aec680))
+
 ## [1.3.40](https://github.com/archestra-ai/archestra/compare/platform-v1.3.39...platform-v1.3.40) (2026-08-18)
 
 

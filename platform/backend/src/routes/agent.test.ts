@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { AgentToolModel, ToolModel } from "@/models";
+import { AgentToolModel, OrganizationModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -759,6 +759,17 @@ describe("agent routes", () => {
         organizationId,
         scope: "personal",
         authorId: user.id,
+      });
+      // The user's only personal chat agent is their personal default, which
+      // can only be deleted once the organization has a default to fall to.
+      const orgDefault = await makeAgent({
+        name: `Org Default ${suffix}`,
+        agentType: "agent",
+        organizationId,
+        scope: "org",
+      });
+      await OrganizationModel.patch(organizationId, {
+        defaultAgentId: orgDefault.id,
       });
 
       const deleteResponse = await app.inject({

@@ -10,9 +10,11 @@ import { expect, test } from "./api-fixtures";
  */
 
 // Recognisable in the table and unlikely to collide with a provider's own
-// figure: 123000 renders as "123K", 7000 as "7K".
+// figure: 123000 renders as "123K" there, and "123,000" in the field.
 const CONTEXT_WINDOW = 123_000;
 const MAX_OUTPUT_TOKENS = 7_000;
+const CONTEXT_WINDOW_TYPED = "123,000";
+const MAX_OUTPUT_TOKENS_TYPED = "7,000";
 
 type ModelRow = {
   id: string;
@@ -68,16 +70,18 @@ test.describe("Model context and output limits", () => {
       .filter({ has: page.getByText(model.modelId, { exact: true }) });
     await expect(row).toHaveCount(1);
 
-    const openEditor = async () => {
+    // The dialog opens on its first page; the limits live on their own.
+    const openLimitsPage = async () => {
       await page
         .getByRole("button", { name: `Edit ${model.modelId}`, exact: true })
         .click();
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Limits", exact: true }).click();
       return dialog;
     };
 
-    const dialog = await openEditor();
+    const dialog = await openLimitsPage();
     await dialog
       .getByLabel("Context window (tokens)")
       .fill(String(CONTEXT_WINDOW));
@@ -93,12 +97,13 @@ test.describe("Model context and output limits", () => {
 
     // Reopening shows the saved values, so a later edit starts from them
     // instead of from an empty field that would clear the override on save.
-    const reopened = await openEditor();
+    // They read back grouped, the way they were entered.
+    const reopened = await openLimitsPage();
     await expect(reopened.getByLabel("Context window (tokens)")).toHaveValue(
-      String(CONTEXT_WINDOW),
+      CONTEXT_WINDOW_TYPED,
     );
     await expect(reopened.getByLabel("Max output tokens")).toHaveValue(
-      String(MAX_OUTPUT_TOKENS),
+      MAX_OUTPUT_TOKENS_TYPED,
     );
 
     // Emptying a field clears the override rather than storing a zero, which
@@ -112,7 +117,7 @@ test.describe("Model context and output limits", () => {
     await expect(row).not.toContainText("7K");
   });
 
-  test("rejects a limit that is not a whole number of tokens", async ({
+  test("blocks a rejected limit even from another page of the dialog", async ({
     page,
     request,
     getModels,
@@ -130,12 +135,20 @@ test.describe("Model context and output limits", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    await dialog.getByLabel("Context window (tokens)").fill("1.5");
+    await dialog.getByRole("button", { name: "Limits", exact: true }).click();
+    await dialog.getByLabel("Context window (tokens)").fill("0");
+
+    // Away from the page that holds the bad value, then save. The pages are
+    // hidden rather than unmounted precisely so the rule still runs here.
+    await dialog
+      .getByRole("button", { name: "Availability", exact: true })
+      .click();
     await dialog.getByRole("button", { name: "Save Changes" }).click();
 
-    // Caught in the form. Without the client-side rule this reached the update
-    // route and came back as a bare 400, which reads like a failed save.
+    // Blocked, and the page holding the rejected value comes back — the
+    // message is no use on a page the user cannot see.
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Must be a whole number of tokens");
+    await expect(dialog).toContainText("Must be 1 or greater");
+    await expect(dialog.getByLabel("Context window (tokens)")).toBeVisible();
   });
 });

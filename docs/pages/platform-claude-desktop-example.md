@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -1,14 +1,21 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  MESSAGING_CHANNEL_LABELS,
+  type MessagingChannelId,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -49,6 +56,10 @@ import {
 
 type FileUploadsEnabled = "enabled" | "disabled";
 
+const MESSAGING_CHANNEL_LABELS_KEYS = Object.keys(
+  MESSAGING_CHANNEL_LABELS,
+) as MessagingChannelId[];
+
 export default function AgentSettingsPage() {
   const appName = useAppName();
   const { data: organization } = useOrganization();
@@ -66,9 +77,6 @@ export default function AgentSettingsPage() {
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
   const [hackathonRecorder, setHackathonRecorder] =
     useState<FileUploadsEnabled>("enabled");
-  const [newAppsDisabledByDefault, setNewAppsDisabledByDefault] =
-    useState(false);
-  const [newAppsLockedByDefault, setNewAppsLockedByDefault] = useState(false);
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -77,8 +85,6 @@ export default function AgentSettingsPage() {
   });
   const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
   const savedHackathonRecorderRef = useRef<FileUploadsEnabled>("enabled");
-  const savedNewAppsDisabledRef = useRef(false);
-  const savedNewAppsLockedRef = useRef(false);
   // Only offered while this deployment carries the hackathon and it is still
   // running; an enterprise deployment never does, so there is nothing here to
   // switch on. Past the closing date the whole section goes rather than
@@ -104,12 +110,12 @@ export default function AgentSettingsPage() {
   const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
   const updateAgentMutation = useUpdateAgentSettings(
-    "Chat settings updated",
-    "Failed to update chat settings",
+    "Agent settings updated",
+    "Failed to update agent settings",
   );
   const updateSecurityMutation = useUpdateSecuritySettings(
-    "Chat settings updated",
-    "Failed to update chat settings",
+    "Agent settings updated",
+    "Failed to update agent settings",
   );
 
   useEffect(() => {
@@ -128,15 +134,9 @@ export default function AgentSettingsPage() {
         ? "enabled"
         : "disabled";
     setHackathonRecorder(savedHackathonRecorder);
-    const savedNewAppsDisabled = organization.newAppsDisabledByDefault ?? false;
-    const savedNewAppsLocked = organization.newAppsLockedByDefault ?? false;
-    setNewAppsDisabledByDefault(savedNewAppsDisabled);
-    setNewAppsLockedByDefault(savedNewAppsLocked);
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
     savedHackathonRecorderRef.current = savedHackathonRecorder;
-    savedNewAppsDisabledRef.current = savedNewAppsDisabled;
-    savedNewAppsLockedRef.current = savedNewAppsLocked;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
@@ -151,9 +151,7 @@ export default function AgentSettingsPage() {
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
     fileUploads !== savedFileUploadsRef.current ||
-    hackathonRecorder !== savedHackathonRecorderRef.current ||
-    newAppsDisabledByDefault !== savedNewAppsDisabledRef.current ||
-    newAppsLockedByDefault !== savedNewAppsLockedRef.current;
+    hackathonRecorder !== savedHackathonRecorderRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -174,13 +172,9 @@ export default function AgentSettingsPage() {
         ...(hackathonOffered
           ? { appsHackathonRecorderEnabled: hackathonRecorder === "enabled" }
           : {}),
-        newAppsDisabledByDefault,
-        newAppsLockedByDefault,
       });
       savedFileUploadsRef.current = fileUploads;
       savedHackathonRecorderRef.current = hackathonRecorder;
-      savedNewAppsDisabledRef.current = newAppsDisabledByDefault;
-      savedNewAppsLockedRef.current = newAppsLockedByDefault;
     }
 
     initializedRef.current = false;
@@ -193,8 +187,6 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setHackathonRecorder(savedHackathonRecorderRef.current);
-    setNewAppsDisabledByDefault(savedNewAppsDisabledRef.current);
-    setNewAppsLockedByDefault(savedNewAppsLockedRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -394,70 +386,6 @@ export default function AgentSettingsPage() {
           </span>
         }
       />
-      <SettingsBlock
-        title="New Apps Are Disabled by Default"
-        description={
-          <>
-            Create every new app disabled: author-only, invisible to agents and
-            runnable by nobody until its author enables it in App settings. The
-            chat it was created in can finish building it first, so a new app is
-            not stranded as an empty shell. Existing apps are unaffected.{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformApps, "defaults-for-new-apps")}
-              className="text-primary hover:underline"
-              showIcon={false}
-            >
-              Learn more.
-            </ExternalDocsLink>
-          </>
-        }
-        control={
-          <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Switch
-                checked={newAppsDisabledByDefault}
-                onCheckedChange={setNewAppsDisabledByDefault}
-                disabled={isSaving || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
-      <SettingsBlock
-        title="New Apps Are Locked by Default"
-        description={
-          <>
-            Create every new app locked: immutable to agents until a user
-            unlocks it, in App settings or by asking an agent directly. The chat
-            it was created in can finish building it first, so a new app is not
-            frozen as an empty shell. Existing apps are unaffected.{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformApps, "locking-an-app")}
-              className="text-primary hover:underline"
-              showIcon={false}
-            >
-              Learn more.
-            </ExternalDocsLink>
-          </>
-        }
-        control={
-          <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Switch
-                checked={newAppsLockedByDefault}
-                onCheckedChange={setNewAppsLockedByDefault}
-                disabled={isSaving || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
       {hackathonOffered && (
         <SettingsBlock
           id={APPS_HACKATHON_SETTING_ANCHOR}
@@ -511,6 +439,21 @@ export default function AgentSettingsPage() {
         permissions={{ agentSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
+      />
+      <IntegrationAvailabilitySection
+        id="available-messaging-channels"
+        catalogKey="messagingChannelOverrides"
+        catalog={MESSAGING_CHANNEL_LABELS_KEYS}
+        title="Available messaging channels"
+        description="Which channels agents can be configured on and reached through. A channel you remove stops listening — a connected Slack bot stops answering, and email stops reaching agents."
+        options={MESSAGING_CHANNEL_LABELS_KEYS.map((channel) => ({
+          value: channel,
+          label: MESSAGING_CHANNEL_LABELS[channel],
+          icon: <ChannelIcon channel={channel} />,
+        }))}
+        placeholder="Select channels…"
+        emptyMessage="No channels found."
+        savedMessage="Available messaging channels updated"
       />
     </SettingsSectionStack>
   );

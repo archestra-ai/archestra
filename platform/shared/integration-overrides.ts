@@ -191,3 +191,38 @@ export function pruneIntegrationOverrides<Id extends string>(
   }
   return Object.keys(pruned).length > 0 ? pruned : null;
 }
+
+/**
+ * The catalog entries an organization offers: everything an admin has not
+ * switched off. This is the shape the availability control renders — a chip
+ * per allowed entry — so an untouched organization shows the whole catalog.
+ */
+export function allowedIntegrationIds<Id extends string>(
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null,
+  catalog: readonly Id[],
+): Id[] {
+  return catalog.filter((id) => !isIntegrationHidden(overrides, id));
+}
+
+/**
+ * Rewrites overrides so exactly `allowed` stays on.
+ *
+ * Names survive the rewrite: model providers keep `displayName` in the same
+ * column as the off switch, so switching a provider off and back on must not
+ * cost the organization the name it chose for it.
+ */
+export function withAllowedIntegrationIds<Id extends string>(
+  overrides: Partial<Record<Id, ModelProviderOverride>> | null,
+  catalog: readonly Id[],
+  allowed: readonly Id[],
+): Partial<Record<Id, ModelProviderOverride>> | null {
+  const allowedIds = new Set<string>(allowed);
+  const next: Partial<Record<Id, ModelProviderOverride>> = {};
+  for (const id of catalog) {
+    next[id] = {
+      ...(overrides?.[id] ?? {}),
+      hidden: !allowedIds.has(id),
+    };
+  }
+  return pruneIntegrationOverrides(next);
+}

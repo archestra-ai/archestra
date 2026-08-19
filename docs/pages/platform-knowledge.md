@@ -289,7 +289,7 @@ Global admins can also delete an entry from the trash for good, with **Delete pe
 
 ## Supported Connectors
 
-Archestra ships with these built-in connector types. As an admin, open **Page settings** on Connectors and switch **Available** off for any your organization does not allow. A turned-off connector disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
+Archestra ships with these built-in connector types. Go to **Settings → Knowledge → Available connectors** to remove any your organization does not allow. A connector type you remove disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
 
 A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 

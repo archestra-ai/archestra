@@ -1,7 +1,8 @@
+import { SupportedProviders } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   deriveMcpServerName,
-  getShownProviders,
+  getConnectableProviders,
   resolveEffectiveId,
   resolveInitialClientId,
   toMcpServerSlug,
@@ -164,29 +165,19 @@ describe("resolveInitialClientId", () => {
   });
 });
 
-describe("getShownProviders", () => {
-  it("returns null when organization is undefined", () => {
-    expect(getShownProviders(undefined)).toBeNull();
+describe("getConnectableProviders", () => {
+  it("offers every provider when the deployment has switched none off", () => {
+    expect(getConnectableProviders({ modelProviderOverrides: null })).toEqual([
+      ...SupportedProviders,
+    ]);
   });
 
-  it("returns null when the field is null (show all)", () => {
-    expect(getShownProviders({ connectionShownProviders: null })).toBeNull();
-  });
-
-  it("returns known providers unchanged", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
-  });
-
-  it("drops unknown provider IDs silently", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "not-a-provider", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
+  it("drops the providers the deployment switched off", () => {
+    const providers = getConnectableProviders({
+      modelProviderOverrides: { anthropic: { hidden: true } },
+    });
+    expect(providers).not.toContain("anthropic");
+    expect(providers).toContain("openai");
   });
 });
 

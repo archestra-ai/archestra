@@ -73087,7 +73087,7 @@ export type UpdateConnectionSettingsData = {
         connectionDefaultLlmProxyId?: string | null;
         connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
-        connectionShownProviders?: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra'> | null;
+        connectionShownProviders?: unknown;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;

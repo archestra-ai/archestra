@@ -15,9 +15,13 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
       "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
   },
   "/settings/agents": {
-    title: "Chat",
+    title: "Agents",
     description:
-      "Defaults for chats and agents — default model, default agent, and file uploads.",
+      "Defaults for agents and chats — default model, default agent, file uploads, and the channels agents can be reached through.",
+  },
+  "/settings/apps": {
+    title: "Apps",
+    description: "How apps behave when an agent creates one.",
   },
   "/settings/security": {
     title: "Security",
@@ -43,6 +47,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Knowledge",
     description:
       "Configure embedding, reranking, and knowledge system defaults.",
+  },
+  "/settings/connection": {
+    title: "Connection",
+    description:
+      "Configure the connect page: which clients it offers, the defaults it pre-selects, and the base URLs it hands out.",
   },
   "/settings/llm": {
     title: "LLM",

@@ -286108,35 +286108,7 @@
                     }
                   },
                   "connectionShownProviders": {
-                    "nullable": true,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "ollama-native",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "kimi",
-                        "azure",
-                        "github-copilot",
-                        "microsoft-365-copilot",
-                        "archestra"
-                      ]
-                    }
+                    "not": {}
                   },
                   "connectionBaseUrls": {
                     "nullable": true,

@@ -332,8 +332,11 @@ function KnowledgeBasesList() {
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <SearchInput paramName="search" className="relative w-[370px]" />
+          <div className="flex flex-wrap items-center gap-4">
+            <SearchInput
+              paramName="search"
+              className="relative w-full sm:w-[370px]"
+            />
             <ResourceDeletedStatusFilter
               deletePermission={{ knowledgeSource: ["delete"] }}
             />

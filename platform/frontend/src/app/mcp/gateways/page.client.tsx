@@ -537,7 +537,7 @@ function McpGateways({
         <div>
           <div>
             <div className="mb-6 flex flex-col gap-2">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <SearchInput
                   objectNamePlural="gateways"
                   searchFields={["name"]}

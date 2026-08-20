@@ -421,6 +421,65 @@ export function buildModelsToUpsert(params: {
 }
 
 /**
+ * Give every model in a picker response a display name of its own, using the
+ * same suffix convention as the sync-time pass below.
+ *
+ * The sync-time pass alone can't guarantee distinct names at read time: it
+ * only sees one API key's catalog per sync, while `models` rows are global.
+ * Two keys of the same provider can serve different subsets — one catalog
+ * lists only `gpt-4.1`, another lists it beside `gpt-4.1-2025-04-14` — so a
+ * sync can refresh one member of a colliding pair without ever seeing the
+ * other, and rows written before the sync-time pass existed keep their
+ * colliding names until their next sync. This pass runs on what a response
+ * actually offers side by side, so the picker never renders two rows a user
+ * can't tell apart, whatever vintage the stored names are.
+ *
+ * Grouped per provider: model ids are only unique within a provider, and the
+ * UI groups the list by provider, so a name shared across providers (openai
+ * and azure both serving "GPT-4o") is not a collision.
+ */
+export function withDistinctDisplayNames<
+  T extends {
+    /** The provider-facing model id (`gpt-4.1-2025-04-14`). */
+    id: string;
+    provider: SupportedProvider;
+    displayName: string;
+  },
+>(models: T[]): T[] {
+  const entriesByProvider = new Map<
+    SupportedProvider,
+    Array<{ modelId: string; name: string }>
+  >();
+  for (const { provider, id, displayName } of models) {
+    const entries = entriesByProvider.get(provider);
+    const entry = { modelId: id, name: displayName };
+    if (entries) {
+      entries.push(entry);
+    } else {
+      entriesByProvider.set(provider, [entry]);
+    }
+  }
+
+  const suffixesByProvider = new Map<SupportedProvider, Map<string, string>>();
+  for (const [provider, entries] of entriesByProvider) {
+    const suffixes = contestedNameSuffixes(entries);
+    if (suffixes.size > 0) {
+      suffixesByProvider.set(provider, suffixes);
+    }
+  }
+  if (suffixesByProvider.size === 0) {
+    return models;
+  }
+
+  return models.map((model) => {
+    const suffix = suffixesByProvider.get(model.provider)?.get(model.id);
+    return suffix
+      ? { ...model, displayName: `${model.displayName} (${suffix})` }
+      : model;
+  });
+}
+
+/**
  * Give every model in a provider's catalog a display name of its own.
  *
  * Two rows arrive sharing a name from two directions. The registry keys a model
@@ -445,41 +504,60 @@ export function buildModelsToUpsert(params: {
  * previously stored one — so a decoration can never stack up across syncs.
  */
 function withDistinctDescriptions(models: CreateModel[]): CreateModel[] {
-  const modelIdsByDescription = new Map<string, string[]>();
-  for (const { description, modelId } of models) {
-    if (!description) {
-      // A nameless row already falls back to its own id for display.
-      continue;
-    }
-    const modelIds = modelIdsByDescription.get(description);
-    if (modelIds) {
-      modelIds.push(modelId);
-    } else {
-      modelIdsByDescription.set(description, [modelId]);
-    }
-  }
-
-  const distinguishersByDescription = new Map<string, Map<string, string>>();
-  for (const [description, modelIds] of modelIdsByDescription) {
-    if (modelIds.length > 1) {
-      distinguishersByDescription.set(
-        description,
-        distinguishModelIds(modelIds),
-      );
-    }
-  }
-  if (distinguishersByDescription.size === 0) {
+  const suffixes = contestedNameSuffixes(
+    models.map(({ modelId, description }) => ({
+      modelId,
+      name: description ?? null,
+    })),
+  );
+  if (suffixes.size === 0) {
     return models;
   }
 
   return models.map((model) => {
-    const distinguisher = model.description
-      ? distinguishersByDescription.get(model.description)?.get(model.modelId)
-      : undefined;
-    return distinguisher
-      ? { ...model, description: `${model.description} (${distinguisher})` }
+    const suffix = suffixes.get(model.modelId);
+    return suffix
+      ? { ...model, description: `${model.description} (${suffix})` }
       : model;
   });
+}
+
+/**
+ * The distinguisher each contested row should be suffixed with, keyed by model
+ * id — empty for uncontested rows and for the row whose id is exactly the
+ * group's shared stem (it keeps the bare name). Callers pass one provider's
+ * rows at a time: model ids are only unique within a provider, and models from
+ * different providers are never shown side by side under one name.
+ */
+function contestedNameSuffixes(
+  entries: Array<{ modelId: string; name: string | null }>,
+): Map<string, string> {
+  const modelIdsByName = new Map<string, string[]>();
+  for (const { name, modelId } of entries) {
+    if (!name) {
+      // A nameless row already falls back to its own id for display.
+      continue;
+    }
+    const modelIds = modelIdsByName.get(name);
+    if (modelIds) {
+      modelIds.push(modelId);
+    } else {
+      modelIdsByName.set(name, [modelId]);
+    }
+  }
+
+  const suffixes = new Map<string, string>();
+  for (const modelIds of modelIdsByName.values()) {
+    if (modelIds.length <= 1) {
+      continue;
+    }
+    for (const [modelId, distinguisher] of distinguishModelIds(modelIds)) {
+      if (distinguisher) {
+        suffixes.set(modelId, distinguisher);
+      }
+    }
+  }
+  return suffixes;
 }
 
 /**

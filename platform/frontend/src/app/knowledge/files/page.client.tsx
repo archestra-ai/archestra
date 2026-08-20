@@ -24,6 +24,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
@@ -450,37 +451,36 @@ export default function KnowledgeFilesPage() {
             placeholder="Search documents…"
             className="w-full max-w-sm flex-1"
           />
-
-          <div className="ml-auto flex items-center gap-2">
-            {selectedIds.length > 0 && (
-              <>
-                <span className="text-muted-foreground text-sm">
-                  {selectedFileCount}{" "}
-                  {selectedFileCount === 1 ? "document" : "documents"} selected
-                </span>
-                <Button variant="outline" size="sm" onClick={clearSelection}>
-                  <span>Clear</span>
-                </Button>
-                <PermissionButton
-                  permissions={{ knowledgeSource: ["update"] }}
-                  size="sm"
-                  // An empty directory resolves to nothing, so the action is
-                  // refused here rather than by an error that contradicts the
-                  // "selected" count next to it.
-                  disabled={selectedFileCount === 0}
-                  tooltip={
-                    selectedFileCount === 0
-                      ? "The selected directories have no documents in them yet."
-                      : undefined
-                  }
-                  onClick={() => setAddToKbOpen(true)}
-                >
-                  <span>Add to knowledge base</span>
-                </PermissionButton>
-              </>
-            )}
-          </div>
         </div>
+
+        {/* Visibility follows the ticked rows, not the document count: picking
+            an empty directory selects something the bar has to be able to
+            report on and clear, even though it resolves to no documents. */}
+        <BulkActionsBar
+          count={selectedIds.length}
+          noun="document"
+          label={`${selectedFileCount} ${
+            selectedFileCount === 1 ? "document" : "documents"
+          } selected`}
+          onClear={clearSelection}
+        >
+          <PermissionButton
+            permissions={{ knowledgeSource: ["update"] }}
+            size="sm"
+            // An empty directory resolves to nothing, so the action is
+            // refused here rather than by an error that contradicts the
+            // "selected" count next to it.
+            disabled={selectedFileCount === 0}
+            tooltip={
+              selectedFileCount === 0
+                ? "The selected directories have no documents in them yet."
+                : undefined
+            }
+            onClick={() => setAddToKbOpen(true)}
+          >
+            <span>Add to knowledge base</span>
+          </PermissionButton>
+        </BulkActionsBar>
 
         {isLoadingError ? (
           <QueryLoadError

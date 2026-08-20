@@ -896,6 +896,7 @@ export function AssignedToolsTable({
 
       <ToolPolicyBulkActionsBar
         selectedToolIds={selectedTools.map((tool) => tool.id)}
+        onClear={() => setRowSelection({})}
       />
 
       <DataTable

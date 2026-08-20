@@ -46,6 +46,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
@@ -596,55 +597,32 @@ function SkillsList() {
               <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>
 
-            {/* The live region is mounted unconditionally: a screen reader
-                announces changes to a region already in the page, not one
-                inserted with its text in place, so a bar that appears with the
-                first tick would announce nothing until the second. The visible
-                count below carries the same words, so this one is hidden from
-                the accessibility tree's reading order. */}
-            <span aria-live="polite" className="sr-only">
-              {selectedSkills.length > 0
-                ? `${selectedSkills.length} ${
-                    selectedSkills.length === 1 ? "skill" : "skills"
-                  } selected`
-                : ""}
-            </span>
-
-            {selectedSkills.length > 0 && (
-              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-                <span
-                  aria-hidden="true"
-                  data-testid={E2eTestId.SkillsBulkSelectionCount}
-                  className="text-sm font-medium"
-                >
-                  {selectedSkills.length}{" "}
-                  {selectedSkills.length === 1 ? "skill" : "skills"} selected
-                </span>
-                <Button variant="ghost" size="sm" onClick={clearSelection}>
-                  <span>Clear</span>
-                </Button>
-                <div className="ml-auto flex items-center gap-2">
-                  <PermissionButton
-                    permissions={{ skill: ["update"] }}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBulkVisibilityOpen(true)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span>Edit visibility</span>
-                  </PermissionButton>
-                  <PermissionButton
-                    permissions={{ skill: ["delete"] }}
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Delete</span>
-                  </PermissionButton>
-                </div>
-              </div>
-            )}
+            <BulkActionsBar
+              count={selectedSkills.length}
+              noun="skill"
+              countTestId={E2eTestId.SkillsBulkSelectionCount}
+              onClear={clearSelection}
+              className="mb-3"
+            >
+              <PermissionButton
+                permissions={{ skill: ["update"] }}
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkVisibilityOpen(true)}
+              >
+                <Pencil className="h-4 w-4" />
+                <span>Edit visibility</span>
+              </PermissionButton>
+              <PermissionButton
+                permissions={{ skill: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActionsBar>
 
             <DataTable
               columns={columns}

@@ -489,7 +489,7 @@ export const getLabelValues = <ThrowOnError extends boolean = false>(options?: O
 export const getMemberDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GetMemberDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<GetMemberDefaultAgentResponses, GetMemberDefaultAgentErrors, ThrowOnError>({ url: '/api/members/default-agent', ...options });
 
 /**
- * Set or clear the current user's personal default agent. Only one of the caller's own personal chat agents can be the default; it is preselected for their new chats ahead of the organization default. Null clears it, so the organization default applies.
+ * Set or clear the current user's default agent. Any chat agent the caller can see may be pinned — their own, a team's, or an organization-wide one — and it is preselected for their new chats ahead of the organization default. Null clears it, so the organization default applies. Nothing else writes this: a member who never pinned one has no personal default, and the organization default reaches them.
  *
  * Authentication:
  *

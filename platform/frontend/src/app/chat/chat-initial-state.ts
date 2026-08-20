@@ -83,9 +83,11 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     return { agent: projectDefaultAgent, fromProjectDefault: true };
   }
 
-  // The member's own personal default (one of their personal agents, chosen
-  // by them or adopted as their first) beats the org-wide default; a member
-  // who cleared theirs falls through to the org default.
+  // The member's own personal default beats the org-wide default: it is set
+  // only by a deliberate pick (PUT /api/members/default-agent), so it speaks
+  // for the member the way the org default speaks for the admin. A member who
+  // never picked one, or who cleared theirs, falls through to the org default —
+  // nothing adopts an agent into this slot on their behalf.
   const memberDefaultAgent = agents.find(
     (agent) => agent.id === params.memberDefaultAgentId,
   );

@@ -23,13 +23,17 @@ import {
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import {
+  DefaultAgentTag,
+  offersDefaultPin,
+  resolveDefaultAgentBadge,
+} from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { PersonalDefaultAgentTag } from "@/components/personal-default-agent-tag";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -56,7 +60,10 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useDefaultEnvironment,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
@@ -204,6 +211,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
   const { data: personalDefaultAgentId } = useDefaultAgentId();
+  const { data: organization } = useOrganization();
+  // Exactly one agent starts this viewer's new chats, so exactly one row is
+  // badged — badging a personal pin AND the organization default would put two
+  // answers on screen to a question that has one.
+  const effectiveDefault = resolveDefaultAgentBadge({
+    personalDefaultAgentId,
+    organizationDefaultAgentId: organization?.defaultAgentId,
+  });
   const updateDefaultAgentId = useUpdateDefaultAgentId();
   const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
@@ -321,8 +336,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             description={agent.description}
             labels={agent.labels}
             extraBadges={
-              agent.id === personalDefaultAgentId ? (
-                <PersonalDefaultAgentTag />
+              effectiveDefault?.agentId === agent.id ? (
+                <DefaultAgentTag source={effectiveDefault.source} />
               ) : undefined
             }
           />
@@ -386,11 +401,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           currentUserId,
           userTeamIds: userTeamIdSet,
         });
-        // The personal-default switch is the author's alone: it sets the
-        // caller's own member default, so a personal agent of someone else's
-        // never offers it, whatever else the caller may modify.
-        const isPersonal = agent.scope === "personal";
-        const isOwner = !!currentUserId && agent.authorId === currentUserId;
         return (
           // The whole cell, so a disabled action's tooltip wrapper cannot let
           // the click through to the row either.
@@ -419,11 +429,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onPermanentlyDelete={setPermanentlyDeletingAgent}
               onClone={setCloningAgent}
               onConvertToSkill={setConvertingAgent}
+              // Pinning a default is about this viewer's own chats, not about
+              // owning the agent: every chat agent on this page is one they
+              // can start a chat with, so every one of them can be pinned.
+              // Except the one already badged `default (org)` — see
+              // offersDefaultPin.
               personalDefault={
-                isPersonal &&
-                isOwner &&
                 agent.agentType === "agent" &&
-                !agent.builtIn
+                !agent.builtIn &&
+                offersDefaultPin({
+                  agentId: agent.id,
+                  badge: effectiveDefault,
+                })
                   ? {
                       isDefault: agent.id === personalDefaultAgentId,
                       onToggle: (target, makeDefault) => {

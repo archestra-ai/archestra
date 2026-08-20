@@ -28,6 +28,12 @@ type TableRowAction = {
   permissions?: Permissions | Readonly<Record<string, readonly string[]>>;
   disabled?: boolean;
   disabledTooltip?: string;
+  /**
+   * Explains what the action does when it IS available — for actions whose
+   * label names the verb but not the consequence. The label alone remains the
+   * tooltip when this is unset, so existing actions are unaffected.
+   */
+  tooltip?: string;
   variant?: "default" | "destructive";
   href?: string;
   testId?: string;
@@ -117,7 +123,7 @@ function ActionButton({
   const tooltipText =
     action.disabled && action.disabledTooltip
       ? action.disabledTooltip
-      : action.label;
+      : (action.tooltip ?? action.label);
 
   // PermissionButton handles its own tooltip (including "no permission" tooltip),
   // so we only wrap non-permission buttons in Tooltip
@@ -215,7 +221,7 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
 
   const isPermitted = action.permissions ? hasPermission : true;
 
-  let tooltipText = action.label;
+  let tooltipText = action.tooltip ?? action.label;
   if (action.permissions && !hasPermission) {
     tooltipText = formatMissingPermissions(missingPermissions);
   } else if (action.disabled && action.disabledTooltip) {
@@ -262,13 +268,28 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
     </DropdownMenuItem>
   );
 
-  if (isDisabled && tooltipText !== action.label) {
+  if (tooltipText !== action.label) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="cursor-not-allowed">{content}</div>
+          {isDisabled ? (
+            // A disabled item swallows pointer events, so the tooltip (the
+            // disabled reason) would never open without this wrapper.
+            <div className="cursor-not-allowed">{content}</div>
+          ) : (
+            // An enabled item triggers the tooltip itself: an extra element
+            // between DropdownMenuContent and its item is what the disabled
+            // branch can afford (disabled items are skipped by keyboard
+            // navigation) and an enabled one cannot.
+            content
+          )}
         </TooltipTrigger>
-        <TooltipContent side="left">{tooltipText}</TooltipContent>
+        {/* `w-fit` with no bound renders a sentence as one long line that
+            blankets the table beside the menu. Cap it so it wraps into a
+            normal tooltip box. */}
+        <TooltipContent side="left" className="max-w-64">
+          {tooltipText}
+        </TooltipContent>
       </Tooltip>
     );
   }

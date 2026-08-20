@@ -1,4 +1,5 @@
 import { createEvent, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -276,6 +277,55 @@ describe("TableRowActions", () => {
     expect(
       screen.getByRole("menuitem", { name: /delete/i }),
     ).toBeInTheDocument();
+  });
+
+  it("explains an available dropdown action with its tooltip, and still fires it", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <TableRowActions
+          actions={primaryActions}
+          dropdownActions={[
+            {
+              icon: <MockIcon />,
+              label: "Pin default",
+              tooltip: "Your new chats start on this agent.",
+              onClick,
+            },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByText("Your new chats start on this agent."),
+    ).toBeInTheDocument();
+    // The tooltip must not cost the item its behaviour: an enabled item stays
+    // its own trigger rather than gaining a wrapper element.
+    await user.click(screen.getByRole("menuitem", { name: /pin default/i }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves an action with no tooltip showing just its label", () => {
+    render(
+      <TooltipProvider>
+        <TableRowActions
+          actions={primaryActions}
+          dropdownActions={[
+            { icon: <MockIcon />, label: "Clone", onClick: vi.fn() },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+
+    // The primary buttons and the "More actions" trigger have tooltips of
+    // their own; what must not exist is one for this item.
+    const tooltips = screen
+      .getAllByTestId("tooltip-content")
+      .map((node) => node.textContent);
+    expect(tooltips).not.toContain("Clone");
   });
 
   it("disables primary action if permissions are missing", () => {

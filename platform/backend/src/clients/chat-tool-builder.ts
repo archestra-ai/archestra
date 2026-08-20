@@ -289,6 +289,11 @@ export function buildMcpGatewayTool(params: {
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
+                // Every runner that drives an agent lands here — web
+                // chat, A2A, ChatOps, schedule triggers, incoming email
+                // — and all of them put the result through this file's
+                // bounded media extraction before a model sees it.
+                deliversMediaAsImageParts: true,
                 // LockedChat: a run_tool dispatch persists via mcpClient, so
                 // its stored row needs the same treatment as a direct call —
                 // encrypted under the conversation key, not redacted.

@@ -18,7 +18,7 @@ import {
   useMyTeams,
   useTeams,
 } from "@/lib/teams/team.query";
-import NewMcpCatalogItemPage from "./page";
+import NewMcpCatalogItemPage from "./page.client";
 
 vi.mock("next/navigation");
 

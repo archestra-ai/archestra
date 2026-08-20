@@ -9,6 +9,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: () => ({ data: { user: { id: "user-me" } } }),
+  useHasPermissions: () => ({ data: false }),
+}));
+
 type Props = Parameters<typeof McpServerIssueNotice>[0];
 
 // The catalog icon behind the name is query-backed.
@@ -27,26 +32,15 @@ const server = {
   id: "srv-1",
   catalogId: "cat-1",
   name: "crashy-test-server",
-  assignedAgents: [
-    {
-      id: "a1",
-      name: "Ops",
-      agentType: "agent",
-      scope: "org",
-      ownerEmail: null,
-    },
-    {
-      id: "a2",
-      name: "QA",
-      agentType: "agent",
-      scope: "org",
-      ownerEmail: null,
-    },
-  ],
+  ownerId: "user-me",
+  assignedAgents: [],
   autoModeAgents: [],
 } as unknown as Props["servers"][number];
 
-const failedToStart = (detail: string): McpServerIssue => ({
+const failedToStart = (
+  detail: string,
+  overrides: Partial<McpServerIssue> = {},
+): McpServerIssue => ({
   kind: "failed-to-start",
   severity: "down",
   audience: "you",
@@ -54,16 +48,34 @@ const failedToStart = (detail: string): McpServerIssue => ({
   serverId: "srv-1",
   detail,
   since: null,
+  muted: false,
+  mutedReason: null,
+  ...overrides,
+});
+
+const needsReauth = (
+  overrides: Partial<McpServerIssue> = {},
+): McpServerIssue => ({
+  kind: "needs-reauth",
+  severity: "down",
+  audience: "you",
+  catalogId: "cat-1",
+  serverId: "srv-1",
+  detail: null,
+  since: null,
+  muted: false,
+  mutedReason: null,
+  ...overrides,
 });
 
 /**
- * The Needs-attention row and the server Overview panel render the same
- * diagnosis at two densities. The row sits under a section header that
- * already names the trouble, so it drops the pill, the how-to-fix prose and
- * the secondary verb, and folds a short raw message into its facts line.
+ * The row and the server Overview panel render the same diagnosis. The row
+ * used to drop the pill, the how-to-fix sentence and the secondary verb on the
+ * theory that a section header supplied them; there is no section header any
+ * more, so the row has to carry the whole answer itself.
  */
 describe("McpServerIssueNotice", () => {
-  it("row: name, cause, one facts line with the raw message inline, one verb", () => {
+  it("row: pill, cause, how to fix it, both verbs and the connection count", () => {
     renderWithQuery(
       <McpServerIssueNotice
         variant="row"
@@ -76,22 +88,88 @@ describe("McpServerIssueNotice", () => {
     expect(
       screen.getByRole("link", { name: "crashy-test-server" }),
     ).toBeTruthy();
+    expect(screen.getByText("Failed to start")).toBeTruthy();
     expect(
       screen.getByText(
         "The server exited before it answered the first request.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText(/Check the logs for the error/)).toBeNull();
-    expect(screen.queryByText("Failed to start")).toBeNull();
+    expect(screen.getByText(/Check the logs for the error/)).toBeTruthy();
 
-    expect(screen.getByText("Affects 2 agents")).toBeTruthy();
+    expect(screen.getByText("1 of 1 connection affected")).toBeTruthy();
     expect(screen.getByText("exit code 1")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Show details/ })).toBeNull();
 
     expect(screen.getByRole("button", { name: "View logs" })).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Edit configuration" }),
+      screen.getByRole("button", { name: "Edit configuration" }),
+    ).toBeTruthy();
+  });
+
+  it("explains every kind in the viewer's bucket, not only the worst one", () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        variant="row"
+        item={item}
+        issues={[
+          failedToStart("exit code 1"),
+          {
+            kind: "reinstall-required",
+            severity: "attention",
+            audience: "you",
+            catalogId: "cat-1",
+            serverId: "srv-1",
+            detail: "Configuration changed since this was installed",
+            since: null,
+            muted: false,
+            mutedReason: null,
+          },
+        ]}
+        servers={[server]}
+      />,
+    );
+
+    expect(screen.getByText("Failed to start")).toBeTruthy();
+    expect(screen.getByText("Reinstall required")).toBeTruthy();
+    expect(
+      screen.getByText("Configuration changed since this was installed"),
+    ).toBeTruthy();
+  });
+
+  it("names who can act instead of showing a button the viewer cannot press", () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        variant="row"
+        item={item}
+        issues={[needsReauth({ audience: "others" })]}
+        servers={[server]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Only the person who owns this connection can sign in to the provider again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Re-authenticate" }),
     ).toBeNull();
+    expect(screen.getByRole("link", { name: "Open" })).toBeTruthy();
+  });
+
+  it("keeps a muted alert visible, and says it is muted", () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        variant="row"
+        item={item}
+        issues={[needsReauth({ muted: true })]}
+        servers={[server]}
+      />,
+    );
+
+    expect(screen.getByText("Needs re-authentication")).toBeTruthy();
+    expect(
+      screen.getByText("You muted this alert, so it is not counted for you."),
+    ).toBeTruthy();
   });
 
   it("row: a long or multi-line raw message stays behind the disclosure", () => {

@@ -2,36 +2,22 @@
 
 import { Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createContext, useContext, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  ATTENTION_FACET_STATUS_VALUES,
+  REGISTRY_STATUS_PARAM,
+} from "./_parts/registry-list-controls";
 
-type McpRegistryLayoutContextType = {
-  setActionButton: (button: React.ReactNode) => void;
-  /**
-   * How many servers the viewer must act on, shown on the root's
-   * "Needs attention" tab. Reported by the list page, which owns the live
-   * deployment-status subscription the count depends on.
-   */
-  setAttentionCount: (count: number) => void;
-};
-
-const McpRegistryLayoutContext = createContext<McpRegistryLayoutContextType>({
-  setActionButton: () => {},
-  setAttentionCount: () => {},
-});
-
-export function useSetMcpRegistryAction() {
-  return useContext(McpRegistryLayoutContext).setActionButton;
-}
-
-export function useSetMcpRegistryAttentionCount() {
-  return useContext(McpRegistryLayoutContext).setAttentionCount;
-}
-
-/** Query param selecting the root's Needs-attention tab. */
-export const MCP_REGISTRY_TAB_PARAM = "tab";
-export const MCP_REGISTRY_ATTENTION_TAB = "attention";
+/**
+ * The registry used to answer "what needs me?" on a second tab, which meant
+ * the same server was counted on the tab and listed on the tab but missing
+ * from the list everyone actually works in. The tab is gone; the question is
+ * now a facet of the one list. Links people already have keep working.
+ */
+const RETIRED_ATTENTION_TAB_PARAM = "tab";
+const RETIRED_ATTENTION_TAB_VALUE = "attention";
 
 export default function McpCatalogLayout({
   children,
@@ -42,21 +28,21 @@ export default function McpCatalogLayout({
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMainRegistry = pathname === "/mcp/registry";
-  // Tab hrefs carry the list's other params (search, labels) so PageLayout's
-  // exact-match active check works and switching tabs keeps the filters.
-  const rootTabHref = (tab: string | null) => {
+
+  // Path-exact: `tab` means something else on the server detail page, so only
+  // the list route redirects. `replace` keeps the retired URL out of history,
+  // where Back would bounce the user straight through it again.
+  const retiredAttentionTab =
+    isMainRegistry &&
+    searchParams.get(RETIRED_ATTENTION_TAB_PARAM) ===
+      RETIRED_ATTENTION_TAB_VALUE;
+  useEffect(() => {
+    if (!retiredAttentionTab) return;
     const params = new URLSearchParams(searchParams.toString());
-    if (tab) params.set(MCP_REGISTRY_TAB_PARAM, tab);
-    else params.delete(MCP_REGISTRY_TAB_PARAM);
-    const qs = params.toString();
-    return qs ? `/mcp/registry?${qs}` : "/mcp/registry";
-  };
-  const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const [attentionCount, setAttentionCount] = useState(0);
-  const contextValue = useMemo(
-    () => ({ setActionButton, setAttentionCount }),
-    [],
-  );
+    params.delete(RETIRED_ATTENTION_TAB_PARAM);
+    params.set(REGISTRY_STATUS_PARAM, ATTENTION_FACET_STATUS_VALUES.you);
+    router.replace(`/mcp/registry?${params.toString()}`, { scroll: false });
+  }, [retiredAttentionTab, searchParams, router]);
 
   const registrySubPath = pathname.startsWith("/mcp/registry/")
     ? pathname.slice("/mcp/registry/".length)
@@ -71,22 +57,14 @@ export default function McpCatalogLayout({
     !registrySubPath.includes("/") &&
     !REGISTRY_NON_DETAIL_ROUTES.includes(registrySubPath);
   if (isServerDetailPage) {
-    return (
-      <McpRegistryLayoutContext.Provider value={contextValue}>
-        {children}
-      </McpRegistryLayoutContext.Provider>
-    );
+    return <>{children}</>;
   }
 
   // Edit/new/catalog pages carry their own headers — render bare content (no
   // overflow wrapper, so in-page sticky footers pin to the viewport).
   const isFullPage = pathname.startsWith("/mcp/registry/");
   if (isFullPage) {
-    return (
-      <McpRegistryLayoutContext.Provider value={contextValue}>
-        <div className="mx-auto w-full px-6 py-6 md:px-6">{children}</div>
-      </McpRegistryLayoutContext.Provider>
-    );
+    return <div className="mx-auto w-full px-6 py-6 md:px-6">{children}</div>;
   }
 
   // The main list navigates to the routed setup wizard.
@@ -101,44 +79,17 @@ export default function McpCatalogLayout({
   ) : undefined;
 
   return (
-    <McpRegistryLayoutContext.Provider value={contextValue}>
-      <PageLayout
-        title="MCP Registry"
-        description={
-          <>
-            Manage your own list of MCP servers and make them available to
-            agents.
-          </>
-        }
-        actionButton={registryActionButton ?? pageActionButton}
-        tabs={
-          isMainRegistry
-            ? [
-                { label: "All servers", href: rootTabHref(null) },
-                {
-                  label: (
-                    <span className="flex items-center gap-1.5">
-                      <span>Needs attention</span>
-                      {attentionCount > 0 && (
-                        <span
-                          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-destructive-foreground tabular-nums"
-                          data-testid="mcp-registry-attention-tab-count"
-                        >
-                          {attentionCount}
-                        </span>
-                      )}
-                    </span>
-                  ),
-                  href: rootTabHref(MCP_REGISTRY_ATTENTION_TAB),
-                  testId: "mcp-registry-attention-tab",
-                },
-              ]
-            : []
-        }
-      >
-        {children}
-      </PageLayout>
-    </McpRegistryLayoutContext.Provider>
+    <PageLayout
+      title="MCP Registry"
+      description={
+        <>
+          Manage your own list of MCP servers and make them available to agents.
+        </>
+      }
+      actionButton={registryActionButton}
+    >
+      {children}
+    </PageLayout>
   );
 }
 

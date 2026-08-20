@@ -6,27 +6,42 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
+  attentionCatalogIds,
   computeMcpServerIssues,
   type McpServerIssue,
-  type McpServerIssueSummary,
-  summarizeMcpServerIssues,
 } from "@/lib/mcp/mcp-server-issues";
 import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 
-const NO_STATUSES: Record<string, McpDeploymentStatusEntry> = {};
+/**
+ * How many catalog items sit in each facet. All three come out of
+ * `attentionCatalogIds`, which is the point: the sidebar badge and the list's
+ * own facet buttons are the same number computed once.
+ */
+export interface McpServerFacetCounts {
+  /** Items the viewer can fix themselves. */
+  you: number;
+  /** Items waiting on somebody else, including on a role the viewer lacks. */
+  others: number;
+  /** Items the viewer has silenced; absent from both counts above. */
+  muted: number;
+}
 
 /**
  * Issues across every MCP server the viewer can see, scoped to what they can
  * act on. Reads the same catalog + installed-server queries the registry page
- * uses (cached, so it costs nothing extra there). Pass the live deployment
- * statuses when the caller subscribes to them (the registry page); without
- * them, runtime states (Not running, Starting) are simply not known.
+ * uses (cached, so it costs nothing extra there).
+ *
+ * `deploymentStatuses` is required rather than defaulted: runtime faults (Not
+ * running, Stuck starting) exist only for a caller that passes the live feed,
+ * so a caller that left it out counted a different fleet from the one next to
+ * it on screen. Every caller takes it from `useMcpDeploymentStatuses`, whose
+ * subscription `<McpDeploymentStatusFeed />` already holds open app-wide.
  */
 export function useMcpServerIssues(
-  deploymentStatuses: Record<string, McpDeploymentStatusEntry> = NO_STATUSES,
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
 ): {
   issuesByCatalog: Map<string, McpServerIssue[]>;
-  summary: McpServerIssueSummary;
+  facetCounts: McpServerFacetCounts;
 } {
   const { data: catalogItems } = useInternalMcpCatalog();
   const { data: servers } = useMcpServers();
@@ -63,9 +78,14 @@ export function useMcpServerIssues(
       canEditCatalog,
     ],
   );
-  const summary = useMemo(
-    () => summarizeMcpServerIssues(issuesByCatalog),
+  const facetCounts = useMemo(
+    () => ({
+      you: attentionCatalogIds(issuesByCatalog, { audience: "you" }).length,
+      others: attentionCatalogIds(issuesByCatalog, { audience: "others" })
+        .length,
+      muted: attentionCatalogIds(issuesByCatalog, { audience: "muted" }).length,
+    }),
     [issuesByCatalog],
   );
-  return { issuesByCatalog, summary };
+  return { issuesByCatalog, facetCounts };
 }

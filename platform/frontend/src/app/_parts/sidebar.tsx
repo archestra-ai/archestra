@@ -90,7 +90,11 @@ interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
-  /** Trailing live count, e.g. MCP servers needing attention. */
+  /**
+   * Trailing live count, e.g. MCP servers needing attention. Rendered as a
+   * sibling of the nav link rather than inside it: the badge is itself a link
+   * to the filtered list, and an anchor may not contain another anchor.
+   */
   countBadge?: React.ReactNode;
   /**
    * Pages whose permissions gate this item, for items whose `url` isn't in
@@ -431,15 +435,20 @@ const NavPrimary = ({
               {item.badgeLabel ?? "New"}
             </Badge>
           )}
-          {item.countBadge}
           {item.dotKey && (
             <OnboardingDot
               visible={unseenDotKeys.has(item.dotKey)}
-              className="absolute right-1 top-1"
+              // Steps aside for a count badge, which is a `SidebarMenuAction`
+              // pinned to the same corner. Keyed off the action actually being
+              // in the DOM, not off the item declaring one: a badge that has
+              // nothing to report renders nothing, and the dot keeps the
+              // corner to itself.
+              className="absolute top-1 right-1 group-has-data-[sidebar=menu-action]/menu-item:right-8"
             />
           )}
         </SidebarPrefetchLink>
       </SidebarMenuButton>
+      {item.countBadge}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
           {item.subItems

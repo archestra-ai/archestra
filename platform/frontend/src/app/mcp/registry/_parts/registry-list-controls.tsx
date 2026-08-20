@@ -17,6 +17,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { typeRole } from "@/lib/design/type-scale";
+import type { McpServerAttentionFacet } from "@/lib/mcp/mcp-server-issues";
+import type { McpServerFacetCounts } from "@/lib/mcp/use-mcp-server-issues";
 import { cn } from "@/lib/utils";
 
 export type SortKey =
@@ -24,7 +27,8 @@ export type SortKey =
   | "name-desc"
   | "newest"
   | "oldest"
-  | "most-tools";
+  | "most-tools"
+  | "issue-age";
 
 export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name-asc", label: "Name (A–Z)" },
@@ -32,6 +36,9 @@ export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "newest", label: "Newest" },
   { key: "oldest", label: "Oldest" },
   { key: "most-tools", label: "Most tools" },
+  // Answers "what has been broken the longest", which is the question a
+  // re-authentication backlog is actually triaged by.
+  { key: "issue-age", label: "Longest outstanding" },
 ];
 
 export interface FilterOption {
@@ -41,18 +48,81 @@ export interface FilterOption {
 
 export type FilterGroup = "status" | "environment" | "author";
 
+/** Also the search-param names the groups are addressable through. */
+export const FILTER_GROUPS: FilterGroup[] = ["status", "environment", "author"];
+
 export type RegistryFilters = Record<FilterGroup, Set<string>>;
 
 export function emptyRegistryFilters(): RegistryFilters {
   return { status: new Set(), environment: new Set(), author: new Set() };
 }
 
-export const NEEDS_ATTENTION_STATUS_VALUE = "needs-attention";
+/**
+ * The search param the whole Status filter lives in, facets included. One
+ * param means one addressable list: `?status=needs-my-action` is a URL that
+ * can be linked to from the sidebar, bookmarked, and redirected to.
+ */
+export const REGISTRY_STATUS_PARAM = "status";
+
+export const INSTALLED_STATUS_VALUE = "installed";
+export const NOT_INSTALLED_STATUS_VALUE = "not-installed";
+
+/**
+ * The audience facets, as status values. They share the `status` param with
+ * the installed/not-installed options but are mutually exclusive with each
+ * other, because an item belongs to exactly one facet and a viewer asking
+ * "what is mine" is asking one question, not building a set.
+ */
+export const ATTENTION_FACET_STATUS_VALUES = {
+  you: "needs-my-action",
+  others: "waiting-on-someone-else",
+  muted: "muted",
+} as const satisfies Record<McpServerAttentionFacet, string>;
+
+const FACET_BY_STATUS_VALUE = new Map<string, McpServerAttentionFacet>(
+  (
+    Object.entries(ATTENTION_FACET_STATUS_VALUES) as [
+      McpServerAttentionFacet,
+      string,
+    ][]
+  ).map(([facet, value]) => [value, facet]),
+);
+
+/** The facet a `status` selection is narrowed to, or null for the whole list. */
+export function selectedAttentionFacet(
+  status: Set<string>,
+): McpServerAttentionFacet | null {
+  for (const value of status) {
+    const facet = FACET_BY_STATUS_VALUE.get(value);
+    if (facet) return facet;
+  }
+  return null;
+}
+
+/**
+ * `status` with exactly one facet selected, or none. The facets replace each
+ * other rather than accumulating: an item belongs to exactly one of them, so a
+ * selection of two would always be a selection of everything.
+ */
+export function withAttentionFacet(
+  status: Set<string>,
+  facet: McpServerAttentionFacet | null,
+): Set<string> {
+  const next = new Set(
+    [...status].filter((value) => !FACET_BY_STATUS_VALUE.has(value)),
+  );
+  if (facet) next.add(ATTENTION_FACET_STATUS_VALUES[facet]);
+  return next;
+}
+
+/** The registry list URL showing one facet, and nothing else. */
+export function mcpRegistryFacetHref(facet: McpServerAttentionFacet): string {
+  return `/mcp/registry?${REGISTRY_STATUS_PARAM}=${ATTENTION_FACET_STATUS_VALUES[facet]}`;
+}
 
 export const STATUS_OPTIONS: FilterOption[] = [
-  { value: "installed", label: "Installed" },
-  { value: "not-installed", label: "Not installed" },
-  { value: NEEDS_ATTENTION_STATUS_VALUE, label: "Needs attention" },
+  { value: INSTALLED_STATUS_VALUE, label: "Installed" },
+  { value: NOT_INSTALLED_STATUS_VALUE, label: "Not installed" },
 ];
 
 const GROUP_LABELS: Record<FilterGroup, string> = {
@@ -63,6 +133,13 @@ const GROUP_LABELS: Record<FilterGroup, string> = {
 
 const STATUS_LABELS: Record<string, string> = Object.fromEntries(
   STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+// Facet labels are written out in full on the segmented control, so the chips
+// never need to render one; they are listed here only so a hand-edited URL
+// carrying a facet value cannot produce a chip labelled with a raw slug.
+const FACET_VALUES = new Set<string>(
+  Object.values(ATTENTION_FACET_STATUS_VALUES),
 );
 
 // Lists longer than this get an inline search box.
@@ -104,6 +181,69 @@ export function RegistrySortMenu({
   );
 }
 
+/**
+ * The list's audience facets, always visible rather than folded into the
+ * Status popover. An admin who personally owns nothing still has to be able to
+ * see, without opening anything, that two servers are waiting on them and one
+ * is waiting on somebody else.
+ *
+ * Each count comes from `attentionCatalogIds`, so the numbers here and the
+ * rows the list renders are the same computation.
+ */
+export function RegistryAttentionFacets({
+  counts,
+  totalCount,
+  selected,
+  onSelect,
+}: {
+  counts: McpServerFacetCounts;
+  /** Catalog items the list would show with no facet applied. */
+  totalCount: number;
+  selected: McpServerAttentionFacet | null;
+  onSelect: (facet: McpServerAttentionFacet | null) => void;
+}) {
+  const facets: {
+    facet: McpServerAttentionFacet | null;
+    label: string;
+    count: number;
+  }[] = [
+    { facet: null, label: "All", count: totalCount },
+    { facet: "you", label: "Needs my action", count: counts.you },
+    { facet: "others", label: "Waiting on someone else", count: counts.others },
+  ];
+  // Muted is a facet the viewer created; nobody else needs a button for an
+  // empty box they have never used.
+  if (counts.muted > 0) {
+    facets.push({ facet: "muted", label: "Muted", count: counts.muted });
+  }
+
+  return (
+    <fieldset
+      className="inline-flex items-center rounded-md border p-0.5"
+      data-testid="mcp-registry-attention-facets"
+    >
+      <legend className="sr-only">Filter MCP servers by who has to act</legend>
+      {facets.map(({ facet, label, count }) => (
+        <button
+          key={facet ?? "all"}
+          type="button"
+          aria-pressed={selected === facet}
+          onClick={() => onSelect(facet)}
+          data-testid={`mcp-registry-facet-${facet ?? "all"}`}
+          className={cn(
+            typeRole({ role: "body" }),
+            "rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent",
+            selected === facet && "bg-secondary font-medium",
+          )}
+        >
+          {label}{" "}
+          <span className="tabular-nums text-muted-foreground">({count})</span>
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
 export function RegistryFilterDropdown({
   label,
   options,
@@ -115,7 +255,11 @@ export function RegistryFilterDropdown({
   selected: Set<string>;
   onToggle: (value: string) => void;
 }) {
-  const count = selected.size;
+  // Only what this dropdown actually offers. The attention facets live in the
+  // segmented control and are carried in the same `status` param, so counting
+  // the raw selection would claim a filter the list below does not contain.
+  const offered = new Set(options.map((o) => o.value));
+  const count = [...selected].filter((v) => offered.has(v)).length;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -218,6 +362,10 @@ export function RegistryFilterChips({
   const entries: { group: FilterGroup; value: string; label: string }[] = [];
   (Object.keys(selected) as FilterGroup[]).forEach((group) => {
     selected[group].forEach((value) => {
+      // The facet is already spelled out, and selected, on the segmented
+      // control; a second dismissible copy of it would be two controls for one
+      // piece of state.
+      if (group === "status" && FACET_VALUES.has(value)) return;
       entries.push({
         group,
         value,

@@ -1,14 +1,18 @@
-import type { McpDeploymentStatusEntry } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type McpDeploymentStatusEntry,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
+  attentionCatalogIds,
   bucketOf,
   type CatalogItemForIssues,
+  canFixInstall,
   computeMcpServerIssues,
-  formatIssueBreakdown,
+  facetIssues,
   type InstalledServerForIssues,
   type IssueViewer,
   needsAttention,
-  summarizeMcpServerIssues,
 } from "./mcp-server-issues";
 
 const ME = "user-me";
@@ -46,8 +50,18 @@ function server(
     oauthRefreshFailedAt: null,
     reinstallRequired: false,
     reinstallReason: null,
+    alertMutes: [],
     ...overrides,
   } as InstalledServerForIssues;
+}
+
+function reauthMute(): InstalledServerForIssues["alertMutes"][number] {
+  return {
+    mcpServerId: "unused",
+    issueKind: "needs-reauth",
+    reason: "Owner is on leave",
+    mutedAt: "2026-08-19T09:00:00.000Z",
+  };
 }
 
 function entry(
@@ -114,6 +128,8 @@ describe("computeMcpServerIssues", () => {
         serverId: "s1",
         detail: "image pull failed",
         since: null,
+        muted: false,
+        mutedReason: null,
       },
     ]);
   });
@@ -364,91 +380,199 @@ describe("computeMcpServerIssues", () => {
   });
 });
 
-describe("summaries", () => {
-  it("counts servers per bucket, actionable issues per kind, and the worst severity", () => {
-    const issues = computeMcpServerIssues({
+describe("facets", () => {
+  /**
+   * The fleet every count on the registry is taken over: one server the viewer
+   * must fix, one waiting on somebody else, one merely starting, one image
+   * awaiting an approval the viewer cannot give, one item broken in two
+   * different people's directions at once, and the built-in Archestra entry
+   * that no surface may ever list.
+   */
+  const mixedFleet = () =>
+    computeMcpServerIssues({
       items: [
-        item({ id: "a" }),
-        item({ id: "r", serverType: "remote" }),
-        item({ id: "p" }),
-        item({ id: "ok" }),
+        item({ id: "mine" }),
+        item({ id: "theirs", serverType: "remote" }),
+        item({ id: "starting" }),
+        item({ id: "approval", imageApprovalRequired: true }),
+        item({ id: "both", serverType: "remote" }),
+        item({ id: "healthy" }),
+        item({ id: ARCHESTRA_MCP_CATALOG_ID }),
       ],
       servers: [
-        server({ id: "s1", catalogId: "a", localInstallationStatus: "error" }),
         server({
-          id: "s2",
-          catalogId: "r",
-          oauthRefreshError: "refresh_failed",
+          id: "s-mine",
+          catalogId: "mine",
+          localInstallationStatus: "error",
         }),
         server({
-          id: "s3",
-          catalogId: "r",
+          id: "s-theirs",
+          catalogId: "theirs",
           ownerId: OTHER,
           oauthRefreshError: "refresh_failed",
         }),
         server({
-          id: "s4",
-          catalogId: "p",
+          id: "s-starting",
+          catalogId: "starting",
           localInstallationStatus: "pending",
         }),
+        // One connection of "both" is the viewer's to re-authenticate and one
+        // is a colleague's: the item belongs to "you" and to nothing else.
+        server({
+          id: "s-both-mine",
+          catalogId: "both",
+          oauthRefreshError: "refresh_failed",
+        }),
+        server({
+          id: "s-both-theirs",
+          catalogId: "both",
+          ownerId: OTHER,
+          oauthRefreshError: "refresh_failed",
+        }),
+        server({ id: "s-healthy", catalogId: "healthy" }),
+        server({
+          id: "s-archestra",
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          localInstallationStatus: "error",
+        }),
       ],
-      deploymentStatuses: {},
+      deploymentStatuses: { "s-starting": entry({ state: "pending" }) },
       viewer: member,
     });
-    const summary = summarizeMcpServerIssues(issues);
-    expect(summary).toEqual({
-      actionableServerCount: 2,
-      actionableByKind: [
-        { kind: "failed-to-start", count: 1 },
-        { kind: "needs-reauth", count: 1 },
-      ],
-      othersServerCount: 0,
-      inProgressServerCount: 1,
-      severity: "down",
-    });
-    expect(formatIssueBreakdown(summary)).toBe(
-      "1 failed to start · 1 needs re-authentication",
-    );
-    expect(bucketOf(issues.get("r") ?? [])).toBe("you");
-    expect(bucketOf(issues.get("p") ?? [])).toBe("system");
-    expect(needsAttention(issues.get("p"))).toBe(false);
-    expect(needsAttention(issues.get("a"))).toBe(true);
-    expect(needsAttention(issues.get("ok"))).toBe(false);
+
+  it("lists the items the viewer has to act on, and only those", () => {
+    expect(attentionCatalogIds(mixedFleet(), { audience: "you" })).toEqual([
+      "mine",
+      "both",
+    ]);
   });
 
-  it("puts a server whose only issues are other people's into the others bucket, uncounted", () => {
+  /**
+   * Why every surface has to be handed the live deployment feed. Runtime
+   * faults exist only for a caller holding the statuses, so two callers over
+   * one fleet disagree the moment one of them leaves them out — which is
+   * exactly how the sidebar badge came to read "0" beside a list reading "1".
+   */
+  it("sees a crash-looping pod only when it is given the deployment statuses", () => {
+    const fleet = (
+      deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
+    ) =>
+      computeMcpServerIssues({
+        items: [item({ id: "crashy" })],
+        servers: [server({ id: "s-crashy", catalogId: "crashy" })],
+        deploymentStatuses,
+        viewer: member,
+      });
+
+    const withFeed = attentionCatalogIds(
+      fleet({ "s-crashy": entry({ state: "failed" }) }),
+      { audience: "you" },
+    );
+    const withoutFeed = attentionCatalogIds(fleet({}), { audience: "you" });
+
+    expect(withFeed).toEqual(["crashy"]);
+    expect(withoutFeed).toEqual([]);
+  });
+
+  it("never lists the built-in Archestra entry, however broken it looks", () => {
+    const issues = mixedFleet();
+    expect(issues.has(ARCHESTRA_MCP_CATALOG_ID)).toBe(true);
+    expect([
+      ...attentionCatalogIds(issues, { audience: "you" }),
+      ...attentionCatalogIds(issues, { audience: "others" }),
+      ...attentionCatalogIds(issues, { audience: "muted" }),
+    ]).not.toContain(ARCHESTRA_MCP_CATALOG_ID);
+  });
+
+  it("puts an item with faults in two buckets in yours only, once", () => {
+    const issues = mixedFleet();
+    expect(attentionCatalogIds(issues, { audience: "you" })).toEqual([
+      "mine",
+      "both",
+    ]);
+    expect(attentionCatalogIds(issues, { audience: "others" })).not.toContain(
+      "both",
+    );
+    expect(bucketOf(issues.get("both") ?? [])).toBe("you");
+  });
+
+  it("leaves nothing broken out of every facet, and nothing merely starting in one", () => {
+    const issues = mixedFleet();
+    const others = attentionCatalogIds(issues, { audience: "others" });
+
+    // "approval" is audience "system" to a non-approver but still blocks every
+    // install, so it waits on somebody else rather than vanishing.
+    expect(others).toEqual(["theirs", "approval"]);
+    expect(others).not.toContain("starting");
+    expect(attentionCatalogIds(issues, { audience: "you" })).not.toContain(
+      "starting",
+    );
+    expect(needsAttention(issues.get("starting"))).toBe(false);
+  });
+
+  it("takes a muted alert out of both counts and lists it under Muted", () => {
     const issues = computeMcpServerIssues({
       items: [item({ id: "r", serverType: "remote" })],
       servers: [
         server({
-          id: "theirs",
+          id: "s1",
           catalogId: "r",
-          ownerId: OTHER,
           oauthRefreshError: "refresh_failed",
+          alertMutes: [reauthMute()],
         }),
       ],
       deploymentStatuses: {},
       viewer: member,
     });
-    expect(summarizeMcpServerIssues(issues)).toEqual({
-      actionableServerCount: 0,
-      actionableByKind: [],
-      othersServerCount: 1,
-      inProgressServerCount: 0,
-      severity: null,
-    });
+
+    expect(attentionCatalogIds(issues, { audience: "you" })).toEqual([]);
+    expect(attentionCatalogIds(issues, { audience: "others" })).toEqual([]);
+    expect(attentionCatalogIds(issues, { audience: "muted" })).toEqual(["r"]);
+    // Still visible, still explained, and it carries the note the viewer gave
+    // for it: muting hides the count, not the state or the reason for it.
+    expect(facetIssues(issues.get("r") ?? [], "muted")).toEqual([
+      expect.objectContaining({
+        kind: "needs-reauth",
+        muted: true,
+        mutedReason: "Owner is on leave",
+      }),
+    ]);
   });
 
-  it("is attention-only when nothing is down, and empty when clean", () => {
-    const warn = summarizeMcpServerIssues(
-      computeMcpServerIssues({
-        items: [item({ id: "a", imageApprovalRequired: true })],
-        servers: [],
-        deploymentStatuses: {},
-        viewer: admin,
+  it("keeps an item counted when only one of its two alerts is muted", () => {
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "a" })],
+      servers: [
+        server({
+          id: "s1",
+          catalogId: "a",
+          oauthRefreshError: "refresh_failed",
+          alertMutes: [reauthMute()],
+          reinstallRequired: true,
+        }),
+      ],
+      deploymentStatuses: {},
+      viewer: member,
+    });
+
+    expect(attentionCatalogIds(issues, { audience: "you" })).toEqual(["a"]);
+    expect(attentionCatalogIds(issues, { audience: "muted" })).toEqual(["a"]);
+    expect(
+      facetIssues(issues.get("a") ?? [], "you").map((i) => i.kind),
+    ).toEqual(["reinstall-required"]);
+  });
+});
+
+describe("canFixInstall", () => {
+  it("lets an installs admin repair a connection they do not own", () => {
+    const theirs = server({ id: "s1", catalogId: "a", ownerId: OTHER });
+    expect(canFixInstall({ server: theirs, viewer: member })).toBe(false);
+    expect(canFixInstall({ server: theirs, viewer: admin })).toBe(true);
+    expect(
+      canFixInstall({
+        server: server({ id: "s2", catalogId: "a" }),
+        viewer: member,
       }),
-    );
-    expect(warn.severity).toBe("attention");
-    expect(summarizeMcpServerIssues(new Map()).severity).toBeNull();
+    ).toBe(true);
   });
 });

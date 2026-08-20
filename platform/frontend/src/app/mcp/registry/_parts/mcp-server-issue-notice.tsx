@@ -1,36 +1,60 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
+import { BellOff, MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
-import { useAutoModeAgents } from "@/lib/mcp/mcp-server.query";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { typeRole } from "@/lib/design/type-scale";
+import { useUnmuteMcpServerAlert } from "@/lib/mcp/mcp-server.query";
+import {
+  bucketOf,
+  canFixInstall,
   describeMcpServerIssue,
+  facetIssues,
+  type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { deriveAgentUsage } from "./mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
+import { MuteAlertDialog } from "./mute-alert-dialog";
 import { humanizeOAuthErrorCode } from "./oauth-reauth-detail";
+import {
+  UninstallServerDialog,
+  type UninstallServerInstall,
+} from "./uninstall-server-dialog";
 
 /**
- * One server's outstanding issue, explained. Two densities:
+ * One server's outstanding issues, explained. Two densities:
  *
- * - `panel` (the server's Overview): status pill, what the status means and
- *   the concrete next step, who is affected, the raw runtime message behind a
- *   disclosure, and both verbs. The page has no other context, so the panel
- *   carries the whole diagnosis.
- * - `row` (the registry's Needs-attention list): the section header already
- *   says what kind of trouble this is and the button says what to do about
- *   it, so the row is just name, one line of cause, one muted line of facts
- *   (with a short raw message inline) and the single verb that clears it.
+ * - `panel` (the server's Overview): the page has no other context, so the
+ *   panel also discloses the raw runtime message and names the agents that
+ *   depend on the server.
+ * - `row` (the registry list): the same diagnosis without the agent usage,
+ *   because the row's one number is how many of this server's connections are
+ *   affected.
  *
- * `onReinstall` is the registry page's confirm-dialog flow; where it isn't
+ * Both densities say the same things, and that is the point. The row used to
+ * suppress the status pill, the "how to fix it" sentence and the secondary
+ * verb on the theory that a section header above it supplied them; there is no
+ * section header any more, and there never was one on a narrow screen.
+ *
+ * Every issue kind in the viewer's own bucket is explained, not just the worst
+ * one: a server that needs both a reinstall and a sign-in has two problems,
+ * and naming one of them sends the user back a second time for the other.
+ *
+ * `onReinstall` is the registry list's confirm-dialog flow; where it isn't
  * available (the server page) the Reinstall verb points back to the registry.
  */
 type Action = { label: string; onClick: () => void; testId?: string };
@@ -39,6 +63,7 @@ export function McpServerIssueNotice({
   item,
   issues,
   servers,
+  facet = null,
   onReinstall,
   hideName = false,
   variant = "panel",
@@ -47,6 +72,12 @@ export function McpServerIssueNotice({
   item: CatalogItem;
   issues: McpServerIssue[];
   servers: InstalledServer[];
+  /**
+   * The facet the list is narrowed to, when it is narrowed to one. The row
+   * explains that facet's issues, so a row reached under Muted shows what the
+   * viewer muted rather than the live issue that kept it in another facet.
+   */
+  facet?: McpServerAttentionFacet | null;
   /** On the server's own page the name is the page title already. */
   hideName?: boolean;
   variant?: "panel" | "row";
@@ -59,34 +90,71 @@ export function McpServerIssueNotice({
 }) {
   const router = useRouter();
   const [showDetail, setShowDetail] = useState(false);
-  const primary = issues[0];
-  const { data: autoModeAgents } = useAutoModeAgents();
-  const usage = deriveAgentUsage({
-    serversForCatalog: servers,
-    autoModeAgents,
+  const [muteOpen, setMuteOpen] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const { data: session } = useSession();
+  const { data: canManageInstalls } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
   });
-  const affectedConnections = new Set(
-    issues.map((i) => i.serverId).filter(Boolean),
-  ).size;
-  const since = primary?.since
-    ? formatRelativeTimeFromNow(primary.since, { neverLabel: "" })
-    : "";
-  const guidance = primary ? describeMcpServerIssue(primary) : null;
+  const unmuteMutation = useUnmuteMcpServerAlert();
   const compact = variant === "row";
-  // The raw runtime / provider message, for people who want the exact text.
-  // OAuth codes get their human name; reinstall reasons already read as a
-  // sentence and are shown as the condition instead.
-  const rawDetail =
-    primary?.kind === "reinstall-required"
-      ? null
-      : primary?.kind === "needs-reauth" && primary.detail
-        ? humanizeOAuthErrorCode(primary.detail)
-        : (primary?.detail ?? null);
-  // A short one-line message reads fine as one more fact on the meta line;
-  // only a long or multi-line one (a stack trace) is worth a disclosure.
-  const inlineDetail =
-    compact && rawDetail && isShortOneLiner(rawDetail) ? rawDetail : null;
-  const disclosedDetail = inlineDetail ? null : rawDetail;
+
+  const liveIssues = issues.filter((i) => !i.muted);
+  const mutedIssues = issues.filter((i) => i.muted);
+  const viewerBucket = bucketOf(liveIssues);
+  // What this row is about. Under a facet it is that facet's issues, so the
+  // row shows the state the reader narrowed the list to. Off a facet (the
+  // server's own page) it is the viewer's own bucket, falling back to the
+  // muted issues once every live one has been silenced.
+  const relevant = facet
+    ? facetIssues(issues, facet)
+    : liveIssues.length > 0
+      ? viewerBucket === "you"
+        ? facetIssues(issues, "you")
+        : liveIssues
+      : facetIssues(issues, "muted");
+  // One pill and one paragraph per kind: three connections failing OAuth are
+  // one thing to read, not three. The count below still counts all three.
+  const explained = distinctByKind(relevant);
+  // Issues are kind-ordered, so the first one the viewer can act on is also
+  // the most severe one they can act on.
+  const primary = explained.find((i) => i.audience === "you") ?? explained[0];
+  const viewerCanAct = primary?.audience === "you" && !primary.muted;
+
+  // Counted before the kinds are collapsed: `needs-reauth` is one issue per
+  // connection, so counting the surviving pills would report one connection
+  // affected on a server whose every connection is locked out.
+  const affectedConnections = new Set(
+    relevant.map((i) => i.serverId).filter(Boolean),
+  ).size;
+
+  // The connections one kind of issue is about. With exactly one, the row can
+  // offer to remove or mute it by name; with several, naming any single one
+  // would be a guess, so the row sends the reader to the connections list.
+  const connectionsFor = (kind: McpServerIssue["kind"]) => {
+    const ids = new Set(
+      issues.filter((i) => i.kind === kind).map((i) => i.serverId),
+    );
+    return servers.filter((s) => ids.has(s.id));
+  };
+  const reauthConnections = connectionsFor("needs-reauth");
+  const removableConnections = [
+    ...reauthConnections,
+    ...connectionsFor("reinstall-required"),
+  ].filter((s, index, all) => all.findIndex((o) => o.id === s.id) === index);
+  const viewer = {
+    userId: session?.user?.id ?? null,
+    canManageInstalls: !!canManageInstalls,
+  };
+  const removableConnection =
+    removableConnections.length === 1 &&
+    canFixInstall({ server: removableConnections[0], viewer })
+      ? removableConnections[0]
+      : null;
+  const mutableConnection =
+    reauthConnections.length === 1 ? reauthConnections[0] : null;
+  const mutedReauth = mutedIssues.find((i) => i.kind === "needs-reauth");
+
   const detailHref = (tab?: string, serverId?: string) => {
     const params = new URLSearchParams();
     if (tab) params.set("tab", tab);
@@ -96,13 +164,26 @@ export function McpServerIssueNotice({
   };
   const editHref = `/mcp/registry/${item.id}/edit?step=configuration`;
 
+  // The raw runtime / provider message, for people who want the exact text.
+  // OAuth codes get their human name; reinstall reasons already read as a
+  // sentence and are shown as the condition instead.
+  const rawDetail =
+    primary?.kind === "reinstall-required"
+      ? null
+      : primary?.kind === "needs-reauth" && primary.detail
+        ? humanizeOAuthErrorCode(primary.detail)
+        : (primary?.detail ?? null);
+  const inlineDetail =
+    compact && rawDetail && isShortOneLiner(rawDetail) ? rawDetail : null;
+  const disclosedDetail = inlineDetail ? null : rawDetail;
+
   // Primary verb clears the issue; secondary is the evidence or the fallback.
   // Both route to the same entry points the card and detail page use.
   const actions = ((): {
     primary?: Action;
     secondary?: Action;
   } => {
-    if (!primary || primary.audience !== "you") return {};
+    if (!primary || !viewerCanAct) return {};
     const viewLogs: Action = {
       label: "View logs",
       onClick: () => router.push(detailHref("logs", primary.serverId)),
@@ -137,7 +218,7 @@ export function McpServerIssueNotice({
               }
             : {
                 label: "Reinstall from registry",
-                onClick: () => router.push("/mcp/registry?tab=attention"),
+                onClick: () => router.push("/mcp/registry"),
               },
         };
       case "awaiting-approval":
@@ -157,6 +238,60 @@ export function McpServerIssueNotice({
     }
   })();
 
+  const overflow: Action[] = [];
+  if (mutedReauth) {
+    const connection = servers.find((s) => s.id === mutedReauth.serverId);
+    if (connection) {
+      overflow.push({
+        label: "Unmute this alert",
+        onClick: () =>
+          unmuteMutation.mutate({
+            serverId: connection.id,
+            serverName: connection.name,
+            kind: "needs-reauth",
+          }),
+      });
+    }
+  } else if (mutableConnection) {
+    // Only `needs-reauth` can be muted, so no other row ever offers it.
+    overflow.push({
+      label: "Mute this alert",
+      onClick: () => setMuteOpen(true),
+    });
+  }
+  if (removableConnection) {
+    overflow.push({
+      label: "Remove this connection",
+      onClick: () => setUninstallOpen(true),
+    });
+  } else if (removableConnections.length > 1) {
+    overflow.push({
+      label: "Manage connections",
+      onClick: () => router.push(detailHref("credentials")),
+    });
+  }
+
+  const uninstallInstalls: UninstallServerInstall[] = removableConnection
+    ? [
+        {
+          server: {
+            id: removableConnection.id,
+            name: removableConnection.name,
+          },
+          assignedAgents: removableConnection.assignedAgents ?? [],
+        },
+      ]
+    : [];
+
+  // The row's only number, and it names its denominator: "1 of 3 connections"
+  // says how much of the server is broken, which "1 connection" does not.
+  const facts = [
+    servers.length > 0 && affectedConnections > 0
+      ? `${affectedConnections} of ${servers.length} ${servers.length === 1 ? "connection" : "connections"} affected`
+      : null,
+    inlineDetail,
+  ];
+
   return (
     <div
       className={cn("rounded-lg border bg-card", className)}
@@ -174,44 +309,53 @@ export function McpServerIssueNotice({
                 />
                 <Link
                   href={detailHref()}
-                  className="truncate font-medium hover:underline"
+                  className={cn(
+                    typeRole({ role: "section-title" }),
+                    "truncate hover:underline",
+                  )}
                 >
                   {item.name}
                 </Link>
               </>
             )}
-            {!compact &&
-              distinctByKind(issues).map((issue) => (
-                <McpServerIssueBadge key={issue.kind} issue={issue} />
-              ))}
+            {explained.map((issue) => (
+              <McpServerIssueBadge key={issue.kind} issue={issue} />
+            ))}
           </div>
-          {guidance && (
-            <p className="mt-1.5 max-w-prose text-sm">
-              <span>{guidance.what}</span>
-              {!compact && guidance.fix && (
-                <span className="text-muted-foreground"> {guidance.fix}</span>
-              )}
-            </p>
-          )}
+          {explained.map((issue) => {
+            const guidance = describeMcpServerIssue(issue);
+            const since = issue.since
+              ? formatRelativeTimeFromNow(issue.since, { neverLabel: "" })
+              : "";
+            return (
+              <p
+                key={issue.kind}
+                className={cn(typeRole({ role: "body" }), "mt-1.5 max-w-prose")}
+              >
+                <span>{guidance.what}</span>
+                {since && <span> Failing since {since}.</span>}{" "}
+                {issue.audience === "you" && !issue.muted ? (
+                  <span className="text-muted-foreground">{guidance.fix}</span>
+                ) : (
+                  // Somebody else's to fix is not a permission failure, so it
+                  // is stated as a fact rather than styled as a refusal.
+                  <span className="text-muted-foreground">
+                    {issue.muted
+                      ? mutedSentence(issue.mutedReason)
+                      : guidance.whoActs}
+                  </span>
+                )}
+              </p>
+            );
+          })}
           <p
             className={cn(
-              "mt-1.5 flex flex-wrap items-center text-xs text-muted-foreground",
+              typeRole({ role: "meta" }),
+              "mt-1.5 flex flex-wrap items-center",
               compact ? "gap-x-1.5" : "gap-x-3",
             )}
           >
-            {joinFacts(
-              [
-                usage.total > 0
-                  ? `Affects ${usage.total} ${usage.total === 1 ? "agent" : "agents"}`
-                  : null,
-                affectedConnections > 1
-                  ? `${affectedConnections} of ${servers.length} connections`
-                  : null,
-                since ? `Since ${since}` : null,
-                inlineDetail,
-              ],
-              compact,
-            )}
+            {joinFacts(facts, compact)}
             {disclosedDetail && (
               <button
                 type="button"
@@ -224,42 +368,81 @@ export function McpServerIssueNotice({
             )}
           </p>
         </div>
-        {(actions.primary || actions.secondary) && (
-          <div className="flex shrink-0 items-center gap-2 sm:justify-end sm:pt-0.5">
-            {!compact && actions.secondary && (
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid={actions.secondary.testId}
-                onClick={actions.secondary.onClick}
-              >
-                {actions.secondary.label}
-              </Button>
-            )}
-            {actions.primary && (
-              <Button
-                size="sm"
-                data-testid={actions.primary.testId}
-                onClick={actions.primary.onClick}
-              >
-                {actions.primary.label}
-              </Button>
-            )}
-          </div>
-        )}
-        {!actions.primary && !actions.secondary && (
-          <div className="flex shrink-0 items-center sm:pt-0.5">
+        <div className="flex shrink-0 items-center gap-2 sm:justify-end sm:pt-0.5">
+          {actions.secondary && (
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid={actions.secondary.testId}
+              onClick={actions.secondary.onClick}
+            >
+              {actions.secondary.label}
+            </Button>
+          )}
+          {actions.primary ? (
+            <Button
+              size="sm"
+              data-testid={actions.primary.testId}
+              onClick={actions.primary.onClick}
+            >
+              {actions.primary.label}
+            </Button>
+          ) : (
             <Button variant="outline" size="sm" asChild>
               <Link href={detailHref()}>Open</Link>
             </Button>
-          </div>
-        )}
+          )}
+          {overflow.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`More actions for ${item.name}`}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {overflow.map((action) => (
+                  <DropdownMenuItem
+                    key={action.label}
+                    onClick={action.onClick}
+                    variant={
+                      action.label === "Remove this connection"
+                        ? "destructive"
+                        : undefined
+                    }
+                  >
+                    {action.label === "Remove this connection" ? (
+                      <Trash2 className="h-4 w-4" />
+                    ) : (
+                      <BellOff className="h-4 w-4" />
+                    )}
+                    {action.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
       {showDetail && disclosedDetail && (
         <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t bg-muted/40 px-4 py-2.5 font-mono text-xs text-muted-foreground">
           {disclosedDetail}
         </pre>
       )}
+      <MuteAlertDialog
+        open={muteOpen}
+        onClose={() => setMuteOpen(false)}
+        server={mutableConnection}
+        kind="needs-reauth"
+      />
+      <UninstallServerDialog
+        open={uninstallOpen}
+        onClose={() => setUninstallOpen(false)}
+        installs={uninstallInstalls}
+      />
     </div>
   );
 }
@@ -282,6 +465,16 @@ function joinFacts(facts: Array<string | null>, compact: boolean) {
       {fact}
     </span>
   ));
+}
+
+/**
+ * The muted state in words. The note is quoted back to the person who wrote
+ * it: mutes are per-viewer (the API returns only the caller's own), so this is
+ * the only place their own note is ever read back to them.
+ */
+function mutedSentence(reason: string | null): string {
+  const base = "You muted this alert, so it is not counted for you.";
+  return reason ? `${base} Your note: "${reason}"` : base;
 }
 
 function distinctByKind(issues: McpServerIssue[]): McpServerIssue[] {

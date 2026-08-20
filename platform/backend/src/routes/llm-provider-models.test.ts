@@ -631,6 +631,42 @@ describe("chat model routes", () => {
     expect(markMultimodal.statusCode).toBe(200);
     expect(markMultimodal.json().inputModalities).toEqual(["text", "image"]);
 
+    // Cohere direct: a table model the KB client drives takes image, a model
+    // outside the table is clamped like any other text-only embedding model.
+    const cohereV4 = await ModelModel.create({
+      externalId: "cohere/embed-v4.0",
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      inputModalities: ["text"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+    const markCohereImage = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${cohereV4.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(markCohereImage.statusCode).toBe(200);
+    expect(markCohereImage.json().inputModalities).toEqual(["text", "image"]);
+
+    const cohereV2 = await ModelModel.create({
+      externalId: "cohere/embed-english-v2.0",
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      inputModalities: ["text"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+    const markCohereV2Image = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${cohereV2.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(markCohereV2Image.statusCode).toBe(400);
+    expect(markCohereV2Image.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
     // A chat model (no embedding dimensions) keeps image input freely.
     const chatImage = await app.inject({
       method: "PATCH",

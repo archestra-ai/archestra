@@ -2243,10 +2243,21 @@ export async function buildKnowledgeSourcesDescription(
     ...new Set(allConnectors.map((c) => c.connectorType)),
   ];
 
+  // Written as a PROACTIVE trigger, and deliberately naming files/images/photos
+  // and the verbs a user actually uses ("show me", "find"). The previous
+  // reactive wording ("a question you cannot answer from your training data")
+  // excluded imperatives: asked to "show me a man with lobsters" the model went
+  // looking for an image-GENERATION tool and answered that it cannot show
+  // pictures, with the indexed photo one call away. This string is also the
+  // text search_tools ranks on, so the vocabulary matters twice.
   let description =
-    "Query the organization's knowledge sources to retrieve relevant information. " +
-    "Use this tool when the user asks a question you cannot answer from your training data alone, " +
-    "or when they explicitly ask you to search internal documents and data sources. " +
+    "Search the organization's indexed knowledge — documents, files, images, photos, " +
+    "and records synced from its connected sources. " +
+    "Use it whenever the user refers to something that may live in this workspace rather " +
+    "than in your training data: a question about internal material, or a request to find, " +
+    "look up, show, open, or describe a document, file, or picture. " +
+    "Prefer searching over answering from memory or replying that you cannot see files or " +
+    "images — this workspace's own content is reachable only through this tool. " +
     "Pass the user's original query as-is — do not rephrase, summarize, or expand it. " +
     "The system performs its own query optimization internally.";
 
@@ -2260,9 +2271,6 @@ export async function buildKnowledgeSourcesDescription(
   if (connectorTypes.length > 0) {
     description += ` Connected sources: ${connectorTypes.join(", ")}.`;
   }
-
-  description +=
-    " Pass the user's original query verbatim — the system handles query optimization internally.";
 
   kbDescriptionCache.set(agentId, {
     description,

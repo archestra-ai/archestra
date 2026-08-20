@@ -29,6 +29,67 @@ const IMAGE_STRIPPED_PLACEHOLDER = "[Image data stripped to save context]";
 const BROWSER_RESULT_SIZE_THRESHOLD = 2000;
 
 /**
+ * A retrieved image IS the answer, not context ballast — an indexed picture
+ * returned by knowledge search, or an app's own screenshot — so the chat has to
+ * be able to show it. Bounded copies are therefore kept in the PERSISTED
+ * message only; the model-bound history is a separate copy that still strips
+ * everything (see the `normalizeChatMessages` call on the replay path), so no
+ * base64 re-enters a prompt. The bytes come from whatever a connector indexed,
+ * i.e. they are untrusted, hence the mime allowlist, base64-alphabet check and
+ * hard caps below.
+ */
+const MAX_DISPLAYABLE_IMAGE_BASE64_LENGTH = 2_000_000;
+const MAX_DISPLAYABLE_IMAGES_PER_RESULT = 2;
+const DISPLAYABLE_IMAGE_MIME_TYPE = /^image\/(png|jpe?g|webp|gif)$/;
+const BASE64_PAYLOAD = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function isDisplayableImageBlock(block: unknown): boolean {
+  if (typeof block !== "object" || block === null || Array.isArray(block)) {
+    return false;
+  }
+  const { type, data, mimeType } = block as Record<string, unknown>;
+  return (
+    type === "image" &&
+    typeof data === "string" &&
+    typeof mimeType === "string" &&
+    DISPLAYABLE_IMAGE_MIME_TYPE.test(mimeType) &&
+    data.length <= MAX_DISPLAYABLE_IMAGE_BASE64_LENGTH &&
+    BASE64_PAYLOAD.test(data)
+  );
+}
+
+/**
+ * Re-attach the bounded `rawContent` image blocks the strip just blanked.
+ * `stripImagesFromObject` rebuilds arrays index-for-index, so positions align.
+ */
+function restoreDisplayableImages(
+  original: unknown,
+  stripped: unknown,
+): unknown {
+  const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+  if (!isRecord(original) || !isRecord(stripped)) return stripped;
+  const originalRaw = original.rawContent;
+  const strippedRaw = stripped.rawContent;
+  if (!Array.isArray(originalRaw) || !Array.isArray(strippedRaw))
+    return stripped;
+  let kept = 0;
+  const merged = strippedRaw.map((block, index) => {
+    if (kept >= MAX_DISPLAYABLE_IMAGES_PER_RESULT) return block;
+    const source = originalRaw[index];
+    if (!isDisplayableImageBlock(source)) return block;
+    kept++;
+    return source;
+  });
+  return kept === 0 ? stripped : { ...stripped, rawContent: merged };
+}
+
+function stripToolOutput(output: unknown, preserveImages: boolean): unknown {
+  const stripped = convertImageBlocksToText(output);
+  return preserveImages ? restoreDisplayableImages(output, stripped) : stripped;
+}
+
+/**
  * Check if a tool name is a browser tool that should have large results stripped
  */
 function isBrowserToolToStrip(toolName: string): boolean {
@@ -178,6 +239,7 @@ function convertImageBlocksToText(content: unknown): unknown {
 function stripImagesFromParts(
   parts: ChatMessagePart[],
   preserveDirectImages = false,
+  preserveToolResultImages = false,
 ): ChatMessagePart[] {
   return parts.map((part) => {
     const partType = part.type;
@@ -209,7 +271,7 @@ function stripImagesFromParts(
       // Strip images from tool output
       return {
         ...part,
-        output: convertImageBlocksToText(part.output),
+        output: stripToolOutput(part.output, preserveToolResultImages),
       };
     }
 
@@ -229,7 +291,7 @@ function stripImagesFromParts(
       }
       return {
         ...part,
-        output: convertImageBlocksToText(part.output),
+        output: stripToolOutput(part.output, preserveToolResultImages),
       };
     }
 
@@ -275,6 +337,7 @@ function stripImagesFromParts(
  */
 export function stripImagesFromMessages(
   messages: ChatMessage[],
+  options?: { preserveToolResultImages?: boolean },
 ): ChatMessage[] {
   logger.info(
     { messageCount: messages.length },
@@ -298,7 +361,11 @@ export function stripImagesFromMessages(
 
     return {
       ...msg,
-      parts: stripImagesFromParts(msg.parts, preserveDirectImages),
+      parts: stripImagesFromParts(
+        msg.parts,
+        preserveDirectImages,
+        options?.preserveToolResultImages ?? false,
+      ),
     };
   });
 }

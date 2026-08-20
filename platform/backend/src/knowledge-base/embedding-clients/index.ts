@@ -12,9 +12,12 @@ import {
 import { AzureEmbeddingError } from "./azure";
 import { BedrockEmbeddingError, BedrockPartialEmbeddingError } from "./bedrock";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
+import { CohereEmbeddingError, CoherePartialEmbeddingError } from "./cohere";
+import { findCohereEmbeddingModel } from "./cohere-models";
 import { GeminiEmbeddingError } from "./gemini";
 import { OpenAIEmbeddingError } from "./openai";
 import { EMBEDDING_ADAPTERS } from "./registry";
+import { PartialEmbeddingError } from "./shared";
 import type {
   EmbeddingApiResponse,
   EmbeddingInput,
@@ -22,11 +25,14 @@ import type {
 } from "./types";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
+export { PartialEmbeddingError };
 /** @public — re-exported for testability */
 export {
   AzureEmbeddingError,
   BedrockEmbeddingError,
   BedrockPartialEmbeddingError,
+  CohereEmbeddingError,
+  CoherePartialEmbeddingError,
   GeminiEmbeddingError,
   OpenAIEmbeddingError,
 };
@@ -38,7 +44,8 @@ export {
  * rather than sent to the OpenAI-compatible client (spec item 2).
  * Accepts both text strings and inline image inputs (multimodal). Image inputs are
  * only meaningful for providers/models that support multimodal embedding (e.g.
- * Gemini gemini-embedding-2); text-only clients throw on non-text inputs.
+ * Gemini gemini-embedding-2, Cohere Embed v4); text-only clients throw on
+ * non-text inputs.
  */
 export async function callEmbedding(params: {
   inputs: EmbeddingInput[];
@@ -49,7 +56,8 @@ export async function callEmbedding(params: {
   provider: SupportedProvider;
   /**
    * Document vs query embedding — clients that condition the vector on it
-   * (Bedrock/Cohere via `input_type`) receive it; the rest ignore it.
+   * (Cohere, direct or on Bedrock, via `input_type`) receive it; the rest
+   * ignore it.
    * Defaults to the document side when omitted.
    */
   purpose?: EmbeddingPurpose;
@@ -139,6 +147,10 @@ export function getEmbeddingClientInputModalities(
     const entry = findBedrockEmbeddingModel(model);
     return entry ? [...entry.inputModalities] : ["text"];
   }
+  if (provider === "cohere") {
+    const entry = findCohereEmbeddingModel(model);
+    return entry ? [...entry.inputModalities] : ["text"];
+  }
   return ["text"];
 }
 
@@ -146,8 +158,8 @@ export function getEmbeddingClientInputModalities(
  * Image MIME types the embedding client for `provider` can send to `model`, or
  * `null` for no per-format restriction. Only meaningful when the resolved
  * input modalities include "image": Bedrock's multimodal models and Gemini's
- * embedding API take JPEG/PNG only (anything else — a GIF, say — is a provider
- * error that fails the document). Connectors
+ * embedding API take JPEG/PNG only, Cohere's direct API adds WebP/GIF
+ * (anything else is a provider error that fails the document). Connectors
  * skip other formats at ingestion and the embedder skips them at embed time.
  */
 export function getEmbeddingClientAcceptedImageMimeTypes(
@@ -156,6 +168,12 @@ export function getEmbeddingClientAcceptedImageMimeTypes(
 ): string[] | null {
   if (provider === "bedrock") {
     const entry = findBedrockEmbeddingModel(model);
+    return entry?.acceptedImageMimeTypes
+      ? [...entry.acceptedImageMimeTypes]
+      : null;
+  }
+  if (provider === "cohere") {
+    const entry = findCohereEmbeddingModel(model);
     return entry?.acceptedImageMimeTypes
       ? [...entry.acceptedImageMimeTypes]
       : null;
@@ -190,9 +208,9 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
     return false;
   }
   // A total fan-out outage is safe to retry. Mixed results require the
-  // embedder's targeted retry path so successful InvokeModel calls are never
+  // embedder's targeted retry path so successful provider calls are never
   // repeated.
-  if (error instanceof BedrockPartialEmbeddingError) {
+  if (error instanceof PartialEmbeddingError) {
     return (
       error.successes.length === 0 &&
       error.failures.length > 0 &&
@@ -204,6 +222,7 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
   if (
     error instanceof AzureEmbeddingError ||
     error instanceof BedrockEmbeddingError ||
+    error instanceof CohereEmbeddingError ||
     error instanceof GeminiEmbeddingError ||
     error instanceof OpenAIEmbeddingError
   ) {

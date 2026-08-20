@@ -319,7 +319,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     title: "Query Knowledge Sources",
     description:
-      "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
+      "Search the organization's indexed knowledge — documents, files, images, photos, and records synced from its connected sources. Use it whenever the user refers to something that may live in this workspace rather than in your training data: a question about internal material, or a request to find, look up, show, open, or describe a document, file, or picture. Prefer searching over answering from memory or replying that you cannot see files or images — this workspace's own content is reachable only through this tool. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
     schema: QueryKnowledgeSourcesToolArgsSchema,
     outputSchema: QueryKnowledgeSourcesOutputSchema,
     async handler({ args, context }) {
@@ -692,15 +692,46 @@ async function handleQueryKnowledgeSources(params: {
     // the same flag as the verification pass — disabling the feature must also
     // stop asking the model to quote, not just skip the check. Omitted for an
     // empty result — there is nothing to quote.
+    // A media chunk's payload never goes into the JSON text: a 180KB base64
+    // image is ~45-60k tokens the model cannot read anyway. It rides as an MCP
+    // image part instead, so a vision-capable model actually sees the picture,
+    // while `content` keeps the short "[image: title (mime)]" descriptor for
+    // models (and transports) that cannot take one.
+    const imageParts: Array<{
+      type: "image";
+      data: string;
+      mimeType: string;
+    }> = [];
+    const wireResults = results.map((result) => {
+      if (!result.media) return result;
+      const { media, ...rest } = result;
+      if (
+        imageParts.length < MAX_INLINE_RESULT_IMAGES &&
+        media.data.length <= MAX_INLINE_RESULT_IMAGE_BASE64_CHARS
+      ) {
+        imageParts.push({
+          type: "image",
+          data: media.data,
+          mimeType: media.mimeType,
+        });
+      }
+      return rest;
+    });
+
     const output = {
-      results,
-      totalChunks: results.length,
+      results: wireResults,
+      totalChunks: wireResults.length,
       ...(config.kb.quoteVerificationEnabled &&
-        results.length > 0 && {
-          citationInstruction: QUOTE_CITATION_INSTRUCTION,
+        wireResults.length > 0 && {
+          citationInstruction:
+            imageParts.length > 0
+              ? `${QUOTE_CITATION_INSTRUCTION} ${MEDIA_CITATION_NOTE}`
+              : QUOTE_CITATION_INSTRUCTION,
         }),
     };
-    return structuredSuccessResult(output, JSON.stringify(output));
+    const toolResult = structuredSuccessResult(output, JSON.stringify(output));
+    toolResult.content.push(...imageParts);
+    return toolResult;
   } catch (error) {
     // A diagnosable KB failure (unsupported/unreachable provider, dimension
     // mismatch, unusable response, unresolvable config) maps to its own
@@ -1546,3 +1577,20 @@ async function findManageableConnector(params: {
   }
   return connector;
 }
+
+/**
+ * A retrieved image cannot be quoted verbatim, so the quote-citation rule needs
+ * an escape hatch or the model refuses to use it.
+ */
+const MEDIA_CITATION_NOTE =
+  "Results whose content reads `[image: ...]` are pictures, delivered as image attachments on this tool result — describe them from what you see and cite them by ref instead of quoting.";
+
+/** At most this many retrieved images ride along as inline image parts. */
+const MAX_INLINE_RESULT_IMAGES = 3;
+
+/**
+ * Skip inlining a single image larger than this (base64 characters, ~5MB of
+ * bytes) — provider image limits sit around there and one oversized attachment
+ * would fail the whole tool result.
+ */
+const MAX_INLINE_RESULT_IMAGE_BASE64_CHARS = 7_000_000;

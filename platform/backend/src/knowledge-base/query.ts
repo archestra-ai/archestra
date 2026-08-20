@@ -22,6 +22,7 @@ import {
   withKbObservability,
 } from "./kb-interaction";
 import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
+import { isMediaChunkContent, parseImageDataUrl } from "./media-chunk";
 import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
@@ -30,6 +31,12 @@ import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 
 interface ChunkResult {
+  /**
+   * What the model reads. For a media chunk this is a short descriptor, never
+   * the payload: the stored content is a base64 data URL (a 180KB image is
+   * ~45-60k tokens of unreadable text), and the bytes travel out-of-band via
+   * `media` instead.
+   */
   content: string;
   score: number;
   chunkIndex: number;
@@ -41,6 +48,11 @@ interface ChunkResult {
    * change.
    */
   ref: string;
+  /**
+   * Present only for a media chunk: the payload the caller may deliver to a
+   * vision-capable model as an image part, plus its type. Text chunks omit it.
+   */
+  media?: { kind: "image"; mimeType: string; data: string };
   citation: {
     title: string;
     sourceUrl: string | null;
@@ -381,6 +393,12 @@ class QueryService {
       idExtractor: (row) => row.id,
       k: 60,
       weights: innerWeights,
+      // Lane 1 is the keyword lane, which matches words: a media chunk stores a
+      // base64 data URL and can never appear there. Without this the best
+      // possible image — vector rank 1 — scores below any text chunk that
+      // merely placed in both lanes, and the post-fusion slice drops it.
+      isEligible: (row, laneIndex) =>
+        laneIndex !== KEYWORD_LANE_INDEX || !isMediaChunkContent(row.content),
     });
 
     return { rows: fused.slice(0, limit), lanesAttempted, lanesTimedOut };
@@ -388,7 +406,7 @@ class QueryService {
 
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {
     return rows.map((row) => ({
-      content: row.content,
+      ...describeChunkContent(row),
       score: row.score,
       chunkIndex: row.chunkIndex,
       metadata: row.metadata,
@@ -460,3 +478,24 @@ export function findEmbeddingDimensionMismatch(
   if (populatedDimensions.has(configuredDimension)) return null;
   return [...populatedDimensions];
 }
+
+/**
+ * What a caller should read for a chunk, and — for a media chunk — the payload
+ * to deliver out-of-band. Text is passed through untouched.
+ */
+function describeChunkContent(row: VectorSearchResult): {
+  content: string;
+  media?: { kind: "image"; mimeType: string; data: string };
+} {
+  const image = parseImageDataUrl(row.content);
+  if (!image) {
+    return { content: row.content };
+  }
+  return {
+    content: `[image: ${row.title} (${image.mimeType})]`,
+    media: { kind: "image", mimeType: image.mimeType, data: image.data },
+  };
+}
+
+/** Index of the keyword lane in the inner hybrid fusion. */
+const KEYWORD_LANE_INDEX = 1;

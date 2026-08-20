@@ -670,6 +670,11 @@ export async function buildArchestraToolOutput(params: {
   if (!response.isError && response.content.some((c) => c.type === "image")) {
     return {
       content: text,
+      // The text summary above ends in a "[image]" marker line, so it is no
+      // longer parseable JSON. Keep the tool's own structured copy so readers
+      // that need the payload (the knowledge citation chips) have one that is
+      // not mangled by the marker.
+      structuredContent: response.structuredContent,
       _meta: {
         ...(response._meta as Record<string, unknown>),
         ...executedAsMeta,

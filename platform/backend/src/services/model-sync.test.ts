@@ -1,4 +1,6 @@
 import {
+  type ModelInputModality,
+  type ModelOutputModality,
   OPENROUTER_FREE_MODEL_ID,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -480,6 +482,40 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("normalizes KB-supported Cohere embedding models to the KB client's modality support", () => {
+    const base = {
+      description: null,
+      contextLength: null,
+      outputLength: null,
+      inputModalities: ["text"] as ModelInputModality[],
+      outputModalities: ["text"] as ModelOutputModality[],
+      supportsToolCalling: true,
+      supportsReasoningEffort: null,
+      supportedEndpoints: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      cacheReadPricePerToken: null,
+      cacheWritePricePerToken: null,
+    };
+    const v4 = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      capabilities: base,
+    });
+    expect(v4.inputModalities).toEqual(["text", "image"]);
+    expect(v4.outputModalities).toEqual([]);
+    expect(v4.supportsToolCalling).toBe(false);
+
+    // A Cohere model outside the KB table keeps whatever the registries say.
+    const unknown = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      capabilities: base,
+    });
+    expect(unknown.inputModalities).toEqual(["text"]);
+    expect(unknown.outputModalities).toEqual(["text"]);
   });
 
   test("normalizes KB-supported Bedrock embedding models to the KB client's modality support", () => {

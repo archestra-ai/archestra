@@ -912,6 +912,8 @@ export function AssignedToolsTable({
           total: toolsData?.pagination?.total ?? 0,
         }}
         onPaginationChange={handlePaginationChange}
+        // The bulk bar above already names the count.
+        hideSelectedCount
         rowSelection={rowSelection}
         onRowSelectionChange={handleRowSelectionChange}
         getRowId={(row) => row.id}

@@ -499,6 +499,8 @@ export default function KnowledgeFilesPage() {
                 : "No documents yet. Upload one to make it available to your agents."
             }
             getRowId={(row) => row.id}
+            // The bulk bar above already names the count.
+            hideSelectedCount
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
             // Cell contents (badges, knowledge-base names) cannot shrink, so a

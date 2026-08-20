@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentSelector, type AgentSelectorAgent } from "./agent-selector";
@@ -79,6 +79,69 @@ describe("AgentSelector (single, flat)", () => {
     await user.click(await screen.findByText("Shared Proxy"));
 
     expect(onValueChange).toHaveBeenCalledWith("p2");
+  });
+});
+
+describe("AgentSelector sentinelOption", () => {
+  it("renders the sentinel label in the trigger when it is the current value", () => {
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value="all"
+        onValueChange={vi.fn()}
+        sentinelOption={{ value: "all", label: "All Agents & LLM Proxies" }}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("combobox")).getByText(
+        "All Agents & LLM Proxies",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("selects the sentinel value rather than an agent id", async () => {
+    const onValueChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value="p1"
+        onValueChange={onValueChange}
+        sentinelOption={{ value: "all", label: "All Agents & LLM Proxies" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("All Agents & LLM Proxies"));
+
+    expect(onValueChange).toHaveBeenCalledWith("all");
+  });
+
+  it("hides the sentinel while a search excludes its label", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value="all"
+        onValueChange={vi.fn()}
+        sentinelOption={{ value: "all", label: "All Agents & LLM Proxies" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search agents..."), "shared");
+
+    expect(await screen.findByText("Shared Proxy")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /All Agents & LLM Proxies/ }),
+    ).not.toBeInTheDocument();
   });
 });
 

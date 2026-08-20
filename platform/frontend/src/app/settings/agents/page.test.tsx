@@ -262,12 +262,12 @@ describe("AgentSettingsPage", () => {
     const props = agentSelectorCall?.[0] as unknown as {
       mode: string;
       agents: typeof mockAgents;
-      personalDefaultOption: { value: string; label: string };
+      sentinelOption: { value: string; label: string };
     };
 
     expect(props.mode).toBe("single");
     expect(props.agents).toEqual(mockAgents);
-    expect(props.personalDefaultOption).toMatchObject({
+    expect(props.sentinelOption).toMatchObject({
       value: "__personal__",
       label: "User's personal agent",
     });

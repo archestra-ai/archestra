@@ -70,7 +70,12 @@ type AgentSelectorProps =
        * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`).
        */
       flat?: boolean;
-      personalDefaultOption?: {
+      /**
+       * An extra choice rendered above the agent list whose value is not an
+       * agent id — e.g. "All agents" in a log filter, or "Each user personal"
+       * in a default picker. Hidden while a search excludes its label.
+       */
+      sentinelOption?: {
         value: string;
         label: string;
       };
@@ -119,14 +124,14 @@ function SingleAgentSelector({
   className,
   hint,
   flat,
-  personalDefaultOption,
+  sentinelOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogContainer = dialogPortalContainer(triggerRef.current);
   const selectedAgent = agents.find((agent) => agent.id === value);
-  const isPersonalDefaultSelected = personalDefaultOption?.value === value;
+  const isSentinelSelected = sentinelOption?.value === value;
   const groupedAgents = useGroupedAgents(agents, search);
   const visibleAgents = useVisibleAgents(agents, search);
 
@@ -164,17 +169,20 @@ function SingleAgentSelector({
           <span className="min-w-0 flex-1 truncate text-left">
             {selectedAgent ? (
               <AgentSelectorRow agent={selectedAgent} />
-            ) : isPersonalDefaultSelected ? (
-              personalDefaultOption.label
+            ) : isSentinelSelected ? (
+              <span>{sentinelOption.label}</span>
             ) : (
-              placeholder
+              <span>{placeholder}</span>
             )}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
+        // Rows carry a scope badge, a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
         portalContainer={dialogContainer}
         collisionBoundary={dialogContainer ?? undefined}
         collisionPadding={8}
@@ -192,24 +200,23 @@ function SingleAgentSelector({
           )}
           <CommandList className="min-h-0 flex-1">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
-            {personalDefaultOption &&
-              matchesSearch(personalDefaultOption.label, search) && (
-                <CommandGroup>
-                  <CommandItem
-                    value={personalDefaultOption.value}
-                    onSelect={() => handleSelect(personalDefaultOption.value)}
-                    className="justify-between"
-                  >
-                    <span>{personalDefaultOption.label}</span>
-                    <Check
-                      className={cn(
-                        "h-4 w-4",
-                        isPersonalDefaultSelected ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                  </CommandItem>
-                </CommandGroup>
-              )}
+            {sentinelOption && matchesSearch(sentinelOption.label, search) && (
+              <CommandGroup>
+                <CommandItem
+                  value={sentinelOption.value}
+                  onSelect={() => handleSelect(sentinelOption.value)}
+                  className="justify-between"
+                >
+                  <span>{sentinelOption.label}</span>
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      isSentinelSelected ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </CommandItem>
+              </CommandGroup>
+            )}
             {flat ? (
               <CommandGroup>
                 {visibleAgents.map((agent) => (
@@ -340,7 +347,10 @@ function MultiAgentSelector({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
+        // Rows carry a scope badge, a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
         align="start"
         onOpenAutoFocus={(event) => event.preventDefault()}
         portalContainer={dialogContainer}

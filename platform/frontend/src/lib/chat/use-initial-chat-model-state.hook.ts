@@ -168,8 +168,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   );
 
   // Resolve which agent to use on load.
-  // Priority: URL param > project default > org default > saved pick >
-  // member default > first.
+  // Priority: URL param > project pin > personal default > org default >
+  // saved pick > first.
   useEffect(() => {
     if (agents.length === 0) return;
     // Wait for organization data to avoid a race where agents load before org,
@@ -192,8 +192,10 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     }
 
     // The member's personal default wins, then the org default (admin-
-    // configured for the whole org). localStorage only overrides when neither
-    // is configured and the user can change agents; otherwise a stale hidden
+    // configured for the whole org). The personal default is only ever set
+    // deliberately, so it is absent for members who never picked one and the
+    // org default reaches them. localStorage only overrides when neither is
+    // configured and the user can change agents; otherwise a stale hidden
     // picker value can trap restricted users on a previously selected agent.
     // Also skip if a URL param was consumed but state hasn't flushed yet.
     if (!agentId && !urlParamsConsumedRef.current) {

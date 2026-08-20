@@ -2530,7 +2530,7 @@ describe("AgentModel", () => {
   });
 
   describe("ensurePersonalChatAgent", () => {
-    test("creates personal agent and sets member defaultAgentId", async ({
+    test("creates the personal agent and returns it, without claiming the member's default", async ({
       makeUser,
       makeOrganization,
       makeMember,
@@ -2539,18 +2539,17 @@ describe("AgentModel", () => {
       const org = await makeOrganization();
       await makeMember(user.id, org.id);
 
-      await AgentModel.ensurePersonalChatAgent({
+      const seededId = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org.id,
       });
+      if (!seededId) throw new Error("expected a seeded agent");
 
-      const defaultAgentId = await MemberModel.getDefaultAgentId(
-        user.id,
-        org.id,
-      );
-      if (!defaultAgentId) throw new Error("expected default agent");
+      // Seeding is not a choice: `members.default_agent_id` records only a
+      // deliberate pick, so an organization default still reaches this member.
+      expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBeNull();
 
-      const agent = await AgentModel.findById(defaultAgentId, user.id, true);
+      const agent = await AgentModel.findById(seededId, user.id, true);
       expect(agent).not.toBeNull();
       expect(agent?.name).toBe("My Assistant");
       expect(agent?.scope).toBe("personal");
@@ -2572,22 +2571,18 @@ describe("AgentModel", () => {
       const org = await makeOrganization();
       await makeMember(user.id, org.id);
 
-      await AgentModel.ensurePersonalChatAgent({
+      const first = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org.id,
       });
-      const firstDefault = await MemberModel.getDefaultAgentId(user.id, org.id);
 
-      await AgentModel.ensurePersonalChatAgent({
+      const second = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org.id,
       });
-      const secondDefault = await MemberModel.getDefaultAgentId(
-        user.id,
-        org.id,
-      );
 
-      expect(firstDefault).toBe(secondDefault);
+      expect(first).not.toBeNull();
+      expect(second).toBe(first);
 
       // Should only have 1 agent total
       const agents = await AgentModel.findAll(user.id, true);
@@ -2597,7 +2592,7 @@ describe("AgentModel", () => {
       expect(personalAgents).toHaveLength(1);
     });
 
-    test("does not recreate if user changed default to another agent", async ({
+    test("does not seed a second assistant, and leaves a chosen default alone", async ({
       makeUser,
       makeOrganization,
       makeMember,
@@ -2611,26 +2606,32 @@ describe("AgentModel", () => {
         organizationId: org.id,
       });
 
-      // User changes default to another agent
-      const otherAgent = await AgentModel.create({
-        name: "Other Agent",
-        agentType: "agent",
-        scope: "personal",
-        organizationId: org.id,
-      });
+      // The member creates a second personal agent and picks it as their
+      // default. Creating it must not claim the role by itself.
+      const otherAgent = await AgentModel.create(
+        {
+          name: "Other Agent",
+          agentType: "agent",
+          scope: "personal",
+          organizationId: org.id,
+        },
+        user.id,
+      );
+      expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBeNull();
       await MemberModel.setDefaultAgent(user.id, org.id, otherAgent.id);
 
-      // Call again - should NOT create new agent since defaultAgentId is set
       await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org.id,
       });
 
-      const currentDefault = await MemberModel.getDefaultAgentId(
-        user.id,
-        org.id,
+      const assistants = (await AgentModel.findAll(user.id, true)).filter(
+        (a) => a.name === "My Assistant" && a.authorId === user.id,
       );
-      expect(currentDefault).toBe(otherAgent.id);
+      expect(assistants).toHaveLength(1);
+      expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBe(
+        otherAgent.id,
+      );
     });
 
     test("assigns the default tools exactly once when the built-ins are seeded", async ({
@@ -2648,8 +2649,11 @@ describe("AgentModel", () => {
         organizationId: org.id,
       });
 
-      const agentId = await MemberModel.getDefaultAgentId(user.id, org.id);
-      if (!agentId) throw new Error("expected default agent");
+      const agentId = await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      if (!agentId) throw new Error("expected a seeded agent");
 
       // Defaults come from AgentModel.create (the seeding path no longer
       // assigns them itself) — present, and never duplicated.
@@ -2672,21 +2676,18 @@ describe("AgentModel", () => {
       await makeMember(user.id, org1.id);
       await makeMember(user.id, org2.id);
 
-      await AgentModel.ensurePersonalChatAgent({
+      const seeded1 = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org1.id,
       });
-      await AgentModel.ensurePersonalChatAgent({
+      const seeded2 = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId: org2.id,
       });
 
-      const default1 = await MemberModel.getDefaultAgentId(user.id, org1.id);
-      const default2 = await MemberModel.getDefaultAgentId(user.id, org2.id);
-
-      expect(default1).not.toBeNull();
-      expect(default2).not.toBeNull();
-      expect(default1).not.toBe(default2);
+      expect(seeded1).not.toBeNull();
+      expect(seeded2).not.toBeNull();
+      expect(seeded1).not.toBe(seeded2);
     });
   });
 

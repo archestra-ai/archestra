@@ -6,11 +6,11 @@ import {
   History,
   MessageSquare,
   Pencil,
+  Pin,
+  PinOff,
   Plug,
   RotateCcw,
   Sparkles,
-  Star,
-  StarOff,
   Trash2,
 } from "lucide-react";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
@@ -136,14 +136,16 @@ export function AgentActions({
       ? [
           personalDefault.isDefault
             ? {
-                icon: <StarOff className="h-4 w-4" />,
-                label: "Unset as my default",
+                icon: <PinOff className="h-4 w-4" />,
+                label: "Unpin default",
+                tooltip: "New chats go back to the organization default.",
                 onClick: () => personalDefault.onToggle(agent, false),
                 testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
               }
             : {
-                icon: <Star className="h-4 w-4" />,
-                label: "Set as my default",
+                icon: <Pin className="h-4 w-4" />,
+                label: "Pin default",
+                tooltip: "Your new chats will start on this agent.",
                 onClick: () => personalDefault.onToggle(agent, true),
                 testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
               },

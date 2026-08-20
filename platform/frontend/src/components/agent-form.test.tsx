@@ -1175,7 +1175,7 @@ describe("AgentForm personal default", () => {
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
   });
 
-  it("offers the switch on the author's own personal agent, on when it is their default", async () => {
+  it("offers the switch on a chat agent, on when it is the viewer's default", async () => {
     useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
@@ -1185,17 +1185,19 @@ describe("AgentForm personal default", () => {
     ).toBeChecked();
   });
 
-  it("hides the switch on someone else's personal agent", async () => {
+  it("offers the switch on an agent the viewer does not own", async () => {
+    // Pinning a default is about whose chats it starts, not about ownership:
+    // any chat agent this viewer can open is one they can pin.
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "someone-else" } },
     } as unknown as ReturnType<typeof useSession>);
+    useDefaultAgentIdMock.mockReturnValue({ data: null });
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
-    await screen.findByText("Subagents (0)");
     expect(
-      screen.queryByTestId(E2eTestId.PersonalDefaultAgentSwitch),
-    ).toBeNull();
+      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
+    ).not.toBeChecked();
   });
 
   it("saves the member default only when the switch was moved", async () => {

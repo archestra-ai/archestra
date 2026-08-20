@@ -192,6 +192,7 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
@@ -1283,16 +1284,20 @@ export function AgentForm({
   // create mode too, before any gateway exists.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
-  // Only the caller's own personal chat agent can be their personal default:
-  // in edit mode that means the author is signed in; in create mode the caller
-  // is the author. Hidden for other scopes, built-ins and other agent types.
+  const { data: organization } = useOrganization();
+  // Any chat agent this form can show is one the caller can start a chat
+  // with, so any of them can be their default — a team's or the
+  // organization's as readily as their own. Hidden only for built-ins and
+  // other agent types, which no chat starts on.
   const isCurrentlyPersonalDefault =
     !!agent?.id && agent.id === memberDefaultAgentId;
-  const canTogglePersonalDefault =
-    isInternalAgent &&
-    !isBuiltIn &&
-    scope === "personal" &&
-    (!agent || (!!currentUserId && agent.authorId === currentUserId));
+  const canTogglePersonalDefault = isInternalAgent && !isBuiltIn;
+  // Pinning the agent the organization already defaults to changes nothing
+  // today — the agents list reads that row as `default (org)` and offers no
+  // pin at all. The switch stays, because it is the only place the pin can be
+  // taken back off, but it has to say what it is (and is not) doing here.
+  const isOrganizationDefault =
+    !!agent?.id && agent.id === organization?.defaultAgentId;
   const personalDefault =
     canTogglePersonalDefault &&
     (personalDefaultOverride ?? isCurrentlyPersonalDefault);
@@ -2071,8 +2076,8 @@ export function AgentForm({
 
       // The personal default is a member setting, saved through its own route
       // once the agent exists. Only when the switch was actually moved: an
-      // untouched switch on a brand-new agent leaves the server's own rule in
-      // charge (a member's first personal agent adopts the role by itself).
+      // untouched switch means the member did not ask for this agent to become
+      // their default, and nothing else in the product decides that for them.
       if (savedAgentId && personalDefaultChanged) {
         await updateDefaultAgentId.mutateAsync(
           personalDefault ? savedAgentId : null,
@@ -2483,9 +2488,9 @@ export function AgentForm({
                           My default agent
                         </Label>
                         <p className="text-sm text-muted-foreground">
-                          Preselected for your new chats, ahead of the
-                          organization default. You have one default agent at a
-                          time.
+                          {isOrganizationDefault
+                            ? "Your organization already starts everyone's chats on this agent, so pinning it changes nothing today — it keeps this agent yours if the organization default moves."
+                            : "Your new chats start on this agent — from the composer, from an app you open in chat, anywhere a chat begins without naming one. Yours alone, one at a time, and ahead of the organization default."}
                         </p>
                       </div>
                       <Switch

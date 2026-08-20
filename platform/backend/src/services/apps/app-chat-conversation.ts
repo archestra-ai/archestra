@@ -19,6 +19,7 @@ import {
   buildExternalAppRenderResult,
 } from "@/services/apps/app-render-result";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { chatAgentVisibilityFor } from "@/services/chat-agent-visibility";
 import { ApiError } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
@@ -200,52 +201,73 @@ export async function createSeededExternalAppConversation(params: {
  * an app opened from the Apps page. Exported because app creation needs it
  * *before* the conversation exists: a new app is bound to this agent's
  * environment, so the agent can assign the tools it discovers there.
+ *
+ * Mirrors the /chat page chain (resolveInitialAgentSelection); keep the two in
+ * sync. A project's pinned agent outranks everything here, but app chats are
+ * never started in a project, so this chain begins one rung lower.
  */
 export async function resolveDefaultChatAgentId(params: {
   userId: string;
   organizationId: string;
 }): Promise<string> {
   const { userId, organizationId } = params;
+  // Both rungs below judge an agent by the same rule that granted the pin, so
+  // resolve the caller's visibility once and reuse it.
+  const visibility = await chatAgentVisibilityFor({ userId, organizationId });
 
-  // The member's personal default outranks the org default, mirroring the
-  // /chat page chain (resolveInitialAgentSelection). A member with none
-  // (they deleted their last personal agent) falls through to the org
-  // default; that only counts when it would appear in that page's picker for
-  // this caller: an internal (non-built-in) chat agent the caller can access —
-  // findById with a userId runs the access check and excludes soft-deleted
-  // rows.
-  const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
-  if (existing) return existing;
+  // 1. The member's pinned default — a deliberate choice, so it outranks the
+  //    organization's. It is a bare FK, so re-check it still names something
+  //    this caller can chat with: the pin survives the agent being deleted or
+  //    the caller losing access to it, and either must fall through rather
+  //    than bind the conversation to an agent they cannot use. The check is
+  //    the one that granted the pin, so the two can never disagree.
+  const memberDefaultId = await MemberModel.getDefaultAgentId(
+    userId,
+    organizationId,
+  );
+  if (memberDefaultId) {
+    const memberDefault = await visibility.find(memberDefaultId);
+    if (memberDefault) return memberDefault.id;
+  }
 
+  // 2. The organization default, under the same visibility check — it only
+  //    counts when it would appear in the /chat picker for this caller.
   const organization = await OrganizationModel.getById(organizationId);
   if (organization?.defaultAgentId) {
-    const orgDefault = await AgentModel.findById(
-      organization.defaultAgentId,
-      userId,
-      false,
-    );
-    if (
-      orgDefault &&
-      orgDefault.organizationId === organizationId &&
-      orgDefault.agentType === "agent" &&
-      !orgDefault.builtIn
-    ) {
-      return orgDefault.id;
-    }
+    const orgDefault = await visibility.find(organization.defaultAgentId);
+    if (orgDefault) return orgDefault.id;
   }
 
-  // No default anywhere (e.g. the member's first chat): bootstrap their
-  // personal chat agent. A member who deleted their last personal agent is
-  // not re-seeded, so this can still come up empty.
-  await AgentModel.ensurePersonalChatAgent({ userId, organizationId });
-  const created = await MemberModel.getDefaultAgentId(userId, organizationId);
-  if (!created) {
-    throw new ApiError(
-      400,
-      "You have no default agent. Create a personal agent or ask an admin to set an organization default.",
-    );
-  }
-  return created;
+  // 3. The caller's own personal chat agent, seeded on first use. This is the
+  //    tail every member lands on before an admin configures anything, and it
+  //    must not be reached through `members.default_agent_id`: that column now
+  //    records only a deliberate choice (step 1) and is null for members who
+  //    never made one.
+  const personalAgentId = await AgentModel.ensurePersonalChatAgent({
+    userId,
+    organizationId,
+  });
+  if (personalAgentId) return personalAgentId;
+
+  // 4. Reached only by a member who authored personal chat agents and deleted
+  //    them all — seeding deliberately does not resurrect one — in an
+  //    organization with no default either. The /chat picker still offers them
+  //    every chat agent they can reach and starts on the first, so do the same
+  //    here rather than refusing an app chat the composer would have allowed.
+  const accessible = await AgentModel.findAll(userId, false, {
+    agentType: "agent",
+    excludeBuiltIn: true,
+  });
+  const [first] = accessible.sort(
+    (a, b) =>
+      a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+  );
+  if (first) return first.id;
+
+  throw new ApiError(
+    400,
+    "You have no default agent. Create a personal agent or ask an admin to set an organization default.",
+  );
 }
 
 // === internal ===

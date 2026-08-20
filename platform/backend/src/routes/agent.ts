@@ -47,6 +47,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
+import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
@@ -1732,23 +1733,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be deleted");
       }
 
-      // Members whose personal default is this agent are moved onto another
-      // agent they can reach rather than blocked: `members.default_agent_id`
-      // is not settable from anywhere in the product, so blocking here left
-      // the seeded "My Assistant" undeletable forever. Only refuse when some
-      // member has nothing to move to — clearing the pointer instead would
-      // have the agent re-seeded straight back (MemberModel.repointDefaultAgent).
-      const memberDefaultMoves = await AgentModel.planMemberDefaultRepoint({
-        agentId: id,
-        organizationId,
-      });
-      if (!memberDefaultMoves) {
-        throw new ApiError(
-          403,
-          "Cannot delete a default agent. Set another agent as default first.",
-        );
-      }
-
       // Prevent deletion of a user's personal MCP gateway
       if (agent.isPersonalGateway) {
         throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
@@ -1760,16 +1744,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (memberDefaultMoves.length > 0) {
-        await MemberModel.repointDefaultAgent({
-          fromAgentId: id,
-          moves: memberDefaultMoves,
-        });
-      }
-
-      // Projects pinning this agent are shown "no default" from here on, so
-      // clear the rows to match. Left set, restoring the agent would silently
-      // re-pin projects whose owners were last told the pin was gone.
+      // Members who chose this agent as their personal default, and projects
+      // pinning it, are shown "no default" from here on, so clear both sets of
+      // rows to match. Left set, restoring the agent would silently re-pin
+      // owners who were last told the pin was gone. Neither blocks the delete:
+      // every chat still resolves (organization default, then the member's own
+      // personal chat agent), which is what made the old "Cannot delete a
+      // default agent" refusal a dead end.
+      await MemberModel.clearDefaultAgent(id);
       await ProjectModel.clearDefaultAgent(id);
 
       return reply.send({ success: true });
@@ -1835,10 +1817,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!restored) {
         throw new ApiError(404, "Agent not found");
       }
-
-      // Same rule as creation: a member's only personal chat agent is their
-      // personal default. Restoring it after they lost theirs re-adopts it.
-      await AgentModel.adoptAsPersonalDefaultIfOnly(restored);
 
       return reply.send(restored);
     },
@@ -1964,10 +1942,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateMemberDefaultAgent,
         description:
-          "Set or clear the current user's personal default agent. Only one " +
-          "of the caller's own personal chat agents can be the default; it " +
-          "is preselected for their new chats ahead of the organization " +
-          "default. Null clears it, so the organization default applies.",
+          "Set or clear the current user's default agent. Any chat agent the " +
+          "caller can see may be pinned — their own, a team's, or an " +
+          "organization-wide one — and it is preselected for their new chats " +
+          "ahead of the organization default. Null clears it, so the " +
+          "organization default applies. Nothing else writes this: a member " +
+          "who never pinned one has no personal default, and the " +
+          "organization default reaches them.",
         tags: ["Members"],
         body: z.object({ defaultAgentId: z.string().uuid().nullable() }),
         response: constructResponseSchema(
@@ -1977,17 +1958,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, organizationId }, reply) => {
       if (body.defaultAgentId) {
-        const agent = await AgentModel.findById(body.defaultAgentId);
-        if (
-          !agent ||
-          agent.organizationId !== organizationId ||
-          agent.agentType !== "agent" ||
-          agent.builtIn ||
-          agent.scope !== "personal" ||
-          agent.authorId !== user.id
-        ) {
-          // 404 for anything that is not the caller's own personal chat
-          // agent, so the route leaks nothing about other people's agents.
+        // Pinnable == visible: whatever the caller could start a chat with.
+        // A miss is one undifferentiated 404, so the route leaks nothing
+        // about agents they cannot see.
+        const agent = await findVisibleChatAgent({
+          agentId: body.defaultAgentId,
+          userId: user.id,
+          organizationId,
+        });
+        if (!agent) {
           throw new ApiError(404, "Agent not found");
         }
       }

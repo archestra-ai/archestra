@@ -74,7 +74,6 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
-import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
@@ -661,11 +660,6 @@ class AgentModel {
       suggestedPrompts: suggestedPrompts ?? [],
     };
     AgentModel.filterUnavailableKnowledgeTools([result]);
-
-    // A member's first personal chat agent becomes their personal default —
-    // however it was created (seeded, UI, clone, import). Later ones don't
-    // steal it; the member picks with PUT /api/members/default-agent.
-    await AgentModel.adoptAsPersonalDefaultIfOnly(createdAgent);
 
     return result;
   }
@@ -2999,24 +2993,33 @@ class AgentModel {
   }
 
   /**
-   * Ensure a personal default chat agent exists for a member.
-   * Idempotent: skips if member already has a defaultAgentId set, or ever
-   * authored a personal chat agent in this organization — soft-deleted rows
-   * count, so deleting the seeded assistant does not bring it straight back
-   * on the next login, app chat, or backend start.
+   * Ensure a personal chat agent exists for a member, and return the one they
+   * should chat with — their oldest live personal chat agent.
+   *
+   * Idempotent, and deliberately keyed on authorship alone: having *ever*
+   * authored a personal chat agent in this organization is the durable marker
+   * (soft-deleted rows count), so deleting the seeded assistant does not bring
+   * it straight back on the next login, app chat, or backend start. It must not
+   * key on `members.default_agent_id`, which now records only a deliberate
+   * choice and is null for almost everyone — reading it here would re-seed an
+   * assistant per login for every member who never picked one.
+   *
+   * Returns null only for a member who authored personal chat agents and then
+   * deleted them all: seeding is skipped by design, and they have none live.
    */
   static async ensurePersonalChatAgent(params: {
     userId: string;
     organizationId: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const { userId, organizationId } = params;
 
-    const existingDefault = await MemberModel.getDefaultAgentId(
-      userId,
-      organizationId,
-    );
-    if (existingDefault !== null) return;
-    if (await AgentModel.hasEverAuthoredPersonalChatAgent(params)) return;
+    // Live agents first: this is the common path (every login and app chat),
+    // and it answers in one indexed query.
+    const [existing] = await AgentModel.findOwnPersonalChatAgentIds(params);
+    if (existing) return existing;
+    // None live. Seed only for a member who never had one — soft-deleted rows
+    // are the durable marker that they did and chose to delete it.
+    if (await AgentModel.hasEverAuthoredPersonalChatAgent(params)) return null;
 
     const agent = await AgentModel.create(
       {
@@ -3038,13 +3041,14 @@ class AgentModel {
 
     // The default built-in tools (artifact_write, todo_write,
     // query_knowledge_sources) are assigned inside AgentModel.create along
-    // with the rest of the creation-default set, and create() made this
-    // first personal chat agent the member's default.
+    // with the rest of the creation-default set.
 
     logger.info(
       { userId, organizationId, agentId: agent.id },
-      "Created personal default chat agent",
+      "Created personal chat agent",
     );
+
+    return agent.id;
   }
 
   /**
@@ -3072,7 +3076,10 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(asc(schema.agentsTable.createdAt));
+      // `id` breaks a createdAt tie so "the member's own personal chat agent"
+      // is one stable answer — the same order migration 0426 used to recognise
+      // the implicitly adopted defaults it cleared.
+      .orderBy(asc(schema.agentsTable.createdAt), asc(schema.agentsTable.id));
     return rows.map((row) => row.id);
   }
 
@@ -3094,105 +3101,6 @@ class AgentModel {
       )
       .limit(1);
     return row !== undefined;
-  }
-
-  /**
-   * Make `agent` its author's personal default when it is their only live
-   * personal chat agent. A no-op for anything else (other agent types, org or
-   * team scope, built-ins, or an author who already has other personal ones).
-   */
-  static async adoptAsPersonalDefaultIfOnly(agent: {
-    id: string;
-    agentType: AgentType;
-    scope: AgentScope;
-    builtIn: boolean | null;
-    authorId: string | null;
-    organizationId: string;
-  }): Promise<void> {
-    if (
-      agent.agentType !== "agent" ||
-      agent.scope !== "personal" ||
-      agent.builtIn ||
-      !agent.authorId ||
-      !agent.organizationId
-    ) {
-      return;
-    }
-    const others = await AgentModel.findOwnPersonalChatAgentIds({
-      userId: agent.authorId,
-      organizationId: agent.organizationId,
-      excludeId: agent.id,
-    });
-    if (others.length > 0) return;
-    await MemberModel.setDefaultAgent(
-      agent.authorId,
-      agent.organizationId,
-      agent.id,
-    );
-  }
-
-  /**
-   * How to move each member whose personal default is `agentId` when it is
-   * deleted: onto their next personal chat agent, or — when they have none —
-   * off to null so the organization default applies. A null result means some
-   * member would be left with no default at all (no other personal agent AND
-   * no live organization default), and the caller must refuse the delete.
-   *
-   * Clearing the pointer is safe only because `ensurePersonalChatAgent` skips
-   * anyone who ever had a personal chat agent — otherwise the deleted agent
-   * would be re-seeded straight back.
-   */
-  static async planMemberDefaultRepoint(params: {
-    agentId: string;
-    organizationId: string;
-  }): Promise<Array<{ userId: string; toAgentId: string | null }> | null> {
-    const { agentId, organizationId } = params;
-
-    const userIds = await MemberModel.findUserIdsDefaultingTo(agentId);
-    if (userIds.length === 0) return [];
-
-    const [organization] = await db
-      .select({ defaultAgentId: schema.organizationsTable.defaultAgentId })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, organizationId))
-      .limit(1);
-    // The org default is stored as a bare FK: re-check it is still a live
-    // chat agent of this organization before relying on it.
-    let hasLiveOrgDefault = false;
-    const orgDefaultId = organization?.defaultAgentId;
-    if (orgDefaultId && orgDefaultId !== agentId) {
-      const [row] = await db
-        .select({ id: schema.agentsTable.id })
-        .from(schema.agentsTable)
-        .where(
-          and(
-            eq(schema.agentsTable.id, orgDefaultId),
-            eq(schema.agentsTable.organizationId, organizationId),
-            eq(schema.agentsTable.agentType, "agent"),
-            eq(schema.agentsTable.builtIn, false),
-            notDeleted(schema.agentsTable),
-          ),
-        )
-        .limit(1);
-      hasLiveOrgDefault = row !== undefined;
-    }
-
-    const moves: Array<{ userId: string; toAgentId: string | null }> = [];
-    for (const userId of userIds) {
-      const [next] = await AgentModel.findOwnPersonalChatAgentIds({
-        userId,
-        organizationId,
-        excludeId: agentId,
-      });
-      if (next) {
-        moves.push({ userId, toAgentId: next });
-      } else if (hasLiveOrgDefault) {
-        moves.push({ userId, toAgentId: null });
-      } else {
-        return null;
-      }
-    }
-    return moves;
   }
 
   /**

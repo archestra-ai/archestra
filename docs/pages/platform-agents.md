@@ -151,11 +151,24 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 
 ## Default Agents
 
-Every member starts with a personal chat agent, **My Assistant**, and it is their **personal default**: the agent preselected when they start a new chat, open an app in chat, or otherwise reach a chat without naming an agent. A member can move their personal default to any other personal agent they own from the **Agents** page — the row's menu offers **Set as my default** and **Unset as my default**, and the current one wears a **My default** badge. There is at most one; the first personal agent a member creates takes the role automatically whenever they have none.
+Which agent a new chat starts on — one opened from the composer, an app opened in chat, or any other chat reached without naming an agent — is decided in this order:
 
-Admins can also set an organization-wide **Default Agent** in **Settings → Agents**. A member's personal default wins over it; the organization default applies to members who have unset theirs, or who have no personal agent left. A [project](/docs/platform-projects)'s pinned agent outranks both inside that project.
+1. the [project](/docs/platform-projects)'s pinned agent, inside that project
+2. the member's own **default agent**, if they pinned one
+3. the organization-wide **Default Agent**, set by an admin in **Settings → Agents**
+4. the member's own personal chat agent — **My Assistant**, created for them on first use
 
-Deleting a member's personal default moves them to their next personal agent, or — with none left — leaves them on the organization default. When there is neither, the delete is refused: set another agent as default first.
+A member can pin **any chat agent they can see** as their default — their own, a team's, or an organization-wide one. On the **Agents** page each one offers **Pin default** and **Unpin default**. There is at most one pin per member.
+
+Exactly one row in that list is badged, because exactly one agent starts a member's new chats: **default (me)** when it is their own pin, **default (org)** when the agent is the organization's default. The organization's default reads as the organization's even for a member who also pinned it — it starts their chats either way — and that row offers no pin or unpin, since neither would change anything they can see. Unpinning elsewhere moves the badge back to the organization default.
+
+A pin on the organization default is still kept: it is what keeps that agent theirs if an admin later points the organization default at a different one, and the row starts reading **default (me)** at that moment.
+
+A pin is only ever made deliberately. Nothing adopts an agent into that slot on a member's behalf — so the organization default reaches everyone who has not pinned one, which is most people.
+
+Every member still gets a personal **My Assistant** on first use, and it is what they chat with when no default is configured anywhere. Having one does not, by itself, override the organization default.
+
+Deleting an agent that someone had pinned clears the pin for them, and they fall back to the organization default. The delete is never refused for that reason. A pin also stops applying if the member loses access to the agent — they fall back the same way, without anything to clean up.
 
 ## Deleting an Agent
 

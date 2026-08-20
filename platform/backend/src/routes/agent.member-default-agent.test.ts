@@ -9,9 +9,11 @@ import type { User } from "@/types";
 /**
  * A member's personal default agent: at most one of their own personal chat
  * agents, preselected for their new chats ahead of the organization default.
- * The seeded "My Assistant" holds it to begin with; the member moves it with
- * PUT /api/members/default-agent, and their first personal agent adopts it
- * automatically whenever they have none.
+ *
+ * PUT /api/members/default-agent is the only thing that writes it. Seeding the
+ * assistant, creating, cloning, importing or restoring a personal agent all
+ * leave it alone — an agent nobody chose must not shadow the organization
+ * default, which is what made an admin's Default Agent setting reach nobody.
  */
 describe("/api/members/default-agent", () => {
   let app: FastifyInstanceWithZod;
@@ -60,7 +62,7 @@ describe("/api/members/default-agent", () => {
       scope: "personal",
       authorId: user.id,
     });
-    expect(await current()).not.toBe(second.id);
+    expect(await current()).toBeNull();
 
     const response = await put(second.id);
 
@@ -96,13 +98,54 @@ describe("/api/members/default-agent", () => {
     expect(await current()).toBeNull();
   });
 
-  test("rejects an org-scoped agent, someone else's personal agent, and non-chat agents", async ({
+  test("accepts any chat agent the caller can see, whatever its scope", async ({
     makeInternalAgent,
+  }) => {
+    // Pinning a default is about whose chats it starts, not about who owns
+    // the agent: an organization-wide agent is as pinnable as one's own.
+    const orgAgent = await makeInternalAgent({ organizationId, scope: "org" });
+
+    const response = await put(orgAgent.id);
+
+    expect(response.statusCode).toBe(200);
+    expect(await current()).toBe(orgAgent.id);
+  });
+
+  test("rejects what the caller cannot chat with: non-chat agents and built-ins", async ({
     makeAgent,
+    makeInternalAgent,
+    makeOrganization,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const foreign = await makeInternalAgent({
+      organizationId: (await makeOrganization()).id,
+      scope: "org",
+    });
+    const before = await current();
+
+    for (const id of [proxy.id, gateway.id, foreign.id]) {
+      const response = await put(id);
+      expect(response.statusCode).toBe(404);
+    }
+    expect(await current()).toBe(before);
+  });
+
+  test("rejects an agent this caller cannot see", async ({
     makeUser,
     makeMember,
+    makeInternalAgent,
   }) => {
-    const orgAgent = await makeInternalAgent({ organizationId, scope: "org" });
     const stranger = await makeUser();
     await makeMember(stranger.id, organizationId);
     const strangersAgent = await makeInternalAgent({
@@ -110,43 +153,39 @@ describe("/api/members/default-agent", () => {
       scope: "personal",
       authorId: stranger.id,
     });
-    const proxy = await makeAgent({
-      organizationId,
-      agentType: "llm_proxy",
-      scope: "personal",
-      authorId: user.id,
-    });
-    const before = await current();
 
-    for (const id of [orgAgent.id, strangersAgent.id, proxy.id]) {
-      const response = await put(id);
-      expect(response.statusCode).toBe(404);
-    }
-    expect(await current()).toBe(before);
+    // A plain member, so no agent-admin bypass: someone else's personal agent
+    // is not in their picker, and the 404 says nothing more than "not found".
+    const plain = await makeUser();
+    await makeMember(plain.id, organizationId);
+    user = plain;
+
+    const response = await put(strangersAgent.id);
+
+    expect(response.statusCode).toBe(404);
+    expect(await current()).toBeNull();
   });
 
-  test("a member's first personal agent becomes their default automatically, later ones do not", async ({
+  test("no creation path claims the default: not seeding, not a first personal agent", async ({
     makeInternalAgent,
   }) => {
-    // Never seeded: this member starts with no personal agent at all.
     expect(await current()).toBeNull();
 
-    const first = await makeInternalAgent({
+    await AgentModel.ensurePersonalChatAgent({
+      userId: user.id,
       organizationId,
-      scope: "personal",
-      authorId: user.id,
     });
-    expect(await current()).toBe(first.id);
+    expect(await current()).toBeNull();
 
     await makeInternalAgent({
       organizationId,
       scope: "personal",
       authorId: user.id,
     });
-    expect(await current()).toBe(first.id);
+    expect(await current()).toBeNull();
   });
 
-  test("restoring a member's only personal agent re-adopts it as their default", async ({
+  test("restoring an agent does not re-adopt it as the default", async ({
     makeInternalAgent,
   }) => {
     const only = await makeInternalAgent({
@@ -154,6 +193,7 @@ describe("/api/members/default-agent", () => {
       scope: "personal",
       authorId: user.id,
     });
+    await put(only.id);
     const orgDefault = await makeInternalAgent({
       organizationId,
       scope: "org",
@@ -169,18 +209,19 @@ describe("/api/members/default-agent", () => {
       url: `/api/agents/${only.id}/restore`,
     });
 
+    // The choice was cleared with the delete and is the member's to make
+    // again — a restore must not silently reinstate it.
     expect(restore.statusCode).toBe(200);
-    expect(await current()).toBe(only.id);
+    expect(await current()).toBeNull();
   });
 
   test("seeding skips a member who deleted their seeded assistant", async ({
     makeInternalAgent,
   }) => {
-    await AgentModel.ensurePersonalChatAgent({
+    const assistantId = await AgentModel.ensurePersonalChatAgent({
       userId: user.id,
       organizationId,
     });
-    const assistantId = await current();
     const orgDefault = await makeInternalAgent({
       organizationId,
       scope: "org",

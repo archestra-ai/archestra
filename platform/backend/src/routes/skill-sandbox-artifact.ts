@@ -5,7 +5,10 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { FileNotDeletableError, fileStore } from "@/skills-sandbox/file-store";
-import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
+import {
+  isInlineSafeImageMime,
+  isPdfBuffer,
+} from "@/skills-sandbox/mime-sniff";
 import {
   ApiError,
   constructResponseSchema,
@@ -34,9 +37,9 @@ const ARTIFACT_REF = z
  *     query param.
  *   - `X-Content-Type-Options: nosniff` + `Content-Security-Policy: sandbox`
  *     so even a polyglot file has no script execution surface.
- *   - Only PNG/JPEG/WebP/GIF are served inline. SVG and everything else
- *     download as `application/octet-stream` so the browser never parses
- *     them as HTML.
+ *   - Only PNG/JPEG/WebP/GIF and real PDFs are served inline. SVG and
+ *     everything else download as `application/octet-stream` so the browser
+ *     never parses them as HTML.
  */
 const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -46,7 +49,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetSkillSandboxArtifact,
         description:
           "Stream the raw bytes of a skill sandbox artifact. Inline for " +
-          "known-safe raster images; download for everything else.",
+          "known-safe raster images and real PDFs, so the browser can " +
+          "preview them; download for everything else.",
         tags: ["Skills"],
         // a row UUID, or an `obj_` ref for an untracked (hand-placed) object.
         params: z.object({ artifactId: ARTIFACT_REF }),
@@ -109,21 +113,34 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .send();
       }
 
-      const inlineSafe = isInlineSafeImageMime(resolved.mimeType);
+      // A PDF is judged by its bytes, not by the stored mime: the column is
+      // caller-influenced, and only a genuine PDF may reach the browser's
+      // viewer. This also covers rows written before PDFs were sniffed, whose
+      // mime is still `application/octet-stream`.
+      const inlinePdf = isPdfBuffer(data);
+      const inlineImage = isInlineSafeImageMime(resolved.mimeType);
       const filename = safeFilenameFromPath(resolved.filename);
-      const disposition = inlineSafe
-        ? `inline; filename="${filename}"`
-        : `attachment; filename="${filename}"`;
-      const contentType = inlineSafe
-        ? resolved.mimeType
-        : "application/octet-stream";
+      const disposition =
+        inlineImage || inlinePdf
+          ? `inline; filename="${filename}"`
+          : `attachment; filename="${filename}"`;
+      let contentType = "application/octet-stream";
+      if (inlinePdf) contentType = "application/pdf";
+      else if (inlineImage) contentType = resolved.mimeType;
 
       reply
         .header("Content-Type", contentType)
         .header("Content-Length", String(data.byteLength))
         .header("Content-Disposition", disposition)
         .header("X-Content-Type-Options", "nosniff")
-        .header("Content-Security-Policy", "default-src 'none'; sandbox")
+        // `sandbox` blocks Chrome's PDF viewer outright — a sandboxed PDF
+        // response renders as a grey box — so PDFs get a narrower policy and
+        // the Files panel can actually preview them. PDF script runs inside
+        // the viewer plugin, isolated from the page and our origin.
+        .header(
+          "Content-Security-Policy",
+          inlinePdf ? "frame-ancestors 'self'" : "default-src 'none'; sandbox",
+        )
         .header("ETag", etag)
         .header("Cache-Control", "private, no-cache");
       return reply.send(data);

@@ -7844,7 +7844,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
 export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillSandboxArtifactResponses, DeleteSkillSandboxArtifactErrors, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
 /**
- * Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.
+ * Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.
  *
  * Authentication:
  *

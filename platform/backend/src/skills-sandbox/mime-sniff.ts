@@ -7,10 +7,10 @@
  * stored mime when the claim disagrees with a known signature, so the
  * download endpoint and inline-image renderer can trust the column.
  *
- * Only the inline-safe raster formats are sniffed. SVG and other text formats
- * are intentionally NOT sniffed back to anything specific — they stay as
- * whatever the caller declared (or `application/octet-stream`) and are served
- * as downloads.
+ * Only the inline-safe formats are sniffed: the raster images, plus PDF. SVG
+ * and other text formats are intentionally NOT sniffed back to anything
+ * specific — they stay as whatever the caller declared (or
+ * `application/octet-stream`) and are served as downloads.
  */
 
 const INLINE_SAFE_MIMES = new Set([
@@ -50,8 +50,8 @@ function sniffImageMime(buffer: Buffer): string | null {
  * actually gets persisted in `skill_sandbox_files.mime_type`.
  *
  * Rules:
- *   - if bytes match a known image signature, the sniffed mime always wins
- *     (the caller cannot mislabel a PNG as `image/svg+xml` to bypass the
+ *   - if bytes match a known image or PDF signature, the sniffed mime always
+ *     wins (the caller cannot mislabel a PNG as `image/svg+xml` to bypass the
  *     inline-safe filter, nor mislabel an HTML page as `image/png` to get
  *     served as an image)
  *   - otherwise, fall back to the caller's claim, or `application/octet-stream`
@@ -62,8 +62,28 @@ export function resolveArtifactMime(params: {
 }): string {
   const sniffed = sniffImageMime(params.buffer);
   if (sniffed) return sniffed;
+  // A tool that writes a report to disk and downloads it often claims nothing,
+  // so sniffing is what lets the stored row say `application/pdf` and the
+  // viewer offer a preview instead of a download prompt.
+  if (isPdfBuffer(params.buffer)) return "application/pdf";
   return params.claimed ?? "application/octet-stream";
 }
+
+/**
+ * Whether these bytes really are a PDF (`%PDF-` signature).
+ *
+ * The serve path asks the BYTES, not the stored mime, before it hands a file
+ * to the browser's PDF viewer: the column is caller-influenced, so a payload
+ * mislabelled `application/pdf` must not earn the viewer's relaxed CSP. Bytes
+ * cannot lie about this, and it also rescues rows persisted as
+ * `application/octet-stream` before PDFs were sniffed at write time.
+ */
+export function isPdfBuffer(buffer: Buffer): boolean {
+  return buffer.length >= 5 && hasMagic(buffer, 0, PDF_MAGIC);
+}
+
+/** `%PDF-` — the signature every PDF opens with. */
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
 
 export function isInlineSafeImageMime(mime: string): boolean {
   return INLINE_SAFE_MIMES.has(mime);

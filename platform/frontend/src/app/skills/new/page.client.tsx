@@ -34,6 +34,7 @@ import {
   buildSkillSaveBody,
   type SkillDraft,
 } from "../_parts/skill-draft";
+import { SkillBackLink } from "../_parts/skill-page-shell";
 
 type CreateStep = "source" | "content" | "access";
 
@@ -148,21 +149,10 @@ function NewSkillWizard() {
       <PageLayout
         title="Add a new skill"
         description={STEP_DESCRIPTIONS[effectiveStep]}
-        backLink={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 text-muted-foreground"
-            asChild
-          >
-            <Link href="/skills">
-              <ArrowLeft className="h-4 w-4" />
-              Skills
-            </Link>
-          </Button>
-        }
+        backLink={<SkillBackLink href="/skills" label="Skills" />}
+        maxWidth="wizard"
       >
-        <div className="mx-auto max-w-5xl space-y-6">
+        <div className="space-y-6">
           {isOrganizationPending ? (
             <LoadingSpinner className="my-8" />
           ) : (

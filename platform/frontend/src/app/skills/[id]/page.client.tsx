@@ -1,17 +1,18 @@
 "use client";
 
 import {
-  ArrowLeft,
+  AlertTriangle,
   ChartColumn,
-  FileX,
   Github,
   History,
   MoreHorizontal,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type ReactNode, useMemo, useState } from "react";
+import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
@@ -22,43 +23,36 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { PermissionButton } from "@/components/ui/permission-button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { parseManifestFields } from "@/lib/skills/manifest-compose";
-import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
-import { cn } from "@/lib/utils";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { composeManifest } from "@/lib/skills/manifest-compose";
+import { useSkill } from "@/lib/skills/skill.query";
+import { formatDate } from "@/lib/utils";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
-import {
-  GithubSnapshotNotice,
-  GithubSyncPanel,
-  type SkillDetail,
-} from "../_parts/github-sync-panel";
-import { SkillAccessFields } from "../_parts/skill-access-fields";
+import type { SkillDetail } from "../_parts/github-sync-panel";
 import { SkillContentEditor } from "../_parts/skill-content-editor";
+import { isSyncedGithubSkill } from "../_parts/skill-draft";
 import {
-  buildSkillSaveBody,
-  isSkillDraftDirty,
-  isSyncedGithubSkill,
-  type SkillDraft,
-  skillDraftFromSkill,
-} from "../_parts/skill-draft";
+  SKILL_DESCRIPTION_FALLBACK,
+  skillEditHref,
+  skillGithubSourceRepo,
+} from "../_parts/skill-page-config";
+import {
+  SkillBackLink,
+  SkillNotFound,
+  SkillPageLoading,
+} from "../_parts/skill-page-shell";
 import { SkillUsageDialog } from "../_parts/skill-usage-dialog";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
-type DetailTab = "content" | "access";
-
-const SKILL_DESCRIPTION_FALLBACK =
-  "A skill is a SKILL.md instruction set plus optional resource files.";
-
+/**
+ * `/skills/[id]` — the skill as it is: its facts, then its content, read-only.
+ * Changing anything goes through the page header's Edit, which opens the
+ * wizard (the create wizard's Content and Access steps on the existing
+ * skill). Version history, usage, chat and delete sit in the header too.
+ */
 export function SkillDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const { data: skill, isPending } = useSkill(id);
@@ -68,35 +62,9 @@ export function SkillDetailPage({ id }: { id: string }) {
   // page would flash "Skill not found" for a delete that just succeeded.
   const [isLeavingAfterDelete, setIsLeavingAfterDelete] = useState(false);
 
-  if (isPending || (isLeavingAfterDelete && !skill)) {
-    return (
-      <PageLayout title="Skill" description="" backLink={<BackToSkillsLink />}>
-        <div className="space-y-4">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
-      </PageLayout>
-    );
-  }
-
-  if (!skill) {
-    return (
-      <PageLayout title="Skill" description="" backLink={<BackToSkillsLink />}>
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FileX />
-            </EmptyMedia>
-            <EmptyTitle>Skill not found</EmptyTitle>
-            <EmptyDescription>
-              This skill may have been deleted, or you may not have access to
-              it.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </PageLayout>
-    );
-  }
+  if (isPending || (isLeavingAfterDelete && !skill))
+    return <SkillPageLoading />;
+  if (!skill) return <SkillNotFound />;
 
   return (
     <SkillDetailView
@@ -109,22 +77,6 @@ export function SkillDetailPage({ id }: { id: string }) {
   );
 }
 
-function BackToSkillsLink() {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
-      asChild
-    >
-      <Link href="/skills">
-        <ArrowLeft className="h-4 w-4" />
-        Skills
-      </Link>
-    </Button>
-  );
-}
-
 function SkillDetailView({
   skill,
   onDeleted,
@@ -132,130 +84,30 @@ function SkillDetailView({
   skill: SkillDetail;
   onDeleted: () => void;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canDelete } = useHasPermissions({ skill: ["delete"] });
-  const updateSkill = useUpdateSkill();
+  const { data: canUpdate } = useHasPermissions({ skill: ["update"] });
 
-  // The URL is the single source of truth for the tab, so a shared link and
-  // the back button land on the same view.
-  const tab: DetailTab =
-    searchParams.get("tab") === "access" ? "access" : "content";
-  const tabHref = (target: DetailTab) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (target === "content") {
-      params.delete("tab");
-    } else {
-      params.set("tab", target);
-    }
-    const query = params.toString();
-    return query ? `${pathname}?${query}` : pathname;
-  };
-
-  // The draft is seeded from the loaded skill, and `base` records what it was
-  // seeded from: the content to diff against, and the version the edit is
-  // anchored to. They are kept in step with the *draft*, not with the query —
-  // this page is open for as long as someone is writing, and reads land under
-  // it unbidden (a window-focus refetch, a sync pull, another tab's save), so
-  // adopting every read would discard unsaved work and silently re-anchor the
-  // save to a head the author never saw.
-  const seed = useMemo(() => skillDraftFromSkill(skill), [skill]);
-  const [draft, setDraft] = useState<SkillDraft>(seed);
-  const [base, setBase] = useState<{ draft: SkillDraft; version: number }>({
-    draft: seed,
-    version: skill.latestVersion,
-  });
-  const isDirty = isSkillDraftDirty(draft, base.draft);
-
-  // Adopt a read only when there is nothing to lose and it is not older than
-  // what this page has already written. Both guards earn their keep:
-  // - while the draft is dirty the stale anchor is kept deliberately, so a
-  //   save composed against an overtaken head is rejected rather than burying
-  //   whoever moved it;
-  // - a save invalidates the skill and the refetch lands a moment later, so
-  //   the cached skill is briefly the pre-save one — adopting it would walk
-  //   the anchor backwards and make the next save 409 against a head this
-  //   page itself set.
-  useEffect(() => {
-    if (isDirty || skill.latestVersion < base.version) return;
-    setDraft(seed);
-    setBase({ draft: seed, version: skill.latestVersion });
-  }, [isDirty, seed, skill.latestVersion, base.version]);
-
-  const patchDraft = (patch: Partial<SkillDraft>) =>
-    setDraft((prev) => ({ ...prev, ...patch }));
-
-  // Discard is also the way out of a version conflict: the failed save has
-  // already invalidated the skill, so this picks up the latest content.
-  const discardChanges = () => {
-    setDraft(seed);
-    setBase({ draft: seed, version: skill.latestVersion });
-  };
-
-  const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
-  const githubSourceRepo = isGithubSkill
-    ? (skill.sourceRef?.split("@")[0] ?? null)
-    : null;
-
-  const parsed = useMemo(
-    () => parseManifestFields(draft.manifest),
-    [draft.manifest],
-  );
-  const isSaving = updateSkill.isPending;
-  const canSave =
-    isDirty && parsed.hasName && parsed.hasDescription && !isSaving;
-
-  const handleSave = async () => {
-    // The draft can move while the request is in flight, so what was sent is
-    // what the new base records — anything typed meanwhile stays unsaved
-    // rather than being counted as written.
-    const submitted = draft;
-    // A handled failure resolves to null and a rejection is reported by the
-    // mutation's own `onError`; both leave the draft intact so the author can
-    // retry without retyping.
-    const saved = await updateSkill
-      .mutateAsync({
-        id: skill.id,
-        body: buildSkillSaveBody(submitted, skill, base.version),
-      })
-      .catch(() => null);
-    if (saved) setBase({ draft: submitted, version: saved.latestVersion });
-  };
+  const manifest = useMemo(() => composeManifest(skill), [skill]);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const [deleteRequested, setDeleteRequested] = useState(false);
-
-  // The badge falls back to "-" for another author's personal skill because
-  // the detail read carries no author name; the header just omits it then.
-  const showVisibilityBadge =
-    skill.scope !== "personal" ||
-    skill.authorId === currentUserId ||
-    skill.users.length > 0;
 
   return (
     <PageLayout
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>
-          {showVisibilityBadge && (
-            <ResourceVisibilityBadge
-              scope={skill.scope}
-              teams={skill.teams}
-              users={skill.users}
-              authorId={skill.authorId}
-              authorName={undefined}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
-          )}
+          <AgentBadge type={skill.scope} className="font-normal" />
           {isGithubSkill && (
             <Badge variant="secondary" className="gap-1 font-normal">
               <Github className="h-3 w-3" />
-              {isSynced ? "Synced from GitHub" : "Imported from GitHub"}
+              {isSyncedGithubSkill(skill)
+                ? "Synced from GitHub"
+                : "Imported from GitHub"}
             </Badge>
           )}
           {skill.sourceType === "built_in" && (
@@ -267,11 +119,8 @@ function SkillDetailView({
       }
       documentTitle={skill.name}
       description={skill.description || SKILL_DESCRIPTION_FALLBACK}
-      backLink={<BackToSkillsLink />}
-      tabs={[
-        { label: "Content", href: tabHref("content") },
-        { label: "Access", href: tabHref("access") },
-      ]}
+      backLink={<SkillBackLink href="/skills" label="Skills" />}
+      maxWidth="wizard"
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
           <ChatWithSkillButton skillId={skill.id} />
@@ -283,6 +132,14 @@ function SkillDetailView({
             <ChartColumn className="h-4 w-4" />
             Usage
           </Button>
+          {canUpdate && (
+            <Button asChild>
+              <Link href={skillEditHref(skill.id)}>
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+          )}
           {canDelete && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -305,54 +162,92 @@ function SkillDetailView({
         </div>
       }
     >
-      <div className="flex flex-col rounded-lg border">
-        <div className="flex min-h-0 flex-col gap-4 p-6">
-          {tab === "content" &&
-            (isSynced ? (
-              <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
-            ) : (
-              isGithubSkill && <GithubSnapshotNotice repo={githubSourceRepo} />
-            ))}
-          {/* Kept mounted across tabs: the open file, collapsed folders and
-              the trash bin of soft-deleted files are the editor's own state,
-              and a trip to Access is not a decision to drop them. */}
-          <div
-            className={cn(
-              "flex min-h-0 flex-col",
-              tab !== "content" && "hidden",
-            )}
-          >
-            <SkillContentEditor
-              manifest={draft.manifest}
-              files={draft.files}
-              onManifestChange={(manifest) => patchDraft({ manifest })}
-              onFilesChange={(update) =>
-                setDraft((prev) => ({ ...prev, files: update(prev.files) }))
-              }
-              readOnly={isSynced}
-              className="h-[calc(100vh-24rem)] min-h-[28rem]"
+      {/* One panel, the wizard's column wide: the skill's facts as its
+          heading section, then the wizard's Content step read-only — who can
+          use it (its Access step) is among the facts. */}
+      <div className="divide-y rounded-lg border bg-card">
+        <section className="grid gap-x-6 gap-y-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <Fact label="Accessible to">
+            <ResourceVisibilityBadge
+              scope={skill.scope}
+              teams={skill.teams}
+              users={skill.users}
+              authorId={skill.authorId}
+              authorName={undefined}
+              currentUserId={currentUserId}
+              showSelfAsMe
             />
-          </div>
-          {tab === "access" && (
-            <SkillAccessFields draft={draft} onChange={patchDraft} />
-          )}
-        </div>
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
-          <div>
-            {isDirty && !isSaving && (
-              <Button variant="outline" onClick={discardChanges}>
-                Discard changes
-              </Button>
+          </Fact>
+          <Fact label="Environments">
+            {skill.environments.length === 0 ? (
+              <span>All environments</span>
+            ) : (
+              <ul className="flex flex-wrap gap-1.5">
+                {skill.environments.map((environment) => (
+                  <li key={environment.id}>
+                    <Badge variant="outline" className="font-normal">
+                      {environment.name}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
             )}
+          </Fact>
+          <Fact label="Source">
+            <SourceFact skill={skill} />
+          </Fact>
+          <Fact label="Version">
+            <span>v{skill.latestVersion}</span>
+          </Fact>
+          <Fact label="Used">
+            {skill.usageCount === 0 ? (
+              <span>Never</span>
+            ) : (
+              <span>
+                {skill.usageCount} {skill.usageCount === 1 ? "time" : "times"}
+                {skill.lastUsedAt ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · last{" "}
+                    {formatRelativeTimeFromNow(skill.lastUsedAt).toLowerCase()}
+                  </span>
+                ) : null}
+              </span>
+            )}
+          </Fact>
+          <Fact label="Created">
+            <span>
+              {formatDate({ date: skill.createdAt, dateFormat: "PP" })}
+            </span>
+          </Fact>
+          {skill.updatedAt !== skill.createdAt && (
+            <Fact label="Last updated">
+              <span>
+                {formatDate({ date: skill.updatedAt, dateFormat: "PPp" })}
+              </span>
+            </Fact>
+          )}
+        </section>
+
+        {/* The wizard's own Content step, so its heading ranks a level
+            above sections inside a step (h2 to their h3). */}
+        <section className="space-y-4 p-4 pt-5">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold tracking-tight">Content</h2>
+            <p className="text-xs text-muted-foreground">
+              The SKILL.md instruction set beside its resource files.
+            </p>
           </div>
-          <PermissionButton
-            permissions={{ skill: ["update"] }}
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            {isSaving ? "Saving..." : "Save skill"}
-          </PermissionButton>
-        </div>
+          <SkillContentEditor
+            manifest={manifest}
+            files={skill.files}
+            onManifestChange={noop}
+            onFilesChange={noop}
+            readOnly
+            readOnlyMarker={false}
+            className="h-[calc(100vh-28rem)] min-h-[24rem]"
+          />
+        </section>
       </div>
 
       {historyOpen && (
@@ -380,4 +275,81 @@ function SkillDetailView({
       )}
     </PageLayout>
   );
+}
+
+/** Where the skill's content comes from, and for a synced one, how it keeps up. */
+function SourceFact({ skill }: { skill: SkillDetail }) {
+  const appName = useAppName();
+  if (skill.sourceType === "built_in") {
+    return <span>Ships with {appName}</span>;
+  }
+  if (skill.sourceType !== "github") {
+    return <span>Written in {appName}</span>;
+  }
+  const repo = skillGithubSourceRepo(skill);
+  const synced = isSyncedGithubSkill(skill);
+  return (
+    <div className="space-y-1">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Github className="size-4 shrink-0 text-muted-foreground" />
+        {repo ? (
+          <a
+            href={`https://github.com/${repo}${synced && skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 truncate font-mono underline underline-offset-4 hover:text-primary"
+            title="Open on GitHub"
+          >
+            {repo}
+            {synced && skill.githubSyncRef ? (
+              <span className="text-muted-foreground">
+                {" "}
+                @ {skill.githubSyncRef}
+              </span>
+            ) : null}
+          </a>
+        ) : (
+          <span>GitHub</span>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {synced ? (
+          skill.lastSyncError ? (
+            <span className="text-destructive">
+              <AlertTriangle className="mr-1 inline size-3 align-[-2px]" />
+              {`Synced ${syncIntervalLabel(skill.githubSyncInterval)} — last sync failed ${formatRelativeTimeFromNow(skill.lastSyncedAt).toLowerCase()}`}
+            </span>
+          ) : (
+            <span>
+              {`Synced ${syncIntervalLabel(skill.githubSyncInterval)} — last synced ${formatRelativeTimeFromNow(skill.lastSyncedAt, { neverLabel: "never" }).toLowerCase()}`}
+            </span>
+          )
+        ) : (
+          <span>Imported once; not kept in sync</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="break-words">{children}</div>
+    </div>
+  );
+}
+
+const noop = () => {};
+
+// lowercase: these render mid-sentence ("Synced every hour — last synced …")
+const SYNC_INTERVAL_LABELS: Record<string, string> = {
+  "15m": "every 15 minutes",
+  "1h": "every hour",
+  "1d": "once a day",
+};
+
+function syncIntervalLabel(interval: string | null) {
+  return (interval && SYNC_INTERVAL_LABELS[interval]) || "on a schedule";
 }

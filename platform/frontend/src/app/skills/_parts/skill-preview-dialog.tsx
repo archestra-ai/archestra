@@ -51,7 +51,7 @@ export function SkillPreviewDialog({
           onManifestChange={() => {}}
           onFilesChange={() => {}}
           readOnly
-          isPreview
+          readOnlyMarker={false}
           className="h-full"
         />
       )}

@@ -71,6 +71,7 @@ import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
+import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
@@ -190,10 +191,10 @@ function SkillsList() {
   );
 
   // Legacy deep link: the editor used to be a dialog on this page opened by
-  // `?edit=<skillId>`; it now lives on the skill's own page.
+  // `?edit=<skillId>`; it is the skill's edit wizard now.
   const editId = searchParams.get("edit");
   useEffect(() => {
-    if (editId) router.replace(`/skills/${encodeURIComponent(editId)}`);
+    if (editId) router.replace(skillEditHref(editId));
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
@@ -450,7 +451,7 @@ function SkillsList() {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
                 permissions: { skill: ["update"] },
-                href: `/skills/${skill.id}`,
+                href: skillEditHref(skill.id),
               },
               {
                 icon: <MessageSquare className="h-4 w-4" />,

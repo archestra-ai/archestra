@@ -121184,6 +121184,12 @@
                         "kbMfilesOauthEnabled": {
                           "type": "boolean"
                         },
+                        "kbBm25DefaultK1": {
+                          "type": "number"
+                        },
+                        "kbBm25DefaultB": {
+                          "type": "number"
+                        },
                         "kbGoogleDriveOAuth": {
                           "type": "object",
                           "properties": {
@@ -121262,6 +121268,8 @@
                         "kbAutoSyncPermissionsEnabled",
                         "kbMfilesConnectorEnabled",
                         "kbMfilesOauthEnabled",
+                        "kbBm25DefaultK1",
+                        "kbBm25DefaultB",
                         "kbGoogleDriveOAuth",
                         "mcpGatewaySkillsEnabled",
                         "hackathonRecorderEnabled",
@@ -279374,6 +279382,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -279803,6 +279823,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -280429,6 +280451,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -280858,6 +280892,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -281739,6 +281775,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -282168,6 +282216,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -282650,6 +282700,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -283079,6 +283141,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -283557,6 +283621,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -283986,6 +284062,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -284461,6 +284539,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -284890,6 +284980,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -285380,6 +285472,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -285809,6 +285913,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -286350,6 +286456,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -286779,6 +286897,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -287295,6 +287415,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -287724,6 +287856,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -288272,6 +288406,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -288701,6 +288847,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -289192,6 +289340,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -289621,6 +289781,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -289954,6 +290116,18 @@
                   "ocrModel": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "kbBm25K1": {
+                    "nullable": true,
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "kbBm25B": {
+                    "nullable": true,
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
                   }
                 }
               }
@@ -290123,6 +290297,18 @@
                     "ocrModel": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
                     },
                     "defaultLlmModel": {
                       "nullable": true,
@@ -290553,6 +290739,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -291013,6 +291201,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -291442,6 +291642,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -292315,6 +292517,297 @@
         }
       }
     },
+    "/api/organization/knowledge-settings/keyword-ranking-status": {
+      "get": {
+        "operationId": "getKeywordRankingStatus",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Where BM25 keyword ranking stands for the organization: whether its corpus statistics cover every language with indexed documents (until they do, keyword search ranks that language with PostgreSQL's built-in ts_rank), when they were last rebuilt and when the next rebuild is due\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:read`: View knowledge settings (embedding and reranking models)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "pending",
+                        "no_documents"
+                      ]
+                    },
+                    "lastRefreshedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "nextRefreshAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "refreshing": {
+                      "type": "boolean"
+                    },
+                    "lastRefreshFailed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "lastRefreshedAt",
+                    "nextRefreshAt",
+                    "refreshing",
+                    "lastRefreshFailed"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSettings:read"
+          ]
+        }
+      }
+    },
     "/api/organization/knowledge-settings/test-ocr": {
       "post": {
         "operationId": "testOcrConnection",
@@ -292799,6 +293292,18 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "kbBm25K1": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
+                    "kbBm25B": {
+                      "nullable": true,
+                      "type": "number",
+                      "minimum": -140737488355328,
+                      "maximum": 140737488355327
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -293228,6 +293733,8 @@
                     "rerankerModel",
                     "ocrChatApiKeyId",
                     "ocrModel",
+                    "kbBm25K1",
+                    "kbBm25B",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",

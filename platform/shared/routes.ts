@@ -545,6 +545,7 @@ export const RouteId = {
   TestEmbeddingConnection: "testEmbeddingConnection",
   TestRerankerConnection: "testRerankerConnection",
   TestOcrConnection: "testOcrConnection",
+  GetKeywordRankingStatus: "getKeywordRankingStatus",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",

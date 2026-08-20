@@ -570,6 +570,16 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbBm25TermStatsTable: {
+    audited: false,
+    reason:
+      "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
+  },
+  kbBm25CorpusStatsTable: {
+    audited: false,
+    reason:
+      "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
+  },
   kbContainerAclsTable: {
     audited: false,
     reason:

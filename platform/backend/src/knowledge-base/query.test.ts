@@ -81,7 +81,7 @@ vi.mock("@/config", async () =>
 );
 
 import db, { schema } from "@/database";
-import { KbChunkModel, KbDocumentModel } from "@/models";
+import { KbChunkModel, KbDocumentModel, OrganizationModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
@@ -876,6 +876,172 @@ describe("QueryService", () => {
     } finally {
       vectorSpy.mockRestore();
     }
+  });
+
+  describe("keyword ranker selection", () => {
+    async function seedEnglishCorpus(fixtures: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeKnowledgeBase: (orgId: string) => Promise<{ id: string }>;
+      makeKnowledgeBaseConnector: (
+        kbId: string,
+        orgId: string,
+      ) => Promise<{ id: string }>;
+    }) {
+      const org = await fixtures.makeOrganization();
+      const kb = await fixtures.makeKnowledgeBase(org.id);
+      const connector = await fixtures.makeKnowledgeBaseConnector(
+        kb.id,
+        org.id,
+      );
+      const doc = await KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title: "Runbook",
+        content: "ingress timeout",
+        contentHash: "h-ranker",
+      });
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "kubernetes ingress timeout",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+      setupEmbeddingConfig();
+      setupSingleQueryExpansion();
+      embeddingQueue.push(makeFakeEmbedding(7));
+      return { org, connector };
+    }
+
+    test("passes the organization's BM25 tuning override to the keyword lane", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { org, connector } = await seedEnglishCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      await OrganizationModel.patch(org.id, { kbBm25K1: 1.5, kbBm25B: 0.3 });
+      await KbChunkModel.refreshBm25Stats();
+
+      const fullTextSearchSpy = vi
+        .spyOn(KbChunkModel, "fullTextSearch")
+        .mockResolvedValueOnce([]);
+
+      await queryService.query({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "ingress timeout",
+        userAcl: ["org:*"],
+      });
+
+      expect(fullTextSearchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ bm25: { k1: 1.5, b: 0.3 } }),
+      );
+      fullTextSearchSpy.mockRestore();
+    });
+
+    test("ranks with BM25 at the deployment default tuning when the organization has none — no per-call argument, no setting", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { org, connector } = await seedEnglishCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      await KbChunkModel.refreshBm25Stats();
+
+      const fullTextSearchSpy = vi
+        .spyOn(KbChunkModel, "fullTextSearch")
+        .mockResolvedValueOnce([]);
+
+      await queryService.query({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "ingress timeout",
+        userAcl: ["org:*"],
+      });
+
+      // The real config's defaults (deep-merged by configModuleMock), i.e. the
+      // Lucene constants — not undefined, which would rank with ts_rank.
+      expect(fullTextSearchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ bm25: { k1: 1.2, b: 0.75 } }),
+      );
+      fullTextSearchSpy.mockRestore();
+    });
+
+    test("an empty connector in another language does not knock the query off BM25", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { org, connector } = await seedEnglishCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      await KbChunkModel.refreshBm25Stats();
+      // A connector created in a language nothing is indexed in — its language
+      // joins the query's parse list, but `ts_stat` never produces statistics
+      // for it, so blocking on it would disable BM25 for this knowledge base
+      // permanently rather than until the next refresh.
+      const kb = await makeKnowledgeBase(org.id);
+      const emptyGermanConnector = await makeKnowledgeBaseConnector(
+        kb.id,
+        org.id,
+        { ftsLanguage: "german" },
+      );
+
+      const fullTextSearchSpy = vi
+        .spyOn(KbChunkModel, "fullTextSearch")
+        .mockResolvedValueOnce([]);
+
+      await queryService.query({
+        connectorIds: [connector.id, emptyGermanConnector.id],
+        organizationId: org.id,
+        queryText: "ingress timeout",
+        userAcl: ["org:*"],
+      });
+
+      expect(fullTextSearchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ bm25: { k1: 1.2, b: 0.75 } }),
+      );
+      fullTextSearchSpy.mockRestore();
+    });
+
+    test("stays on ts_rank until the BM25 statistics have been built", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { org, connector } = await seedEnglishCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      // No refreshBm25Stats(): the scoring statement inner-joins the stats
+      // tables, so an unguarded BM25 query here would return nothing at all.
+
+      const fullTextSearchSpy = vi
+        .spyOn(KbChunkModel, "fullTextSearch")
+        .mockResolvedValueOnce([]);
+
+      await queryService.query({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "ingress timeout",
+        userAcl: ["org:*"],
+      });
+
+      expect(fullTextSearchSpy).toHaveBeenCalledTimes(1);
+      expect(fullTextSearchSpy.mock.calls[0]?.[0].bm25).toBeUndefined();
+      fullTextSearchSpy.mockRestore();
+    });
   });
 });
 

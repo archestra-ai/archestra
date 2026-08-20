@@ -1259,6 +1259,56 @@ describe("organization routes", () => {
         "reranker_validation_failed",
       );
     });
+
+    test("saves BM25 tuning overrides and clears them back to the deployment default", async () => {
+      // Set both. Fractional values must survive the round trip — an integer
+      // column or parser would silently collapse b=0.75 to 0.
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25K1: 1.5, kbBm25B: 0.3 },
+      });
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json().kbBm25K1).toBe(1.5);
+      expect(setResponse.json().kbBm25B).toBe(0.3);
+
+      const stored = await OrganizationModel.getById(organizationId);
+      expect(stored?.kbBm25K1).toBe(1.5);
+      expect(stored?.kbBm25B).toBe(0.3);
+
+      // A patch that does not mention a field leaves it alone; null clears it
+      // so the organization inherits the deployment default again.
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25B: null },
+      });
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json().kbBm25K1).toBe(1.5);
+      expect(clearResponse.json().kbBm25B).toBeNull();
+    });
+
+    test("rejects BM25 tuning outside the shared bounds", async () => {
+      // b is a mixing weight and only meaningful in [0, 1]; the same bounds
+      // gate the env-var parser and the settings UI.
+      const tooLarge = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25B: 1.5 },
+      });
+      expect(tooLarge.statusCode).toBe(400);
+
+      const negative = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25K1: -1 },
+      });
+      expect(negative.statusCode).toBe(400);
+
+      const untouched = await OrganizationModel.getById(organizationId);
+      expect(untouched?.kbBm25K1).toBeNull();
+      expect(untouched?.kbBm25B).toBeNull();
+    });
   });
 
   describe("PATCH /api/organization/auth-settings", () => {

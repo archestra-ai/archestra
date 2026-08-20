@@ -115,6 +115,23 @@ export const DEFAULT_CHUNK_SIZE_TOKENS = 512;
 export const DEFAULT_CONTEXT_EXPANSION_RADIUS = 1;
 export const MAX_CONTEXT_EXPANSION_RADIUS = 4;
 
+/**
+ * Bounds for the BM25 keyword-ranker tuning constants, shared by the env-var
+ * parser, the settings API schema, and the settings UI so all three reject the
+ * same values.
+ *
+ * `k1` (term-frequency saturation) has no natural upper bound in the formula;
+ * 10 is far past where additional repetitions stop mattering. `b`
+ * (document-length normalization) is a mixing weight and is only meaningful in
+ * [0, 1]. The defaults are Lucene/Elasticsearch's.
+ */
+export const BM25_K1_MIN = 0;
+export const BM25_K1_MAX = 10;
+export const BM25_K1_DEFAULT = 1.2;
+export const BM25_B_MIN = 0;
+export const BM25_B_MAX = 1;
+export const BM25_B_DEFAULT = 0.75;
+
 export const SUPPORTED_EMBEDDING_DIMENSIONS = [
   3072, 1536, 1024, 768, 384,
 ] as const;

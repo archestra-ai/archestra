@@ -692,11 +692,20 @@ async function handleQueryKnowledgeSources(params: {
     // the same flag as the verification pass — disabling the feature must also
     // stop asking the model to quote, not just skip the check. Omitted for an
     // empty result — there is nothing to quote.
-    // A media chunk's payload never goes into the JSON text: a 180KB base64
-    // image is ~45-60k tokens the model cannot read anyway. It rides as an MCP
-    // image part instead, so a vision-capable model actually sees the picture,
-    // while `content` keeps the short "[image: title (mime)]" descriptor for
-    // models (and transports) that cannot take one.
+    // How a media chunk's payload leaves this tool depends on who is asking.
+    //
+    // A caller that feeds the result to a model through the chat pipeline gets
+    // the payload as an MCP image part, with `content` keeping only the short
+    // "[image: title (mime)]" descriptor: a 180KB base64 blob is ~45-60k tokens
+    // the model cannot read anyway, and that pipeline bounds, strips and
+    // persists the part properly.
+    //
+    // Everyone else — an external MCP client on the gateway, the app proxy —
+    // gets the chunk exactly as it is stored and as this tool has always
+    // returned it: the `data:<mime>;base64,<payload>` URL inline in
+    // `results[].content`. Those surfaces hand the result straight back to
+    // their caller, so an image part would be a wire-contract change for a
+    // client that never asked for one.
     const imageParts: Array<{
       type: "image";
       data: string;
@@ -705,6 +714,9 @@ async function handleQueryKnowledgeSources(params: {
     const wireResults = results.map((result) => {
       if (!result.media) return result;
       const { media, ...rest } = result;
+      if (!context.deliversMediaAsImageParts) {
+        return { ...rest, content: toMediaDataUrl(media) };
+      }
       if (
         imageParts.length < MAX_INLINE_RESULT_IMAGES &&
         media.data.length <= MAX_INLINE_RESULT_IMAGE_BASE64_CHARS
@@ -1584,6 +1596,16 @@ async function findManageableConnector(params: {
  */
 const MEDIA_CITATION_NOTE =
   "Results whose content reads `[image: ...]` are pictures, delivered as image attachments on this tool result — describe them from what you see and cite them by ref instead of quoting.";
+
+/**
+ * Rebuild the stored data URL for a caller that takes its payloads inline.
+ * `queryService` splits a media chunk into a descriptor plus `media` for the
+ * image-part path; joining them back is exactly the string the chunk holds
+ * (`chunk-and-store.ts` writes `data:<mime>;base64,<data>`).
+ */
+function toMediaDataUrl(media: { mimeType: string; data: string }): string {
+  return `data:${media.mimeType};base64,${media.data}`;
+}
 
 /** At most this many retrieved images ride along as inline image parts. */
 const MAX_INLINE_RESULT_IMAGES = 3;

@@ -181,6 +181,131 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
+    test("hands a media chunk to a raw MCP caller inline, as the stored data URL", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithKb = await makeAgent({
+        name: "Agent With KB (raw caller)",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const payload = "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4H";
+      const querySpy = vi.spyOn(queryService, "query").mockResolvedValueOnce([
+        {
+          chunkId: "chunk-media",
+          content: "[image: lobsters.webp (image/webp)]",
+          score: 0.9,
+          media: { kind: "image", mimeType: "image/webp", data: payload },
+        },
+      ] as any);
+
+      // The gateway's context (routes/mcp-gateway/utils.ts) sets no
+      // `deliversMediaAsImageParts` — an external MCP client gets the payload
+      // where this tool has always put it, not as an image part it never
+      // asked for.
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "lobsters" },
+        {
+          agent: { id: agentWithKb.id, name: agentWithKb.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toHaveLength(1);
+      expect(result.content.every((part: any) => part.type === "text")).toBe(
+        true,
+      );
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.results[0].content).toBe(
+        `data:image/webp;base64,${payload}`,
+      );
+      expect(parsed.results[0].media).toBeUndefined();
+      expect((result.structuredContent as any).results[0].content).toBe(
+        `data:image/webp;base64,${payload}`,
+      );
+      // The media escape hatch belongs to the image-part path only.
+      expect(parsed.citationInstruction).toBe(QUOTE_CITATION_INSTRUCTION);
+
+      querySpy.mockRestore();
+    });
+
+    test("hands a media chunk to the chat pipeline as an image part with a descriptor", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithKb = await makeAgent({
+        name: "Agent With KB (chat caller)",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const payload = "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4H";
+      const querySpy = vi.spyOn(queryService, "query").mockResolvedValueOnce([
+        {
+          chunkId: "chunk-media",
+          content: "[image: lobsters.webp (image/webp)]",
+          score: 0.9,
+          media: { kind: "image", mimeType: "image/webp", data: payload },
+        },
+      ] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "lobsters" },
+        {
+          agent: { id: agentWithKb.id, name: agentWithKb.name },
+          organizationId: org.id,
+          userId: user.id,
+          deliversMediaAsImageParts: true,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toHaveLength(2);
+      expect(result.content[1]).toEqual({
+        type: "image",
+        data: payload,
+        mimeType: "image/webp",
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.results[0].content).toBe(
+        "[image: lobsters.webp (image/webp)]",
+      );
+      expect((result.content[0] as any).text).not.toContain(payload);
+      expect(parsed.results[0].media).toBeUndefined();
+      expect(parsed.citationInstruction).toContain(QUOTE_CITATION_INSTRUCTION);
+      expect(parsed.citationInstruction).not.toBe(QUOTE_CITATION_INSTRUCTION);
+
+      querySpy.mockRestore();
+    });
+
     test("omits the citation instruction when quote verification is disabled", async ({
       makeAgent,
       makeOrganization,

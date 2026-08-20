@@ -12,9 +12,13 @@ import { anthropicAdapterFactory } from "./anthropic";
 import {
   type AnthropicOpenaiContext,
   anthropicResponseToOpenai,
+  anthropicUsageViewToOpenai,
   mapStopReason,
 } from "./anthropic-openai-translator";
-import { formatOpenAiChunkSse, toOpenAiStreamUsage } from "./openai-sse-chunk";
+import {
+  formatOpenAiChunkSse,
+  type OpenAiStreamUsage,
+} from "./openai-sse-chunk";
 
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
 type AnthropicResponse = Anthropic.Types.MessagesResponse;
@@ -120,11 +124,7 @@ class AnthropicOpenaiResponseAdapter
           },
         },
       ],
-      usage: {
-        prompt_tokens: usage.inputTokens,
-        completion_tokens: usage.outputTokens,
-        total_tokens: usage.inputTokens + usage.outputTokens,
-      },
+      usage: anthropicUsageViewToOpenai(usage),
     };
 
     return response as unknown as AnthropicResponse;
@@ -241,7 +241,7 @@ class AnthropicOpenaiStreamAdapter
     return `${this.formatChunk({
       delta: {},
       finishReason,
-      usage: this.state.usage,
+      usage: anthropicUsageViewToOpenai(this.state.usage),
     })}data: [DONE]\n\n`;
   }
 
@@ -323,7 +323,7 @@ class AnthropicOpenaiStreamAdapter
     delta: Record<string, unknown>;
     finishReason: string | null;
     /** Only the final chunk passes this; delta chunks must stay usage-free. */
-    usage?: UsageView | null;
+    usage?: OpenAiStreamUsage;
   }): string {
     return formatOpenAiChunkSse({
       id: this.ctx.chatcmplId,
@@ -331,7 +331,7 @@ class AnthropicOpenaiStreamAdapter
       model: this.ctx.requestedModel,
       delta: params.delta,
       finishReason: params.finishReason,
-      usage: toOpenAiStreamUsage(params.usage),
+      usage: params.usage,
     });
   }
 }

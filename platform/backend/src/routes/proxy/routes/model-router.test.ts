@@ -2266,6 +2266,64 @@ describe("model router proxy routes", () => {
     });
   });
 
+  // End-to-end counterpart to the adapter-level guard in
+  // adapters/streaming-usage.test.ts: Anthropic counts cache reads and writes
+  // OUTSIDE `input_tokens`, so relaying that field as OpenAI's `prompt_tokens`
+  // reported an agent turn whose prompt was almost entirely a cache hit as a
+  // prompt of the handful of tokens that missed — and dropped the cache read
+  // from the wire, where a chained Archestra recovers it as
+  // `prompt_tokens - cached_tokens`.
+  test("reports Anthropic cache reads as part of the OpenAI prompt count", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    anthropicStubOptions.cacheReadInputTokens = 90_000;
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({
+      provider: "anthropic",
+      modelId: "claude-opus-4-6-20250918",
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeSecret,
+      makeLlmProviderApiKey,
+      apiKeyValue: "test-anthropic-key",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "anthropic:claude-opus-4-6-20250918",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The stub reports input_tokens 12, output_tokens 10 alongside the 90k read.
+    expect(response.json().usage).toEqual({
+      prompt_tokens: 90_012,
+      completion_tokens: 10,
+      total_tokens: 90_022,
+      prompt_tokens_details: { cached_tokens: 90_000 },
+    });
+  });
+
   test("lists provider-qualified OpenAI-compatible model ids for mapped providers", async ({
     makeOrganization,
     makeSecret,

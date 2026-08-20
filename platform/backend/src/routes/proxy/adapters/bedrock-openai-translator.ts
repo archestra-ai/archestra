@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
+import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
   parseJsonObject,
   stringifyTextContent,
@@ -153,12 +154,12 @@ export function converseResponseToOpenai(
   }
 
   const finishReason = mapStopReason(resp.stopReason);
-  const usage = {
-    prompt_tokens: resp.usage?.inputTokens ?? 0,
-    completion_tokens: resp.usage?.outputTokens ?? 0,
-    total_tokens:
-      (resp.usage?.inputTokens ?? 0) + (resp.usage?.outputTokens ?? 0),
-  };
+  const usage = converseUsageToOpenai({
+    uncachedInputTokens: resp.usage?.inputTokens ?? 0,
+    outputTokens: resp.usage?.outputTokens ?? 0,
+    cacheReadTokens: resp.usage?.cacheReadInputTokens ?? 0,
+    cacheWriteTokens: resp.usage?.cacheWriteInputTokens ?? 0,
+  });
 
   return {
     id: ctx.chatcmplId,
@@ -179,6 +180,45 @@ export function converseResponseToOpenai(
     ],
     usage,
   } as OpenAiResponse;
+}
+
+/**
+ * Map Bedrock Converse token counts onto the OpenAI usage fields.
+ *
+ * Converse reports `inputTokens` as the prompt tokens that MISSED the cache —
+ * `cacheReadInputTokens` and `cacheWriteInputTokens` are counted alongside it,
+ * not inside it (which is why `totalTokens` exceeds inputTokens + outputTokens
+ * on a cached turn). OpenAI's `prompt_tokens` is the gross prompt count, with
+ * cache hits repeated as a subset in `prompt_tokens_details.cached_tokens`, so
+ * forwarding `inputTokens` straight across drops the cached prefix: a Claude
+ * turn on Bedrock that reads 90k tokens back from the cache reports a prompt of
+ * only the few tokens that missed.
+ *
+ * Takes already-extracted counts because the three call sites read them from
+ * three different shapes (`ConverseResponse.usage`, the stream's metadata
+ * event, and the accumulator's `UsageView`) that agree on the semantics but not
+ * on the field names.
+ */
+function converseUsageToOpenai(params: {
+  uncachedInputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}): OpenAiStreamUsage {
+  const promptTokens =
+    params.uncachedInputTokens +
+    params.cacheReadTokens +
+    params.cacheWriteTokens;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: params.outputTokens,
+    total_tokens: promptTokens + params.outputTokens,
+    // Omitted rather than zeroed when nothing was cached, so the field's
+    // presence still means "this provider reported cache hits".
+    ...(params.cacheReadTokens > 0
+      ? { prompt_tokens_details: { cached_tokens: params.cacheReadTokens } }
+      : {}),
+  };
 }
 
 /** Map a Bedrock stopReason to the OpenAI finish_reason string. */
@@ -328,19 +368,18 @@ export function createConverseToOpenaiSseEncoder(
 
     if (e.metadata?.usage && ctx.includeUsageInStream) {
       const u = e.metadata.usage;
-      const prompt = Number(u.inputTokens ?? 0);
-      const completion = Number(u.outputTokens ?? 0);
       return sse({
         id: ctx.chatcmplId,
         object: "chat.completion.chunk",
         created: ctx.createdUnix,
         model: ctx.requestedModel,
         choices: [],
-        usage: {
-          prompt_tokens: prompt,
-          completion_tokens: completion,
-          total_tokens: Number(u.totalTokens ?? prompt + completion),
-        },
+        usage: converseUsageToOpenai({
+          uncachedInputTokens: Number(u.inputTokens ?? 0),
+          outputTokens: Number(u.outputTokens ?? 0),
+          cacheReadTokens: Number(u.cacheReadInputTokens ?? 0),
+          cacheWriteTokens: Number(u.cacheWriteInputTokens ?? 0),
+        }),
       });
     }
 
@@ -410,12 +449,12 @@ export function createConverseToOpenaiSseEncoder(
       type: "function" as const,
       function: { name: tc.name, arguments: tc.arguments },
     }));
-    const usage = {
-      prompt_tokens: state.usage?.inputTokens ?? 0,
-      completion_tokens: state.usage?.outputTokens ?? 0,
-      total_tokens:
-        (state.usage?.inputTokens ?? 0) + (state.usage?.outputTokens ?? 0),
-    };
+    const usage = converseUsageToOpenai({
+      uncachedInputTokens: state.usage?.inputTokens ?? 0,
+      outputTokens: state.usage?.outputTokens ?? 0,
+      cacheReadTokens: state.usage?.cacheReadTokens ?? 0,
+      cacheWriteTokens: state.usage?.cacheWriteTokens ?? 0,
+    });
     return {
       id: ctx.chatcmplId,
       object: "chat.completion",

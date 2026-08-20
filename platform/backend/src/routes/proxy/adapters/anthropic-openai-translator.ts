@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Anthropic, OpenAi } from "@/types";
+import type { Anthropic, OpenAi, UsageView } from "@/types";
+import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
   type NormalizedContentPart,
   normalizeOpenAiContentParts,
@@ -12,6 +13,12 @@ type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
 type AnthropicResponse = Anthropic.Types.MessagesResponse;
+/**
+ * The OpenAI usage object both wire shapes share. `OpenAiStreamUsage` names it
+ * for the streaming chunk; a non-streaming `chat.completion` carries the very
+ * same fields.
+ */
+type OpenAiUsage = OpenAiStreamUsage;
 
 const DEFAULT_ANTHROPIC_MAX_TOKENS = 8192;
 
@@ -184,8 +191,7 @@ export function anthropicResponseToOpenai(
     }
   }
 
-  const promptTokens = response.usage.input_tokens;
-  const completionTokens = response.usage.output_tokens;
+  const usage = anthropicUsageToOpenai(response.usage);
 
   return {
     id: ctx.chatcmplId,
@@ -204,12 +210,77 @@ export function anthropicResponseToOpenai(
         },
       },
     ],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-    },
+    usage,
   } as OpenAiResponse;
+}
+
+/**
+ * Map Anthropic's `usage` onto the OpenAI usage fields.
+ *
+ * Anthropic reports `input_tokens` as the prompt tokens that MISSED the cache;
+ * `cache_read_input_tokens` and `cache_creation_input_tokens` are counted
+ * separately and are not included in it. OpenAI's `prompt_tokens` is the gross
+ * prompt count, with cache hits repeated as a subset in
+ * `prompt_tokens_details.cached_tokens`. Forwarding `input_tokens` straight
+ * across therefore drops the cached prefix entirely: a turn that reads 90k
+ * tokens back from the cache and misses on 4 reports `prompt_tokens: 4`, and
+ * the cache read is unrecoverable from the wire.
+ *
+ * Cache *writes* have no OpenAI counterpart, so they land in the uncached
+ * remainder (`prompt_tokens - cached_tokens`) — which is where they belong:
+ * a cache write is billed at more than the input rate, never less.
+ */
+function anthropicUsageToOpenai(
+  usage: AnthropicResponse["usage"],
+): OpenAiUsage {
+  return buildOpenAiUsage({
+    uncachedInputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+  });
+}
+
+/**
+ * Same mapping as `anthropicUsageToOpenai`, but from the stream accumulator,
+ * whose `UsageView` carries the same uncached-input normalization. Streaming
+ * and non-streaming answer the same route, so they must report the same numbers
+ * for the same turn.
+ */
+export function anthropicUsageViewToOpenai(
+  usage: UsageView | null | undefined,
+): OpenAiUsage | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  return buildOpenAiUsage({
+    uncachedInputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+  });
+}
+
+function buildOpenAiUsage(params: {
+  uncachedInputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}): OpenAiUsage {
+  const promptTokens =
+    params.uncachedInputTokens +
+    params.cacheReadTokens +
+    params.cacheWriteTokens;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: params.outputTokens,
+    total_tokens: promptTokens + params.outputTokens,
+    // Omitted rather than zeroed when nothing was cached, so the field's
+    // presence still means "this provider reported cache hits".
+    ...(params.cacheReadTokens > 0
+      ? { prompt_tokens_details: { cached_tokens: params.cacheReadTokens } }
+      : {}),
+  };
 }
 
 export function mapStopReason(

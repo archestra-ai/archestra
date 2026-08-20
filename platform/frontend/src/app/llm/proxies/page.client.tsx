@@ -3,13 +3,24 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { LlmProxyConnectInstructionsDialog } from "@/components/agent-connect-instructions-dialog";
-import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  AGENT_PAGE_CONFIGS,
+  agentDetailHref,
+  agentEditHref,
+  agentNewHref,
+  resolveLegacyAgentDialogRedirect,
+} from "@/components/agent-pages/agent-page-config";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
+import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -40,14 +51,12 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
   usePermanentlyDeleteProfile,
-  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
@@ -103,6 +112,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     updateQueryParams,
     setPagination,
   } = useDataTableQueryParams();
+  const router = useRouter();
 
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
@@ -171,17 +181,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingProxy, setConnectingProxy] = useState<Pick<
-    ProxyData,
-    "id" | "name" | "agentType"
-  > | null>(null);
-  const editId = searchParams.get("edit");
-  const { data: editFromUrl } = useProfile(editId ?? undefined);
-  const editDialog = useDialogUrlParam<ProxyData>({
-    paramName: "edit",
-    entityFromUrl: editFromUrl ?? null,
-  });
+  // Create/edit used to be dialogs on this page, opened from `?create=true`
+  // and `?edit=<id>`; those links still arrive and now land on the routed
+  // pages.
+  useEffect(() => {
+    const redirect = resolveLegacyAgentDialogRedirect(
+      "llm_proxy",
+      searchParams,
+    );
+    if (redirect) router.replace(redirect);
+  }, [searchParams, router]);
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
   // The row's scope check travels with the id: it is computed per row, and the
@@ -264,6 +273,13 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
+            // A trashed proxy has no detail page: `GET /api/agents/:id`
+            // filters deleted rows, so the link would land on "not found".
+            href={
+              agent.deletedAt
+                ? undefined
+                : agentDetailHref("llm_proxy", agent.id)
+            }
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -296,15 +312,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       size: 140,
       enableSorting: false,
       cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
+        <RowClickShield>
+          <ResourceVisibilityBadge
+            scope={row.original.scope}
+            teams={row.original.teams}
+            users={row.original.users}
+            authorId={row.original.authorId}
+            authorName={row.original.authorName}
+            currentUserId={currentUserId}
+            showSelfAsMe
+          />
+        </RowClickShield>
       ),
     },
     {
@@ -316,40 +334,42 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
-        const authorId = agent.authorId;
-        const agentTeams = agent.teams;
-        const isPersonal = scope === "personal";
-        const isTeamScoped = scope === "team";
-        const isOwner = !!currentUserId && authorId === currentUserId;
-        const isMemberOfAgentTeam = agentTeams?.some((t) =>
-          userTeamIdSet.has(t.id),
-        );
-        const canModify =
-          !!isAdmin ||
-          (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
-          (isPersonal && isOwner);
+        const canModify = computeCanModifyAgent({
+          agent,
+          isAdmin: !!isAdmin,
+          isTeamAdmin: !!isTeamAdmin,
+          currentUserId,
+          userTeamIds: userTeamIdSet,
+        });
         return (
-          <LlmProxyActions
-            agent={agent}
-            canModify={canModify}
-            onConnect={setConnectingProxy}
-            onEdit={editDialog.open}
-            onDelete={setDeletingProxyId}
-            onRestore={(agentId) => {
-              restoreProxy.mutate(agentId, {
-                onSuccess: (data) => {
-                  if (!data) return;
-                  toast.success("LLM Proxy restored successfully");
-                },
-              });
-            }}
-            onPermanentlyDelete={setPermanentlyDeletingProxy}
-            onClone={setCloningProxy}
-            onHistory={(id, historyCanModify) =>
-              setHistory({ id, canModify: historyCanModify })
-            }
-          />
+          // The whole cell, so a disabled action's tooltip wrapper cannot let
+          // the click through to the row either.
+          <RowClickShield>
+            <LlmProxyActions
+              agent={agent}
+              canModify={canModify}
+              onConnect={(target) =>
+                router.push(agentDetailHref("llm_proxy", target.id, "connect"))
+              }
+              onEdit={(target) =>
+                router.push(agentEditHref("llm_proxy", target.id))
+              }
+              onDelete={setDeletingProxyId}
+              onRestore={(agentId) => {
+                restoreProxy.mutate(agentId, {
+                  onSuccess: (data) => {
+                    if (!data) return;
+                    toast.success("LLM Proxy restored successfully");
+                  },
+                });
+              }}
+              onPermanentlyDelete={setPermanentlyDeletingProxy}
+              onClone={setCloningProxy}
+              onHistory={(id, historyCanModify) =>
+                setHistory({ id, canModify: historyCanModify })
+              }
+            />
+          </RowClickShield>
         );
       },
     },
@@ -383,7 +403,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         actionButton={
           <PermissionButton
             permissions={{ llmProxy: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => router.push(agentNewHref("llm_proxy"))}
             data-testid={E2eTestId.CreateAgentButton}
           >
             <Plus className="h-4 w-4" />
@@ -432,6 +452,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   total: pagination?.total ?? 0,
                 }}
                 onPaginationChange={handlePaginationChange}
+                // Trashed rows have no page to open — Restore and permanent
+                // delete stay row actions.
+                onRowClick={
+                  isDeletedView
+                    ? undefined
+                    : (row, event) =>
+                        openRowOnPlainClick(event, () =>
+                          router.push(agentDetailHref("llm_proxy", row.id)),
+                        )
+                }
                 hasActiveFilters={Boolean(
                   nameFilter ||
                     scopeFilter.hasActiveScopeFilters ||
@@ -463,34 +493,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               />
             </div>
 
-            <AgentDialog
-              open={isCreateDialogOpen}
-              onOpenChange={setIsCreateDialogOpen}
-              agentType="llm_proxy"
-              defaultIconType="llm_proxy"
-              onCreated={(created) => {
-                setIsCreateDialogOpen(false);
-                // Creation ends in the connect dialog, so the flow closes on
-                // "here's the endpoint and how to authenticate".
-                setConnectingProxy({ ...created, agentType: "llm_proxy" });
-              }}
-            />
-
-            <LlmProxyConnectInstructionsDialog
-              proxy={connectingProxy}
-              onOpenChange={(open) => {
-                if (!open) setConnectingProxy(null);
-              }}
-            />
-
-            <AgentDialog
-              open={!!editDialog.entity}
-              onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.entity}
-              agentType={editDialog.entity?.agentType || "llm_proxy"}
-              defaultIconType="llm_proxy"
-            />
-
             {deletingProxyId && (
               <DeleteProxyDialog
                 agentId={deletingProxyId}
@@ -506,13 +508,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   !open && setPermanentlyDeletingProxy(null)
                 }
                 title="Delete LLM Proxy permanently"
-                description={`This destroys "${permanentlyDeletingProxy.name}" and everything it owns. Its LLM interaction history is kept for cost reporting, no longer pointing at the proxy. Nothing recovers the proxy itself.`}
+                description={AGENT_PAGE_CONFIGS.llm_proxy.permanentDeleteDescription(
+                  permanentlyDeletingProxy.name,
+                )}
                 isPending={permanentlyDeleteProxy.isPending}
-                onConfirm={async () => {
-                  const ok = await permanentlyDeleteProxy.mutateAsync(
-                    permanentlyDeletingProxy.id,
-                  );
-                  if (ok) setPermanentlyDeletingProxy(null);
+                onConfirm={() => {
+                  permanentlyDeleteProxy.mutate(permanentlyDeletingProxy.id, {
+                    onSuccess: (ok) => {
+                      if (ok) setPermanentlyDeletingProxy(null);
+                    },
+                  });
                 }}
                 confirmLabel={PERMANENT_DELETE_LABEL}
               />
@@ -524,8 +529,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 if (!open) setCloningProxy(null);
               }}
               onCloned={(cloned) => {
-                // Open edit dialog for the clone so user can rename immediately
-                editDialog.open(cloned as ProxyData);
+                // Land on the clone's Configuration step so it can be renamed
+                // straight away.
+                router.push(
+                  agentEditHref("llm_proxy", cloned.id, "configuration"),
+                );
               }}
             />
 
@@ -554,12 +562,17 @@ function DeleteProxyDialog({
 }) {
   const deleteProxy = useDeleteProfile();
 
-  const handleDelete = useCallback(async () => {
-    const result = await deleteProxy.mutateAsync(agentId);
-    if (result) {
-      toast.success("LLM Proxy deleted successfully");
-      onOpenChange(false);
-    }
+  // `mutate` with callbacks rather than an awaited `mutateAsync`: the query
+  // layer rejects on failure (and toasts), and an unhandled rejection here
+  // would take the page down instead.
+  const handleDelete = useCallback(() => {
+    deleteProxy.mutate(agentId, {
+      onSuccess: (result) => {
+        if (!result) return;
+        toast.success("LLM Proxy deleted successfully");
+        onOpenChange(false);
+      },
+    });
   }, [agentId, deleteProxy, onOpenChange]);
 
   return (

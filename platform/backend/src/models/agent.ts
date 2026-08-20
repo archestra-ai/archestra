@@ -438,6 +438,16 @@ class AgentModel {
        * onto the new agent.
        */
       skipCreationDefaultTools?: boolean;
+      /**
+       * Delegation targets the new agent starts with excluded from its
+       * Auto-subagent surface (today: the Advisor, which is opt-in). Applied
+       * inside create so version 1's snapshot already records them — a
+       * follow-up write from the caller would fork a second version, and one
+       * made by the client silently never happens for roles without
+       * `agent:read`. Which ids these are is the caller's rule; see
+       * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
+       */
+      defaultExcludedSubagentIds?: string[];
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -588,6 +598,30 @@ class AgentModel {
       });
       if (flipped) {
         Object.assign(createdAgent, flipped);
+      }
+    }
+
+    // Seed the caller's default Auto-mode subagent exclusions. Before the
+    // version-1 fork below, so the first snapshot carries them like any other
+    // part of the created config. Best-effort, like the fork itself: the agent
+    // row and its junctions are already committed (create is not transactional,
+    // and this write is a delete+insert of its own), so throwing here would
+    // leave a half-made agent behind. One that starts with the Advisor
+    // reachable is degraded, not broken.
+    if (
+      options?.defaultExcludedSubagentIds &&
+      options.defaultExcludedSubagentIds.length > 0
+    ) {
+      try {
+        await AgentExcludedSubagentModel.replaceForAgent(
+          createdAgent.id,
+          options.defaultExcludedSubagentIds,
+        );
+      } catch (error) {
+        logger.warn(
+          { error, agentId: createdAgent.id },
+          "Default subagent exclusions were not seeded; agent created without them",
+        );
       }
     }
 

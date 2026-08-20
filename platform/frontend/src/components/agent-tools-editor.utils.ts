@@ -34,6 +34,23 @@ type AssignedToolInput = {
 };
 
 /**
+ * The credential pick a catalog's saved assignments stand for. The editor
+ * offers ONE pick per catalog and seeds it from the first saved row: a static
+ * pin shows its server; everything else — dynamic, enterprise-managed, or a
+ * static assignment whose pinned server is gone (the shape every built-in tool
+ * is stored in) — shows as resolve-at-call-time, which is also how the
+ * backend routes it.
+ */
+export function credentialSourceOfAssignments(
+  assigned: readonly AssignedToolInput[],
+): string {
+  const first = assigned[0];
+  return first?.credentialResolutionMode === "static"
+    ? (first.mcpServerId ?? DYNAMIC_CREDENTIAL_VALUE)
+    : DYNAMIC_CREDENTIAL_VALUE;
+}
+
+/**
  * Fold every catalog's pending edits into ONE assignments/removals pair.
  *
  * Sending them per tool (the shape this replaced) forked an agent config version
@@ -120,20 +137,22 @@ export function buildBulkToolUpdate(params: {
       });
     }
 
-    // Tools that stay assigned but whose credential changed. Re-assigning is
-    // the correct upsert — the bulk write reports these as `updated`.
+    // Tools that stay assigned are re-bound when the catalog's credential pick
+    // changed. Re-assigning is the correct upsert — the bulk write reports
+    // these as `updated`. "Changed" is measured against the pick the editor
+    // seeded from the saved rows, not row by row: a static assignment with no
+    // pinned server is shown (and routed) as resolve-at-call-time, and diffing
+    // it against that pick read every pristine built-in tool as an edit.
     const toKeep = currentAssigned.filter((at) =>
       changes.selectedToolIds.has(at.tool.id),
     );
-    for (const agentTool of toKeep) {
-      const currentCred =
-        agentTool.credentialResolutionMode === "dynamic"
-          ? DYNAMIC_CREDENTIAL_VALUE
-          : agentTool.credentialResolutionMode === "enterprise_managed"
-            ? DYNAMIC_CREDENTIAL_VALUE
-            : (agentTool.mcpServerId ?? null);
-      if (currentCred !== changes.credentialSourceId) {
-        hasChanges = true;
+    if (
+      toKeep.length > 0 &&
+      changes.credentialSourceId !==
+        credentialSourceOfAssignments(currentAssigned)
+    ) {
+      hasChanges = true;
+      for (const agentTool of toKeep) {
         assignments.push({
           agentId: targetAgentId,
           toolId: agentTool.tool.id,
@@ -380,54 +399,6 @@ export function computeMcpEnvConflicts(
     conflicts.push({ catalogId, name: catalog.name });
   }
   return conflicts;
-}
-
-export type SharedPersonalPin = {
-  catalogId: string;
-  mcpName: string;
-  ownerEmail: string;
-  isCurrentUser: boolean;
-};
-
-/**
- * The active tools whose effective credential is a static pin to a still-resolvable
- * `personal`-scope connection. On a shared (team/org) agent these are exactly the
- * pins that make every caller authenticate as one owner, so the dialog warns about
- * them and offers to switch them to resolve-at-call-time.
- *
- * `pinnedServerId` is each catalog's effective credential (pending overlaid on
- * saved), or `null` when it resolves at call time. A pin whose server is absent
- * from `resolvableServers` is excluded: it has either already reset to dynamic or
- * cannot resolve for the target group, so it will not be shared.
- */
-export function computeSharedPersonalPins(
-  catalogs: {
-    catalogId: string;
-    pinnedServerId: string | null;
-    resolvableServers: readonly {
-      id: string;
-      scope: string;
-      ownerEmail?: string | null;
-      ownerId?: string | null;
-      catalogName?: string | null;
-      name: string;
-    }[];
-  }[],
-  currentUserId: string | null | undefined,
-): SharedPersonalPin[] {
-  const pins: SharedPersonalPin[] = [];
-  for (const { catalogId, pinnedServerId, resolvableServers } of catalogs) {
-    if (!pinnedServerId) continue;
-    const server = resolvableServers.find((s) => s.id === pinnedServerId);
-    if (!server || server.scope !== "personal") continue;
-    pins.push({
-      catalogId,
-      mcpName: server.catalogName ?? server.name,
-      ownerEmail: server.ownerEmail || "Deleted user",
-      isCurrentUser: !!currentUserId && server.ownerId === currentUserId,
-    });
-  }
-  return pins;
 }
 
 export function sortCatalogItems<

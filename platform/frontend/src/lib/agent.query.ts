@@ -7,7 +7,7 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   createAgent,
@@ -112,7 +112,7 @@ export function useCloneAgent() {
         body,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
@@ -140,7 +140,7 @@ export function useConvertAgentToSkill() {
         body,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return data;
     },
@@ -170,8 +170,7 @@ export function useSuggestSkillDescription() {
     mutationFn: async (id: string) => {
       const { data, error } = await suggestSkillDescription({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data?.description ?? null;
     },
@@ -312,7 +311,7 @@ export function useCreateProfile() {
     mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
       const { data: responseData, error } = await createAgent({ body: data });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
@@ -345,7 +344,7 @@ export function useUpdateProfile() {
         body: data,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
@@ -378,8 +377,7 @@ export function useDeleteProfile() {
     mutationFn: async (id: string) => {
       const { data, error } = await deleteAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -399,8 +397,7 @@ export function useRestoreProfile() {
     mutationFn: async (id: string) => {
       const { data, error } = await restoreAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -427,8 +424,7 @@ export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
     mutationFn: async (id: string) => {
       const { data, error } = await permanentlyDeleteAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -496,8 +492,7 @@ export function useUpdateDefaultAgentId() {
         body: { defaultAgentId },
       });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -559,8 +554,7 @@ export function useExportAgent() {
     mutationFn: async (id: string) => {
       const { data, error } = await exportAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -577,8 +571,7 @@ export function useImportAgent() {
     mutationFn: async (payload: archestraApiTypes.ImportAgentData["body"]) => {
       const { data, error } = await importAgent({ body: payload });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },

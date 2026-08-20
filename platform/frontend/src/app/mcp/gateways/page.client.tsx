@@ -3,13 +3,24 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { McpGatewayConnectInstructionsDialog } from "@/components/agent-connect-instructions-dialog";
-import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  AGENT_PAGE_CONFIGS,
+  agentDetailHref,
+  agentEditHref,
+  agentNewHref,
+  resolveLegacyAgentDialogRedirect,
+} from "@/components/agent-pages/agent-page-config";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
+import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -18,7 +29,6 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -42,14 +52,12 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
   usePermanentlyDeleteProfile,
-  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
@@ -110,6 +118,7 @@ function McpGateways({
     updateQueryParams,
     setPagination,
   } = useDataTableQueryParams();
+  const router = useRouter();
 
   const nameFilter = searchParams.get("name") || "";
   const sortByFromUrl = searchParams.get("sortBy") as
@@ -188,24 +197,16 @@ function McpGateways({
   type GatewayData =
     archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
-    searchParams.get("create") === "true",
-  );
-  const [postCreateGateway, setPostCreateGateway] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const openToolsFromUrl = searchParams.get("openTools") === "true";
-  const [connectingGateway, setConnectingGateway] = useState<Pick<
-    GatewayData,
-    "id" | "name" | "agentType" | "slug"
-  > | null>(null);
-  const editId = searchParams.get("edit");
-  const { data: editFromUrl } = useProfile(editId ?? undefined);
-  const editDialog = useDialogUrlParam<GatewayData>({
-    paramName: "edit",
-    entityFromUrl: editFromUrl ?? null,
-  });
+  // Create/edit used to be dialogs on this page, opened from `?create=true`
+  // and `?edit=<id>` (plus `?openTools=true`); those links still arrive and
+  // now land on the routed pages.
+  useEffect(() => {
+    const redirect = resolveLegacyAgentDialogRedirect(
+      "mcp_gateway",
+      searchParams,
+    );
+    if (redirect) router.replace(redirect);
+  }, [searchParams, router]);
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
@@ -292,6 +293,13 @@ function McpGateways({
         return (
           <AgentNameCell
             name={agent.name}
+            // A trashed gateway has no detail page: `GET /api/agents/:id`
+            // filters deleted rows, so the link would land on "not found".
+            href={
+              agent.deletedAt
+                ? undefined
+                : agentDetailHref("mcp_gateway", agent.id)
+            }
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -394,15 +402,17 @@ function McpGateways({
       size: 140,
       enableSorting: false,
       cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
+        <RowClickShield>
+          <ResourceVisibilityBadge
+            scope={row.original.scope}
+            teams={row.original.teams}
+            users={row.original.users}
+            authorId={row.original.authorId}
+            authorName={row.original.authorName}
+            currentUserId={currentUserId}
+            showSelfAsMe
+          />
+        </RowClickShield>
       ),
     },
     {
@@ -414,40 +424,44 @@ function McpGateways({
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
-        const authorId = agent.authorId;
-        const agentTeams = agent.teams;
-        const isPersonal = scope === "personal";
-        const isTeamScoped = scope === "team";
-        const isOwner = !!currentUserId && authorId === currentUserId;
-        const isMemberOfAgentTeam = agentTeams?.some((t) =>
-          userTeamIdSet.has(t.id),
-        );
-        const canModify =
-          !!isAdmin ||
-          (isTeamScoped && !!isTeamAdmin && !!isMemberOfAgentTeam) ||
-          (isPersonal && isOwner);
+        const canModify = computeCanModifyAgent({
+          agent,
+          isAdmin: !!isAdmin,
+          isTeamAdmin: !!isTeamAdmin,
+          currentUserId,
+          userTeamIds: userTeamIdSet,
+        });
         return (
-          <McpGatewayActions
-            agent={agent}
-            canModify={canModify}
-            onConnect={setConnectingGateway}
-            onEdit={editDialog.open}
-            onDelete={setDeletingGatewayId}
-            onRestore={(agentId) => {
-              restoreGateway.mutate(agentId, {
-                onSuccess: (data) => {
-                  if (!data) return;
-                  toast.success("MCP Gateway restored successfully");
-                },
-              });
-            }}
-            onPermanentlyDelete={setPermanentlyDeletingGateway}
-            onClone={setCloningGateway}
-            onHistory={(id, historyCanModify) =>
-              setHistory({ id, canModify: historyCanModify })
-            }
-          />
+          // The whole cell, so a disabled action's tooltip wrapper cannot let
+          // the click through to the row either.
+          <RowClickShield>
+            <McpGatewayActions
+              agent={agent}
+              canModify={canModify}
+              onConnect={(target) =>
+                router.push(
+                  agentDetailHref("mcp_gateway", target.id, "connect"),
+                )
+              }
+              onEdit={(target) =>
+                router.push(agentEditHref("mcp_gateway", target.id))
+              }
+              onDelete={setDeletingGatewayId}
+              onRestore={(agentId) => {
+                restoreGateway.mutate(agentId, {
+                  onSuccess: (data) => {
+                    if (!data) return;
+                    toast.success("MCP Gateway restored successfully");
+                  },
+                });
+              }}
+              onPermanentlyDelete={setPermanentlyDeletingGateway}
+              onClone={setCloningGateway}
+              onHistory={(id, historyCanModify) =>
+                setHistory({ id, canModify: historyCanModify })
+              }
+            />
+          </RowClickShield>
         );
       },
     },
@@ -512,7 +526,7 @@ function McpGateways({
         actionButton={
           <PermissionButton
             permissions={{ mcpGateway: ["create"] }}
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => router.push(agentNewHref("mcp_gateway"))}
             data-testid={E2eTestId.CreateAgentButton}
           >
             <Plus className="h-4 w-4" />
@@ -561,6 +575,16 @@ function McpGateways({
                   total: pagination?.total ?? 0,
                 }}
                 onPaginationChange={handlePaginationChange}
+                // Trashed rows have no page to open — Restore and permanent
+                // delete stay row actions.
+                onRowClick={
+                  isDeletedView
+                    ? undefined
+                    : (row, event) =>
+                        openRowOnPlainClick(event, () =>
+                          router.push(agentDetailHref("mcp_gateway", row.id)),
+                        )
+                }
                 hasActiveFilters={Boolean(
                   nameFilter ||
                     scopeFilter.hasActiveScopeFilters ||
@@ -592,49 +616,6 @@ function McpGateways({
               />
             </div>
 
-            <AgentDialog
-              open={isCreateDialogOpen}
-              onOpenChange={setIsCreateDialogOpen}
-              agentType="mcp_gateway"
-              defaultIconType="mcp_gateway"
-              onCreated={(created) => {
-                setIsCreateDialogOpen(false);
-                setPostCreateGateway(created);
-              }}
-            />
-
-            <PostCreateConnectDialog
-              created={postCreateGateway}
-              agentType="mcp_gateway"
-              onOpenChange={(open) => {
-                if (!open) setPostCreateGateway(null);
-              }}
-            />
-
-            <McpGatewayConnectInstructionsDialog
-              gateway={connectingGateway}
-              onOpenChange={(open) => {
-                if (!open) setConnectingGateway(null);
-              }}
-            />
-
-            <AgentDialog
-              open={!!editDialog.entity}
-              onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.entity}
-              agentType={editDialog.entity?.agentType || "mcp_gateway"}
-              defaultIconType="mcp_gateway"
-              openToolsCombobox={
-                openToolsFromUrl &&
-                editDialog.openedFromUrl &&
-                // "All" gateways hide the tool editor (there is nothing to
-                // pick), so its search combobox would open inside a
-                // display:none subtree and render unanchored in the corner.
-                // Only auto-open the picker for Custom gateways.
-                !editDialog.entity?.accessAllTools
-              }
-            />
-
             {deletingGatewayId && (
               <DeleteGatewayDialog
                 agentId={deletingGatewayId}
@@ -650,13 +631,19 @@ function McpGateways({
                   !open && setPermanentlyDeletingGateway(null)
                 }
                 title="Delete MCP Gateway permanently"
-                description={`This destroys "${permanentlyDeletingGateway.name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`}
+                description={AGENT_PAGE_CONFIGS.mcp_gateway.permanentDeleteDescription(
+                  permanentlyDeletingGateway.name,
+                )}
                 isPending={permanentlyDeleteGateway.isPending}
-                onConfirm={async () => {
-                  const ok = await permanentlyDeleteGateway.mutateAsync(
+                onConfirm={() => {
+                  permanentlyDeleteGateway.mutate(
                     permanentlyDeletingGateway.id,
+                    {
+                      onSuccess: (ok) => {
+                        if (ok) setPermanentlyDeletingGateway(null);
+                      },
+                    },
                   );
-                  if (ok) setPermanentlyDeletingGateway(null);
                 }}
                 confirmLabel={PERMANENT_DELETE_LABEL}
               />
@@ -668,8 +655,11 @@ function McpGateways({
                 if (!open) setCloningGateway(null);
               }}
               onCloned={(cloned) => {
-                // Open edit dialog for the clone so user can rename immediately
-                editDialog.open(cloned as GatewayData);
+                // Land on the clone's Configuration step so it can be renamed
+                // straight away.
+                router.push(
+                  agentEditHref("mcp_gateway", cloned.id, "configuration"),
+                );
               }}
             />
 
@@ -698,12 +688,17 @@ function DeleteGatewayDialog({
 }) {
   const deleteGateway = useDeleteProfile();
 
-  const handleDelete = useCallback(async () => {
-    const result = await deleteGateway.mutateAsync(agentId);
-    if (result) {
-      toast.success("MCP Gateway deleted successfully");
-      onOpenChange(false);
-    }
+  // `mutate` with callbacks rather than an awaited `mutateAsync`: the query
+  // layer rejects on failure (and toasts), and an unhandled rejection here
+  // would take the page down instead.
+  const handleDelete = useCallback(() => {
+    deleteGateway.mutate(agentId, {
+      onSuccess: (result) => {
+        if (!result) return;
+        toast.success("MCP Gateway deleted successfully");
+        onOpenChange(false);
+      },
+    });
   }, [agentId, deleteGateway, onOpenChange]);
 
   return (

@@ -1997,6 +1997,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
@@ -2013,6 +2014,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/proxies/new": { llmProxy: ["create"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
@@ -2022,6 +2024,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },

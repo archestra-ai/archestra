@@ -69,18 +69,24 @@ export function ConvertToSkillDialog({
   // in-flight suggestion that resolves late can detect it is now stale.
   const suggestionToken = useRef(0);
 
-  const onSuggestDescription = async () => {
+  // `mutate`, not `mutateAsync`: a refused suggestion rejects (and has already
+  // been toasted), and awaiting it here would turn that into an unhandled
+  // rejection in a click handler.
+  const onSuggestDescription = () => {
     if (!agent) return;
     suggestionToken.current += 1;
     const token = suggestionToken.current;
     const descriptionAtRequest = getValues("description");
-    const description = await suggestDescription.mutateAsync(agent.id);
-    // drop the result if the dialog moved on or the user edited meanwhile.
-    if (token !== suggestionToken.current) return;
-    if (getValues("description") !== descriptionAtRequest) return;
-    if (description) {
-      setValue("description", description, { shouldValidate: true });
-    }
+    suggestDescription.mutate(agent.id, {
+      onSuccess: (description) => {
+        // drop the result if the dialog moved on or the user edited meanwhile.
+        if (token !== suggestionToken.current) return;
+        if (getValues("description") !== descriptionAtRequest) return;
+        if (description) {
+          setValue("description", description, { shouldValidate: true });
+        }
+      },
+    });
   };
 
   // Prefill from the agent each time the dialog opens for a new one, and
@@ -109,14 +115,14 @@ export function ConvertToSkillDialog({
       : null,
   ].filter((item): item is string => item !== null);
 
-  const onSubmit = handleSubmit(async ({ description, deleteAgent }) => {
+  // Closing on success only: a refused conversion rejects, and the dialog has
+  // to stay open with the typed description intact so it can be retried.
+  const onSubmit = handleSubmit(({ description, deleteAgent }) => {
     if (!agent) return;
-    const result = await convertToSkill.mutateAsync({
-      id: agent.id,
-      description: description.trim(),
-      deleteAgent,
-    });
-    if (result) onOpenChange(false);
+    convertToSkill.mutate(
+      { id: agent.id, description: description.trim(), deleteAgent },
+      { onSuccess: () => onOpenChange(false) },
+    );
   });
 
   return (

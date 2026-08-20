@@ -93,6 +93,12 @@ interface ModelSelectorProps {
   onModelChange: (model: string) => void;
   /** Whether the selector should be disabled */
   disabled?: boolean;
+  /**
+   * What the trigger says while no model is selected. The default names the
+   * runtime's own fallback; a host that knows what will actually answer (the
+   * organization's default model) passes that instead.
+   */
+  placeholder?: string;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
   /** Optional callback to clear selection - shows X button inside the trigger when provided and a model is selected */
@@ -459,6 +465,7 @@ export const ModelSelector = memo(function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
+  placeholder,
   onOpenChange: onOpenChangeProp,
   onClear,
   variant = "default",
@@ -633,7 +640,7 @@ export const ModelSelector = memo(function ModelSelector({
                 </span>
               ) : (
                 <span className="text-muted-foreground">
-                  Best available model
+                  {placeholder ?? "Best available model"}
                 </span>
               )}
             </Button>

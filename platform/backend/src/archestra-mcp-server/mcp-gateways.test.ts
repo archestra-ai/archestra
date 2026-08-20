@@ -38,6 +38,11 @@ describe("mcp gateway tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "Successfully created mcp gateway",
     );
+    // A gateway's edit page lives under /mcp/gateways — the agents list cannot
+    // open one.
+    expect((result.content[0] as any).text).toContain(
+      `/mcp/gateways/${extractCreatedId(result)}/edit`,
+    );
   });
 
   test("create_mcp_gateway attributes the calling user as author", async () => {
@@ -125,6 +130,9 @@ describe("mcp gateway tool execution", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain(
       "Successfully updated mcp gateway",
+    );
+    expect((result.content[0] as any).text).toContain(
+      `/mcp/gateways/${mcpGateway.id}/edit`,
     );
 
     const updated = await AgentModel.findById(

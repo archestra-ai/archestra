@@ -3,8 +3,10 @@ import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
   // FIXME(stale): the agents table row no longer offers the title + "more
-  // actions" affordances this walks; needs rewriting against the current row
-  // markup, not re-timing.
+  // actions" affordances this walks, and Create is no longer a dialog — it
+  // routes to the /agents/new setup wizard, whose first step submits the
+  // POST and continues on /agents/<id>/edit?step=tools. Needs rewriting
+  // against the current pages, not re-timing.
   test.fixme("can create and delete an agent", async ({
     page,
     agentsPage,
@@ -56,8 +58,10 @@ test.describe("Agents", () => {
   });
 
   // FIXME(stale): the agents table row no longer offers the title + "more
-  // actions" affordances this walks; needs rewriting against the current row
-  // markup, not re-timing.
+  // actions" affordances this walks, and Clone no longer opens an edit
+  // dialog — it lands on the clone's /agents/<id>/edit?step=configuration
+  // page, whose Save & Continue submits the PUT. Needs rewriting against the
+  // current pages, not re-timing.
   test.fixme("can clone an agent and rename it", async ({
     page,
     agentsPage,

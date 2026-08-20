@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import {
   AccessLevelSelector,
   agentTypeDisplayName,
-} from "@/components/agent-dialog";
+} from "@/components/agent-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

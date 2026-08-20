@@ -3,7 +3,7 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface WizardStepDefinition<Id extends string> {
+export interface WizardStepDefinition<Id extends string> {
   id: Id;
   title: string;
 }
@@ -18,10 +18,13 @@ export function WizardStepper<Id extends string>({
   steps,
   activeStep,
   onStepClick,
+  stepTestIdPrefix,
 }: {
   steps: ReadonlyArray<WizardStepDefinition<Id>>;
   activeStep: Id;
   onStepClick?: (step: Id) => void;
+  /** When set, each step button gets `data-testid="<prefix>-<step id>"`. */
+  stepTestIdPrefix?: string;
 }) {
   const activeIndex = steps.findIndex((s) => s.id === activeStep);
   return (
@@ -38,6 +41,9 @@ export function WizardStepper<Id extends string>({
                 onStepClick ? "cursor-pointer" : "cursor-default",
               )}
               aria-current={isActive ? "step" : undefined}
+              data-testid={
+                stepTestIdPrefix ? `${stepTestIdPrefix}-${step.id}` : undefined
+              }
               onClick={() => onStepClick?.(step.id)}
             >
               <span

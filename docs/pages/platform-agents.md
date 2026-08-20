@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-19
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,17 +16,23 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
-- a **When someone is missing a tool connection** setting for teammates who have not connected one of the agent's MCP servers
+- a **Tool connections** setting — missing MCP server connections are requested when needed, requested at chat start, or required before use
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
+## Creating and Editing an Agent
+
+**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its **Connect** tab, which shows how to reach it.
+
+Every agent has its own page with an **Overview** tab and a **Connect** tab. The Overview repeats the wizard's own sections, read-only, so the page and the form describe the agent the same way. **Edit** in the page header reopens the wizard on the agent. **Save** on any step saves and returns to the Overview; **Save & Continue** saves and moves to the next step.
+
 ## Tool Access Modes
 
-An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs in the agent dialog. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half.
+An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs on the agent's **Tools & Knowledge** step. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half.
 
 ### Custom Mode
 
-In **Custom** mode the agent uses only its explicitly assigned tools. New agents get a default set assigned by the backend, and the create form pre-selects that same set. Assignments resolve credentials at call time by default; you can pin a specific connection per server instead.
+In **Custom** mode the agent uses only its explicitly assigned tools. New agents get a default set assigned by the backend, and the **Tools & Knowledge** step pre-selects that same set. Assignments resolve credentials at call time by default; you can pin a specific connection per server instead.
 
 Sharing the agent shares its assigned tools. A teammate with agent access can call an assigned tool even when its MCP server is not shared with them — the server's own team assignment governs the [registry](/docs/platform-private-registry), not tool calls through the agent. [Credential resolution](/docs/mcp-authentication#credential-resolution) decides whose connection serves each call: a pinned connection serves every caller, and resolve-at-call-time looks for a connection the caller can reach.
 
@@ -42,7 +48,7 @@ Tool call policies still apply to the target tool. If the model calls `run_tool`
 
 ### Excluding Servers and Tools
 
-**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent dialog (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
+**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
 
 While the tools setting is **Auto**, exclusions cover the agent's entire surface:
 
@@ -69,15 +75,15 @@ Use this when the full tool menu is too large to send to the model on every turn
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 
-## Missing Tool Connections
+## Tool Connections
 
-An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and a teammate who has not connected one of those servers finds out only when a tool from it runs.
+An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and someone who has not connected one of those servers finds out only when a tool from it runs.
 
-**When someone is missing a tool connection** sits in **Custom** mode, under Tools & Knowledge Sources:
+**Tool connections** sits in **Custom** mode, under Tools & Knowledge Sources. It sets how the agent treats an MCP server the person using it has not connected yet:
 
-- **Let them continue** — the default. Nothing is shown up front.
-- **Let them continue, with a warning** — the chat names the servers they have not connected, and offers to connect them.
-- **Stop them from using the agent** — the agent is marked unavailable in the chat picker, and the run is refused wherever it is triggered from.
+- **Requested when needed** — the default. Nothing is shown up front; a connection is requested the moment a tool call needs one.
+- **Requested at chat start** — the chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.
+- **Required before use** — the agent is marked unavailable in the chat picker, and a run is refused wherever it is triggered from, until every server is connected.
 
 A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account. Servers that need no credentials never count as missing.
 
@@ -100,7 +106,7 @@ Go to **Settings → Agents → Available messaging channels** to remove any cha
 
 ## Knowledge Sources
 
-Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** in the agent dialog). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
+Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** on the agent's **Tools & Knowledge** step). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
 
 Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run.
 
@@ -122,7 +128,7 @@ A skill that names an `agent` in its frontmatter runs in that subagent instead �
 
 ## Delegation
 
-An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under the **Subagents** tabs in the agent dialog.
+An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under **Subagents** on the agent's **Tools & Knowledge** step.
 
 In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
 

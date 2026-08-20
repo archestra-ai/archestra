@@ -14,11 +14,11 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Editor } from "@/components/editor";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -66,7 +66,7 @@ export function SkillContentEditor({
   onManifestChange,
   onFilesChange,
   readOnly = false,
-  isPreview = false,
+  readOnlyMarker = true,
   className,
 }: {
   manifest: string;
@@ -76,10 +76,11 @@ export function SkillContentEditor({
   /** Locks the manifest and files (a preview, or a GitHub-synced skill). */
   readOnly?: boolean;
   /**
-   * A skill that is not in the catalog yet. Its host already says so, so the
-   * read-only marker would only repeat it.
+   * Whether a locked editor says so beside the file name. Off where the host
+   * already does — a preview of a skill not yet imported, the skill's own
+   * read-only page — so the marker does not repeat it.
    */
-  isPreview?: boolean;
+  readOnlyMarker?: boolean;
   className?: string;
 }) {
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
@@ -380,8 +381,8 @@ export function SkillContentEditor({
             <Label className="font-mono text-xs">
               {openFile ? openFile.path : "SKILL.md"}
             </Label>
-            {readOnly && !isPreview && (
-              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            {readOnly && readOnlyMarker && (
+              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium text-muted-foreground">
                 <Lock className="size-3" />
                 Read-only
               </span>
@@ -428,19 +429,57 @@ export function SkillContentEditor({
             </span>
           </div>
         ) : (
-          <Textarea
-            value={editorValue}
-            onChange={(e) => setEditorValue(e.target.value)}
-            aria-label="File contents"
-            placeholder={openFile ? "File contents..." : MANIFEST_PLACEHOLDER}
+          // The same embedded editor the MCP server's deployment YAML uses:
+          // language by file name, so SKILL.md gets Markdown and a bundled
+          // script its own highlighting.
+          <div
             className={cn(
-              "min-h-0 flex-1 resize-none font-mono text-xs",
-              readOnly &&
-                "cursor-default bg-muted/40 text-muted-foreground focus-visible:ring-0",
+              "min-h-0 flex-1 overflow-hidden rounded-md border",
+              readOnly && "bg-muted/40",
             )}
-            spellCheck={false}
-            readOnly={readOnly}
-          />
+          >
+            <Editor
+              height="100%"
+              // Keyed by the open file, so Monaco swaps models instead of
+              // carrying one file's undo stack and language into the next.
+              key={openFile ? openFile.path : "SKILL.md"}
+              language={editorLanguage(openFile ? openFile.path : "SKILL.md")}
+              value={editorValue}
+              onChange={(value) => setEditorValue(value ?? "")}
+              loading={
+                <div className="flex h-full w-full items-center justify-center bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    Loading editor...
+                  </p>
+                </div>
+              }
+              options={{
+                ariaLabel: "File contents",
+                placeholder: openFile
+                  ? "File contents..."
+                  : MANIFEST_PLACEHOLDER,
+                readOnly,
+                minimap: { enabled: false },
+                lineNumbers: "on",
+                folding: true,
+                scrollBeyondLastLine: false,
+                wordWrap: "on",
+                fontSize: 13,
+                fontFamily: "monospace",
+                tabSize: 2,
+                padding: { top: 8, bottom: 8 },
+                renderLineHighlight: "line",
+                scrollbar: {
+                  vertical: "auto",
+                  horizontal: "auto",
+                  verticalScrollbarSize: 10,
+                  // The pane sits in a page that scrolls: a wheel that
+                  // reaches the editor's edge keeps scrolling the page.
+                  alwaysConsumeMouseWheel: false,
+                },
+              }}
+            />
+          </div>
         )}
         {!openFile && parsed.templated && <TemplatedManifestHint />}
       </div>
@@ -812,3 +851,34 @@ function TemplatedManifestHint() {
     </p>
   );
 }
+
+/** Monaco's language id for a skill file, from its extension; plain text otherwise. */
+function editorLanguage(path: string): string {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  return EDITOR_LANGUAGES[extension] ?? "plaintext";
+}
+
+const EDITOR_LANGUAGES: Record<string, string> = {
+  md: "markdown",
+  markdown: "markdown",
+  json: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  py: "python",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  jsx: "javascript",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  toml: "ini",
+  ini: "ini",
+  html: "html",
+  css: "css",
+  sql: "sql",
+  xml: "xml",
+  txt: "plaintext",
+};

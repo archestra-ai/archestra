@@ -5,7 +5,7 @@ import {
   normalizeSuggestedPrompts,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
-} from "./agent-dialog.utils";
+} from "./agent-form.utils";
 
 describe("getNamePlaceholder", () => {
   it("returns type-specific placeholders", () => {

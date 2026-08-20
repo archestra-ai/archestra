@@ -3,6 +3,8 @@ export {
   getApiErrorMessage,
   getApiErrorType,
   handleApiError,
+  isReportedApiError,
+  reportApiError,
   throwOnApiError,
   toApiError,
 } from "./api";

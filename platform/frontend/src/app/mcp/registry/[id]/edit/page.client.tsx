@@ -3,6 +3,7 @@
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRef } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,14 @@ function SetupWizard({ item }: { item: CatalogItem }) {
   const { target: testTarget } = useTestConnectionTarget(item);
   const hideNext = step === "test" && !testTarget;
 
+  const detailHref = `/mcp/registry/${item.id}`;
+  // Which of the configuration step's two submit buttons asked for the save
+  // in flight: "Save" finishes on the server's page (one field changed is one
+  // save, not a walk through the remaining steps), "Save & Continue" moves on
+  // to the test. Set in the button's click, which runs before the form's
+  // submit; Enter in a field clicks the form's first submit button, Save.
+  const saveIntentRef = useRef<"finish" | "continue">("continue");
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -134,45 +143,86 @@ function SetupWizard({ item }: { item: CatalogItem }) {
             // A save lands a success toast in the bottom-right corner, exactly
             // where this step's sticky footer sits — so staying here would mean
             // waiting out the toast before the CTA under it could be clicked.
-            // Saving is also the point at which this step is done, so move on.
-            onSaved={() => goToStep("test")}
-            // One primary CTA: while the form is dirty it saves and continues;
-            // once clean it just continues. Discard is the secondary escape
-            // hatch.
-            footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => (
-              <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
-                <div>
-                  {(isDirty || isSaving) && (
-                    <Button
-                      variant="outline"
-                      type="button"
-                      onClick={onReset}
-                      disabled={isSaving}
-                    >
-                      Discard changes
-                    </Button>
-                  )}
+            // Saving is also the point at which this step is done, so move on
+            // — or, for a plain Save, back to the server's page.
+            onSaved={() => {
+              if (saveIntentRef.current === "finish") router.push(detailHref);
+              else goToStep("test");
+            }}
+            // Save is on every step that has something to save: it writes and
+            // returns to the server's page — once clean it just returns. The
+            // step's own "Save & Continue" stays the primary CTA; Discard is
+            // the secondary escape hatch.
+            footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => {
+              const savingWith = isSaving ? saveIntentRef.current : null;
+              return (
+                <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                  <div>
+                    {(isDirty || isSaving) && (
+                      <Button
+                        variant="outline"
+                        type="button"
+                        onClick={onReset}
+                        disabled={isSaving}
+                      >
+                        Discard changes
+                      </Button>
+                    )}
+                  </div>
+                  {/* The form clears its dirty state as soon as the save is
+                      submitted, so `isSaving` has to be checked first —
+                      otherwise the buttons flip to their clean faces
+                      mid-save. */}
+                  <div className="flex items-center gap-2">
+                    {savingWith === "finish" ? (
+                      <Button type="submit" variant="outline" disabled>
+                        <span>Saving...</span>
+                      </Button>
+                    ) : isDirty || isSaving ? (
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        disabled={hasBlockingErrors || isSaving}
+                        onClick={() => {
+                          saveIntentRef.current = "finish";
+                        }}
+                      >
+                        Save
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push(detailHref)}
+                      >
+                        Save
+                      </Button>
+                    )}
+                    {savingWith === "continue" ? (
+                      <Button type="submit" disabled>
+                        <span>Saving...</span>
+                      </Button>
+                    ) : isDirty || isSaving ? (
+                      <Button
+                        type="submit"
+                        disabled={hasBlockingErrors || isSaving}
+                        onClick={() => {
+                          saveIntentRef.current = "continue";
+                        }}
+                      >
+                        <span>Save & Continue</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button type="button" onClick={() => goToStep("test")}>
+                        <span>Test Connection</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {/* The form clears its dirty state as soon as the save is
-                    submitted, so `isSaving` has to be checked first — otherwise
-                    the button flips to the next-step CTA mid-save. */}
-                {isSaving ? (
-                  <Button type="submit" disabled>
-                    <span>Saving...</span>
-                  </Button>
-                ) : isDirty ? (
-                  <Button type="submit" disabled={hasBlockingErrors}>
-                    <span>Save & Continue</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button type="button" onClick={() => goToStep("test")}>
-                    <span>Test Connection</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            )}
+              );
+            }}
           />
         </div>
       )}
@@ -200,9 +250,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
               </Button>
             )
           ) : (
-            <Button onClick={() => router.push(`/mcp/registry/${item.id}`)}>
-              Finish
-            </Button>
+            <Button onClick={() => router.push(detailHref)}>Finish</Button>
           )}
         </div>
       )}

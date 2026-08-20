@@ -145,8 +145,11 @@ export function InternalMCPCatalog({
   const byosEnabled = Boolean(useFeature("byosEnabled"));
 
   const [sort, setSort] = useState<SortKey>("name-asc");
+  // The table is the registry's default view: it is the one that reads a
+  // long server list fastest and opens each server's page on its row.
   const [viewMode, setViewMode] = useListViewMode(
     "archestra-mcp-registry-view",
+    "table",
   );
   const [filters, setFilters] = useState<RegistryFilters>(emptyRegistryFilters);
   const toggleFilter = useCallback((group: FilterGroup, value: string) => {
@@ -996,7 +999,11 @@ export function InternalMCPCatalog({
               />
             )}
             <RegistrySortMenu value={sort} onChange={setSort} />
-            <ListViewToggle value={viewMode} onChange={setViewMode} />
+            <ListViewToggle
+              value={viewMode}
+              onChange={setViewMode}
+              order={["table", "cards"]}
+            />
           </div>
           {hasLabelFilters && (
             <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />

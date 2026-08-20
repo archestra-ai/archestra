@@ -69,6 +69,24 @@ async function dismissOnboarding(page: Page): Promise<void> {
 }
 
 /**
+ * Browser-side preferences the specs were written against. The MCP registry
+ * opens in its table view by default; the registry helpers and specs drive
+ * the cards (their test ids, the per-card tools count and error banners, the
+ * Connect and credentials controls), so every context starts with that view
+ * remembered, exactly as a user who picked it would.
+ */
+async function applyPreferences(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    try {
+      window.localStorage.setItem("archestra-mcp-registry-view", "cards");
+    } catch {
+      // Storage can be unavailable (opaque origins); the page then shows the
+      // default view and the spec fails loudly where it looks for a card.
+    }
+  });
+}
+
+/**
  * Create a page with specific auth state
  */
 async function createAuthenticatedPage(
@@ -76,12 +94,19 @@ async function createAuthenticatedPage(
   storageState: string,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ storageState });
+  await applyPreferences(context);
   const page = await context.newPage();
   return { context, page };
 }
 
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
+  // The default context (admin, via storageState in config) gets the same
+  // preferences as the contexts created below.
+  context: async ({ context }, use) => {
+    await applyPreferences(context);
+    await use(context);
+  },
   goToPage: async ({}, use) => {
     await use(goToPage);
   },

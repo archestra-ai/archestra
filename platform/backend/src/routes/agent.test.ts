@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
@@ -8,7 +9,14 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { AgentToolModel, OrganizationModel, ToolModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  AgentToolModel,
+  MemberModel,
+  OrganizationModel,
+  ToolModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -245,6 +253,172 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(200);
       const agent = response.json();
       expect(agent.teams.map((t: { id: string }) => t.id)).toEqual([team.id]);
+    });
+  });
+
+  describe("advisor delegation default", () => {
+    /** The org-wide Advisor row, as the seeder writes it. */
+    async function seedAdvisor() {
+      return AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.ADVISOR,
+        organizationId,
+        agentType: "agent",
+        scope: "org",
+        description: "Answers questions from other agents",
+        systemPrompt: "You are the advisor.",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+        teams: [],
+        labels: [],
+        knowledgeBaseIds: [],
+        connectorIds: [],
+      });
+    }
+
+    async function createAgent(payload: Record<string, unknown>) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Advisor Default ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+          ...payload,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    }
+
+    async function getExclusions(agentId: string): Promise<string[]> {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agentId}/subagent-exclusions`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().excludedSubagentIds;
+    }
+
+    test("excludes the advisor from a new agent in Auto subagent mode, in version 1", async () => {
+      const advisor = await seedAdvisor();
+
+      const agent = await createAgent({ accessAllSubagents: true });
+
+      expect(await getExclusions(agent.id)).toEqual([advisor.id]);
+
+      // Version 1 must already carry it: a follow-up write would fork a
+      // second version whose only change is the default.
+      const versionResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions/1`,
+      });
+      expect(versionResponse.statusCode).toBe(200);
+      expect(versionResponse.json().snapshot.excludedSubagents).toEqual([
+        { agentId: advisor.id, name: BUILT_IN_AGENT_NAMES.ADVISOR },
+      ]);
+      expect(agent.latestVersion).toBe(1);
+    });
+
+    test("excludes nothing in Custom subagent mode", async () => {
+      await seedAdvisor();
+
+      const agent = await createAgent({ accessAllSubagents: false });
+
+      expect(await getExclusions(agent.id)).toEqual([]);
+    });
+
+    test("excludes nothing for an LLM proxy, which cannot delegate", async () => {
+      await seedAdvisor();
+
+      const proxy = await createAgent({
+        agentType: "llm_proxy",
+        accessAllSubagents: true,
+      });
+
+      expect(await getExclusions(proxy.id)).toEqual([]);
+    });
+
+    test("creates normally when the organization has no advisor", async () => {
+      const agent = await createAgent({ accessAllSubagents: true });
+
+      expect(await getExclusions(agent.id)).toEqual([]);
+    });
+
+    test("a clone copies the source's exclusions and gains none", async ({
+      makeInternalAgent,
+    }) => {
+      await seedAdvisor();
+      const source = await makeInternalAgent({
+        organizationId,
+        authorId: user.id,
+        scope: "org",
+        accessAllSubagents: true,
+      });
+      expect(await getExclusions(source.id)).toEqual([]);
+
+      const cloneResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${source.id}/clone`,
+      });
+      expect(cloneResponse.statusCode).toBe(200);
+
+      expect(await getExclusions(cloneResponse.json().id)).toEqual([]);
+    });
+
+    test("a profile record gets the same default", async () => {
+      const advisor = await seedAdvisor();
+
+      const profile = await createAgent({
+        agentType: "profile",
+        accessAllSubagents: true,
+      });
+
+      expect(await getExclusions(profile.id)).toEqual([advisor.id]);
+    });
+
+    test("the create still succeeds when seeding the exclusion fails", async () => {
+      await seedAdvisor();
+      const write = vi
+        .spyOn(AgentExcludedSubagentModel, "replaceForAgent")
+        .mockRejectedValue(new Error("exclusion write rejected"));
+
+      // Nothing rolls back a create, so a failed default must not fail it:
+      // the caller would be left with a half-made agent it never heard about.
+      const agent = await createAgent({ accessAllSubagents: true });
+
+      expect(write).toHaveBeenCalled();
+      expect(agent.id).toBeTruthy();
+      // Degraded, not broken — the agent simply starts with the Advisor
+      // reachable.
+      expect(await getExclusions(agent.id)).toEqual([]);
+    });
+
+    test("the seeded personal assistant never asks for the default", async () => {
+      await seedAdvisor();
+      const create = vi.spyOn(AgentModel, "create");
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId,
+      });
+      const assistantId = await MemberModel.getDefaultAgentId(
+        user.id,
+        organizationId,
+      );
+      expect(assistantId).toBeTruthy();
+
+      // Seeding never opts into the rule at all. Asserting only "no
+      // exclusions" would pass for the wrong reason: the assistant is created
+      // in Custom subagent mode, where the rule yields nothing anyway.
+      expect(create).toHaveBeenCalled();
+      for (const call of create.mock.calls) {
+        expect(call[2]?.defaultExcludedSubagentIds).toBeUndefined();
+      }
+      expect(
+        await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+          assistantId as string,
+        ),
+      ).toEqual([]);
     });
   });
 

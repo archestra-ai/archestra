@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+// Monaco does not render in jsdom; the canonical mock is a textarea.
+vi.mock("@/components/editor");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/skills/skill.query");
 

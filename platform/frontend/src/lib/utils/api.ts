@@ -173,3 +173,36 @@ export function throwOnApiError(
   }
   throw toApiError(error);
 }
+
+/**
+ * An API failure whose message is already in front of the user.
+ *
+ * Write hooks toast the API's own refusal through `handleApiError`
+ * and then reject, so the caller can stop; a caller that also toasts in its
+ * catch says the same sentence twice. `toApiError` yields a plain `Error`,
+ * indistinguishable from one a component built for itself — and those are
+ * exactly the failures nothing else has reported — so the rejection carries
+ * this type instead, and a caller can tell the two apart.
+ */
+class ReportedApiError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ReportedApiError";
+  }
+}
+
+/** Toast an API failure, and give back the error to reject with. */
+export function reportApiError(error: unknown): Error {
+  handleApiError(error);
+  return new ReportedApiError(toApiError(error).message, { cause: error });
+}
+
+/**
+ * Whether this failure came back from a write that has already told the user.
+ * A caller with a catch of its own toasts only what this returns false for.
+ */
+export function isReportedApiError(error: unknown): boolean {
+  // By name rather than `instanceof`, so a module boundary (or a test double)
+  // cannot un-mark an error that was reported.
+  return error instanceof Error && error.name === "ReportedApiError";
+}

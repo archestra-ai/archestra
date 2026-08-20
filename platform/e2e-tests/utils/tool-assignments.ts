@@ -13,7 +13,6 @@ type AssignmentTarget = {
   targetName: string;
   catalogItemName: string;
   pagePath: "/agents" | "/mcp/gateways";
-  dialogTitle: "Edit Agent" | "Edit MCP Gateway";
 };
 
 export async function openGatewayCatalogToolAssignment(params: {
@@ -26,17 +25,21 @@ export async function openGatewayCatalogToolAssignment(params: {
     targetName: params.gatewayName,
     catalogItemName: params.catalogItemName,
     pagePath: "/mcp/gateways",
-    dialogTitle: "Edit MCP Gateway",
   });
 }
 
+/**
+ * Save the tools step of the open agent/gateway setup wizard (the page that
+ * replaced the edit dialog): Save the step and wait for the wizard to return
+ * to the record's page, which is what a successful Save does.
+ */
 export async function saveOpenProfileDialog(page: Page): Promise<void> {
   // The per-server tool-config modal has no submit of its own (its choices
   // commit live; the only control is the Close X) and while it is open the
-  // layer beneath is aria-hidden, so no role query can reach the edit
-  // dialog's Save/Update. It normally auto-closes after the credential
-  // choice commits, but on slow runners it can linger — wait briefly for
-  // the auto-close, then close it manually.
+  // layer beneath is aria-hidden, so no role query can reach the wizard's
+  // Save. It normally auto-closes after the credential choice commits, but
+  // on slow runners it can linger — wait briefly for the auto-close, then
+  // close it manually.
   const configModal = page
     .getByRole("dialog")
     .filter({ has: page.getByTestId(E2eTestId.TokenSelect) })
@@ -52,15 +55,16 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
     }
   }
 
-  // One combined locator: sampling Save's visibility at a single instant and
-  // falling back to Update races the dialog's render (isVisible() does not
-  // wait). A dialog has exactly one submit — wait for whichever it is.
-  const submitButton = page
-    .getByRole("button", { name: /^(Save|Update)$/ })
-    .first();
+  // The step's Save submits only while the form is dirty (a clean step's
+  // Save just returns), and the assignment above made it dirty.
+  const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
   await expect(submitButton).toBeVisible({ timeout: 15_000 });
   await submitButton.click();
 
+  // A successful Save returns to the record's own page (its Overview).
+  await page.waitForURL((url) => !url.pathname.endsWith("/edit"), {
+    timeout: 30_000,
+  });
   await page.waitForLoadState("domcontentloaded");
 }
 
@@ -108,9 +112,9 @@ async function confirmPersonalCredentialPinIfPrompted(
 }
 
 /**
- * Select a static credential in the open assignment dialog: click the option,
+ * Select a static credential in the open tool-config modal: click the option,
  * confirm the personal-pin dialog if it appears, otherwise close the still-open
- * dropdown. Applying the pin (confirm) leaves the edit dialog open for saving,
+ * dropdown. Applying the pin (confirm) leaves the wizard step open for saving,
  * so a trailing Escape only runs when no confirmation was shown.
  */
 export async function selectCredentialOption(
@@ -140,7 +144,7 @@ export async function selectCredentialOption(
 
   const confirmed = await confirmPersonalCredentialPinIfPrompted(page);
   // Close the dropdown only when it is demonstrably still open — a blind
-  // Escape after the dropdown already closed dismisses the edit dialog.
+  // Escape after the dropdown already closed dismisses the tool-config modal.
   if (!confirmed && (await credentialOption.isVisible().catch(() => false))) {
     await page.keyboard.press("Escape");
   }
@@ -174,40 +178,39 @@ async function openCatalogToolAssignment({
   targetName,
   catalogItemName,
   pagePath,
-  dialogTitle,
 }: AssignmentTarget): Promise<void> {
   await goToPage(page, `${pagePath}?name=${encodeURIComponent(targetName)}`);
   await page.waitForLoadState("domcontentloaded");
 
+  // The row's Edit opens the setup wizard page on its Configuration step;
+  // the tools live on the Tools & Knowledge step.
   const editButton = page.getByTestId(
     `${E2eTestId.EditAgentButton}-${targetName}`,
   );
   await expect(editButton).toBeVisible({ timeout: 30_000 });
   await editButton.click();
+  await page.waitForURL(new RegExp(`${pagePath}/[^/?]+/edit`), {
+    timeout: 30_000,
+  });
+  // Retry the step click until the URL says so: like the row's Edit above,
+  // the stepper can render before hydration wires its handler.
+  await expect(async () => {
+    if (!/[?&]step=tools/.test(page.url())) {
+      await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
+    }
+    await page.waitForURL(/[?&]step=tools/, { timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
 
-  // Anchor the dialog by its visible heading, not its accessible name: the
-  // dialog's aria-labelledby wiring breaks when the title re-renders after
-  // the gateway data loads (captured in a failure's ARIA snapshot — the
-  // dialog node ends up with an EMPTY accessible name), after which every
-  // name-scoped lookup dead-ends. Fast machines finish the flow before that
-  // re-render; standard CI runners do not. The broken accessible name is a
-  // real product a11y bug — screen readers lose the dialog title the same
-  // way — tracked separately from this locator hardening.
-  const dialog = page
-    .getByRole("dialog")
-    .filter({ has: page.getByRole("heading", { name: dialogTitle }) })
-    .first();
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
-
-  const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);
+  const toolsSectionAnchor = page.getByTestId(E2eTestId.AgentToolsSection);
+  await expect(toolsSectionAnchor).toBeVisible({ timeout: 15_000 });
   await toolsSectionAnchor.scrollIntoViewIfNeeded();
 
-  const toolsSectionHeading = dialog.getByRole("heading", {
+  const toolsSectionHeading = page.getByRole("heading", {
     name: "Tools & Knowledge Sources",
   });
   await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
-  const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
+  const addButton = page.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });
   await addButton.click();
 
@@ -286,12 +289,12 @@ async function openCatalogToolAssignment({
     await enabledCatalogItem.click();
     // Clicking the catalog item opens the per-server tool-config MODAL
     // (item-name heading, "Connect on behalf of" credential select, tool
-    // checkboxes) layered over the edit dialog. While it is up, everything
+    // checkboxes) layered over the wizard page. While it is up, everything
     // beneath is unclickable even though isVisible() still reports the
     // combobox — so only dismiss a leftover combobox when no modal
-    // appeared, and do it with a neutral in-dialog click (Escape is banned
+    // appeared, and do it with a neutral in-page click (Escape is banned
     // here: it lands on whatever the CURRENT top layer is, and closing the
-    // modal or the edit dialog by accident strands every later step).
+    // modal by accident strands every later step).
     const modalAppeared = await visibleTokenSelect
       .waitFor({ state: "visible", timeout: 5_000 })
       .then(() => true)

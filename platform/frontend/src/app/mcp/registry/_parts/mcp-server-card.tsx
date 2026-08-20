@@ -1035,12 +1035,23 @@ export function McpServerCard({
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
-              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
-              <TruncatedTooltip content={item.name}>
-                <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
-                  {item.name}
-                </span>
-              </TruncatedTooltip>
+              {/* The name opens the server's page, as a table row does: the
+                  card itself is too full of its own controls to be one link. */}
+              <Link
+                href={`/mcp/registry/${item.id}`}
+                className="flex min-w-0 items-center gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <McpCatalogIcon
+                  icon={item.icon}
+                  catalogId={item.id}
+                  size={20}
+                />
+                <TruncatedTooltip content={item.name}>
+                  <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
+                    {item.name}
+                  </span>
+                </TruncatedTooltip>
+              </Link>
               {environmentLabel && (
                 <Badge
                   variant="outline"

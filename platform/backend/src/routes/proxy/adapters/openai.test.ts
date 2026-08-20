@@ -1085,6 +1085,39 @@ describe("execute custom-tool normalization", () => {
     expect(request.tools?.[1]).toEqual(flatCustomTool);
   });
 
+
+  test("nulls out empty assistant content arrays before forwarding", async () => {
+    // Cursor sends assistant tool-call turns with content: []; OpenAI rejects
+    // the empty array ("Expected an array with minimum length 1").
+    const { captured, client } = captureClient();
+    const request = createMockRequest([
+      { role: "user", content: "hi" },
+      {
+        role: "assistant",
+        content: [],
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "Read", arguments: "{}" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_1", content: "file contents" },
+    ] as OpenAi.Types.ChatCompletionsRequest["messages"]);
+
+    await openaiAdapterFactory.execute(client, request);
+
+    const messages = captured.params?.messages as Array<
+      Record<string, unknown>
+    >;
+    expect(messages[1].content).toBeNull();
+    expect(messages[1].tool_calls).toBeDefined();
+    // Non-empty content and other roles stay untouched.
+    expect(messages[0].content).toBe("hi");
+    expect(messages[2].content).toBe("file contents");
+  });
+
   test("leaves already-nested custom tools and tool-less requests untouched", async () => {
     const { captured, client } = captureClient();
     const nested = {

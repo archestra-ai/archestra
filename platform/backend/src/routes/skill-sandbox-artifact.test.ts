@@ -19,6 +19,11 @@ const PNG_HEADER = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 const PNG_FAKE = Buffer.concat([PNG_HEADER, Buffer.alloc(64, 0xab)]);
+const PDF_FAKE = Buffer.concat([
+  Buffer.from("%PDF-1.7\n"),
+  Buffer.alloc(64, 0x20),
+  Buffer.from("\n%%EOF\n"),
+]);
 
 async function seedSandbox(params: { organizationId: string; userId: string }) {
   return await SkillSandboxModel.create({
@@ -240,6 +245,85 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(response.headers["content-disposition"]).toContain("icon.svg");
   });
 
+  test("serves a PDF inline so the viewer can preview it, with a CSP the browser's PDF plugin survives", async () => {
+    // `default-src 'none'; sandbox` blocks Chrome's PDF viewer outright, and an
+    // `attachment` disposition makes the preview iframe download the file
+    // instead of rendering it — either one leaves an empty preview pane.
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "application/pdf",
+      data: PDF_FAKE,
+      path: "/sandbox/skills/example/report.pdf",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.headers["content-disposition"]).toContain("inline");
+    expect(response.headers["content-disposition"]).toContain("report.pdf");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["content-security-policy"]).toBe(
+      "frame-ancestors 'self'",
+    );
+    expect(response.rawPayload).toEqual(PDF_FAKE);
+  });
+
+  test("previews a PDF stored as octet-stream (written before PDFs were sniffed)", async () => {
+    // Rows persisted before write-time PDF sniffing kept the caller's fallback
+    // mime; the bytes still decide, so those files preview too.
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "application/octet-stream",
+      data: PDF_FAKE,
+      path: "/sandbox/skills/example/legacy.pdf",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.headers["content-disposition"]).toContain("inline");
+  });
+
+  test("a non-PDF claiming application/pdf is still served as a download", async () => {
+    // The mime column is caller-influenced, so only the bytes may unlock the
+    // PDF viewer's relaxed CSP.
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "application/pdf",
+      data: Buffer.from("<html><script>alert(1)</script></html>"),
+      path: "/sandbox/skills/example/not-really.pdf",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/octet-stream");
+    expect(response.headers["content-disposition"]).toContain("attachment");
+    expect(response.headers["content-security-policy"]).toBe(
+      "default-src 'none'; sandbox",
+    );
+  });
+
   test("returns 404 when the artifact's sandbox belongs to another user", async ({
     makeUser,
     makeOrganization,
@@ -298,7 +382,8 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     const cd = response.headers["content-disposition"] as string;
     // user-supplied quote and backslash inside the filename are stripped so
     // the header stays parseable. wrapping quotes around filename are fine.
-    expect(cd).toMatch(/^attachment; filename="[^"\\]*"$/);
+    // Either disposition is fine here — sanitizing the name is the subject.
+    expect(cd).toMatch(/^(?:inline|attachment); filename="[^"\\]*"$/);
     expect(cd).toContain(".pdf");
   });
 });

@@ -1767,8 +1767,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    // The compaction guard matters now that the composer stays usable during
-    // compaction when queueing is on — a second /compact must not re-enter.
+    // The composer stays usable for the whole compaction, so `/compact` is
+    // reachable again while one is already running — this guard is what stops
+    // a second run re-entering.
     if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }

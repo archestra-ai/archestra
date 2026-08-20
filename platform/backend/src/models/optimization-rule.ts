@@ -359,6 +359,8 @@ class OptimizationRuleModel {
     // Define rules per provider
     const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
       {
+        // Embeddings-only provider: no chat models to optimize between.
+        voyage: [],
         openai: [
           {
             entityType: "organization",

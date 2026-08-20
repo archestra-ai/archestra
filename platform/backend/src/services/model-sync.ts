@@ -18,6 +18,7 @@ import {
 } from "@/clients/models-dev-client";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
+import { findVoyageEmbeddingModel } from "@/knowledge-base/embedding-clients/voyage-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -497,6 +498,11 @@ function inferEmbeddingDimensions(
   }
   if (provider === "cohere") {
     return findCohereEmbeddingModel(id)?.dimensions ?? null;
+  }
+  // Voyage is embeddings-only, so every model it offers is an embedding model
+  // and the table is the only source for its dimension.
+  if (provider === "voyage") {
+    return findVoyageEmbeddingModel(id)?.dimensions ?? null;
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
@@ -994,6 +1000,22 @@ function normalizeKnownModelCapabilities(params: {
   // below — the KB's Cohere client decides which modalities it drives.
   if (provider === "cohere") {
     const embedding = findCohereEmbeddingModel(modelId);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
+  // KB-supported Voyage embedding models: same reasoning — the KB's Voyage
+  // client is the only thing that drives them, so its table decides the
+  // modalities. Voyage has no chat models at all, so there is no non-embedding
+  // branch to fall through to.
+  if (provider === "voyage") {
+    const embedding = findVoyageEmbeddingModel(modelId);
     if (embedding) {
       return {
         ...capabilities,

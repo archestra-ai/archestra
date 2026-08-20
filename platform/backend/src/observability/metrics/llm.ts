@@ -62,6 +62,9 @@ function getChatOrResponsesUsage(usage: Record<string, unknown>) {
  * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
  */
 const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
+  // Embeddings-only provider: no chat traffic passes through this path, and
+  // the KB embedder reports its own token usage.
+  voyage: null,
   openai: getChatOrResponsesUsage,
   archestra: getOpenAIUsage,
   cerebras: getOpenAIUsage,

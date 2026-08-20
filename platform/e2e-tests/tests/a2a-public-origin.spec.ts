@@ -54,15 +54,7 @@ test.describe("A2A over the public origin", () => {
       expect(card.status()).toBe(200);
       expect(card.headers()["content-type"]).toContain("application/json");
 
-      // The card tells clients where to dial. Behind the frontend proxy the
-      // backend's own Host header is the in-cluster address, which no external
-      // client can reach — the card has to name the origin the caller used.
-      const body = await card.json();
-      expect(body.supportedInterfaces[0].url).toBe(
-        `${UI_BASE_URL}/v2/a2a/${agent.id}`,
-      );
-
-      // And the JSON-RPC entry point itself answers in JSON-RPC. An
+      // The JSON-RPC entry point itself answers in JSON-RPC. An
       // unauthenticated call is enough: the HTML 404 has no envelope at all.
       const rpc = await request.post(`${UI_BASE_URL}/v2/a2a/${agent.id}`, {
         headers: { "Content-Type": "application/json" },

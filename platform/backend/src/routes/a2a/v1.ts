@@ -6,7 +6,6 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
-import { resolveA2ABaseUrl } from "@/routes/a2a/base-url";
 import { ProviderError } from "@/routes/chat/errors";
 import {
   extractBearerToken,
@@ -136,9 +135,10 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(401, "Invalid or unauthorized token");
       }
 
-      // The origin the caller reached us on, which behind the frontend's
-      // reverse proxy is not this process's own Host header.
-      const baseUrl = resolveA2ABaseUrl(request);
+      // Construct base URL from request
+      const protocol = request.headers["x-forwarded-proto"] || "http";
+      const host = request.headers.host || "localhost:9000";
+      const baseUrl = `${protocol}://${host}`;
 
       // Build skills array with a single skill representing the agent
       const skillId = agent.name

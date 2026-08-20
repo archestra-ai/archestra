@@ -316,14 +316,8 @@ describe("proxy", () => {
       ).toBe("http");
     });
 
-    it("injects forwarded host for /v1, /v2 and /api paths", () => {
-      // /v2 is the A2A surface: its AgentCard names the origin clients should
-      // dial, which the backend can only know from the forwarded host.
-      for (const url of [
-        "/v1/mcp/profile-1",
-        "/v2/a2a/agent-1/.well-known/agent-card.json",
-        "/api/auth/jwks",
-      ]) {
+    it("injects forwarded host for /v1 and /api paths", () => {
+      for (const url of ["/v1/mcp/profile-1", "/api/auth/jwks"]) {
         const response = proxy(
           createMockRequest({ url, headers: { host: "localhost:3000" } }),
         );

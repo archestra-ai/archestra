@@ -84,7 +84,6 @@ const withForwardedOrigin = (req: NextRequest) => {
 
 const needsForwardedOrigin = (pathname: string) =>
   pathname.startsWith("/v1/") ||
-  pathname.startsWith("/v2/") ||
   pathname.startsWith("/.well-known/") ||
   pathname.startsWith("/api/");
 

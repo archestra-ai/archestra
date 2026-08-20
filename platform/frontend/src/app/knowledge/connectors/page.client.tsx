@@ -350,8 +350,11 @@ function ConnectorsList() {
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <SearchInput paramName="search" className="relative w-[330px]" />
+          <div className="flex flex-wrap items-center gap-4">
+            <SearchInput
+              paramName="search"
+              className="relative w-full sm:w-[330px]"
+            />
             <Select
               value={connectorTypeFilter}
               onValueChange={handleConnectorTypeChange}

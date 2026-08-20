@@ -13,7 +13,6 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
-  MemberModel,
   OrganizationModel,
   ToolModel,
 } from "@/models";
@@ -397,14 +396,10 @@ describe("agent routes", () => {
       await seedAdvisor();
       const create = vi.spyOn(AgentModel, "create");
 
-      await AgentModel.ensurePersonalChatAgent({
+      const assistantId = await AgentModel.ensurePersonalChatAgent({
         userId: user.id,
         organizationId,
       });
-      const assistantId = await MemberModel.getDefaultAgentId(
-        user.id,
-        organizationId,
-      );
       expect(assistantId).toBeTruthy();
 
       // Seeding never opts into the rule at all. Asserting only "no

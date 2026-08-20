@@ -256,18 +256,15 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     expect(response.statusCode).toBe(409);
   });
 
-  test("clears the member's default when deleting their only personal agent under an org default", async ({
+  test("clears the member's default when converting away the agent they chose", async ({
     makeInternalAgent,
   }) => {
-    await AgentModel.ensurePersonalChatAgent({
+    const assistantId = await AgentModel.ensurePersonalChatAgent({
       userId: user.id,
       organizationId,
     });
-    const assistantId = await MemberModel.getDefaultAgentId(
-      user.id,
-      organizationId,
-    );
     if (!assistantId) throw new Error("expected a seeded personal assistant");
+    await MemberModel.setDefaultAgent(user.id, organizationId, assistantId);
 
     const orgDefault = await makeInternalAgent({
       organizationId,
@@ -290,16 +287,16 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     ).toBeNull();
   });
 
-  test("refuses to delete a member's only personal agent with no org default", async () => {
-    await AgentModel.ensurePersonalChatAgent({
+  test("converts away a member's only personal agent with no org default", async () => {
+    // The old refusal here mirrored the agent DELETE route's; both are gone.
+    // Nothing is stranded: chat resolution falls through to any chat agent the
+    // caller can reach, and says so plainly when there is none.
+    const assistantId = await AgentModel.ensurePersonalChatAgent({
       userId: user.id,
       organizationId,
     });
-    const assistantId = await MemberModel.getDefaultAgentId(
-      user.id,
-      organizationId,
-    );
     if (!assistantId) throw new Error("expected a seeded personal assistant");
+    await MemberModel.setDefaultAgent(user.id, organizationId, assistantId);
 
     const response = await app.inject({
       method: "POST",
@@ -307,11 +304,12 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
       payload: { description: "Retired assistant", deleteAgent: true },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(await AgentModel.findById(assistantId)).not.toBeNull();
-    expect(await MemberModel.getDefaultAgentId(user.id, organizationId)).toBe(
-      assistantId,
-    );
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as ConvertResponse).deletedAgent).toBe(true);
+    expect(await AgentModel.findById(assistantId)).toBeNull();
+    expect(
+      await MemberModel.getDefaultAgentId(user.id, organizationId),
+    ).toBeNull();
   });
 
   test("keeps the source agent on a name conflict so deleteAgent stays retry-safe", async ({

@@ -560,40 +560,23 @@ class MemberModel {
   }
 
   /**
-   * The user ids of every member (in any organization) whose default agent
-   * is `agentId`.
+   * Drop `agentId` as anyone's personal default. Called when the agent is
+   * deleted: the pointer records a deliberate choice, and the choice is no
+   * longer available. Those members fall back to the organization default (or
+   * their own personal chat agent) until they pick again.
+   *
+   * Mirrors {@link ProjectModel.clearDefaultAgent}: a restore does NOT bring
+   * the pointer back, for the same reason projects do not silently re-pin.
    */
-  static async findUserIdsDefaultingTo(agentId: string): Promise<string[]> {
-    const rows = await db
-      .select({ userId: schema.membersTable.userId })
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.defaultAgentId, agentId));
-    return rows.map((row) => row.userId);
-  }
-
-  /**
-   * Move members off `fromAgentId`, each onto their own replacement (or to
-   * null, so the organization default applies to them).
-   */
-  static async repointDefaultAgent(
-    params: {
-      fromAgentId: string;
-      moves: Array<{ userId: string; toAgentId: string | null }>;
-    },
+  static async clearDefaultAgent(
+    agentId: string,
     tx?: Transaction,
   ): Promise<void> {
     const executor = tx ?? db;
-    for (const move of params.moves) {
-      await executor
-        .update(schema.membersTable)
-        .set({ defaultAgentId: move.toAgentId })
-        .where(
-          and(
-            eq(schema.membersTable.userId, move.userId),
-            eq(schema.membersTable.defaultAgentId, params.fromAgentId),
-          ),
-        );
-    }
+    await executor
+      .update(schema.membersTable)
+      .set({ defaultAgentId: null })
+      .where(eq(schema.membersTable.defaultAgentId, agentId));
   }
 }
 

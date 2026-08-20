@@ -566,10 +566,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
       let deletedAgent = false;
-      let memberDefaultMoves: Array<{
-        userId: string;
-        toAgentId: string | null;
-      }> = [];
 
       // If the caller wants the source agent gone, prove they may delete it
       // BEFORE creating the skill, so a permission failure doesn't leave an
@@ -595,20 +591,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userTeamIds: agentUserTeamIds,
           userId: user.id,
         });
-        // Same treatment as the agent DELETE route: members whose personal
-        // default is this agent move onto another agent they can reach
-        // instead of the delete being refused.
-        const plan = await AgentModel.planMemberDefaultRepoint({
-          agentId: agent.id,
-          organizationId,
-        });
-        if (!plan) {
-          throw new ApiError(
-            400,
-            "Cannot delete a default agent. Set another agent as default first.",
-          );
-        }
-        memberDefaultMoves = plan;
       }
 
       const { draft, teamIds, report } = agentToSkill(agent, {
@@ -666,11 +648,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Eligibility was checked above; delete inside the same transaction.
           if (body.deleteAgent) {
             deletedAgent = await AgentModel.delete(agent.id, tx);
-            if (deletedAgent && memberDefaultMoves.length > 0) {
-              await MemberModel.repointDefaultAgent(
-                { fromAgentId: agent.id, moves: memberDefaultMoves },
-                tx,
-              );
+            // Same as the agent DELETE route: members who chose this agent as
+            // their personal default fall back to the organization default.
+            if (deletedAgent) {
+              await MemberModel.clearDefaultAgent(agent.id, tx);
             }
           }
           return created;

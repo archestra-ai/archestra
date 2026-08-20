@@ -281,12 +281,62 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const conversationId = await openInChat(appId);
 
     const agentId = await ConversationModel.getAgentId(conversationId);
-    expect(agentId).toBe(
-      await MemberModel.getDefaultAgentId(user.id, organizationId),
-    );
     const agent = await AgentModel.findById(agentId as string);
     expect(agent?.name).toBe("My Assistant");
     expect(agent?.scope).toBe("personal");
+    // Bootstrapping is not a choice: it must not write the personal default,
+    // or the member would shadow every organization default set afterwards.
+    expect(
+      await MemberModel.getDefaultAgentId(user.id, organizationId),
+    ).toBeNull();
+  });
+
+  test("an org default reaches a member who only ever had one seeded for them", async ({
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    // T-1118: the member holds a seeded "My Assistant" and never picked a
+    // personal default. The organization's Default Agent must reach them —
+    // binding the chat to the assistant instead is what left app chats running
+    // on an agent that could not reach the app.
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const seeded = await AgentModel.ensurePersonalChatAgent({
+      userId: user.id,
+      organizationId,
+    });
+    const orgDefault = await makeAgent({ organizationId, agentType: "agent" });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: orgDefault.id,
+    });
+
+    const appId = await createApp("SeededMember");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      orgDefault.id,
+    );
+    expect(await ConversationModel.getAgentId(conversationId)).not.toBe(seeded);
+  });
+
+  test("ignores a personal default whose agent was deleted", async ({
+    makeAgent,
+  }) => {
+    // The pointer is a bare FK and survives a soft delete, so the resolver —
+    // not the writer — is what keeps a dead choice from binding conversations.
+    const orgDefault = await makeAgent({ organizationId, agentType: "agent" });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: orgDefault.id,
+    });
+    await AgentModel.delete(memberDefaultAgentId);
+
+    const appId = await createApp("DeadPersonalDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      orgDefault.id,
+    );
   });
 
   test("falls back to the member default when the org default agent is soft-deleted", async ({

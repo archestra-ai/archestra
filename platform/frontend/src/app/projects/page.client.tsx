@@ -578,7 +578,7 @@ function CreateProjectDialog({
               )
             }
             hint="Any agent you can use"
-            personalDefaultOption={{
+            sentinelOption={{
               value: NO_DEFAULT_AGENT,
               label: "Default",
             }}

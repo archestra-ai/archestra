@@ -224,7 +224,7 @@ export function ConnectionSettingsForm() {
                   onValueChange={(value) =>
                     setGatewayId(value === DEFAULT_VALUE ? null : value)
                   }
-                  personalDefaultOption={{
+                  sentinelOption={{
                     value: DEFAULT_VALUE,
                     label: "Each user personal",
                   }}
@@ -246,7 +246,7 @@ export function ConnectionSettingsForm() {
                   onValueChange={(value) =>
                     setProxyId(value === DEFAULT_VALUE ? null : value)
                   }
-                  personalDefaultOption={{
+                  sentinelOption={{
                     value: DEFAULT_VALUE,
                     label: "Each user personal",
                   }}

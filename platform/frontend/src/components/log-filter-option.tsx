@@ -1,35 +1,9 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  InteractionSource,
-  SupportedProvider,
-} from "@archestra/shared";
-import { AgentIcon } from "@/components/agent-icon";
+import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import { ProviderIcon } from "@/components/provider-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-type ProfileOption = archestraApiTypes.GetAllAgentsResponses["200"][number];
-
-export function ProfileFilterOption({
-  profile,
-}: {
-  profile: Pick<ProfileOption, "agentType" | "icon" | "name">;
-}) {
-  return (
-    <span className="flex items-center gap-2 min-w-0">
-      <AgentIcon
-        icon={profile.icon}
-        fallbackType={
-          profile.agentType === "profile" ? "agent" : profile.agentType
-        }
-        className="text-muted-foreground"
-      />
-      <span className="truncate">{profile.name}</span>
-    </span>
-  );
-}
 
 export function SourceFilterOption({ source }: { source: InteractionSource }) {
   return (

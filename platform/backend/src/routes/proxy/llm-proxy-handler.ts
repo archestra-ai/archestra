@@ -1230,6 +1230,7 @@ export async function handleLLMProxy<
       agent: resolvedAgent,
       abortSignal,
       source,
+      model: requestAdapter.getModel(),
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,

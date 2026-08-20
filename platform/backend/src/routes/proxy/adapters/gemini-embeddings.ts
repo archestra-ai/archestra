@@ -91,6 +91,7 @@ export const geminiEmbeddingsAdapterFactory: LLMProvider<
       apiKey,
       "[GeminiEmbeddingProxy]",
       options.baseUrl,
+      options.model ? getGeminiEmbeddingModelId(options.model) : undefined,
     );
   },
 

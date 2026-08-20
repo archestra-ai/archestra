@@ -11,13 +11,21 @@ beforeEach(() => {
   vi.stubGlobal("fetch", mockFetch);
 });
 
-vi.mock("@/clients/gemini-client", () => ({
+// Only the client constructors are faked: `resolveVertexLocation` and
+// `isVertexModelReachable` stay real so the tests exercise the actual
+// location-routing rules, driven by the config mutations below.
+vi.mock("@/clients/gemini-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/clients/gemini-client")>()),
   createGoogleGenAIClient: vi.fn(),
+  createVertexClientForLocation: vi.fn(),
 }));
 
-import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import { createVertexClientForLocation } from "@/clients/gemini-client";
+import config from "@/config";
 
-const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
+const mockCreateVertexClientForLocation = vi.mocked(
+  createVertexClientForLocation,
+);
 
 describe("gemini model fetchers", () => {
   beforeEach(() => {
@@ -140,6 +148,13 @@ describe("gemini model fetchers", () => {
   });
 
   describe("fetchGeminiModelsViaVertexAi", () => {
+    beforeEach(() => {
+      // These tests are about catalog assembly, not location routing, so every
+      // model stays reachable. The nested suite below sets its own values.
+      config.llm.gemini.vertexAi.location = "us-central1";
+      config.llm.gemini.vertexAi.allowGlobalEndpoint = true;
+    });
+
     test("fetches Gemini catalog entries using Vertex AI SDK format", async () => {
       const mockModels = [
         {
@@ -190,7 +205,7 @@ describe("gemini model fetchers", () => {
         },
       } as unknown as GoogleGenAI;
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      mockCreateVertexClientForLocation.mockReturnValue(mockClient);
 
       const models = await fetchGeminiModelsViaVertexAi();
 
@@ -270,7 +285,7 @@ describe("gemini model fetchers", () => {
         },
       } as unknown as GoogleGenAI;
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      mockCreateVertexClientForLocation.mockReturnValue(mockClient);
 
       const models = await fetchGeminiModelsViaVertexAi();
 
@@ -334,7 +349,7 @@ describe("gemini model fetchers", () => {
         },
       } as unknown as GoogleGenAI;
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      mockCreateVertexClientForLocation.mockReturnValue(mockClient);
 
       const models = await fetchGeminiModelsViaVertexAi();
 
@@ -418,7 +433,7 @@ describe("gemini model fetchers", () => {
         },
       } as unknown as GoogleGenAI;
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      mockCreateVertexClientForLocation.mockReturnValue(mockClient);
 
       const models = await fetchGeminiModelsViaVertexAi();
 
@@ -461,7 +476,7 @@ describe("gemini model fetchers", () => {
         },
       } as unknown as GoogleGenAI;
 
-      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+      mockCreateVertexClientForLocation.mockReturnValue(mockClient);
 
       const models = await fetchGeminiModelsViaVertexAi();
 
@@ -472,6 +487,110 @@ describe("gemini model fetchers", () => {
         "gemini-2.5-flash",
         "gemini-embedding-001",
       ]);
+    });
+
+    describe("global-only generations", () => {
+      /** A Vertex client whose catalog is exactly `modelIds`. */
+      function vertexClientListing(modelIds: string[]): GoogleGenAI {
+        return {
+          models: {
+            list: vi.fn().mockResolvedValue({
+              [Symbol.asyncIterator]: async function* () {
+                for (const id of modelIds) {
+                  yield {
+                    name: `publishers/google/models/${id}`,
+                    version: "default",
+                    tunedModelInfo: {},
+                  };
+                }
+              },
+            }),
+            get: vi.fn(),
+            countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
+          },
+        } as unknown as GoogleGenAI;
+      }
+
+      beforeEach(() => {
+        config.llm.gemini.vertexAi.location = "us-central1";
+      });
+
+      test("drops Gemini 3+ models when the global endpoint is not allowed", async () => {
+        config.llm.gemini.vertexAi.allowGlobalEndpoint = false;
+
+        // The regional Model Garden catalog lists the newer generations even
+        // though a regional host 404s on them, which is the trap here.
+        const client = vertexClientListing([
+          "gemini-2.5-pro",
+          "gemini-3-flash-preview",
+          "gemini-3.5-flash",
+          "gemini-embedding-001",
+          "gemini-embedding-2",
+        ]);
+        mockCreateVertexClientForLocation.mockReturnValue(client);
+
+        const models = await fetchGeminiModelsViaVertexAi();
+
+        expect(models.map((model) => model.id)).toEqual([
+          "gemini-2.5-pro",
+          "gemini-embedding-001",
+        ]);
+        // Unreachable models are dropped before the probe, not by it: the
+        // global endpoint is never contacted at all.
+        expect(
+          mockCreateVertexClientForLocation.mock.calls.map(
+            ([location]) => location,
+          ),
+        ).not.toContain("global");
+      });
+
+      test("serves each model from the location that has it when global is allowed", async () => {
+        config.llm.gemini.vertexAi.allowGlobalEndpoint = true;
+
+        // Neither catalog contains the other: Gemma MaaS and embedding-001 are
+        // regional, the 3.x generations global.
+        const regionalClient = vertexClientListing([
+          "gemini-2.5-pro",
+          "gemini-embedding-001",
+          "gemma-4-26b-a4b-it-maas",
+        ]);
+        const globalClient = vertexClientListing([
+          "gemini-2.5-pro",
+          "gemini-3.5-flash",
+          "gemini-embedding-2",
+        ]);
+        mockCreateVertexClientForLocation.mockImplementation((location) =>
+          location === "global" ? globalClient : regionalClient,
+        );
+
+        const models = await fetchGeminiModelsViaVertexAi();
+
+        expect(models.map((model) => model.id).sort()).toEqual([
+          "gemini-2.5-pro",
+          "gemini-3.5-flash",
+          "gemini-embedding-001",
+          "gemini-embedding-2",
+          "gemma-4-26b-a4b-it-maas",
+        ]);
+
+        const probedAt = (client: GoogleGenAI) =>
+          vi
+            .mocked(client.models.countTokens)
+            .mock.calls.map(([params]) => params.model)
+            .sort();
+
+        // Each model is probed at the location it would actually be routed to,
+        // so the catalog cannot advertise a model the proxy would 404 on.
+        expect(probedAt(globalClient)).toEqual([
+          "gemini-3.5-flash",
+          "gemini-embedding-2",
+        ]);
+        expect(probedAt(regionalClient)).toEqual([
+          "gemini-2.5-pro",
+          "gemini-embedding-001",
+          "gemma-4-26b-a4b-it-maas",
+        ]);
+      });
     });
   });
 });

@@ -10,6 +10,11 @@
 // synchronously so follow-up submits queue instead of starting a second,
 // racing direct send (concurrent sends reach the model but clobber each other's
 // optimistic message, so most never render).
+//
+// Context compaction is the other way the conversation can be busy while
+// `status` reads idle: a manual `/compact` rewrites the thread over a REST call
+// with no stream attached. Sending into that would race the rewrite, so those
+// submits queue too and the session drains them once compaction settles.
 
 export type ChatSubmitAction = "queue" | "stop" | "send";
 
@@ -20,8 +25,10 @@ export function classifyChatSubmitAction(params: {
   queueEnabled: boolean;
   /** A direct send fired but the page's `status` hasn't caught up yet. */
   directSendPending: boolean;
+  /** A context compaction (auto or manual) is rewriting the thread. */
+  isCompacting: boolean;
 }): ChatSubmitAction {
-  const { status, queueEnabled, directSendPending } = params;
+  const { status, queueEnabled, directSendPending, isCompacting } = params;
   const isStreaming = status === "submitted" || status === "streaming";
 
   if (isStreaming) {
@@ -30,9 +37,10 @@ export function classifyChatSubmitAction(params: {
     return queueEnabled ? "queue" : "stop";
   }
 
-  // Status reads idle, but a direct send we just issued is still settling — the
-  // turn is live, so queue the follow-up rather than race it.
-  if (queueEnabled && directSendPending) {
+  // Status reads idle, but the conversation is still busy — a direct send we
+  // just issued is settling, or a compaction is rewriting the thread. Either
+  // way the follow-up queues rather than racing it.
+  if (queueEnabled && (directSendPending || isCompacting)) {
     return "queue";
   }
 

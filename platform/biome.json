@@ -65,6 +65,14 @@
     },
     {
       "includes": [
+        "frontend/src/app/agents/**/*.tsx",
+        "frontend/src/app/llm/proxies/**/*.tsx",
+        "frontend/src/app/mcp/gateways/**/*.tsx"
+      ],
+      "plugins": ["./biome-plugins/no-arbitrary-text-size.grit"]
+    },
+    {
+      "includes": [
         "**/*.ts",
         "**/*.tsx",
         "!**/*.ee.ts",

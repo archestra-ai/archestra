@@ -82,6 +82,12 @@
   --shadow-opacity: var(--shadow-opacity);
   --color-shadow-color: var(--shadow-color);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-tone-down: var(--tone-down);
+  --color-tone-down-foreground: var(--tone-down-foreground);
+  --color-tone-attention: var(--tone-attention);
+  --color-tone-attention-foreground: var(--tone-attention-foreground);
+  --color-tone-progress: var(--tone-progress);
+  --color-tone-progress-foreground: var(--tone-progress-foreground);
 }
 
 /* Base styles and defaults - theme classes override --radius */
@@ -109,6 +115,86 @@
   --tracking-normal: 0em;
   --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
   --scrollbar-thumb-hover: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+}
+
+/* ── Status tones ──────────────────────────────────────────────────────────
+   The colour half of `lib/design/status-tone.ts`. Consumed as Tailwind
+   utilities (`bg-tone-down/12`, `text-tone-down-foreground`); read that module
+   for which tone means what.
+
+   Each tone is one hue plus one recipe, and the recipe is the same for all
+   three: a 12% tint of the hue for the fill, and for the text that hue mixed
+   45% into the theme's own `--foreground`, then pushed 22% towards
+   `--tone-ink`. The push is what makes one recipe work across all 48 palettes:
+   several themes ship a `--foreground` with only ~5:1 on their own `--card`,
+   so tinting alone would drop below AA no matter how gently it was done.
+   Pushing past the theme's own foreground buys the tint its headroom back.
+
+   The hues:
+
+   `--tone-down` is `--destructive`, the theme's own alarm colour, so a down
+   badge belongs to the palette it sits in.
+
+   `--tone-progress` is `--muted-foreground`, the theme's own quiet ink, which
+   is what "the system is working on it, nobody needs to act" should read as.
+   It is a tint like the other two rather than an opaque `bg-muted`, which was
+   invisible by construction on a `--muted` surface: the fill was exactly its
+   own backdrop, so the pill was a 1px border around nothing.
+
+   `--tone-attention` is a fixed amber and is the one value here not derived
+   from a theme token, which is a decision rather than an oversight. No theme
+   names a warning colour, and `--destructive` cannot stand in for one: across
+   the 24 palettes it ranges from `oklch(0 0 0)` and `oklch(1 0 0)` (chroma 0,
+   so any hue rotation off it stays grey) through hue 68 to hue 350, so a
+   derived "degraded" would come out grey on some themes and magenta on
+   others. A status amber is a convention rather than a brand decision, and one
+   fixed amber is the only way "degraded" means the same thing on every screen.
+
+   `--tone-ink` is likewise deliberate rather than a token: pure black and pure
+   white are the endpoints of the lightness axis, not colour choices, and no
+   theme names either. Using a theme token here would reintroduce that theme's
+   own contrast ceiling, which is the exact thing the push exists to escape.
+
+   Nothing here overrides a theme's own tokens. An earlier version raised
+   `--muted-foreground` on thirteen palettes so the progress tone could use it
+   as text; running that text through the same push instead makes every palette
+   pass on its own values. Those thirteen themes do still ship a
+   `--muted-foreground` below 4.5:1 for ordinary muted copy (`solarized-dark`
+   light manages 2.52:1), but that is a themes.css problem affecting every
+   muted string in the product, and it should be fixed there on its own terms
+   rather than by a status palette quietly repainting the whole app.
+
+   `tests-integration/status-tone-contrast.spec.ts` measures all of this in a
+   real browser (3 tones x 3 surfaces x 48 palettes) and fails CI below 4.5:1,
+   or when a fill comes out indistinguishable from the surface under it. Badge
+   text is 12px, so WCAG's large-text allowance does not apply. */
+:root {
+  --tone-ink: oklch(0 0 0);
+  --tone-down: var(--destructive);
+  --tone-attention: oklch(0.62 0.15 70);
+  --tone-progress: var(--muted-foreground);
+
+  --tone-down-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--tone-down) 45%, var(--foreground)) 78%,
+    var(--tone-ink)
+  );
+  --tone-attention-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--tone-attention) 45%, var(--foreground)) 78%,
+    var(--tone-ink)
+  );
+  --tone-progress-foreground: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--tone-progress) 45%, var(--foreground)) 78%,
+    var(--tone-ink)
+  );
+}
+
+html.dark {
+  --tone-ink: oklch(1 0 0);
+  /* Dark surfaces need the amber lighter, or the tint reads brown. */
+  --tone-attention: oklch(0.80 0.14 78);
 }
 
 @layer base {

@@ -1,0 +1,45 @@
+// Project-specific Biome (GritQL) lint plugin: type scale guard.
+//
+// Flags `text-[Npx]` anywhere inside a `className`. An arbitrary pixel size is
+// a decision made once, on one screen, against one font, and it does not
+// travel. The frontend accumulated 190 of them across 70 files in twelve
+// different sizes, which is how a product ends up with 141 distinct typography
+// signatures and no two pages agreeing on what a section heading looks like.
+//
+// The replacement is `typeRole` in `frontend/src/lib/design/type-scale.ts`:
+// eight named roles, base 14px, hierarchy carried by weight rather than by
+// size. If none of the eight fits, the answer is a ninth role argued for in
+// that module, not a pixel value inline.
+//
+// The type scale governs six entity surfaces. biome.json scopes this plugin to
+// the three that carry no `text-[Npx]` today, so the rule holds them at zero:
+// agents, LLM proxies and MCP gateways. The other three still have sites to
+// lose before they can be added, and restyling them is its own change:
+//
+//   frontend/src/app/mcp/registry/**/*.tsx       35 sites
+//   frontend/src/app/skills/**/*.tsx              9 sites
+//   frontend/src/components/agent-pages/**/*.tsx  1 site
+//
+// Widen the `includes` list a surface at a time as each reaches zero. A surface
+// that is not listed is not held to the scale, which is the honest state rather
+// than a rule that has to be switched off to get a green build. The rest of the
+// frontend is not held to it either, so this stays a boundary rather than a
+// repo-wide sweep nobody finishes.
+//
+// Only `px` is flagged. `text-[0.8125rem]` and friends are not in use and are
+// no better, but a regex that also banned them would catch `text-[var(--x)]`
+// and other legitimate escapes; add them here if they ever show up.
+//
+// Plugin diagnostics are not suppressible via `biome-ignore`. A genuinely
+// unavoidable size (matching a third-party widget's metrics, say) belongs in a
+// named constant next to the code that needs it, with a comment saying why.
+language js
+
+jsx_attribute(name = $name, value = $value) where {
+  $name <: "className",
+  $value <: r"(?s).*text-\[[0-9]+px\].*",
+  register_diagnostic(
+    span = $value,
+    message = "Arbitrary text sizes do not travel between pages. Use a role from `typeRole` in lib/design/type-scale.ts (page-title, page-description, section-title, label, body, meta, metric, code)."
+  )
+}

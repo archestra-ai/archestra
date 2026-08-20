@@ -166,6 +166,36 @@ describe("GET /api/statistics/users", () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0].userId).toBe(currentUser.id);
   });
+
+  test("rejects a custom timeframe whose bounds are not dates", async () => {
+    // A `custom:` value with unparseable bounds contributes no date predicate
+    // to the query, so accepting it would silently widen the request to every
+    // interaction ever recorded instead of the range the caller asked for.
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:not-a-date_also-not-a-date",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("rejects a custom timeframe that ends before it starts", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:2026-07-31T00:00:00.000Z_2026-07-01T00:00:00.000Z",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("accepts a well-formed custom timeframe", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/users?timeframe=custom:2026-07-01T00:00:00.000Z_2026-07-31T23:59:59.999Z",
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
 });
 
 describe("GET /api/statistics/apps", () => {

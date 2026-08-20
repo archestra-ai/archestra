@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  parseCustomStatisticsTimeframe,
   type StatisticsTimeFrame,
   StatisticsTimeFrameSchema,
 } from "@archestra/shared";
@@ -60,6 +61,7 @@ import {
   useTeamStatistics,
   useUserStatistics,
 } from "@/lib/statistics.query";
+import { formatStatisticsAxisLabel } from "./format-axis-label";
 
 /**
  * Reusable tooltip component for cost charts.
@@ -200,9 +202,9 @@ export default function StatisticsPage() {
     );
     if (success) {
       setTimeframe(data);
-      const customRange = parseCustomTimeframe(data);
-      setCustomFrom(customRange?.from);
-      setCustomTo(customRange?.to);
+      const customRange = parseCustomStatisticsTimeframe(data);
+      setCustomFrom(customRange?.startTime);
+      setCustomTo(customRange?.endTime);
     } else {
       setTimeframe("1h");
       setCustomFrom(undefined);
@@ -250,23 +252,21 @@ export default function StatisticsPage() {
   }, [customFrom, customTo, handleTimeframeChange]);
 
   const getTimeframeDisplay = useCallback((tf: StatisticsTimeFrame) => {
-    if (tf.startsWith("custom:")) {
-      const value = tf.replace("custom:", "");
-      const [fromDate, toDate] = value.split("_");
-      const fromDateTime = new Date(fromDate);
-      const toDateTime = new Date(toDate);
+    // Falls through to the preset labels below when the bounds are unparseable,
+    // rather than formatting an Invalid Date and taking the page down with it.
+    const customRange = parseCustomStatisticsTimeframe(tf);
+    if (customRange) {
+      const { startTime, endTime } = customRange;
+      // A range picked as whole days runs local midnight to 23:59; any other
+      // bound was given an explicit time that belongs in the label.
+      const isWholeDayRange =
+        startTime.getHours() === 0 &&
+        startTime.getMinutes() === 0 &&
+        endTime.getHours() === 23 &&
+        endTime.getMinutes() === 59;
+      const pattern = isWholeDayRange ? "MMM d" : "MMM d, HH:mm";
 
-      const hasCustomTime =
-        fromDateTime.getHours() !== 0 ||
-        fromDateTime.getMinutes() !== 0 ||
-        toDateTime.getHours() !== 23 ||
-        toDateTime.getMinutes() !== 59;
-
-      if (hasCustomTime) {
-        return `${format(fromDateTime, "MMM d, HH:mm")} - ${format(toDateTime, "MMM d, HH:mm")}`;
-      } else {
-        return `${format(fromDateTime, "MMM d")} - ${format(toDateTime, "MMM d")}`;
-      }
+      return `${format(startTime, pattern)} - ${format(endTime, pattern)}`;
     }
     switch (tf) {
       case "1h":
@@ -288,15 +288,8 @@ export default function StatisticsPage() {
     }
   }, []);
 
-  // Format timestamp for display based on timeframe
   const formatTimestamp = useCallback(
-    (timestamp: string) => {
-      const date = new Date(timestamp);
-      if (timeframe === "1h" || timeframe === "24h") {
-        return format(date, "HH:mm");
-      }
-      return format(date, "MMM d");
-    },
+    (timestamp: string) => formatStatisticsAxisLabel(timestamp, timeframe),
     [timeframe],
   );
 
@@ -1659,28 +1652,4 @@ function StatisticsTablePanel({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-function parseCustomTimeframe(timeframe: StatisticsTimeFrame):
-  | {
-      from: Date;
-      to: Date;
-    }
-  | undefined {
-  if (!timeframe.startsWith("custom:")) {
-    return undefined;
-  }
-
-  const [from, to] = timeframe.replace("custom:", "").split("_");
-  if (!from || !to) {
-    return undefined;
-  }
-
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
-  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-    return undefined;
-  }
-
-  return { from: fromDate, to: toDate };
 }

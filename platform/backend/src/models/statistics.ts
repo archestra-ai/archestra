@@ -1,4 +1,9 @@
-import type { PaginationQuery, StatisticsTimeFrame } from "@archestra/shared";
+import {
+  getStatisticsBucketIntervalMinutes,
+  type PaginationQuery,
+  parseCustomStatisticsTimeframe,
+  type StatisticsTimeFrame,
+} from "@archestra/shared";
 import {
   type AnyColumn,
   and,
@@ -43,33 +48,6 @@ import AgentTeamModel from "./agent-team";
 
 class StatisticsModel {
   /**
-   * Parse custom timeframe to get start and end dates
-   */
-  private static parseCustomTimeframe(
-    timeframe: string,
-  ): { startTime: Date; endTime: Date } | null {
-    if (!timeframe.startsWith("custom:")) {
-      return null;
-    }
-
-    const timeframeValue = timeframe.replace("custom:", "");
-    const [startTimeStr, endTimeStr] = timeframeValue.split("_");
-
-    if (!startTimeStr || !endTimeStr) {
-      return null;
-    }
-
-    const startTime = new Date(startTimeStr);
-    const endTime = new Date(endTimeStr);
-
-    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-      return null;
-    }
-
-    return { startTime, endTime };
-  }
-
-  /**
    * Convert timeframe to SQL interval or return null for custom timeframes
    */
   private static getTimeframeInterval(
@@ -110,7 +88,7 @@ class StatisticsModel {
    */
   private static getTimeBucket(timeframe: StatisticsTimeFrame): string {
     if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
-      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+      const customRange = parseCustomStatisticsTimeframe(timeframe);
       if (!customRange) return "hour";
 
       const durationMs =
@@ -150,52 +128,6 @@ class StatisticsModel {
   }
 
   /**
-   * Get time bucket interval in minutes for custom grouping
-   */
-  private static getBucketIntervalMinutes(
-    timeframe: StatisticsTimeFrame,
-  ): number {
-    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
-      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
-      if (!customRange) return 60;
-
-      const durationMs =
-        customRange.endTime.getTime() - customRange.startTime.getTime();
-      const durationHours = durationMs / (1000 * 60 * 60);
-
-      if (durationHours <= 2) return 5; // 5-minute buckets for short periods
-      if (durationHours <= 48) return 60; // 1-hour buckets for up to 2 days
-      if (durationHours <= 720) return 1440; // 1-day buckets for up to 30 days
-      return 10080; // 1-week buckets for longer periods
-    }
-
-    switch (timeframe) {
-      case "5m":
-        return 1; // 1-minute buckets for 5-minute range
-      case "15m":
-        return 1; // 1-minute buckets for 15-minute range
-      case "30m":
-        return 5; // 5-minute buckets for 30-minute range
-      case "1h":
-        return 5; // 5-minute buckets
-      case "24h":
-        return 60; // 1-hour buckets
-      case "7d":
-        return 360; // 6-hour buckets
-      case "30d":
-        return 1440; // 1-day buckets
-      case "90d":
-        return 4320; // 3-day buckets
-      case "12m":
-        return 10080; // 1-week buckets
-      case "all":
-        return 43200; // 1-month buckets (30 days)
-      default:
-        return 60; // 1-hour buckets
-    }
-  }
-
-  /**
    * Round a timestamp down to the start of its bucket.
    *
    * Buckets are aligned to whole multiples of the interval measured from the
@@ -226,13 +158,13 @@ class StatisticsModel {
     timeframe: StatisticsTimeFrame,
     groupByField: keyof T,
   ): T[] {
-    const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
+    const intervalMinutes = getStatisticsBucketIntervalMinutes(timeframe);
 
-    // If the interval is standard (60 minutes or more), no custom grouping needed.
+    // Nothing to regroup when SQL already truncated to the final bucket width.
     // Still coerce numeric fields since PostgreSQL DOUBLE PRECISION / DECIMAL
     // values are returned as strings by node-postgres, which causes Zod schema
     // validation failures (z.number() rejects string values).
-    if (intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d") {
+    if (!StatisticsModel.needsRebucketing(timeframe, intervalMinutes)) {
       return timeSeriesData.map((row) => ({
         ...row,
         requests: Number(row.requests) || 0,
@@ -308,7 +240,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<TeamStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are not agent admins
@@ -355,29 +286,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange =
-                  StatisticsModel.parseCustomTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -476,7 +385,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<AgentStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -525,29 +433,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange =
-                  StatisticsModel.parseCustomTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -618,7 +504,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<ModelStatistics[]> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -657,29 +542,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange =
-                  StatisticsModel.parseCustomTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -1287,7 +1150,6 @@ class StatisticsModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<CostSavingsStatistics> {
-    const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     // Get accessible agent IDs for users that are non-agent admins
@@ -1344,29 +1206,7 @@ class StatisticsModel {
       )
       .where(
         and(
-          ...(interval
-            ? [
-                gte(
-                  schema.interactionsTable.createdAt,
-                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-                ),
-              ]
-            : (() => {
-                const customRange =
-                  StatisticsModel.parseCustomTimeframe(timeframe);
-                return customRange
-                  ? [
-                      gte(
-                        schema.interactionsTable.createdAt,
-                        customRange.startTime,
-                      ),
-                      lte(
-                        schema.interactionsTable.createdAt,
-                        customRange.endTime,
-                      ),
-                    ]
-                  : [];
-              })()),
+          ...StatisticsModel.timeframeConditions(timeframe),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -1391,16 +1231,18 @@ class StatisticsModel {
       subscriptionCost: number;
     }
 
-    const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
+    const intervalMinutes = getStatisticsBucketIntervalMinutes(timeframe);
 
     // Group by custom intervals if needed
     const grouped = new Map<string, CostSavingsRow>();
 
     for (const row of rawTimeSeriesData) {
-      const bucketKey =
-        intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d"
-          ? row.timeBucket
-          : StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes);
+      const bucketKey = StatisticsModel.needsRebucketing(
+        timeframe,
+        intervalMinutes,
+      )
+        ? StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes)
+        : row.timeBucket;
 
       if (!grouped.has(bucketKey)) {
         grouped.set(bucketKey, {
@@ -1499,6 +1341,25 @@ class StatisticsModel {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
+   * Whether the rows coming back from SQL still have to be merged into wider
+   * buckets in JS.
+   *
+   * `getTimeBucket` can only ask `DATE_TRUNC` for a whole calendar unit, so a
+   * timeframe whose bucket is a multiple of one — 7d's six hours cut from
+   * hourly rows, 90d's three days cut from daily rows, and every sub-hour
+   * timeframe, cut from per-minute rows — arrives finer than it should be and
+   * is regrouped here. For the rest, the SQL truncation is already the final
+   * bucket. Both bucketing paths ask this so they cannot disagree about which
+   * rows are already final.
+   */
+  private static needsRebucketing(
+    timeframe: StatisticsTimeFrame,
+    intervalMinutes: number,
+  ): boolean {
+    return intervalMinutes < 60 || timeframe === "7d" || timeframe === "90d";
+  }
+
+  /**
    * WHERE conditions restricting a table to a timeframe, covering both the
    * relative presets and `custom:<start>_<end>` ranges. Defaults to
    * `interactions.created_at`; pass another timestamp column to bound a
@@ -1514,9 +1375,14 @@ class StatisticsModel {
       return [gte(column, sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`)];
     }
 
-    const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+    const customRange = parseCustomStatisticsTimeframe(timeframe);
     if (!customRange) {
-      return [];
+      // Fail closed. `StatisticsTimeFrameSchema` rejects unparseable custom
+      // ranges at the API boundary, so this is unreachable from a route — but
+      // returning no conditions would drop the date predicate from `and(...)`
+      // and silently turn a bounded request into an unbounded scan of whatever
+      // table it bounds. An impossible condition is the safe answer.
+      return [sql`FALSE`];
     }
     return [
       gte(column, customRange.startTime),

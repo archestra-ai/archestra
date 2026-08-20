@@ -1844,13 +1844,17 @@ function normalizeChatCompletionsQuirks(request: OpenAiRequest): OpenAiRequest {
 function normalizeEmptyAssistantContent(request: OpenAiRequest): OpenAiRequest {
   const needsFix = request.messages.some(
     (m) =>
-      m.role === "assistant" && Array.isArray(m.content) && m.content.length === 0,
+      m.role === "assistant" &&
+      Array.isArray(m.content) &&
+      m.content.length === 0,
   );
   if (!needsFix) return request;
   return {
     ...request,
     messages: request.messages.map((m) =>
-      m.role === "assistant" && Array.isArray(m.content) && m.content.length === 0
+      m.role === "assistant" &&
+      Array.isArray(m.content) &&
+      m.content.length === 0
         ? { ...m, content: null }
         : m,
     ),

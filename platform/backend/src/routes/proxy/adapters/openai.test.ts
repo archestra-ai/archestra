@@ -1085,7 +1085,6 @@ describe("execute custom-tool normalization", () => {
     expect(request.tools?.[1]).toEqual(flatCustomTool);
   });
 
-
   test("nulls out empty assistant content arrays before forwarding", async () => {
     // Cursor sends assistant tool-call turns with content: []; OpenAI rejects
     // the empty array ("Expected an array with minimum length 1").

@@ -23,6 +23,8 @@ import type {
   EmbeddingInput,
   EmbeddingPurpose,
 } from "./types";
+import { VoyageEmbeddingError, VoyagePartialEmbeddingError } from "./voyage";
+import { findVoyageEmbeddingModel } from "./voyage-models";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
 export { PartialEmbeddingError };
@@ -35,6 +37,8 @@ export {
   CoherePartialEmbeddingError,
   GeminiEmbeddingError,
   OpenAIEmbeddingError,
+  VoyageEmbeddingError,
+  VoyagePartialEmbeddingError,
 };
 
 /**
@@ -151,6 +155,10 @@ export function getEmbeddingClientInputModalities(
     const entry = findCohereEmbeddingModel(model);
     return entry ? [...entry.inputModalities] : ["text"];
   }
+  if (provider === "voyage") {
+    const entry = findVoyageEmbeddingModel(model);
+    return entry ? [...entry.inputModalities] : ["text"];
+  }
   return ["text"];
 }
 
@@ -158,7 +166,7 @@ export function getEmbeddingClientInputModalities(
  * Image MIME types the embedding client for `provider` can send to `model`, or
  * `null` for no per-format restriction. Only meaningful when the resolved
  * input modalities include "image": Bedrock's multimodal models and Gemini's
- * embedding API take JPEG/PNG only, Cohere's direct API adds WebP/GIF
+ * embedding API take JPEG/PNG only, Cohere's direct API and Voyage add WebP/GIF
  * (anything else is a provider error that fails the document). Connectors
  * skip other formats at ingestion and the embedder skips them at embed time.
  */
@@ -174,6 +182,12 @@ export function getEmbeddingClientAcceptedImageMimeTypes(
   }
   if (provider === "cohere") {
     const entry = findCohereEmbeddingModel(model);
+    return entry?.acceptedImageMimeTypes
+      ? [...entry.acceptedImageMimeTypes]
+      : null;
+  }
+  if (provider === "voyage") {
+    const entry = findVoyageEmbeddingModel(model);
     return entry?.acceptedImageMimeTypes
       ? [...entry.acceptedImageMimeTypes]
       : null;
@@ -224,7 +238,8 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
     error instanceof BedrockEmbeddingError ||
     error instanceof CohereEmbeddingError ||
     error instanceof GeminiEmbeddingError ||
-    error instanceof OpenAIEmbeddingError
+    error instanceof OpenAIEmbeddingError ||
+    error instanceof VoyageEmbeddingError
   ) {
     return error.status === 429 || error.status >= 500;
   }

@@ -1,5 +1,9 @@
+"use client";
+
 import type { Permissions } from "@archestra/shared";
 import type { ReactNode } from "react";
+import { createContext, useContext, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -88,10 +92,12 @@ export function SettingsSaveBar({
   onCancel,
   disabledSave,
 }: SettingsSaveBarProps) {
+  const slot = useContext(SaveBarSlotContext);
+
   if (!hasChanges) return null;
 
-  return (
-    <div className="flex gap-3 sticky bottom-4 bg-background p-4 rounded-lg border border-border shadow-lg">
+  const bar = (
+    <div className="flex gap-3 bg-background p-4 rounded-lg border border-border shadow-lg">
       <PermissionButton
         permissions={permissions}
         onClick={onSave}
@@ -104,6 +110,15 @@ export function SettingsSaveBar({
       </Button>
     </div>
   );
+
+  // Inside a stack the bar belongs to the stack's slot, not to wherever the
+  // page declared it. Outside one there is nothing to move it into, so it
+  // sticks from where it stands.
+  return slot ? (
+    createPortal(bar, slot)
+  ) : (
+    <div className="sticky bottom-4 z-10">{bar}</div>
+  );
 }
 
 interface SettingsSectionStackProps {
@@ -115,5 +130,31 @@ export function SettingsSectionStack({
   children,
   className,
 }: SettingsSectionStackProps) {
-  return <div className={cn("space-y-5", className)}>{children}</div>;
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+
+  return (
+    <div className={cn("space-y-5", className)}>
+      <SaveBarSlotContext.Provider value={slot}>
+        {children}
+      </SaveBarSlotContext.Provider>
+      {/* Every save bar on the page renders here rather than at its own place
+          in the stack. `position: sticky` with a `bottom` offset only lifts a
+          box that would otherwise fall below the viewport, so a bar declared
+          between two sections floats only until you scroll level with it and
+          then rides away with the section above — and a second bar declared
+          further down pins to the same offset and covers it. One slot at the
+          end of the stack keeps every bar floating for the whole page and
+          stacks them instead. */}
+      <div
+        ref={setSlot}
+        className="sticky bottom-4 z-10 space-y-3 empty:hidden"
+      />
+    </div>
+  );
 }
+
+/**
+ * The stack's save-bar slot, or null for a bar rendered outside any stack.
+ * Read by {@link SettingsSaveBar}; there is nothing for a page to set.
+ */
+const SaveBarSlotContext = createContext<HTMLDivElement | null>(null);

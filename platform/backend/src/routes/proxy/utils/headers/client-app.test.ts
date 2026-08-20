@@ -1,6 +1,14 @@
-import { CLAUDE_CLIENT_ID, CODEX_CLIENT_ID } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_ID,
+  CODEX_CLIENT_ID,
+  CURSOR_CLIENT_ID,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import { detectClaudeClientId, detectCodexClientId } from "./client-app";
+import {
+  detectClaudeClientId,
+  detectCodexClientId,
+  detectCursorClientId,
+} from "./client-app";
 
 describe("detectClaudeClientId", () => {
   test("detects Claude from an x-anthropic-billing-header system block", () => {
@@ -153,6 +161,31 @@ describe("detectCodexClientId", () => {
         {},
         { client_metadata: { session_id: "not-a-uuid" } },
       ),
+    ).toBeUndefined();
+  });
+});
+
+describe("detectCursorClientId", () => {
+  test("attributes the Cursor User-Agent to the Cursor client id", () => {
+    // Cursor's backend stamps `Cursor/1.0` on every BYOK request — the only
+    // client-identity signal the request carries.
+    expect(detectCursorClientId({ "user-agent": "Cursor/1.0" })).toBe(
+      CURSOR_CLIENT_ID,
+    );
+    // Future version bumps keep matching.
+    expect(detectCursorClientId({ "user-agent": "cursor/2.3" })).toBe(
+      CURSOR_CLIENT_ID,
+    );
+  });
+
+  test("does not attribute non-Cursor user agents", () => {
+    expect(detectCursorClientId({})).toBeUndefined();
+    expect(
+      detectCursorClientId({ "user-agent": "OpenAI/Python 1.0" }),
+    ).toBeUndefined();
+    // Only the full leading product token counts.
+    expect(
+      detectCursorClientId({ "user-agent": "Precursor/1.0" }),
     ).toBeUndefined();
   });
 });

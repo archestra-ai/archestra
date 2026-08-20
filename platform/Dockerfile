@@ -49,6 +49,8 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
+    go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
     # Versions must satisfy x/net@v0.56.0 requirements: x/sys >= v0.46.0, x/term >= v0.44.0.
     go get golang.org/x/sys@v0.46.0 && \
@@ -92,7 +94,10 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
     go get golang.org/x/mod@v0.40.0 && \
-    go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
+    # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
+    # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
+    # same `go get` would make go resolve the conflict by downgrading go-archive below 0.3.0.
+    go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
     go get github.com/containerd/containerd/v2@v2.2.5 && \

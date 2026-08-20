@@ -1,7 +1,9 @@
 import {
   type archestraApiTypes,
+  type ChatProvider,
   isIntegrationHidden,
   isSupportedProvider,
+  providerSupportsChat,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -82,10 +84,14 @@ export function getConnectableProviders(
       }
     | null
     | undefined,
-): SupportedProvider[] {
+): ChatProvider[] {
   const overrides = organization?.modelProviderOverrides ?? null;
   return SupportedProviders.filter(
-    (provider) => !isIntegrationHidden(overrides, provider),
+    (provider): provider is ChatProvider =>
+      // Embeddings-only providers serve no chat endpoint to connect a client
+      // to, so they are never offered here however the overrides are set.
+      providerSupportsChat(provider) &&
+      !isIntegrationHidden(overrides, provider),
   );
 }
 

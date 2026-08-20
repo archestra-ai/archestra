@@ -37,6 +37,9 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   "github-copilot": "github-copilot",
   "microsoft-365-copilot": "microsoft-365-copilot",
   archestra: "archestra",
+  // models.dev has no Voyage provider; this is the monochrome mark from
+  // @lobehub/icons-static-svg, same source as vllm/microsoft-365-copilot.
+  voyage: "voyage",
 };
 
 export function providerLogoUrl(provider: SupportedProvider): string {

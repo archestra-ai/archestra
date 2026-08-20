@@ -693,6 +693,7 @@ async function syncModelsForApiKey(
  */
 function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
+    voyage: "Voyage AI",
     anthropic: "Anthropic",
     // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     archestra: "Archestra",

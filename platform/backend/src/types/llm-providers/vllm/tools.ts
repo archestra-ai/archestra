@@ -57,6 +57,31 @@ const CustomToolSchema = z
   })
   .describe("A custom tool definition");
 
+const ResponsesStyleCustomToolSchema = z
+  .object({
+    type: z.enum(["custom"]),
+    name: z.string().describe("The name of the custom tool"),
+    description: z.string().optional().describe("Description of the tool"),
+    format: z
+      .union([
+        z.object({
+          type: z.enum(["text"]).describe("Unconstrained text format"),
+        }),
+        z.object({
+          type: z.enum(["grammar"]),
+          definition: z.string().describe("The grammar definition"),
+          syntax: z
+            .enum(["lark", "regex"])
+            .describe("The syntax of the grammar"),
+        }),
+      ])
+      .optional()
+      .describe("The input format for the custom tool"),
+  })
+  .describe(
+    "A custom tool in the flat Responses-API shape (see the OpenAI provider's ResponsesStyleCustomToolSchema)",
+  );
+
 const AllowedToolsSchema = z
   .object({
     mode: z.enum(["auto", "required"]).describe(`
@@ -85,7 +110,7 @@ const NamedToolChoiceSchema = z
   .describe("Named function tool choice");
 
 export const ToolSchema = z
-  .union([FunctionToolSchema, CustomToolSchema])
+  .union([FunctionToolSchema, CustomToolSchema, ResponsesStyleCustomToolSchema])
   .describe("A tool definition");
 
 export const ToolChoiceOptionSchema = z

@@ -18,6 +18,7 @@ import {
 } from "@/clients/models-dev-client";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
+import { findVoyageEmbeddingModel } from "@/knowledge-base/embedding-clients/voyage-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -323,7 +324,7 @@ export function buildModelsToUpsert(params: {
     }
   }
 
-  return [...uniqueModels.values()].map((model) => {
+  const built = [...uniqueModels.values()].map((model) => {
     // Bedrock/Azure model ids don't match models.dev keys, so derive pricing and
     // capabilities from the underlying vendor entry.
     const isReseller = provider === "bedrock" || provider === "azure";
@@ -415,7 +416,207 @@ export function buildModelsToUpsert(params: {
       lastSyncedAt: new Date(),
     };
   });
+
+  return withDistinctDescriptions(built);
 }
+
+/**
+ * Give every model in a picker response a display name of its own, using the
+ * same suffix convention as the sync-time pass below.
+ *
+ * The sync-time pass alone can't guarantee distinct names at read time: it
+ * only sees one API key's catalog per sync, while `models` rows are global.
+ * Two keys of the same provider can serve different subsets — one catalog
+ * lists only `gpt-4.1`, another lists it beside `gpt-4.1-2025-04-14` — so a
+ * sync can refresh one member of a colliding pair without ever seeing the
+ * other, and rows written before the sync-time pass existed keep their
+ * colliding names until their next sync. This pass runs on what a response
+ * actually offers side by side, so the picker never renders two rows a user
+ * can't tell apart, whatever vintage the stored names are.
+ *
+ * Grouped per provider: model ids are only unique within a provider, and the
+ * UI groups the list by provider, so a name shared across providers (openai
+ * and azure both serving "GPT-4o") is not a collision.
+ */
+export function withDistinctDisplayNames<
+  T extends {
+    /** The provider-facing model id (`gpt-4.1-2025-04-14`). */
+    id: string;
+    provider: SupportedProvider;
+    displayName: string;
+  },
+>(models: T[]): T[] {
+  const entriesByProvider = new Map<
+    SupportedProvider,
+    Array<{ modelId: string; name: string }>
+  >();
+  for (const { provider, id, displayName } of models) {
+    const entries = entriesByProvider.get(provider);
+    const entry = { modelId: id, name: displayName };
+    if (entries) {
+      entries.push(entry);
+    } else {
+      entriesByProvider.set(provider, [entry]);
+    }
+  }
+
+  const suffixesByProvider = new Map<SupportedProvider, Map<string, string>>();
+  for (const [provider, entries] of entriesByProvider) {
+    const suffixes = contestedNameSuffixes(entries);
+    if (suffixes.size > 0) {
+      suffixesByProvider.set(provider, suffixes);
+    }
+  }
+  if (suffixesByProvider.size === 0) {
+    return models;
+  }
+
+  return models.map((model) => {
+    const suffix = suffixesByProvider.get(model.provider)?.get(model.id);
+    return suffix
+      ? { ...model, displayName: `${model.displayName} (${suffix})` }
+      : model;
+  });
+}
+
+/**
+ * Give every model in a provider's catalog a display name of its own.
+ *
+ * Two rows arrive sharing a name from two directions. The registry keys a model
+ * family by its undated id, so a provider that lists both the moving alias and
+ * a pinned snapshot — OpenAI serves `gpt-4.1` and `gpt-4.1-2025-04-14` side by
+ * side — has the snapshot borrow the family's name through the date-stripped
+ * fallback in `registryLookupCandidates`. And the registry names distinct ids
+ * alike of its own accord: `gemini-3-pro-image` and `gemini-3-pro-image-preview`
+ * are both "Nano Banana Pro". Either way every model picker renders rows a user
+ * cannot tell apart, and choosing between them is a coin flip.
+ *
+ * A colliding row is suffixed with the part of its id the rest of the group
+ * does not share, reproducing the convention the registry uses for the
+ * snapshots it names itself ("GPT-4o (2024-08-06)"). The row whose id is the
+ * group's shared stem keeps the bare name, and a name nothing else answers to
+ * is left alone — so a provider listing a dated id and no alias for it
+ * (Anthropic publishes only `claude-sonnet-4-5-20250929`) is untouched.
+ *
+ * Scoped to one provider catalog because that is the scope of the confusion:
+ * these are the rows a picker offers side by side. It is also idempotent —
+ * the name is re-derived from the registry on every sync, never from the
+ * previously stored one — so a decoration can never stack up across syncs.
+ */
+function withDistinctDescriptions(models: CreateModel[]): CreateModel[] {
+  const suffixes = contestedNameSuffixes(
+    models.map(({ modelId, description }) => ({
+      modelId,
+      name: description ?? null,
+    })),
+  );
+  if (suffixes.size === 0) {
+    return models;
+  }
+
+  return models.map((model) => {
+    const suffix = suffixes.get(model.modelId);
+    return suffix
+      ? { ...model, description: `${model.description} (${suffix})` }
+      : model;
+  });
+}
+
+/**
+ * The distinguisher each contested row should be suffixed with, keyed by model
+ * id — empty for uncontested rows and for the row whose id is exactly the
+ * group's shared stem (it keeps the bare name). Callers pass one provider's
+ * rows at a time: model ids are only unique within a provider, and models from
+ * different providers are never shown side by side under one name.
+ */
+function contestedNameSuffixes(
+  entries: Array<{ modelId: string; name: string | null }>,
+): Map<string, string> {
+  const modelIdsByName = new Map<string, string[]>();
+  for (const { name, modelId } of entries) {
+    if (!name) {
+      // A nameless row already falls back to its own id for display.
+      continue;
+    }
+    const modelIds = modelIdsByName.get(name);
+    if (modelIds) {
+      modelIds.push(modelId);
+    } else {
+      modelIdsByName.set(name, [modelId]);
+    }
+  }
+
+  const suffixes = new Map<string, string>();
+  for (const modelIds of modelIdsByName.values()) {
+    if (modelIds.length <= 1) {
+      continue;
+    }
+    for (const [modelId, distinguisher] of distinguishModelIds(modelIds)) {
+      if (distinguisher) {
+        suffixes.set(modelId, distinguisher);
+      }
+    }
+  }
+  return suffixes;
+}
+
+/**
+ * What sets each of these model ids apart: everything past the leading tokens
+ * they all share, punctuated the way the id itself is.
+ *
+ * Whole tokens only. `claude-opus-4-thinking:32000` and `…:32768` share
+ * characters up to "32", and labelling them "(000)" and "(768)" would name
+ * something no provider ever published. The id that is exactly the shared stem
+ * gets an empty distinguisher and keeps its bare name.
+ *
+ * Ids that tokenise identically (`a-b` and `a.b`) leave two rows indistinct, so
+ * the whole group falls back to raw ids, which always tell them apart.
+ */
+function distinguishModelIds(modelIds: string[]): Map<string, string> {
+  // Splitting on a capturing group keeps the separators, so a distinguisher is
+  // rebuilt with the punctuation its own id used.
+  const partsByModelId = modelIds.map(
+    (modelId) => [modelId, modelId.split(MODEL_ID_SEPARATOR)] as const,
+  );
+  const sharedTokens = countSharedLeadingTokens(
+    partsByModelId.map(([, parts]) => parts),
+  );
+
+  const distinguishers = new Map(
+    partsByModelId.map(([modelId, parts]) => [
+      modelId,
+      // Tokens sit at even indices, each preceded by its separator at the odd
+      // index below it — so this drops the shared run and its trailing
+      // separator in one cut.
+      parts.slice(sharedTokens * 2).join(""),
+    ]),
+  );
+
+  const distinct = new Set(distinguishers.values());
+  return distinct.size === distinguishers.size
+    ? distinguishers
+    : new Map(modelIds.map((modelId) => [modelId, modelId]));
+}
+
+/** How many leading tokens every one of these split model ids has in common. */
+function countSharedLeadingTokens(partsPerModelId: string[][]): number {
+  const [first, ...rest] = partsPerModelId;
+  let shared = 0;
+  while (shared * 2 < first.length) {
+    const token = first[shared * 2];
+    if (rest.some((parts) => parts[shared * 2] !== token)) {
+      break;
+    }
+    shared++;
+  }
+  return shared;
+}
+
+/**
+ * The punctuation providers build model ids out of — `gpt-4.1-nano`,
+ * `openai.gpt-oss-120b-1:0`, `google/gemini-3-pro-image`.
+ */
+const MODEL_ID_SEPARATOR = /([-._:/])/;
 
 /**
  * The one place the size threshold is applied. Null (not `true`) when the
@@ -497,6 +698,11 @@ function inferEmbeddingDimensions(
   }
   if (provider === "cohere") {
     return findCohereEmbeddingModel(id)?.dimensions ?? null;
+  }
+  // Voyage is embeddings-only, so every model it offers is an embedding model
+  // and the table is the only source for its dimension.
+  if (provider === "voyage") {
+    return findVoyageEmbeddingModel(id)?.dimensions ?? null;
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
@@ -996,6 +1202,22 @@ function normalizeKnownModelCapabilities(params: {
   // below — the KB's Cohere client decides which modalities it drives.
   if (provider === "cohere") {
     const embedding = findCohereEmbeddingModel(modelId);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
+  // KB-supported Voyage embedding models: same reasoning — the KB's Voyage
+  // client is the only thing that drives them, so its table decides the
+  // modalities. Voyage has no chat models at all, so there is no non-embedding
+  // branch to fall through to.
+  if (provider === "voyage") {
+    const embedding = findVoyageEmbeddingModel(modelId);
     if (embedding) {
       return {
         ...capabilities,

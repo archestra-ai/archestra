@@ -585,6 +585,20 @@ function reasoningCompatibleCreateModel(params: {
  * until the corresponding config is added.
  */
 const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
+  // Embeddings-only provider: Voyage publishes no chat API, so there is no chat
+  // model to construct. Reaching here means something resolved a Voyage model
+  // for a conversation despite the catalog tagging every one of them as an
+  // embedding model — fail loudly rather than build a client that would 404 on
+  // every request.
+  voyage: {
+    createModel: () => {
+      throw new Error(
+        "Voyage AI is an embeddings-only provider and cannot serve chat requests",
+      );
+    },
+    defaultBaseUrl: config.llm.voyage.baseUrl,
+  },
+
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 
   anthropic: {

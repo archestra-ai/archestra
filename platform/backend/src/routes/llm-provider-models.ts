@@ -33,7 +33,10 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { modelSyncService } from "@/services/model-sync";
+import {
+  modelSyncService,
+  withDistinctDisplayNames,
+} from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
@@ -278,7 +281,11 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning available LLM models from database",
       );
 
-      return reply.send(visibleModels);
+      // Stored descriptions can still collide at read time — rows synced
+      // before names were disambiguated, or keys whose catalogs each contain
+      // only one member of a colliding pair — so the response gets its own
+      // pass to keep picker rows tellable-apart.
+      return reply.send(withDistinctDisplayNames(visibleModels));
     },
   );
 

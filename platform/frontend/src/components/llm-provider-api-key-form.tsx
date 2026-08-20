@@ -206,6 +206,16 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://cloud.cerebras.ai/platform",
     consoleName: "Cerebras Cloud",
   },
+  voyage: {
+    name: "Voyage AI",
+    icon: "/icons/voyage.png",
+    placeholder: "pa-...",
+    enabled: true,
+    consoleUrl: "https://dashboard.voyageai.com/organization/api-keys",
+    consoleName: "Voyage AI Dashboard",
+    description:
+      "Embeddings only. Voyage serves no chat models, so this key is used to embed knowledge-base documents rather than to answer prompts.",
+  },
   cohere: {
     name: "Cohere",
     icon: "/icons/cohere.png",

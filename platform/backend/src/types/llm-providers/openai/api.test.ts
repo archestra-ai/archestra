@@ -24,6 +24,58 @@ describe("ChatCompletionRequestSchema", () => {
     });
   });
 
+  test("keeps user and stream_options through validation (Cursor session grouping)", () => {
+    // Cursor stamps a stable `user` id on every BYOK request; session
+    // extraction reads it as the openai_user session signal, so stripping it
+    // here silently un-groups every Cursor session.
+    const result = ChatCompletionRequestSchema.safeParse({
+      model: "gpt-5-mini",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+      user: "ff9d1da0167751c3",
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      user: "ff9d1da0167751c3",
+      stream_options: { include_usage: true },
+    });
+  });
+
+  test("accepts a flat Responses-style custom tool (Cursor's ApplyPatch)", () => {
+    // Cursor's BYOK chat-completions requests carry a custom tool in the flat
+    // Responses-API shape — name/format at the top level and grammar fields
+    // inlined — instead of Chat Completions' nested `custom` wrapper. OpenAI
+    // accepts it, so the proxy must not 400 it (was: "body/tools/N Invalid
+    // input" on every Cursor request).
+    const result = ChatCompletionRequestSchema.safeParse({
+      model: "gpt-5-mini",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [
+        {
+          type: "function",
+          function: { name: "Read", parameters: { type: "object" } },
+        },
+        {
+          type: "custom",
+          name: "ApplyPatch",
+          description: "Use this tool to edit files.",
+          format: {
+            type: "grammar",
+            definition: "start: begin_patch hunk end_patch",
+            syntax: "lark",
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.tools?.[1]).toMatchObject({
+      type: "custom",
+      name: "ApplyPatch",
+      format: { syntax: "lark" },
+    });
+  });
+
   test("rejects an unknown reasoning_effort value", () => {
     const result = ChatCompletionRequestSchema.safeParse({
       model: "gpt-5.2",

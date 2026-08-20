@@ -8,6 +8,7 @@ describe("classifyChatSubmitAction", () => {
         status: "ready",
         queueEnabled: true,
         directSendPending: false,
+        isCompacting: false,
       }),
     ).toBe("send");
   });
@@ -19,6 +20,7 @@ describe("classifyChatSubmitAction", () => {
           status,
           queueEnabled: true,
           directSendPending: false,
+          isCompacting: false,
         }),
       ).toBe("queue");
     }
@@ -31,6 +33,7 @@ describe("classifyChatSubmitAction", () => {
           status,
           queueEnabled: false,
           directSendPending: false,
+          isCompacting: false,
         }),
       ).toBe("stop");
     }
@@ -46,6 +49,7 @@ describe("classifyChatSubmitAction", () => {
         status: "ready",
         queueEnabled: true,
         directSendPending: true,
+        isCompacting: false,
       }),
     ).toBe("queue");
   });
@@ -58,6 +62,46 @@ describe("classifyChatSubmitAction", () => {
         status: "ready",
         queueEnabled: false,
         directSendPending: true,
+        isCompacting: false,
+      }),
+    ).toBe("send");
+  });
+
+  // A manual `/compact` rewrites the thread over REST, so the SDK status stays
+  // "ready" for its whole duration. Sending into that races the rewrite; the
+  // submit has to queue and drain once compaction settles.
+  it("queues a submit made while a compaction is in progress", () => {
+    expect(
+      classifyChatSubmitAction({
+        status: "ready",
+        queueEnabled: true,
+        directSendPending: false,
+        isCompacting: true,
+      }),
+    ).toBe("queue");
+  });
+
+  it("still queues (not stops) when compaction overlaps a streaming turn", () => {
+    // Auto-compaction runs inside the turn, so both flags are set at once.
+    expect(
+      classifyChatSubmitAction({
+        status: "streaming",
+        queueEnabled: true,
+        directSendPending: false,
+        isCompacting: true,
+      }),
+    ).toBe("queue");
+  });
+
+  it("sends during compaction when there is no conversation to queue into", () => {
+    // Unreachable in practice (compaction needs a conversation), but the
+    // classification must never promise a queue that has nowhere to land.
+    expect(
+      classifyChatSubmitAction({
+        status: "ready",
+        queueEnabled: false,
+        directSendPending: false,
+        isCompacting: true,
       }),
     ).toBe("send");
   });

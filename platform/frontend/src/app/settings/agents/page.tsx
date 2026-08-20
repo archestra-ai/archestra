@@ -343,7 +343,7 @@ export default function AgentSettingsPage() {
                 className="w-80"
                 disabled={isSaving || !hasPermission}
                 hint="Only org-wide agents are shown"
-                personalDefaultOption={{
+                sentinelOption={{
                   value: "__personal__",
                   label: "User's personal agent",
                 }}

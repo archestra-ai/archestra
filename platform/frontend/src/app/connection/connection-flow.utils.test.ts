@@ -1,4 +1,8 @@
-import { SupportedProviders } from "@archestra/shared";
+import {
+  EMBEDDING_ONLY_PROVIDERS,
+  providerSupportsChat,
+  SupportedProviders,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   deriveMcpServerName,
@@ -166,10 +170,19 @@ describe("resolveInitialClientId", () => {
 });
 
 describe("getConnectableProviders", () => {
-  it("offers every provider when the deployment has switched none off", () => {
-    expect(getConnectableProviders({ modelProviderOverrides: null })).toEqual([
-      ...SupportedProviders,
-    ]);
+  it("offers every chat provider when the deployment has switched none off", () => {
+    expect(getConnectableProviders({ modelProviderOverrides: null })).toEqual(
+      SupportedProviders.filter(providerSupportsChat),
+    );
+  });
+
+  it("never offers an embeddings-only provider, which has no chat endpoint", () => {
+    const providers = getConnectableProviders({ modelProviderOverrides: null });
+    for (const provider of EMBEDDING_ONLY_PROVIDERS) {
+      expect(providers).not.toContain(provider);
+    }
+    // Guards the assertion above against silently passing on an empty set.
+    expect(EMBEDDING_ONLY_PROVIDERS.size).toBeGreaterThan(0);
   });
 
   it("drops the providers the deployment switched off", () => {

@@ -2274,6 +2274,13 @@ const config = {
       enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
       baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
     },
+    // Embeddings-only provider: this base URL roots both /v1/embeddings and
+    // /v1/multimodalembeddings; there is no chat endpoint to configure.
+    voyage: {
+      enabled: Boolean(process.env.ARCHESTRA_VOYAGE_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
+    },
     cerebras: {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
@@ -2502,6 +2509,11 @@ const config = {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+    },
+    // Keeps the env-seeded-key naming uniform across providers even though
+    // Voyage serves embeddings rather than chat.
+    voyage: {
+      apiKey: process.env.ARCHESTRA_CHAT_VOYAGE_API_KEY || "",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",

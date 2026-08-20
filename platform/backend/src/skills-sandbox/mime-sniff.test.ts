@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isInlineSafeImageMime, resolveArtifactMime } from "./mime-sniff";
+import {
+  isInlineSafeImageMime,
+  isPdfBuffer,
+  resolveArtifactMime,
+} from "./mime-sniff";
 
 const PNG_HEADER = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
@@ -11,6 +15,7 @@ const GIF89A_HEADER = Buffer.from([
 const WEBP_HEADER = Buffer.from([
   0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
 ]);
+const PDF_HEADER = Buffer.from("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n", "binary");
 
 describe("resolveArtifactMime", () => {
   it.each([
@@ -56,10 +61,38 @@ describe("resolveArtifactMime", () => {
   it("keeps a non-image claim when bytes are unknown", () => {
     expect(
       resolveArtifactMime({
-        buffer: Buffer.from("%PDF-1.4 ..."),
-        claimed: "application/pdf",
+        buffer: Buffer.from("col_a,col_b\n1,2\n"),
+        claimed: "text/csv",
       }),
+    ).toBe("text/csv");
+  });
+
+  it("sniffs a PDF when unclaimed, so the viewer can preview it", () => {
+    expect(
+      resolveArtifactMime({ buffer: PDF_HEADER, claimed: undefined }),
     ).toBe("application/pdf");
+  });
+
+  it("does not promote a mislabelled non-PDF to application/pdf", () => {
+    expect(
+      resolveArtifactMime({
+        buffer: Buffer.from("<html><script>alert(1)</script></html>"),
+        claimed: "text/html",
+      }),
+    ).toBe("text/html");
+  });
+});
+
+describe("isPdfBuffer", () => {
+  it("recognises the %PDF- signature", () => {
+    expect(isPdfBuffer(PDF_HEADER)).toBe(true);
+  });
+
+  it("rejects payloads that merely claim to be one", () => {
+    expect(isPdfBuffer(Buffer.from("<html>not a pdf</html>"))).toBe(false);
+    // "%PDF" without the trailing dash isn't the signature.
+    expect(isPdfBuffer(Buffer.from("%PDF"))).toBe(false);
+    expect(isPdfBuffer(Buffer.alloc(0))).toBe(false);
   });
 });
 

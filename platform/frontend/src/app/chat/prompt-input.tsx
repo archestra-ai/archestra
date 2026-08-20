@@ -724,13 +724,16 @@ const PromptInputContent = ({
   const submitStatus =
     status === "error" || isQueueingSubmit ? "ready" : status;
 
-  // Context compaction normally locks the composer, but when queueing can
-  // absorb the message (live conversation, response in flight) the composer
-  // stays usable: Enter enqueues — the session-level drain already defers to
-  // compaction — and the button keeps its Stop role. Without this, mid-turn
-  // auto-compaction silently swallows Enter and drops keyboard focus, which
-  // reads as "queueing stopped working".
-  const canComposeDuringCompaction = !!conversationId && isResponseInFlight;
+  // Context compaction normally locks the composer, but a live conversation can
+  // always absorb the message into its queue, so the composer stays usable for
+  // the whole compaction: Enter enqueues (classifyChatSubmitAction routes a
+  // submit during compaction to the queue) and the session-level drain holds it
+  // until compaction settles. This covers both shapes — auto-compaction inside
+  // a streaming turn, and a manual `/compact` that runs while the conversation
+  // is otherwise idle. Without it, compaction silently swallows Enter and drops
+  // keyboard focus, which reads as "queueing stopped working". Only the
+  // new-chat composer (nothing to queue into) still locks.
+  const canComposeDuringCompaction = !!conversationId;
   const composerLocked =
     submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
   // Messages queued while a response was in-flight; sent automatically (in

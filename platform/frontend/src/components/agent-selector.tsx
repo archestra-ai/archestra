@@ -205,15 +205,14 @@ function SingleAgentSelector({
                 <CommandItem
                   value={sentinelOption.value}
                   onSelect={() => handleSelect(sentinelOption.value)}
-                  className="justify-between"
                 >
-                  <span>{sentinelOption.label}</span>
                   <Check
                     className={cn(
                       "h-4 w-4",
                       isSentinelSelected ? "opacity-100" : "opacity-0",
                     )}
                   />
+                  <span>{sentinelOption.label}</span>
                 </CommandItem>
               </CommandGroup>
             )}
@@ -374,15 +373,14 @@ function MultiAgentSelector({
                       <CommandItem
                         value={allOption.label}
                         onSelect={handleSelectAll}
-                        className="justify-between"
                       >
-                        <span>{allOption.label}</span>
                         <Check
                           className={cn(
                             "h-4 w-4",
                             allSelected ? "opacity-100" : "opacity-0",
                           )}
                         />
+                        <span>{allOption.label}</span>
                       </CommandItem>
                     </CommandGroup>
                   )}
@@ -441,18 +439,14 @@ function AgentSelectorGroups({
     <>
       {allOption && (
         <CommandGroup>
-          <CommandItem
-            value={allOption.label}
-            onSelect={allOption.onSelect}
-            className="justify-between"
-          >
-            <span>{allOption.label}</span>
+          <CommandItem value={allOption.label} onSelect={allOption.onSelect}>
             <Check
               className={cn(
                 "h-4 w-4",
                 allOption.selected ? "opacity-100" : "opacity-0",
               )}
             />
+            <span>{allOption.label}</span>
           </CommandItem>
         </CommandGroup>
       )}
@@ -494,48 +488,59 @@ function AgentSelectorItem({
   onSelect: (agentId: string) => void;
 }) {
   return (
-    <CommandItem
-      value={agent.id}
-      onSelect={() => onSelect(agent.id)}
-      className="justify-between"
-    >
-      <AgentSelectorRow agent={agent} showDescription />
+    <CommandItem value={agent.id} onSelect={() => onSelect(agent.id)}>
       <Check
         className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
       />
+      <AgentSelectorRow agent={agent} variant="option" />
     </CommandItem>
   );
 }
 
 function AgentSelectorRow({
   agent,
-  showDescription = false,
+  variant = "trigger",
 }: {
   agent: AgentSelectorAgent;
   /**
-   * Render the agent description as a secondary line — used in the dropdown
-   * list, but not the (compact) trigger button so a selected value stays short.
+   * "option" is a dropdown row: it has room for the description, and stretches
+   * to the full row width so the scope badge pins to the row's right edge —
+   * the selection check leads the row instead of trailing it, precisely so
+   * that edge is the dropdown's own edge and the badges read as a column.
+   * "trigger" is the compact button showing the current value — no
+   * description, and the badge stays beside the name rather than stranded
+   * across the control.
    */
-  showDescription?: boolean;
+  variant?: "trigger" | "option";
 }) {
+  const isOption = variant === "option";
   const owner = getOwnerLabel(agent);
-  const description = showDescription ? agent.description?.trim() : null;
+  const description = isOption ? agent.description?.trim() : null;
 
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span
+      className={cn("flex min-w-0 items-center gap-2", isOption && "flex-1")}
+    >
       <AgentIcon
         icon={agent.icon}
         fallbackType={agent.agentType === "profile" ? "agent" : agent.agentType}
         className="text-muted-foreground"
       />
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1.5",
+            isOption && "justify-between",
+          )}
+        >
           <span className="truncate">{agent.name}</span>
           {agent.scope ? (
-            <ScopeBadge
-              scope={agent.scope}
-              teamNames={agent.teams?.map((team) => team.name)}
-            />
+            <span className="shrink-0">
+              <ScopeBadge
+                scope={agent.scope}
+                teamNames={agent.teams?.map((team) => team.name)}
+              />
+            </span>
           ) : null}
         </span>
         {description && (

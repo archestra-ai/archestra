@@ -16,6 +16,7 @@ const orgProxy: AgentSelectorAgent = {
   name: "Shared Proxy",
   agentType: "llm_proxy",
   scope: "org",
+  description: "Shared across the org",
 };
 
 beforeAll(() => {
@@ -59,6 +60,30 @@ describe("AgentSelector (single, flat)", () => {
 
     expect(screen.getByText("Shared Proxy")).toBeInTheDocument();
     expect(screen.queryByText("owner@example.com")).not.toBeInTheDocument();
+  });
+
+  // The dropdown row has room for the description; the trigger is a compact
+  // control that has to stay one value tall.
+  it("shows an agent's description in its dropdown row but not in the trigger", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value="p2"
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("combobox")).queryByText("Shared across the org"),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("combobox"));
+
+    const option = await screen.findByRole("option", { name: /Shared Proxy/ });
+    expect(within(option).getByText("Shared across the org")).toBeVisible();
   });
 
   it("flat mode lists llm_proxy items that the grouped view would drop", async () => {

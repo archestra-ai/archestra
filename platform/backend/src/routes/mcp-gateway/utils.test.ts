@@ -1452,10 +1452,14 @@ describe("buildKnowledgeSourcesDescription", () => {
     const result = await buildKnowledgeSourcesDescription(agent.id);
 
     expect(result).not.toBeNull();
-    expect(result).toContain(
-      "Query the organization's knowledge sources to retrieve relevant information",
-    );
+    expect(result).toContain("Search the organization's indexed knowledge");
     expect(result).toContain("Pass the user's original query as-is");
+    // The description is the only steering surface a model sees for this tool
+    // (and the text search_tools ranks on), so it must name the content kinds
+    // and the verbs users actually use — a reactive "answer a question you
+    // can't answer from training data" phrasing left "show me …" unserved.
+    expect(result).toContain("images");
+    expect(result).toContain("show");
   });
 
   test("omits 'Connected sources' when no connectors exist", async ({

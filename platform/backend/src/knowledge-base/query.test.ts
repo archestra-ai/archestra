@@ -212,6 +212,63 @@ describe("QueryService", () => {
     });
   });
 
+  test("returns a media chunk as a descriptor plus an out-of-band payload", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "lobsters.webp",
+      content: "# lobsters.webp",
+      contentHash: "hash-query-media",
+      sourceUrl: "https://example.com/lobsters.webp",
+      embeddingStatus: "completed",
+    });
+
+    // A media document is stored as one chunk holding a base64 data URL.
+    const payload = "UklGRgABBBBB";
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: `data:image/webp;base64,${payload}`,
+        chunkIndex: 0,
+        acl: ["org:*"],
+      },
+    ]);
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    await KbChunkModel.updateEmbeddings(
+      [{ chunkId: chunks[0].id, embedding: makeFakeEmbedding(1) }],
+      1536,
+    );
+    embeddingQueue.push(makeFakeEmbedding(1.1));
+
+    const results = await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "show me man with lobsters",
+      userAcl: ["org:*"],
+    });
+
+    expect(results).toHaveLength(1);
+    // The model reads a short descriptor, never the base64 payload.
+    expect(results[0].content).toBe("[image: lobsters.webp (image/webp)]");
+    expect(results[0].content).not.toContain(payload);
+    // The bytes ride out-of-band so a caller can attach them as an image.
+    expect(results[0].media).toEqual({
+      kind: "image",
+      mimeType: "image/webp",
+      data: payload,
+    });
+  });
+
   test("returns empty array when no chunks exist", async ({
     makeOrganization,
     makeKnowledgeBase,

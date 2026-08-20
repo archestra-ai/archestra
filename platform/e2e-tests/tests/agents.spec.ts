@@ -8,51 +8,66 @@ import {
 } from "../utils";
 
 /**
- * Drive the shared creation dialog (AgentDialog) to a submitted POST.
+ * Drive the routed setup wizard (`/<family>/new`, first step of the shared
+ * AgentForm) to a submitted POST, and land on the second wizard step of the
+ * created record.
  *
- * The dialog's trigger, name input, and submit button render before React
- * finishes hydrating, so any interaction landing in that window is silently
- * lost — Playwright sees a visible/enabled element and reports success, but
- * the handler never ran. A longer timeout can't recover a dropped
- * interaction, so each step is driven by its observable end-state and
+ * The list's Create button, the wizard's name input, and its submit render
+ * before React finishes hydrating, so any interaction landing in that window
+ * is silently lost — Playwright sees a visible/enabled element and reports
+ * success, but the handler never ran. A longer timeout can't recover a
+ * dropped interaction, so each step is driven by its observable end-state and
  * retried until that state is reached. (Same pre-hydration class as the
  * skills marketplace fix in #6339.)
+ *
+ * Returns the created record's id, read from the wizard URL.
  */
-async function createViaDialog(
+async function createViaWizard(
   page: Page,
-  dialogTitle: RegExp,
+  listPath: "/agents" | "/llm/proxies" | "/mcp/gateways",
   name: string,
-): Promise<void> {
+): Promise<string> {
   const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
   await waitForElementWithReload(page, createButton);
 
-  const dialog = page.getByRole("dialog", { name: dialogTitle });
-  const nameField = dialog.getByRole("textbox", { name: "Name" });
-  const submitButton = dialog.getByRole("button", { name: "Create" });
+  // Anchored: the list page behind the wizard has a "Search … by name" box,
+  // which a substring match would accept as the name field before the click
+  // has navigated anywhere.
+  const nameField = page.getByRole("textbox", { name: /^Name\b/ });
+  const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
 
-  // 1. Open the dialog — retry the trigger until the name field mounts.
-  //    Guarded on visibility so a landed click is never re-sent through the
-  //    modal overlay (opening the dialog is not idempotent).
+  // 1. Open the wizard — retry the trigger until the name field mounts on
+  //    the /new page. Guarded on the URL so a landed click is never re-sent.
   await expect(async () => {
-    if (!(await nameField.isVisible())) {
+    if (!page.url().includes(`${listPath}/new`)) {
       await createButton.click();
     }
     await expect(nameField).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
 
   // 2. Fill the name — retry until the form actually registered it, which the
-  //    Create button becoming enabled confirms (it is disabled while the name
-  //    is empty). fill() is idempotent, so re-filling after the input hydrates
-  //    is safe and is what flips the button from disabled to enabled.
+  //    Next button becoming enabled confirms (it is disabled while the name
+  //    is empty). fill() is idempotent, so re-filling after the input
+  //    hydrates is safe and is what flips the button from disabled to enabled.
+  const nextButton = page.getByTestId(E2eTestId.AgentSetupNextButton);
   await expect(async () => {
     await nameField.fill(name);
-    await expect(submitButton).toBeEnabled({ timeout: 2_000 });
+    await expect(nextButton).toBeEnabled({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 
-  // 3. Submit — retry the click until the POST is dispatched. waitForRequest
+  // 3. Walk the remaining steps: nothing is written until the last one, whose
+  //    CTA is the Create button. Each Next is a plain state change, so the
+  //    loop ends as soon as the submit is on screen.
+  await expect(async () => {
+    if (await submitButton.isVisible()) return;
+    await nextButton.click();
+    await expect(submitButton).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
+
+  // 4. Create — retry the click until the POST is dispatched. waitForRequest
   //    resolves the instant the handler runs, so a click that landed is
   //    detected immediately and never re-clicked — there is no window in which
-  //    a second agent could be created.
+  //    a second record could be created.
   const createResponsePromise = page.waitForResponse(
     (response) =>
       response.url().includes("/api/agents") &&
@@ -71,7 +86,34 @@ async function createViaDialog(
     expect(await requestDispatched).not.toBeNull();
   }).toPass({ timeout: 20_000 });
   await createResponsePromise;
+
+  // 5. The create lands on the new record's Connect tab.
+  const connectUrl = new RegExp(`${listPath}/([^/?]+)\\?tab=connect`);
+  await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
+  const id = page.url().match(connectUrl)?.[1];
+  if (!id) throw new Error(`No record id in detail URL ${page.url()}`);
+  // The pointer is still where the Create button was — the bottom-right
+  // corner, where the "created" toast now sits and pauses its own dismissal
+  // while hovered, covering whatever lands under it. Park the pointer away.
+  await page.mouse.move(0, 0);
+  return id;
+}
+
+/** The delete flow of a list row: row menu (agents) or button, then confirm. */
+async function deleteFromList(
+  page: Page,
+  { name, confirmLabel }: { name: string; confirmLabel: string },
+) {
+  const rowLocator = page.getByTestId(E2eTestId.AgentsTable).getByTitle(name);
+  await waitForElementWithReload(page, rowLocator, {
+    timeout: 30_000,
+    intervals: [2000, 3000, 5000],
+    checkEnabled: false,
+  });
+  await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${name}`).click();
+  await clickButton({ page, options: { name: confirmLabel } });
+  await expect(rowLocator).not.toBeVisible({ timeout: 10_000 });
 }
 
 test(
@@ -91,30 +133,63 @@ test(
 
     await page.waitForLoadState("domcontentloaded");
 
-    await createViaDialog(page, /Create Agent/i, AGENT_NAME);
+    const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
 
-    // Creation hands off to the agent's connect dialog so the user knows how
-    // to use it; close it (X button — the dialog has no footer) to get back
-    // to the table.
-    const connectDialog = page.getByRole("dialog", {
-      name: new RegExp(`Connect to "${AGENT_NAME}"`, "i"),
+    // The create lands on the Connect tab, which shows the agent's A2A
+    // endpoint so the user knows how to use it.
+    await expect(
+      page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The wizard's steps are the edit page's: Tools & Knowledge is there.
+    await page.getByRole("link", { name: "Edit" }).click();
+    await page.waitForURL(new RegExp(`/agents/${agentId}/edit`), {
+      timeout: 15_000,
     });
-    await expect(connectDialog).toBeVisible({ timeout: 15_000 });
-    await connectDialog.getByRole("button", { name: "Close" }).click();
-    await expect(connectDialog).not.toBeVisible({ timeout: 10_000 });
+    await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
+    await expect(page).toHaveURL(/step=tools/);
+    await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Poll for the agent to appear in the table
+    await goToPage(page, "/agents");
     const agentLocator = page
       .getByTestId(E2eTestId.AgentsTable)
       .getByTitle(AGENT_NAME);
-
     await waitForElementWithReload(page, agentLocator, {
       timeout: 30_000,
       intervals: [2000, 3000, 5000],
       checkEnabled: false,
     });
 
-    // Delete created agent
+    // The whole row opens the detail page, not just the name link: click the
+    // icon cell, which carries no control of its own. Retried until the URL
+    // changes, for the same pre-hydration reason as the wizard steps above.
+    const agentDetailUrl = new RegExp(`/agents/${agentId}$`);
+    // The name cell truncates long names in the DOM and carries the full
+    // name as its title, so find the row by that title, not by text.
+    const rowIconCell = page
+      .getByTestId(E2eTestId.AgentsTable)
+      .locator("tr")
+      .filter({ has: page.getByTitle(AGENT_NAME) })
+      .locator('td[data-column-id="icon"]');
+    await expect(async () => {
+      if (!page.url().match(agentDetailUrl)) {
+        await rowIconCell.click();
+      }
+      await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
+
+    // Delete created agent from the table
+    await goToPage(page, "/agents");
+    await waitForElementWithReload(page, agentLocator, {
+      timeout: 30_000,
+      intervals: [2000, 3000, 5000],
+      checkEnabled: false,
+    });
     await openAgentRowMenu(page, AGENT_NAME);
     await page
       .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
@@ -140,35 +215,22 @@ test(
 
     await page.waitForLoadState("domcontentloaded");
 
-    await createViaDialog(page, /Create LLM Proxy/i, PROXY_NAME);
+    const proxyId = await createViaWizard(page, "/llm/proxies", PROXY_NAME);
 
-    // Creation hands off to the proxy connect dialog (endpoint + auth).
-    const connectDialog = page.getByRole("dialog", {
-      name: new RegExp(`Connect via "${PROXY_NAME}"`, "i"),
-    });
-    await expect(connectDialog).toBeVisible({ timeout: 15_000 });
-    await connectDialog.getByRole("button", { name: "Close" }).click();
-    await expect(connectDialog).not.toBeVisible({ timeout: 10_000 });
-
-    // Poll for the LLM proxy to appear in the table
-    const proxyLocator = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .getByTitle(PROXY_NAME);
-
-    await waitForElementWithReload(page, proxyLocator, {
-      timeout: 30_000,
-      intervals: [2000, 3000, 5000],
-      checkEnabled: false,
+    // The create lands on the proxy's Connect tab (endpoint + auth).
+    await expect(page).toHaveURL(
+      new RegExp(`/llm/proxies/${proxyId}\\?tab=connect`),
+    );
+    await expect(page.getByRole("tab", { name: "Virtual keys" })).toBeVisible({
+      timeout: 15_000,
     });
 
-    // Delete created LLM proxy
-    await page
-      .getByTestId(`${E2eTestId.DeleteAgentButton}-${PROXY_NAME}`)
-      .click();
-    await clickButton({ page, options: { name: "Delete LLM Proxy" } });
-
-    // Wait for deletion to complete
-    await expect(proxyLocator).not.toBeVisible({ timeout: 10000 });
+    // Delete created LLM proxy from the table
+    await goToPage(page, "/llm/proxies");
+    await deleteFromList(page, {
+      name: PROXY_NAME,
+      confirmLabel: "Delete LLM Proxy",
+    });
   },
 );
 
@@ -186,39 +248,25 @@ test(
 
     await page.waitForLoadState("domcontentloaded");
 
-    await createViaDialog(page, /Create MCP Gateway/i, GATEWAY_NAME);
-
-    // Creation hands off to the post-create connect dialog; the primary CTA
-    // lands on /connection with the new gateway pre-selected.
-    const postCreateDialog = page.getByTestId(
-      E2eTestId.PostCreateConnectDialog,
+    const gatewayId = await createViaWizard(
+      page,
+      "/mcp/gateways",
+      GATEWAY_NAME,
     );
-    await expect(postCreateDialog).toBeVisible({ timeout: 15_000 });
-    await page
-      .getByTestId(E2eTestId.PostCreateOpenConnectionGuideButton)
-      .click();
-    await page.waitForURL(/\/connection\?gatewayId=.*&from=create/, {
-      timeout: 15_000,
-    });
+
+    // The create lands on the Connect tab, whose "Open the Connect page" link
+    // lands on /connection with the new gateway pre-selected.
+    await page.getByRole("link", { name: /Open the Connect page/ }).click();
+    await page.waitForURL(
+      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
+      { timeout: 15_000 },
+    );
 
     // Clean up: back to the table and delete the gateway.
     await goToPage(page, "/mcp/gateways");
-    const gatewayLocator = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .getByTitle(GATEWAY_NAME);
-
-    await waitForElementWithReload(page, gatewayLocator, {
-      timeout: 30_000,
-      intervals: [2000, 3000, 5000],
-      checkEnabled: false,
+    await deleteFromList(page, {
+      name: GATEWAY_NAME,
+      confirmLabel: "Delete MCP Gateway",
     });
-
-    await page
-      .getByTestId(`${E2eTestId.DeleteAgentButton}-${GATEWAY_NAME}`)
-      .click();
-    await clickButton({ page, options: { name: "Delete MCP Gateway" } });
-
-    // Wait for deletion to complete
-    await expect(gatewayLocator).not.toBeVisible({ timeout: 10000 });
   },
 );

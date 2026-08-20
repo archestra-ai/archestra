@@ -84,6 +84,7 @@ const withForwardedOrigin = (req: NextRequest) => {
 
 const needsForwardedOrigin = (pathname: string) =>
   pathname.startsWith("/v1/") ||
+  pathname.startsWith("/v2/") ||
   pathname.startsWith("/.well-known/") ||
   pathname.startsWith("/api/");
 
@@ -99,7 +100,11 @@ const shouldLogApiRequest = (req: NextRequest) => {
   }
   // log request before it is proxied via nextjs rewrites
   // see rewrites() config in next.config.ts
-  return pathname.startsWith("/api") || pathname.startsWith("/v1");
+  return (
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/v1") ||
+    pathname.startsWith("/v2")
+  );
 };
 
 const isSamlCallback = (req: NextRequest) => {

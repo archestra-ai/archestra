@@ -434,10 +434,14 @@ vi.mock("@/components/ui/badge", () => ({
 vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
+    asChild,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    asChild?: boolean;
+  }) =>
+    // `asChild` hands the button's place to the caller's element, as the real
+    // Slot does, so a link stays a link instead of nesting inside a button.
+    asChild ? children : <button {...props}>{children}</button>,
 }));
 
 vi.mock("@/components/ui/collapsible", () => ({
@@ -2107,5 +2111,42 @@ describe("AgentForm save payload and failure handling", () => {
     );
     expect(onCreated).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith("Tools were refused");
+  });
+});
+
+describe("AgentForm read-only footer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pendingSaveChanges.mockResolvedValue(undefined);
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: baseAgent.authorId } },
+    } as unknown as ReturnType<typeof useSession>);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
+  });
+
+  it("gives a read-only form an exit instead of no footer at all", async () => {
+    // Reached by URL on a record the viewer may not change: every field is
+    // disabled and there is nothing to save, so without this the only way off
+    // the page was the browser's back button.
+    render(<AgentForm agentType="agent" agent={baseAgent} readOnly />);
+
+    const cancel = await screen.findByRole("link", { name: "Cancel" });
+    expect(cancel).toHaveAttribute("href", `/agents/${baseAgent.id}`);
+    // Nothing that implies a save: the caller's submit row is not rendered.
+    expect(screen.queryByRole("button", { name: /update/i })).toBeNull();
+  });
+
+  it("keeps the caller's own footer when the form is editable", async () => {
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    expect(
+      await screen.findByRole("button", { name: /update/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Cancel" })).toBeNull();
   });
 });

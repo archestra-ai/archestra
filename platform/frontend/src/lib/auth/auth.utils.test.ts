@@ -1,6 +1,10 @@
 import type { Permissions } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
-import { formatMissingPermissions, hasPermissions } from "./auth.utils";
+import {
+  formatMissingPermissions,
+  formatPermissionConstraint,
+  hasPermissions,
+} from "./auth.utils";
 
 describe("hasPermissions", () => {
   it("returns true when no permissions are required", () => {
@@ -59,5 +63,31 @@ describe("formatMissingPermissions", () => {
         mcpGateway: ["team-admin"],
       }),
     ).toContain("Missing permissions:");
+  });
+});
+
+describe("formatPermissionConstraint", () => {
+  it("names the required permission with its resource label", () => {
+    expect(formatPermissionConstraint({ skill: ["update"] })).toBe(
+      "Available to roles with the Skills (update) permission",
+    );
+  });
+
+  it("pluralises the noun once more than one resource is required", () => {
+    expect(
+      formatPermissionConstraint({
+        team: ["read"],
+        mcpGateway: ["team-admin"],
+      }),
+    ).toBe(
+      "Available to roles with the Teams (read), MCP Gateways (team-admin) permissions",
+    );
+  });
+
+  it("keeps a resource's several actions inside its own parentheses", () => {
+    // One resource, so the noun stays singular however many actions it lists.
+    expect(formatPermissionConstraint({ project: ["admin", "delete"] })).toBe(
+      "Available to roles with the Projects (admin, delete) permission",
+    );
   });
 });

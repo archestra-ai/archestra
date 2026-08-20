@@ -59,7 +59,10 @@ import {
   buildBedrockProvider,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import {
+  isVertexAiEnabled,
+  resolveVertexLocation,
+} from "@/clients/gemini-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -1040,7 +1043,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         const { vertexAi } = config.llm.gemini;
         return createVertex({
           project: vertexAi.project,
-          location: vertexAi.location,
+          location: resolveVertexLocation(modelName),
           googleAuthOptions: {
             projectId: vertexAi.project,
             ...(vertexAi.credentialsFile && {

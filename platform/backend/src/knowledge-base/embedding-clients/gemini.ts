@@ -34,9 +34,14 @@ export async function callGeminiEmbedding(params: {
 }): Promise<EmbeddingApiResponse> {
   const { inputs, model, apiKey, baseUrl, dimensions } = params;
 
-  const client = createGoogleGenAIClient(apiKey, "[GeminiEmbedding]", baseUrl);
-
   const modelId = getGeminiEmbeddingModelId(model);
+
+  const client = createGoogleGenAIClient(
+    apiKey,
+    "[GeminiEmbedding]",
+    baseUrl,
+    modelId,
+  );
 
   // Map EmbeddingInput[] to ContentListUnion (PartUnion[]).
   // Strings pass through as-is; image inputs become Part objects with inlineData.

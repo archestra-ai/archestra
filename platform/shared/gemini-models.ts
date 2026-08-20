@@ -29,6 +29,23 @@ const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
 const RETIRED_GEMINI_EMBEDDING_MODELS = new Set(["gemini-embedding-2-preview"]);
 
 /**
+ * Lowest chat generation Vertex AI serves only from its `global` endpoint. The
+ * 2.5 family answers on both global and ordinary regions; from 3.0 on, a
+ * regional host replies 404 ("not found or your project does not have access
+ * to it") and only `locations/global` works. Bumping this is not needed when a
+ * new generation ships — anything above the threshold is already covered.
+ */
+const GEMINI_GLOBAL_ENDPOINT_MIN_VERSION: GeminiVersion = [3, 0];
+
+/**
+ * Lowest `gemini-embedding-N` generation that is global-only. `-001` is served
+ * regionally and is absent from the global catalog; `-2` is the reverse. The
+ * embedding ids carry no dotted version, so they are versioned separately from
+ * {@link GEMINI_GLOBAL_ENDPOINT_MIN_VERSION}.
+ */
+const GEMINI_GLOBAL_ENDPOINT_MIN_EMBEDDING_VERSION = 2;
+
+/**
  * Lowest generation whose chat models think by default. Deliberately its own
  * constant: catalog policy ({@link GEMINI_FAMILY_MIN_VERSION}) can move
  * independently of the thinking capability boundary.
@@ -64,6 +81,46 @@ export function isUsableGeminiCatalogModel(modelId: string): boolean {
   const version = parseGeminiFamilyVersion(id);
   return (
     version !== null && compareVersion(version, GEMINI_FAMILY_MIN_VERSION) >= 0
+  );
+}
+
+/**
+ * True when Vertex AI serves this model only from its `global` endpoint, so a
+ * request pinned to an ordinary region (`us-central1`, …) would 404.
+ *
+ * Three families, three answers, each matching what Vertex actually serves:
+ * - `gemma-*` — Model Garden MaaS, regional only, absent from the global
+ *   catalog entirely. Never global, whatever generation number it carries.
+ * - `gemini-embedding-N` — global from
+ *   {@link GEMINI_GLOBAL_ENDPOINT_MIN_EMBEDDING_VERSION} on.
+ * - `gemini-<major>.<minor>` chat models — global from
+ *   {@link GEMINI_GLOBAL_ENDPOINT_MIN_VERSION} on.
+ *
+ * Only meaningful in Vertex AI mode; the Gemini API (API-key mode) has one
+ * global host and no notion of a location.
+ */
+export function requiresGlobalVertexEndpoint(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+
+  if (!id.startsWith("gemini-")) {
+    return false;
+  }
+
+  if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
+    const generation = Number.parseInt(
+      id.slice(GEMINI_EMBEDDING_PREFIX.length),
+      10,
+    );
+    return (
+      Number.isFinite(generation) &&
+      generation >= GEMINI_GLOBAL_ENDPOINT_MIN_EMBEDDING_VERSION
+    );
+  }
+
+  const version = parseGeminiFamilyVersion(id);
+  return (
+    version !== null &&
+    compareVersion(version, GEMINI_GLOBAL_ENDPOINT_MIN_VERSION) >= 0
   );
 }
 

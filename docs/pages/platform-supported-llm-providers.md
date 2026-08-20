@@ -47,7 +47,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
 - **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API and return `501 Not Implemented`.
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API through the Model Router and return `501 Not Implemented`. This only concerns the router — [Knowledge](/docs/platform-knowledge#image-embedding) embeds with Bedrock and Cohere through its own clients.
 
 ### GitHub Copilot Through the Model Router
 
@@ -237,6 +237,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **Chat API** (`/chat`)
 - **Streaming**
+- **Embed API** (`/v2/embed`) — used by [Knowledge](/docs/platform-knowledge#image-embedding) for Cohere Embed v3 and v4, text and images; not exposed through the proxy
 
 ### Cohere Connection Details
 

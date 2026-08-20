@@ -17,6 +17,7 @@ import {
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
+import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -493,6 +494,9 @@ function inferEmbeddingDimensions(
   }
   if (provider === "gemini" && id === "gemini-embedding-2") {
     return 3072;
+  }
+  if (provider === "cohere") {
+    return findCohereEmbeddingModel(id)?.dimensions ?? null;
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
@@ -986,10 +990,25 @@ function normalizeKnownModelCapabilities(params: {
     }
   }
 
+  // KB-supported Cohere (direct) embedding models: same reasoning as Bedrock
+  // below — the KB's Cohere client decides which modalities it drives.
+  if (provider === "cohere") {
+    const embedding = findCohereEmbeddingModel(modelId);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
   // KB-supported Bedrock embedding models: the KB's own Bedrock client is the
   // only thing that drives them, so its declared modality support outranks
   // whatever the models.dev / cross-provider tiers say about the vendor's model
-  // (Cohere Embed v3 direct also takes images, but that's a different client).
+  // (Cohere Embed direct is driven by the KB's Cohere client, which has its own
+  // table).
   if (provider === "bedrock") {
     const embedding =
       findBedrockEmbeddingModel(modelId) ??

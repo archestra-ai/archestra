@@ -6,8 +6,16 @@ import {
 } from "@/clients/bedrock-credentials";
 import logger from "@/logging";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { getEncoding, truncateToTokens } from "../tokenizer";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
+import {
+  base64DecodedBytes,
+  chunkArray,
+  collectPartialEmbeddingResults,
+  PartialEmbeddingError,
+  toEmbeddingApiResponse,
+  truncateTextInputsToTokens,
+  truncateToChars,
+} from "./shared";
 import type {
   EmbeddingApiResponse,
   EmbeddingInput,
@@ -25,40 +33,22 @@ export class BedrockEmbeddingError extends Error {
 }
 
 /**
- * A fan-out where some independent InvokeModel calls succeeded and others
- * failed. Successful vectors are carried back to the embedder so it can persist
- * them and fail only the affected chunks instead of discarding and rebilling the
- * entire slice on retry.
+ * A Bedrock fan-out where some independent InvokeModel calls succeeded and
+ * others failed; every failure reason is normalized to a `BedrockEmbeddingError`.
  */
-export class BedrockPartialEmbeddingError extends BedrockEmbeddingError {
-  public readonly successes: Array<{
-    index: number;
-    embedding: number[];
-  }>;
-  public readonly failures: Array<{ index: number; reason: unknown }>;
-  public readonly tokens: number;
-
+export class BedrockPartialEmbeddingError extends PartialEmbeddingError {
   constructor(
-    successes: Array<{
-      index: number;
-      embedding: number[];
-    }>,
+    successes: Array<{ index: number; embedding: number[] }>,
     failures: Array<{ index: number; reason: unknown }>,
     tokens: number,
   ) {
-    const orderedFailures = failures
-      .map((failure) => ({
-        ...failure,
-        reason: toBedrockEmbeddingError(failure.reason),
-      }))
-      .sort((a, b) => a.index - b.index);
-    const first =
-      orderedFailures[0]?.reason ?? toBedrockEmbeddingError(undefined);
-    super(first.status, first.message);
+    super({
+      successes,
+      failures,
+      tokens,
+      toTypedError: toBedrockEmbeddingError,
+    });
     this.name = "BedrockPartialEmbeddingError";
-    this.successes = [...successes].sort((a, b) => a.index - b.index);
-    this.failures = orderedFailures;
-    this.tokens = tokens;
   }
 }
 
@@ -109,7 +99,11 @@ export async function callBedrockEmbedding(params: {
           });
       return toEmbeddingApiResponse({ embeddings, tokens, model });
     } catch (err: unknown) {
-      throw toBedrockEmbeddingError(err);
+      // A partial result already carries typed per-input reasons — pass it
+      // through so the embedder can bank the successes.
+      throw err instanceof BedrockPartialEmbeddingError
+        ? err
+        : toBedrockEmbeddingError(err);
     }
   }
 
@@ -195,7 +189,12 @@ async function embedWithTitanMultimodal(params: {
       ? { embeddingConfig: { outputEmbeddingLength: dimensions } }
       : {};
 
-  const prepared = truncateTextInputs({ inputs, model, maxInputTextTokens });
+  const prepared = truncateTextInputsToTokens({
+    inputs,
+    model,
+    maxInputTextTokens,
+    logPrefix: "[BedrockEmbedding]",
+  });
 
   let tokens = 0;
   const settled = await mapWithConcurrency(
@@ -230,6 +229,11 @@ async function embedWithTitanMultimodal(params: {
 
   const partial = collectPartialEmbeddingResults(settled);
   if (partial.failures.length > 0) {
+    // Nothing succeeded: surface the first failure itself — a "partial" error
+    // is reserved for fan-outs with vectors worth banking.
+    if (partial.successes.length === 0) {
+      throw toBedrockEmbeddingError(partial.failures[0].reason);
+    }
     throw new BedrockPartialEmbeddingError(
       partial.successes,
       partial.failures,
@@ -291,10 +295,7 @@ async function embedWithCohere(params: {
     );
   }
 
-  const textBatches: Array<Array<{ index: number; text: string }>> = [];
-  for (let i = 0; i < textEntries.length; i += COHERE_MAX_TEXTS_PER_CALL) {
-    textBatches.push(textEntries.slice(i, i + COHERE_MAX_TEXTS_PER_CALL));
-  }
+  const textBatches = chunkArray(textEntries, COHERE_MAX_TEXTS_PER_CALL);
 
   let tokens = 0;
   const calls: Array<{ indices: number[]; run: () => Promise<void> }> = [
@@ -351,6 +352,11 @@ async function embedWithCohere(params: {
     const successes = embeddings.flatMap((embedding, index) =>
       embedding && !failedIndices.has(index) ? [{ index, embedding }] : [],
     );
+    if (successes.length === 0) {
+      throw toBedrockEmbeddingError(
+        failures.sort((a, b) => a.index - b.index)[0].reason,
+      );
+    }
     throw new BedrockPartialEmbeddingError(successes, failures, tokens);
   }
 
@@ -383,61 +389,6 @@ function cohereVectors(
 }
 
 /**
- * Truncate text inputs to fit a model's hard per-request token limit. We count
- * cl100k tokens (the KB's tokenizer) but the model counts its own, so only a
- * margin-reduced share of the limit is used. Unlike Cohere's server-side
- * `truncate: "END"`, this loses content locally — warn with the count so the
- * degradation is visible.
- */
-function truncateTextInputs(params: {
-  inputs: EmbeddingInput[];
-  model: string;
-  maxInputTextTokens?: number;
-}): EmbeddingInput[] {
-  const { inputs, model, maxInputTextTokens } = params;
-  if (maxInputTextTokens === undefined) {
-    return inputs;
-  }
-  const tokenBudget = Math.floor(maxInputTextTokens * TOKEN_LIMIT_MARGIN);
-  const encoding = getEncoding();
-  let truncatedCount = 0;
-  const prepared = inputs.map((input) => {
-    if (typeof input !== "string") {
-      return input;
-    }
-    const truncated = truncateToTokens(encoding, input, tokenBudget);
-    if (truncated !== input) {
-      truncatedCount++;
-    }
-    return truncated;
-  });
-  if (truncatedCount > 0) {
-    logger.warn(
-      { model, truncatedCount, maxInputTextTokens },
-      "[BedrockEmbedding] Truncated text inputs over the model's token limit",
-    );
-  }
-  return prepared;
-}
-
-/**
- * Truncate a text to a hard character cap. A string of N UTF-16 code units is
- * at most N code points, so slicing by `length` can never exceed a cap the
- * server counts in code points; a trailing lone high surrogate (a split
- * astral character) is stripped rather than sent broken.
- */
-function truncateToChars(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  const truncated = text.slice(0, maxChars);
-  const lastCode = truncated.charCodeAt(truncated.length - 1);
-  return lastCode >= 0xd800 && lastCode <= 0xdbff
-    ? truncated.slice(0, -1)
-    : truncated;
-}
-
-/**
  * Reject an image over Cohere's per-image size limit up front — the provider's
  * own error for an oversized payload is an opaque 400, and the base64 size is
  * known before spending the request.
@@ -446,31 +397,13 @@ function assertCohereImageSize(
   input: { mimeType: string; data: string },
   model: string,
 ): void {
-  const decodedBytes = Math.floor((input.data.length * 3) / 4);
+  const decodedBytes = base64DecodedBytes(input.data);
   if (decodedBytes > COHERE_MAX_IMAGE_BYTES) {
     throw new BedrockEmbeddingError(
       400,
       `Image of ${Math.round(decodedBytes / (1024 * 1024))}MB exceeds the ${Math.round(COHERE_MAX_IMAGE_BYTES / (1024 * 1024))}MB limit of model "${model}"`,
     );
   }
-}
-
-function toEmbeddingApiResponse(params: {
-  embeddings: number[][];
-  tokens: number;
-  model: string;
-}): EmbeddingApiResponse {
-  const { embeddings, tokens, model } = params;
-  return {
-    object: "list",
-    data: embeddings.map((embedding, index) => ({
-      object: "embedding",
-      embedding,
-      index,
-    })),
-    model,
-    usage: { prompt_tokens: tokens, total_tokens: tokens },
-  };
 }
 
 function toBedrockEmbeddingError(err: unknown): BedrockEmbeddingError {
@@ -492,24 +425,6 @@ function toBedrockEmbeddingError(err: unknown): BedrockEmbeddingError {
   return new BedrockEmbeddingError(status, message);
 }
 
-function collectPartialEmbeddingResults(
-  settled: PromiseSettledResult<number[]>[],
-): {
-  successes: Array<{ index: number; embedding: number[] }>;
-  failures: Array<{ index: number; reason: unknown }>;
-} {
-  const successes: Array<{ index: number; embedding: number[] }> = [];
-  const failures: Array<{ index: number; reason: unknown }> = [];
-  settled.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      successes.push({ index, embedding: result.value });
-    } else {
-      failures.push({ index, reason: result.reason });
-    }
-  });
-  return { successes, failures };
-}
-
 // ===== Internal constants =====
 
 /**
@@ -526,10 +441,3 @@ const COHERE_MAX_TEXTS_PER_CALL = 96;
 
 /** Cohere's documented per-image limit (base64-decoded size). */
 const COHERE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-
-/**
- * Share of a model's token limit the local cl100k count may fill. The model's
- * own tokenizer segments differently, so aiming at the exact limit would still
- * trip its ValidationException on unlucky inputs.
- */
-const TOKEN_LIMIT_MARGIN = 0.85;

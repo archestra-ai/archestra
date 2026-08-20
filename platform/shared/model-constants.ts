@@ -43,6 +43,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "bedrock:invoke",
   "bedrock:embeddings",
   "cohere:chat",
+  "cohere:embeddings",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",

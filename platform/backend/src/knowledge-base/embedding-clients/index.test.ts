@@ -18,6 +18,27 @@ import {
   OpenAIEmbeddingError,
 } from "./index";
 
+describe("Cohere direct embedding capability", () => {
+  test("drives text and images for the table's multimodal models, with Cohere's image formats", () => {
+    expect(getEmbeddingClientInputModalities("cohere", "embed-v4.0")).toEqual([
+      "text",
+      "image",
+    ]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("cohere", "embed-english-v3.0"),
+    ).toEqual(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  });
+
+  test("degrades a Cohere model outside the table to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("cohere", "embed-english-v2.0"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("cohere", "embed-english-v2.0"),
+    ).toBeNull();
+  });
+});
+
 describe("Gemini multimodal embedding capability", () => {
   test("enables the stable model with only its embedding image formats", () => {
     expect(
@@ -168,7 +189,6 @@ describe("callEmbedding provider gating", () => {
   test.each([
     "anthropic",
     "archestra",
-    "cohere",
     "cerebras",
     "deepseek",
     "groq",

@@ -77,6 +77,10 @@ import {
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
+import {
+  browserLanguagePreferences,
+  resolveSpeechRecognitionLocale,
+} from "@/lib/chat/speech-locale";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -1358,6 +1362,13 @@ export const PromptInputSpeechButton = ({
   );
   const [isInsecureContext, setIsInsecureContext] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // Set once the recognizer has rejected the requested language and been
+  // restarted on its own default, so the retry can never loop.
+  const didFallBackToDefaultLangRef = useRef(false);
+  // The spec fires `onerror` before `onend`, and starting a recognizer that
+  // has not finished stopping throws. The retry is therefore armed in the
+  // error handler and fired from `onend`.
+  const restartPendingRef = useRef(false);
 
   useEffect(() => {
     // Chrome exposes the SpeechRecognition constructor on insecure origins,
@@ -1375,7 +1386,10 @@ export const PromptInputSpeechButton = ({
 
       speechRecognition.continuous = true;
       speechRecognition.interimResults = true;
-      speechRecognition.lang = "en-US";
+      // Assigning "" is the spec's "use the user-agent default", which beats
+      // pinning every speaker to one language we picked for them.
+      speechRecognition.lang =
+        resolveSpeechRecognitionLocale(browserLanguagePreferences()) ?? "";
 
       speechRecognition.onstart = () => {
         setIsListening(true);
@@ -1383,6 +1397,10 @@ export const PromptInputSpeechButton = ({
 
       speechRecognition.onend = () => {
         setIsListening(false);
+        if (restartPendingRef.current) {
+          restartPendingRef.current = false;
+          speechRecognition.start();
+        }
       };
 
       speechRecognition.onresult = (event) => {
@@ -1408,6 +1426,20 @@ export const PromptInputSpeechButton = ({
       };
 
       speechRecognition.onerror = (event) => {
+        // Engines ship different language packs, so a locale that is perfectly
+        // valid can still be one this browser cannot listen in. Retry once on
+        // the user-agent default rather than leaving the microphone dead.
+        if (
+          event.error === "language-not-supported" &&
+          !didFallBackToDefaultLangRef.current
+        ) {
+          didFallBackToDefaultLangRef.current = true;
+          speechRecognition.lang = "";
+          restartPendingRef.current = true;
+          setIsListening(false);
+          return;
+        }
+
         console.error("Speech recognition error:", event.error);
         setIsListening(false);
       };

@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-18
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -77,6 +77,10 @@ Expand any category to see the largest individual contributors (top tools by sch
 Use **Compact now** in the panel to summarize earlier turns before auto-compaction does it for you. When a compaction frees tokens, a note appears showing how many were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
+
+### Speech to Text
+
+The microphone in the prompt input dictates into the message box. It listens in your own language, taken from your browser's language preferences — if your browser is set to German, so is the microphone. Browsers ship different language packs, so one that cannot listen in your language falls back to its own default rather than going silent.
 
 ### File Attachments
 

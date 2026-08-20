@@ -584,6 +584,7 @@ export function resolveModelCapabilities(params: {
         crossProviderMetadata?.outputLength ??
         null,
       inputModalities:
+        fetched?.inputModalities ??
         capabilities?.inputModalities ??
         inferredCapabilities.inputModalities ??
         parseModalities(
@@ -591,6 +592,7 @@ export function resolveModelCapabilities(params: {
           ModelInputModalitySchema,
         ),
       outputModalities:
+        fetched?.outputModalities ??
         capabilities?.outputModalities ??
         inferredCapabilities.outputModalities ??
         parseModalities(

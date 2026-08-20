@@ -10,9 +10,9 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { LockedChatContentUnavailableLabel } from "@/components/locked-chat-content-unavailable";
-import { ProfileFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
   TooltipContent,
@@ -502,19 +501,25 @@ function McpToolCallsTable({
     <div className="space-y-4">
       <TableFilters>
         {searchInputComponent}
-        <SearchableSelect
+        {/* Two people's personal gateways can both be called "My Gateway", so
+            the picker carries each one's scope and owner email rather than a
+            bare name. */}
+        <AgentSelector
+          mode="single"
+          flat
+          agents={agents ?? []}
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
-          placeholder="Filter by MCP Gateway"
-          items={[
-            { value: "all", label: "All Agents & MCP Gateways" },
-            ...(agents?.map((agent) => ({
-              value: agent.id,
-              label: agent.name,
-              content: <ProfileFilterOption profile={agent} />,
-              selectedContent: <ProfileFilterOption profile={agent} />,
-            })) || []),
-          ]}
+          sentinelOption={{
+            value: "all",
+            label: "All Agents & MCP Gateways",
+          }}
+          // Only reached when the URL pins an id that no longer resolves to an
+          // agent (e.g. a bookmarked filter whose target was deleted); the
+          // sentinel label covers the ordinary unfiltered state.
+          placeholder="Filter by Agent"
+          searchPlaceholder="Search agents and MCP gateways…"
+          emptyMessage="No agents or MCP gateways found."
           className="w-[200px]"
         />
         {datePickerComponent}

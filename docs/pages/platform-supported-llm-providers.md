@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-19
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -333,6 +333,8 @@ OpenRouter exposes `:free` model variants that cost nothing. An OpenRouter API k
 When an OpenRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
 
 Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so the pricing is dynamic.
+
+Models that generate audio or images also report a zero per-token price, because they bill per second or per image instead. Archestra doesn't mark those free — the "Free models only" filter leaves them out.
 
 ## Mistral AI
 

@@ -3,18 +3,18 @@ title: Hooks (Beta)
 category: Agents
 order: 11
 description: Scripts that run in the sandbox when an agent lifecycle event fires
-lastUpdated: 2026-07-19
+lastUpdated: 2026-08-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Hooks are small Python or shell scripts that run when a lifecycle event fires in a chat. They run in the conversation's [code sandbox](./platform-code-sandbox). Use them to inject context at the start of a session, or to inspect every tool call before and after it runs.
 
-> **Beta feature** — hooks need the code sandbox. The Hooks section appears in the agent dialog only when the sandbox runtime is configured.
+> **Beta feature** — hooks need the code sandbox. The Hooks section appears on the agent's **Tools & Knowledge** step only when the sandbox runtime is configured.
 
 ## Adding a Hook
 
-Open an agent's create or edit dialog and go to the Hooks section. Pick the event, pick the language — Python or shell — and write the script in the editor. The "Available context" panel shows the exact payload the selected event delivers.
+Open the agent, click **Edit**, and go to the Hooks section on the **Tools & Knowledge** step. Pick the event, pick the language — Python or shell — and write the script in the editor. The "Available context" panel shows the exact payload the selected event delivers.
 
 A hook can be disabled without deleting it, with the toggle on its row.
 

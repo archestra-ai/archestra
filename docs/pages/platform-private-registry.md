@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-18
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,6 +29,8 @@ This separation lets admins curate a small approved catalog while still allowing
 Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
 
 ## Server Configuration
+
+Every server has a page of its own. Its **Overview** reads back the setup wizard: how the server is reached and run, how callers authenticate, what its container is given at run time, and the tools it exposes. Secret values are never shown there — only whether a value is set here or asked for at installation. **Edit** in the page header reopens the wizard.
 
 Registry entries can describe either a remote server or a self-hosted server.
 

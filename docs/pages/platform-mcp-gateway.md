@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-19
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ Use separate gateways when different clients, teams, or environments need differ
 
 A gateway is a named MCP surface. It has its own visibility, authentication settings, and assigned tools. The same installed MCP server can appear behind multiple gateways, but each gateway decides which clients can reach it and which tools are exposed.
 
-Create or edit gateways from **MCPs > Gateways**. A usable gateway needs:
+Create gateways from **MCP Gateways** with the setup wizard. **Configuration** asks for the name and visibility, **Tools & Knowledge** picks what the gateway exposes, and **Advanced** holds labels, passthrough headers, and the identity provider. Nothing is saved until **Create** on the last step — the gateway then opens on its **Connect** tab, which shows how clients reach it. Every gateway has its own page with an **Overview** and a **Connect** tab; **Edit** reopens the wizard, where **Save** on any step returns to the Overview. A usable gateway needs:
 
 - at least one assigned tool
 - a supported client authentication path
@@ -24,7 +24,7 @@ Create or edit gateways from **MCPs > Gateways**. A usable gateway needs:
 
 Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
-After the gateway is configured, use **Connect** to copy connection details for supported clients.
+After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
 
 ## Tool Assignment
 
@@ -147,7 +147,7 @@ See [Access Control](/docs/platform-access-control) for the permission model.
 
 By default, a gateway exposes every assigned tool through MCP `tools/list`.
 
-For larger toolsets, enable **Load tools when needed** in the gateway dialog. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
+For larger toolsets, enable **Load tools when needed** on the gateway's **Tools & Knowledge** step. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
 
 Those two tools are enabled implicitly and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available on demand:
 

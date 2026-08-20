@@ -94,25 +94,28 @@ export function AgentEmailSettingsDialog({
     providerEnabled && open && incomingEmailEnabled && agent ? agent.id : null,
   );
 
-  const handleSubmit = async (values: AgentEmailSettingsFormValues) => {
+  // `mutate` with an `onSuccess` close, rather than awaiting: a refused update
+  // rejects (already toasted by the mutation), and awaiting it inside the
+  // submit handler would surface that as an unhandled rejection while still
+  // needing the dialog to stay open on failure.
+  const handleSubmit = (values: AgentEmailSettingsFormValues) => {
     if (!agent) return;
 
-    const result = await updateAgentMutation.mutateAsync({
-      id: agent.id,
-      data: {
-        incomingEmailEnabled: values.incomingEmailEnabled,
-        incomingEmailSecurityMode: values.incomingEmailSecurityMode,
-        incomingEmailAllowedDomain:
-          values.incomingEmailEnabled &&
-          values.incomingEmailSecurityMode === "internal"
-            ? values.incomingEmailAllowedDomain.trim()
-            : null,
+    updateAgentMutation.mutate(
+      {
+        id: agent.id,
+        data: {
+          incomingEmailEnabled: values.incomingEmailEnabled,
+          incomingEmailSecurityMode: values.incomingEmailSecurityMode,
+          incomingEmailAllowedDomain:
+            values.incomingEmailEnabled &&
+            values.incomingEmailSecurityMode === "internal"
+              ? values.incomingEmailAllowedDomain.trim()
+              : null,
+        },
       },
-    });
-
-    if (result?.id) {
-      onOpenChange(false);
-    }
+      { onSuccess: () => onOpenChange(false) },
+    );
   };
 
   const title = agent

@@ -19,8 +19,7 @@ import {
 import { GenericAuthRow } from "@/app/connection/mcp-client-instructions";
 import { GenericEndpointCard } from "@/app/connection/proxy-client-instructions";
 import { TerminalBlock } from "@/app/connection/terminal-block";
-import { useUpdateUrlParams } from "@/app/connection/use-update-url-params";
-import { ConnectDialog } from "@/components/connect-dialog";
+import { agentEditHref } from "@/components/agent-pages/agent-page-config";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
   CreateVirtualKeyDialogWithData,
@@ -57,11 +56,12 @@ import { useCreateMcpOauthClient } from "@/lib/mcp-oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
- * "Plug" row-action dialogs for the LLM Proxies and MCP Gateways tables.
- * Unlike the /connection page (end-user, one-client setup), the audience here
- * is the admin: the endpoint plus the full authentication surface — every
- * credential type the entity accepts, how each reaches models downstream,
- * and create actions for minting credentials per use case.
+ * Admin-facing "how to connect" content for the LLM Proxy and MCP Gateway
+ * pages (the Connect tab of the detail page and the Connect step of the setup
+ * wizard). Unlike the /connection page (end-user, one-client setup), the
+ * audience here is the admin: the endpoint plus the full authentication
+ * surface — every credential type the entity accepts, how each reaches
+ * models downstream, and create actions for minting credentials per use case.
  */
 
 type ConnectTarget = {
@@ -70,86 +70,75 @@ type ConnectTarget = {
   agentType: AgentType;
 };
 
-export function LlmProxyConnectInstructionsDialog({
+/**
+ * Where the "Open the Connect page" link says it came from. Both values
+ * pre-select the entity on /connection; the create flow announces itself so
+ * the guide can keep doing so if the two ever diverge.
+ */
+export type ConnectInstructionsOrigin = "table" | "create";
+
+export function LlmProxyConnectInstructions({
   proxy,
-  onOpenChange,
+  origin,
 }: {
-  /** Proxy to show instructions for; null keeps the dialog closed. */
-  proxy: ConnectTarget | null;
-  onOpenChange: (open: boolean) => void;
+  proxy: ConnectTarget;
+  origin: ConnectInstructionsOrigin;
 }) {
   const { baseUrl, organization } = useConnectionBaseUrl();
-  // Local selection — the dialog must not write providerId into the list URL.
+  // Local selection — this content must not write providerId into the page URL.
   const [selected, setSelected] = useState<"model-router" | SupportedProvider>(
     "model-router",
   );
 
-  if (!proxy) return null;
-
   const providers = getConnectableProviders(organization);
 
   return (
-    <ConnectDialog agent={proxy} open onOpenChange={onOpenChange}>
-      <div className="space-y-4">
-        <GenericEndpointCard
-          baseUrl={baseUrl}
-          profileId={proxy.id}
-          providers={[...providers]}
-          routerSelected={selected === "model-router"}
-          selectedProvider={selected === "model-router" ? null : selected}
-          onSelectRouter={() => setSelected("model-router")}
-          onSelectProvider={setSelected}
-          caption={
-            <div className="text-xs text-muted-foreground">Endpoint</div>
-          }
-        />
-        {selected === "model-router" && <ModelRouterAlert />}
-        <LlmProxyAuthSurface
-          proxy={proxy}
-          onClose={() => onOpenChange(false)}
-        />
-        <ConnectionGuideFooter
-          href={`/connection?proxyId=${encodeURIComponent(proxy.id)}&from=table`}
-        />
-      </div>
-    </ConnectDialog>
+    <div className="space-y-4">
+      <GenericEndpointCard
+        baseUrl={baseUrl}
+        profileId={proxy.id}
+        providers={[...providers]}
+        routerSelected={selected === "model-router"}
+        selectedProvider={selected === "model-router" ? null : selected}
+        onSelectRouter={() => setSelected("model-router")}
+        onSelectProvider={setSelected}
+        caption={<div className="text-xs text-muted-foreground">Endpoint</div>}
+      />
+      {selected === "model-router" && <ModelRouterAlert />}
+      <LlmProxyAuthSurface proxy={proxy} />
+      <ConnectionGuideFooter
+        href={`/connection?proxyId=${encodeURIComponent(proxy.id)}&from=${origin}`}
+      />
+    </div>
   );
 }
 
-export function McpGatewayConnectInstructionsDialog({
+export function McpGatewayConnectInstructions({
   gateway,
-  onOpenChange,
+  origin,
 }: {
-  /** Gateway to show instructions for; null keeps the dialog closed. */
-  gateway: (ConnectTarget & { slug?: string | null }) | null;
-  onOpenChange: (open: boolean) => void;
+  gateway: ConnectTarget & { slug?: string | null };
+  origin: ConnectInstructionsOrigin;
 }) {
   const { baseUrl } = useConnectionBaseUrl();
-  // Callers that only carry {id, name} (e.g. right after creation) don't know
-  // the slug — resolve it so the endpoint URL is never the raw id.
+  // Callers that only carry {id, name} don't know the slug — resolve it so
+  // the endpoint URL is never the raw id.
   const { data: detail } = useProfile(
-    gateway && gateway.slug == null ? gateway.id : undefined,
+    gateway.slug == null ? gateway.id : undefined,
   );
-
-  if (!gateway) return null;
   const slug = gateway.slug ?? detail?.slug ?? gateway.id;
 
   return (
-    <ConnectDialog agent={gateway} open onOpenChange={onOpenChange}>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <div className="text-xs text-muted-foreground">Endpoint</div>
-          <TerminalBlock code={`${baseUrl}/mcp/${slug}`} />
-        </div>
-        <McpGatewayAuthSurface
-          gateway={gateway}
-          onClose={() => onOpenChange(false)}
-        />
-        <ConnectionGuideFooter
-          href={`/connection?gatewayId=${encodeURIComponent(gateway.id)}&from=table`}
-        />
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <div className="text-xs text-muted-foreground">Endpoint</div>
+        <TerminalBlock code={`${baseUrl}/mcp/${slug}`} />
       </div>
-    </ConnectDialog>
+      <McpGatewayAuthSurface gateway={gateway} />
+      <ConnectionGuideFooter
+        href={`/connection?gatewayId=${encodeURIComponent(gateway.id)}&from=${origin}`}
+      />
+    </div>
   );
 }
 
@@ -159,17 +148,10 @@ export function McpGatewayConnectInstructionsDialog({
 
 type ProxyAuthTab = "virtual-keys" | "passthrough" | "oauth" | "idp";
 
-function LlmProxyAuthSurface({
-  proxy,
-  onClose,
-}: {
-  proxy: ConnectTarget;
-  onClose: () => void;
-}) {
+function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
   const [tab, setTab] = useState<ProxyAuthTab>("virtual-keys");
-  // Keys are created without leaving the dialog; the nested create dialog
-  // stacks on top and the tables refresh via the create mutation's
-  // invalidations.
+  // Keys are created without leaving the page; the create dialog opens on
+  // top and the tables refresh via the create mutation's invalidations.
   const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
     null,
   );
@@ -285,9 +267,7 @@ function LlmProxyAuthSurface({
         </div>
       )}
 
-      {tab === "idp" && (
-        <IdentityProviderStatus target={proxy} onClose={onClose} />
-      )}
+      {tab === "idp" && <IdentityProviderStatus target={proxy} />}
 
       <CreateVirtualKeyDialogWithData
         open={createKeyType !== null}
@@ -397,13 +377,7 @@ function OauthClientCreateFlow({
 
 type GatewayAuthTab = "oauth" | "token" | "idp";
 
-function McpGatewayAuthSurface({
-  gateway,
-  onClose,
-}: {
-  gateway: ConnectTarget;
-  onClose: () => void;
-}) {
+function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
   const [tab, setTab] = useState<GatewayAuthTab>("oauth");
 
   return (
@@ -463,9 +437,7 @@ function McpGatewayAuthSurface({
         </div>
       )}
 
-      {tab === "idp" && (
-        <IdentityProviderStatus target={gateway} onClose={onClose} />
-      )}
+      {tab === "idp" && <IdentityProviderStatus target={gateway} />}
     </div>
   );
 }
@@ -474,29 +446,25 @@ function McpGatewayAuthSurface({
 // Shared pieces
 // =========================================================================
 
-/** IdP tab body shared by both dialogs: status + edit deep link. */
-function IdentityProviderStatus({
-  target,
-  onClose,
-}: {
-  target: ConnectTarget;
-  onClose: () => void;
-}) {
+/** IdP tab body shared by both surfaces: status + edit deep link. */
+function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
   const { data: detail } = useProfile(target.id);
   const { data: identityProviders } = useIdentityProviders();
+  const isGateway = target.agentType === "mcp_gateway";
   const { data: canUpdate } = useHasPermissions(
-    target.agentType === "mcp_gateway"
-      ? { mcpGateway: ["update"] }
-      : { llmProxy: ["update"] },
+    isGateway ? { mcpGateway: ["update"] } : { llmProxy: ["update"] },
   );
-  const updateUrlParams = useUpdateUrlParams();
 
   const idpId = detail?.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
-  // The edit dialog only shows its IdP field when the org has identity
+  // The edit form only shows its IdP field when the org has identity
   // providers configured — without any, "Edit …" would be a dead end, so
   // point at IdP setup instead.
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
+  const editHref = agentEditHref(
+    isGateway ? "mcp_gateway" : "llm_proxy",
+    target.id,
+  );
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -516,16 +484,8 @@ function IdentityProviderStatus({
         </p>
       </div>
       {!canUpdate ? null : orgHasIdps ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => {
-            onClose();
-            updateUrlParams({ edit: target.id });
-          }}
-        >
-          Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
+        <Button variant="outline" size="sm" className="shrink-0" asChild>
+          <Link href={editHref}>Edit {isGateway ? "gateway" : "proxy"}</Link>
         </Button>
       ) : (
         <Button variant="outline" size="sm" className="shrink-0" asChild>
@@ -788,7 +748,7 @@ function ConnectionGuideFooter({ href }: { href: string }) {
   );
 }
 
-/** Same base-URL resolution as the /connection page and post-create dialog. */
+/** Same base-URL resolution as the /connection page. */
 function useConnectionBaseUrl() {
   const { data: organization } = useOrganization();
   const connectionBaseUrls = organization?.connectionBaseUrls ?? null;

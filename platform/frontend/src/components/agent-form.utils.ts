@@ -1,4 +1,5 @@
-import type { AgentType } from "@archestra/shared";
+import type { AgentType, archestraApiTypes } from "@archestra/shared";
+import type { SettingTone } from "@/components/setting-icon";
 
 export function getNamePlaceholder(agentType: AgentType): string {
   const placeholders: Record<AgentType, string> = {
@@ -55,3 +56,51 @@ export function normalizeSuggestedPrompts(
       prompt: sp.prompt.trim() || sp.summaryTitle.trim(),
     }));
 }
+
+/**
+ * What happens when someone sharing the agent has not connected one of the
+ * MCP servers its tools come from — the form's choices, in its words, so the
+ * detail page describes the saved choice the same way.
+ */
+export const MISSING_CREDENTIAL_BEHAVIOR_OPTIONS: Array<{
+  value: MissingCredentialBehavior;
+  label: string;
+  /** One line on what a missing server connection means under this choice. */
+  describe: (noun: string) => string;
+}> = [
+  {
+    value: "allow",
+    label: "Requested when needed",
+    describe: () =>
+      "The default — nothing is shown up front. A connection is requested the moment a tool call needs one.",
+  },
+  {
+    value: "warn",
+    label: "Requested at chat start",
+    describe: () =>
+      "The chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.",
+  },
+  {
+    value: "block",
+    label: "Required before use",
+    describe: (noun) =>
+      `The ${noun} stays unavailable until every server its tools come from is connected.`,
+  },
+];
+
+/**
+ * How each connectivity choice reads as a tone: an enforcement scale (lenient
+ * → informational → fully enforced), never the error palette — the strictest
+ * choice is a setting, not a failure.
+ */
+export const MISSING_CREDENTIAL_TONE: Record<
+  MissingCredentialBehavior,
+  SettingTone
+> = {
+  allow: "off",
+  warn: "info",
+  block: "on",
+};
+
+type MissingCredentialBehavior =
+  archestraApiTypes.GetAgentResponses["200"]["missingCredentialBehavior"];

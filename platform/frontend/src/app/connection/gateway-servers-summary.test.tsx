@@ -200,7 +200,7 @@ describe("GatewayServersSummary", () => {
     rerender(<GatewayServersSummary gatewayId="g1" />);
     // just opens the edit form (no forced tool picker), in the same tab
     const link = screen.getByRole("link", { name: /Edit on gateway/ });
-    expect(link).toHaveAttribute("href", "/mcp/gateways?edit=g1");
+    expect(link).toHaveAttribute("href", "/mcp/gateways/g1/edit");
     expect(link).not.toHaveAttribute("target");
   });
 });

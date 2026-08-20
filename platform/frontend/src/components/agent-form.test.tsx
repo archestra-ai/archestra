@@ -2,6 +2,7 @@ import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
@@ -10,7 +11,12 @@ import {
   useSmallTeamTier,
 } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { AgentDialog } from "./agent-dialog";
+import { useConnectors } from "@/lib/knowledge/connector.query";
+import {
+  type AgentFormFooterState,
+  type AgentFormProps,
+  AgentForm as AgentFormWithoutFooter,
+} from "./agent-form";
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -20,6 +26,7 @@ global.ResizeObserver = class ResizeObserver {
 
 const {
   pendingSaveChanges,
+  ReportedApiError,
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
   useAgentSubagentExclusionsMock,
@@ -38,7 +45,14 @@ const {
   useDeleteProfileMock,
   useDefaultAgentIdMock,
   useUpdateDefaultAgentIdMock,
+  useAgentToolsMock,
+  useBulkUpdateAgentToolsMock,
+  useInternalMcpCatalogMock,
 } = vi.hoisted(() => ({
+  /** Stands in for what the agent write hooks reject with once they toasted. */
+  ReportedApiError: class ReportedApiError extends Error {
+    name = "ReportedApiError";
+  },
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
@@ -51,7 +65,17 @@ const {
       refetch: vi.fn(),
     }),
   ),
-  useAvailableLlmProviderApiKeysMock: vi.fn(() => ({ data: [] })),
+  useAvailableLlmProviderApiKeysMock: vi.fn(
+    (): {
+      data: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        scope: string;
+        bestModelId: string;
+      }>;
+    } => ({ data: [] }),
+  ),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
   useUpdateProfileMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
@@ -72,6 +96,30 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useAgentToolsMock: vi.fn(
+    (): {
+      data: Array<{ id: string; catalogId: string | null }>;
+      isPending: boolean;
+      isError: boolean;
+      refetch: ReturnType<typeof vi.fn>;
+    } => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
+  ),
+  useBulkUpdateAgentToolsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useInternalMcpCatalogMock: vi.fn(
+    (): {
+      data: Array<{
+        id: string;
+        name: string;
+        serverType?: string | null;
+        environmentId?: string | null;
+      }>;
+      isPending: boolean;
+      isError: boolean;
+    } => ({ data: [], isPending: false, isError: false }),
+  ),
   useAgentDelegationsMock: vi.fn(
     (): { data: unknown[]; isSuccess: boolean } => ({
       data: [],
@@ -163,7 +211,15 @@ vi.mock("@/lib/agent.query", () => ({
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: useAgentDelegationsMock,
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
+  useAgentTools: useAgentToolsMock,
+  useBulkUpdateAgentTools: useBulkUpdateAgentToolsMock,
 }));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useInternalMcpCatalog: useInternalMcpCatalogMock,
+}));
+
+vi.mock("sonner");
 
 vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
   useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
@@ -190,7 +246,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
-  useConnectors: () => ({ data: [] }),
+  useConnectors: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
@@ -200,6 +256,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModelsByProvider: useLlmModelsByProviderMock,
+  // The "Organization default" label's lookup; the org under test has none.
+  useLlmModels: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -215,6 +273,10 @@ vi.mock("@/lib/docs/docs", () => ({
 vi.mock("@/lib/utils", () => ({
   cn: (...classes: Array<string | false | null | undefined>) =>
     classes.filter(Boolean).join(" "),
+  // The real predicate: the query layer marks the errors it already toasted by
+  // name, and the form stays quiet for exactly those.
+  isReportedApiError: (error: unknown) =>
+    error instanceof Error && error.name === "ReportedApiError",
 }));
 
 vi.mock("@/lib/config/config", () => ({
@@ -271,7 +333,19 @@ vi.mock("@/components/permission-requirement-hint", () => ({
 }));
 
 vi.mock("@/components/system-prompt-editor", () => ({
-  SystemPromptEditor: () => null,
+  SystemPromptEditor: () => <div>Mock Instruction Editor</div>,
+}));
+
+vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
+  LlmProviderApiKeyDropdown: ({
+    onSelectKey,
+  }: {
+    onSelectKey: (keyId: string) => void;
+  }) => (
+    <button type="button" onClick={() => onSelectKey("key-1")}>
+      Pick API key
+    </button>
+  ),
 }));
 
 vi.mock("@/components/share-personal-credentials-dialog", () => ({
@@ -280,16 +354,29 @@ vi.mock("@/components/share-personal-credentials-dialog", () => ({
 
 vi.mock("@/components/visibility-selector", () => ({
   VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+    <div data-testid="visibility-selector">{children}</div>
   ),
 }));
 
 vi.mock("@/components/environment-selector", () => ({
-  EnvironmentSelector: ({ disabled }: { disabled?: boolean }) => (
+  EnvironmentSelector: ({
+    disabled,
+    hideWhenOnlyDefault,
+    onChange,
+  }: {
+    disabled?: boolean;
+    hideWhenOnlyDefault?: boolean;
+    onChange?: (environmentId: string | null) => void;
+  }) => (
     <div
       data-testid="environment-selector"
       data-disabled={disabled ? "true" : "false"}
-    />
+      data-hide-when-only-default={hideWhenOnlyDefault ? "true" : "false"}
+    >
+      <button type="button" onClick={() => onChange?.("env-2")}>
+        Move to other environment
+      </button>
+    </div>
   ),
 }));
 
@@ -298,6 +385,9 @@ vi.mock("@/components/ui/alert", () => ({
     <div>{children}</div>
   ),
   AlertDescription: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AlertTitle: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
@@ -503,6 +593,9 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(useConnectors).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useConnectors>);
   vi.mocked(useFeature).mockReturnValue(
     false as unknown as ReturnType<typeof useFeature>,
   );
@@ -510,6 +603,18 @@ beforeEach(() => {
   vi.mocked(useSmallTeamTier).mockReturnValue(undefined);
   vi.mocked(useAppName).mockReturnValue("Archestra");
 });
+
+// The page owns the submit row, so the form renders no button of its own.
+// Every render below gets the same Create/Update submit the pages give it, so
+// the tests can drive a save the way a user does.
+const testFooter = ({ isCreate, canSubmit }: AgentFormFooterState) => (
+  <button type="submit" disabled={!canSubmit}>
+    <span>{isCreate ? "Create" : "Update"}</span>
+  </button>
+);
+const AgentForm = (props: Omit<AgentFormProps, "footer">) => (
+  <AgentFormWithoutFooter {...props} footer={testFooter} />
+);
 
 const baseAgent = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -577,7 +682,7 @@ const subagentModeTab = (name: "Auto" | "Custom") => {
   return within(section).getByRole("tab", { name });
 };
 
-describe("AgentDialog delegation state", () => {
+describe("AgentForm delegation state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // clearAllMocks wipes call data but keeps implementations; re-assert the
@@ -610,9 +715,7 @@ describe("AgentDialog delegation state", () => {
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
 
     render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
+      <AgentForm
         agentType="agent"
         agent={{ ...baseAgent, accessAllSubagents: false }}
       />,
@@ -641,16 +744,10 @@ describe("AgentDialog delegation state", () => {
     useProfileMock.mockReturnValue({ data: advisorBuiltIn, refetch: vi.fn() });
     useDelegationTargetAgentsMock.mockReturnValue({ data: [advisorAgent] });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={advisorBuiltIn}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={advisorBuiltIn} />);
 
-    await screen.findByRole("heading", { name: "Edit Advisor" });
+    // The form's own submit is the last thing it mounts.
+    await screen.findByRole("button", { name: /update/i });
     expect(screen.queryByTestId("environment-selector")).toBeNull();
   });
 
@@ -665,14 +762,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={autoAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     // The switch is the single place the advisor is offered; listing it as a
     // disabled subagent as well would mean two controls for one decision.
@@ -698,14 +788,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={autoAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
@@ -723,14 +806,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={autoAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     await waitFor(() => {
       expect(
@@ -754,14 +830,7 @@ describe("AgentDialog delegation state", () => {
     // what would drop a setting the administrator never touched.
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={autoAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
@@ -792,14 +861,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={customAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={customAgent} />);
 
     const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
     expect(toggle).not.toBeChecked();
@@ -844,14 +906,7 @@ describe("AgentDialog delegation state", () => {
       isPending: false,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={customAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={customAgent} />);
 
     const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
     expect(toggle).toBeChecked();
@@ -891,14 +946,7 @@ describe("AgentDialog delegation state", () => {
       isPending: false,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={autoAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
@@ -945,23 +993,17 @@ describe("AgentDialog delegation state", () => {
       mutateAsync: updateAgent,
       isPending: false,
     });
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
     await screen.findByText("Subagents (1)");
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    // The save must complete (reaches the success close) and persist the agent —
-    // proving the handler ran through the sync block, not that it bailed early.
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    // The save must complete (reaches the success callback) and persist the
+    // agent — proving the handler ran through the sync block, not that it
+    // bailed early.
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(updateAgent).toHaveBeenCalled();
     // No delegation/exclusion changes → no redundant sync writes (each of which
     // would produce a spurious no-op agent.updated audit record).
@@ -984,14 +1026,7 @@ describe("AgentDialog delegation state", () => {
       isPending: false,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await screen.findByText("Subagents (1)");
     await user.click(screen.getByRole("button", { name: /remove agent/i }));
@@ -1036,14 +1071,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
     expect(
@@ -1082,14 +1110,7 @@ describe("AgentDialog delegation state", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
     expect(
@@ -1099,12 +1120,7 @@ describe("AgentDialog delegation state", () => {
 
   it("keeps selected subagents when fresh agent data refetches", async () => {
     const { rerender } = render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
+      <AgentForm agentType="agent" agent={baseAgent} />,
     );
 
     await screen.findByText("Subagents (1)");
@@ -1114,14 +1130,7 @@ describe("AgentDialog delegation state", () => {
       refetch: vi.fn(),
     });
 
-    rerender(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    rerender(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await waitFor(() => {
       expect(screen.getByText("Subagents (1)")).toBeInTheDocument();
@@ -1149,7 +1158,7 @@ const skillsModeTab = (name: "Auto" | "Custom") => {
   return within(section).getByRole("tab", { name });
 };
 
-describe("AgentDialog personal default", () => {
+describe("AgentForm personal default", () => {
   const owner = { id: baseAgent.authorId };
 
   beforeEach(() => {
@@ -1169,14 +1178,7 @@ describe("AgentDialog personal default", () => {
   it("offers the switch on the author's own personal agent, on when it is their default", async () => {
     useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     expect(
       await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
@@ -1188,14 +1190,7 @@ describe("AgentDialog personal default", () => {
       data: { user: { id: "someone-else" } },
     } as unknown as ReturnType<typeof useSession>);
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await screen.findByText("Subagents (0)");
     expect(
@@ -1215,21 +1210,14 @@ describe("AgentDialog personal default", () => {
       isPending: false,
     });
     useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
     // Untouched → the save leaves the member setting alone.
     await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch);
     await user.click(screen.getByRole("button", { name: /update/i }));
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(setDefault).not.toHaveBeenCalled();
   });
 
@@ -1245,33 +1233,84 @@ describe("AgentDialog personal default", () => {
       isPending: false,
     });
     useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
     await user.click(
       await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
     );
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(setDefault).toHaveBeenCalledWith(null);
   });
 });
 
-describe("AgentDialog published skills", () => {
+describe("AgentForm knowledge in Auto mode", () => {
+  beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+  });
+
+  it("names the sources an Auto agent will search — the environment's, not the assignment", async () => {
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Handbook",
+          connectorType: "notion",
+          environmentId: null,
+        },
+        {
+          id: "c2",
+          name: "Staging wiki",
+          connectorType: "notion",
+          environmentId: "env-2",
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    // Scoped to the Auto block: the Custom picker stays mounted (hidden) and
+    // names the same sources, so an unscoped query matches both.
+    const block = (await screen.findByText("Knowledge sources"))
+      .parentElement as HTMLElement;
+    // Auto searches this agent's environment, so a source stamped with
+    // another environment is not named.
+    expect(within(block).getByText("Handbook")).toBeVisible();
+    expect(within(block).queryByText("Staging wiki")).toBeNull();
+    expect(
+      within(block).getByText(
+        /each conversation searches the ones its own caller may query/i,
+      ),
+    ).toBeVisible();
+  });
+
+  it("says so when the environment has no source set up yet", async () => {
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    expect(
+      await screen.findByText(/No source is set up in this agent/i),
+    ).toBeVisible();
+  });
+});
+
+describe("AgentForm published skills", () => {
   const syncSkills = vi.fn();
   const syncSkillExclusions = vi.fn();
   const updateAgent = vi.fn();
   const createAgent = vi.fn();
-  const deleteAgent = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1279,13 +1318,8 @@ describe("AgentDialog published skills", () => {
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
     createAgent.mockResolvedValue({ id: "created-agent", name: "New Agent" });
-    deleteAgent.mockResolvedValue(undefined);
     useCreateProfileMock.mockReturnValue({
       mutateAsync: createAgent,
-      isPending: false,
-    });
-    useDeleteProfileMock.mockReturnValue({
-      mutateAsync: deleteAgent,
       isPending: false,
     });
     pendingSaveChanges.mockResolvedValue(undefined);
@@ -1349,16 +1383,9 @@ describe("AgentDialog published skills", () => {
       isSuccess: false,
       isError: true,
     });
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
     expect(
       await screen.findByText(/could not load the published skills/i),
@@ -1367,7 +1394,7 @@ describe("AgentDialog published skills", () => {
 
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(updateAgent).toHaveBeenCalled();
     expect(syncSkills).not.toHaveBeenCalled();
     expect(syncSkillExclusions).not.toHaveBeenCalled();
@@ -1382,14 +1409,7 @@ describe("AgentDialog published skills", () => {
       return { data: !("skill" in permissions) };
     }) as unknown as typeof useHasPermissions);
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await screen.findByRole("button", { name: /update/i });
     expect(screen.queryByText(/published skills/i)).not.toBeInTheDocument();
@@ -1412,14 +1432,7 @@ describe("AgentDialog published skills", () => {
         : { data: { data: [] }, isFetching: false },
     );
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     const search = await screen.findByLabelText("Search skills...");
     await user.type(search, "far-away");
@@ -1461,21 +1474,14 @@ describe("AgentDialog published skills", () => {
       },
       isSuccess: true,
     });
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
     await screen.findByText("Skills (1)");
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(updateAgent).toHaveBeenCalled();
     expect(syncSkills).not.toHaveBeenCalled();
     expect(syncSkillExclusions).not.toHaveBeenCalled();
@@ -1490,14 +1496,7 @@ describe("AgentDialog published skills", () => {
       isSuccess: true,
     });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await screen.findByText(/Excluded skills \(0\)/);
     await user.click(skillsModeTab("Custom"));
@@ -1513,95 +1512,32 @@ describe("AgentDialog published skills", () => {
     expect(syncSkillExclusions).not.toHaveBeenCalled();
   });
 
-  it("deletes the agent it just created when the skills write rejects", async () => {
-    // Create mode publishes after the agent exists, so the write can fail with
-    // an agent already created. It has to run before `onCreated` — both call
-    // sites close the dialog from there — or the rejection lands on a screen
-    // that has already said "created", leaving a half-configured gateway
-    // behind. Inside the rollback, it deletes the agent instead.
+  it("calls the save a success only once the skills write has landed too", async () => {
+    // The agent PUT is not the whole save: the skill sets are written after
+    // it, and a toast between the two promised a save the API could still
+    // refuse — leaving the user reading "updated" over unsaved edits.
     const user = userEvent.setup();
-    const onCreated = vi.fn();
-    const onOpenChange = vi.fn();
+    const onSaved = vi.fn();
     syncSkills.mockRejectedValue(new Error("published skills rejected"));
-    useSkillsPaginatedMock.mockImplementation(() => ({
-      data: {
-        data: [orgSkill("payroll", "00000000-0000-4000-8000-0000000000bb")],
-      },
-      isFetching: false,
-    }));
+    useAgentSkillsMock.mockReturnValue({
+      data: { accessAllSkills: true, skillIds: [], skills: [] },
+      isSuccess: true,
+    });
 
-    render(
-      <AgentDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        agentType="agent"
-        onCreated={onCreated}
-      />,
-    );
+    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
-    const name = await screen.findByPlaceholderText(/name/i);
-    await user.type(name, "New Agent");
+    await screen.findByText(/Excluded skills \(0\)/);
     await user.click(skillsModeTab("Custom"));
-    await user.click(
-      await screen.findByRole("button", { name: "Add payroll" }),
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
+    await user.click(screen.getByRole("button", { name: /update/i }));
 
-    await waitFor(() =>
-      expect(deleteAgent).toHaveBeenCalledWith("created-agent"),
-    );
-    expect(onCreated).not.toHaveBeenCalled();
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
-  });
-
-  it("reads nothing while the dialog is closed", () => {
-    // The component stays mounted with open={false} on the list and chat
-    // pages, so a query enabled on `showSkills` alone fetched a skill catalog
-    // on every one of those page loads, for a dialog nobody opened.
-    render(
-      <AgentDialog
-        open={false}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
-
-    expect(useAgentSkillsMock).toHaveBeenCalledWith(undefined);
-    expect(useAgentSkillExclusionsMock).toHaveBeenCalledWith(undefined);
-    for (const call of useSkillsPaginatedMock.mock.calls) {
-      expect(call[1]).toMatchObject({ enabled: false });
-    }
-  });
-
-  it("keeps the open dialog on its agent when the agent leaves the caller's list", async () => {
-    // Callers derive `agent` from a refetching list query, not from dialog
-    // state. When the agent dropped out of that list mid-edit, the instance key
-    // fell back to "new" and remounted the body as an empty create form —
-    // silently discarding the edit, with the next save creating a new agent.
-    const user = userEvent.setup();
-    const { rerender } = render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        agentType="agent"
-        agent={baseAgent}
-      />,
-    );
-
-    const name = await screen.findByDisplayValue("Existing Agent");
-    await user.clear(name);
-    await user.type(name, "Renamed Agent");
-
-    rerender(
-      <AgentDialog open={true} onOpenChange={vi.fn()} agentType="agent" />,
-    );
-
-    expect(screen.getByDisplayValue("Renamed Agent")).toBeInTheDocument();
+    await waitFor(() => expect(syncSkills).toHaveBeenCalled());
+    expect(updateAgent).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 });
 
-describe.skip("AgentDialog", () => {
+describe.skip("AgentForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockImplementation(
@@ -1612,34 +1548,11 @@ describe.skip("AgentDialog", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
-  it("does not eagerly enable agent-only queries for a closed MCP gateway dialog", () => {
-    render(
-      <AgentDialog
-        open={false}
-        onOpenChange={vi.fn()}
-        agentType="mcp_gateway"
-      />,
-    );
-
-    expect(useDelegationTargetAgentsMock).toHaveBeenCalledWith({
-      enabled: false,
-    });
-    expect(useAvailableLlmProviderApiKeysMock).toHaveBeenCalledWith({
-      includeKeyId: undefined,
-      enabled: false,
-    });
-    expect(useLlmModelsByProviderMock).toHaveBeenCalledWith({
-      enabled: false,
-    });
-  });
-
   it("disables Update immediately while save starts", async () => {
     const user = userEvent.setup();
 
     render(
-      <AgentDialog
-        open={true}
-        onOpenChange={vi.fn()}
+      <AgentForm
         agentType="agent"
         agent={{
           id: "agent-1",
@@ -1707,9 +1620,7 @@ describe.skip("AgentDialog", () => {
       return { data: true };
     }) as unknown as typeof useHasPermissions);
 
-    render(
-      <AgentDialog open={true} onOpenChange={vi.fn()} agentType="agent" />,
-    );
+    render(<AgentForm agentType="agent" />);
 
     expect(useAvailableLlmProviderApiKeysMock).toHaveBeenCalledWith({
       includeKeyId: undefined,
@@ -1729,9 +1640,7 @@ describe.skip("AgentDialog", () => {
       return { data: true };
     }) as unknown as typeof useHasPermissions);
 
-    render(
-      <AgentDialog open={true} onOpenChange={vi.fn()} agentType="agent" />,
-    );
+    render(<AgentForm agentType="agent" />);
 
     expect(
       screen.getByText(
@@ -1741,5 +1650,460 @@ describe.skip("AgentDialog", () => {
     expect(
       screen.getByText(/this agent will use the organization's default model/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("AgentForm save payload and failure handling", () => {
+  const updateAgent = vi.fn();
+  const createAgent = vi.fn();
+  const bulkUpdateTools = vi.fn();
+  const refetchAgentTools = vi.fn();
+
+  const renderConfiguration = (props?: { onSaved?: () => void }) =>
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+        {...props}
+      />,
+    );
+
+  const renderTools = () =>
+    render(
+      <AgentForm agentType="agent" agent={baseAgent} sections={["tools"]} />,
+    );
+
+  const savedBody = () =>
+    updateAgent.mock.calls[0][0].data as Record<string, unknown>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useFeature).mockReturnValue(
+      false as unknown as ReturnType<typeof useFeature>,
+    );
+    pendingSaveChanges.mockResolvedValue(undefined);
+    updateAgent.mockResolvedValue(baseAgent);
+    createAgent.mockResolvedValue({ id: "created-agent", name: "New Agent" });
+    bulkUpdateTools.mockResolvedValue({
+      succeeded: [],
+      removed: [],
+      failed: [],
+    });
+    useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isSuccess: true,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+    useCreateProfileMock.mockReturnValue({
+      mutateAsync: createAgent,
+      isPending: false,
+    });
+    refetchAgentTools.mockResolvedValue({ data: [], isError: false });
+    useAgentToolsMock.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      refetch: refetchAgentTools,
+    });
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+    });
+    useBulkUpdateAgentToolsMock.mockReturnValue({
+      mutateAsync: bulkUpdateTools,
+      isPending: false,
+    });
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
+    useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+  });
+
+  it("sends the configuration step's own fields, and nothing the step does not show", async () => {
+    // The PUT is partial, so a step writes back only what it renders. Sending
+    // a field the step never showed writes this mount's copy of it — and even
+    // when the copy is right, it forks a config version and writes an audit
+    // record for an edit nobody made. `agentType` is not editable at all, and
+    // the environment and the key/model pair wait until they actually move:
+    // re-sending one this caller may no longer assign turns a rename into a
+    // permission error.
+    const user = userEvent.setup();
+    renderConfiguration();
+
+    const name = await screen.findByDisplayValue("Existing Agent");
+    await user.clear(name);
+    await user.type(name, "Renamed Agent");
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().name).toBe("Renamed Agent");
+    expect(Object.keys(savedBody()).sort()).toEqual([
+      "description",
+      "icon",
+      "name",
+      "scope",
+      "suggestedPrompts",
+      "systemPrompt",
+      "teams",
+      "users",
+    ]);
+  });
+
+  it("sends the advanced step's own fields, and nothing the step does not show", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
+    );
+
+    // The Switch and Label mocks above leave the control unlabelled, so it
+    // is reached by the id the label points at.
+    await screen.findByText("Security");
+    const securitySwitch = container.querySelector<HTMLInputElement>(
+      "#consider-context-untrusted",
+    );
+    if (!securitySwitch) throw new Error("No security switch rendered");
+    await user.click(securitySwitch);
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().considerContextUntrusted).toBe(true);
+    expect(Object.keys(savedBody()).sort()).toEqual([
+      "considerContextUntrusted",
+      "identityProviderId",
+      "labels",
+    ]);
+  });
+
+  it("sends the tools step's own fields, and none of the configuration behind it", async () => {
+    // The Tools step renders no name, visibility or instruction: those inputs
+    // hold whatever this mount was seeded with, so re-sending them would write
+    // a stale copy of the configuration back over a concurrent edit.
+    const user = userEvent.setup();
+    renderTools();
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(Object.keys(savedBody()).sort()).toEqual([
+      "accessAllSubagents",
+      "accessAllTools",
+      "connectorIds",
+      "knowledgeBaseIds",
+      "missingCredentialBehavior",
+      "toolExposureMode",
+    ]);
+  });
+
+  it("sends the environment once it actually changes", async () => {
+    const user = userEvent.setup();
+    renderConfiguration();
+
+    await user.click(
+      await screen.findByRole("button", { name: /move to other environment/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().environmentId).toBe("env-2");
+  });
+
+  it("sends the key and the model together when either one changes", async () => {
+    // The API validates them against each other, so a model sent without its
+    // key (or the reverse) is judged against the stored half of the pair.
+    const user = userEvent.setup();
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Org OpenAI",
+          provider: "openai",
+          scope: "org",
+          bestModelId: "model-1",
+        },
+      ],
+    });
+    renderConfiguration();
+
+    await user.click(
+      await screen.findByRole("button", { name: /pick api key/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().llmApiKeyId).toBe("key-1");
+    expect(savedBody().modelId).toBe("model-1");
+  });
+
+  it("leaves a refused update to the toast the query layer already showed", async () => {
+    // The write hooks toast the API's refusal themselves and then reject. The
+    // form used to toast it a second time, so one refusal arrived as two
+    // identical messages.
+    const user = userEvent.setup();
+    const onSaved = vi.fn();
+    updateAgent.mockRejectedValue(
+      new ReportedApiError("Environment is restricted"),
+    );
+    renderConfiguration({ onSaved });
+
+    const name = await screen.findByDisplayValue("Existing Agent");
+    await user.type(name, " v2");
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    // Still dirty: nothing was written, so the edit is still the user's to save.
+    expect(screen.getByDisplayValue("Existing Agent v2")).toBeInTheDocument();
+  });
+
+  it("reports a failure that nothing else has reported", async () => {
+    // The bulk tool endpoint answers 200 and names what it refused inside the
+    // body, so the editor summarises that into an error of its own — this
+    // catch is the only place it can reach the user.
+    const user = userEvent.setup();
+    pendingSaveChanges.mockRejectedValue(
+      new Error("Jira: tool could not be assigned"),
+    );
+    renderTools();
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Jira: tool could not be assigned",
+      ),
+    );
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("blocks the environment change while its tools would be stranded, and clears it by removing them", async () => {
+    const user = userEvent.setup();
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Jira",
+          serverType: "remote",
+          environmentId: null,
+        },
+      ],
+      isPending: false,
+      isError: false,
+    });
+    useAgentToolsMock.mockReturnValue({
+      data: [
+        { id: "tool-1", catalogId: "catalog-1" },
+        { id: "tool-2", catalogId: "catalog-1" },
+      ],
+      isPending: false,
+      isError: false,
+      refetch: refetchAgentTools,
+    });
+    renderConfiguration();
+
+    await user.click(
+      await screen.findByRole("button", { name: /move to other environment/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled(),
+    );
+    expect(screen.getByText(/1 MCP server/)).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /remove 2 incompatible tools/i }),
+    );
+
+    // The removal is persisted first; only then is the environment saved.
+    await waitFor(() =>
+      expect(bulkUpdateTools).toHaveBeenCalledWith({
+        removals: [
+          { agentId: baseAgent.id, toolId: "tool-1" },
+          { agentId: baseAgent.id, toolId: "tool-2" },
+        ],
+      }),
+    );
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().environmentId).toBe("env-2");
+  });
+
+  it("leaves the environment unsaved when the removal fails", async () => {
+    const user = userEvent.setup();
+    bulkUpdateTools.mockRejectedValue(new Error("nope"));
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Jira",
+          serverType: "remote",
+          environmentId: null,
+        },
+      ],
+      isPending: false,
+      isError: false,
+    });
+    useAgentToolsMock.mockReturnValue({
+      data: [{ id: "tool-1", catalogId: "catalog-1" }],
+      isPending: false,
+      isError: false,
+      refetch: refetchAgentTools,
+    });
+    renderConfiguration();
+
+    await user.click(
+      await screen.findByRole("button", { name: /move to other environment/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /remove 1 incompatible tool/i }),
+    );
+
+    await waitFor(() => expect(bulkUpdateTools).toHaveBeenCalled());
+    expect(updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("leaves the environment unsaved when the removal is refused inside a 200", async () => {
+    // The bulk endpoint reports a refusal in `failed` rather than by failing,
+    // so a resolved removal is not on its own a cleared conflict — and saving
+    // the environment on it strands the tools it was supposed to free.
+    const user = userEvent.setup();
+    bulkUpdateTools.mockResolvedValue({
+      succeeded: [],
+      removed: [],
+      failed: [{ error: "Tool is pinned by a policy" }],
+    });
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Jira",
+          serverType: "remote",
+          environmentId: null,
+        },
+      ],
+      isPending: false,
+      isError: false,
+    });
+    useAgentToolsMock.mockReturnValue({
+      data: [{ id: "tool-1", catalogId: "catalog-1" }],
+      isPending: false,
+      isError: false,
+      refetch: refetchAgentTools,
+    });
+    renderConfiguration();
+
+    await user.click(
+      await screen.findByRole("button", { name: /move to other environment/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /remove 1 incompatible tool/i }),
+    );
+
+    await waitFor(() => expect(bulkUpdateTools).toHaveBeenCalled());
+    expect(updateAgent).not.toHaveBeenCalled();
+    expect(refetchAgentTools).not.toHaveBeenCalled();
+  });
+
+  it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {
+    // The create wizard walks one form across its steps: what a hidden step
+    // holds (the tools picked on it) must survive the step change, and Enter
+    // on an earlier step must not create the record.
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        submitEnabled={false}
+      />,
+    );
+
+    const toolsEditor = await screen.findByText("Mock Tools Editor");
+    expect(toolsEditor.closest(".divide-y")).toHaveClass("hidden");
+    expect(
+      screen.getByPlaceholderText("Enter agent name").closest(".divide-y"),
+    ).not.toHaveClass("hidden");
+
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "New Agent{Enter}",
+    );
+    expect(createAgent).not.toHaveBeenCalled();
+
+    rerender(
+      <AgentForm
+        agentType="agent"
+        activeSection="tools"
+        submitEnabled={false}
+      />,
+    );
+    expect(
+      screen.getByText("Mock Tools Editor").closest(".divide-y"),
+    ).not.toHaveClass("hidden");
+    // Same mount: the name typed on the first step is still there.
+    expect(screen.getByPlaceholderText("Enter agent name")).toHaveValue(
+      "New Agent",
+    );
+
+    rerender(
+      <AgentForm agentType="agent" activeSection="advanced" submitEnabled />,
+    );
+    expect(screen.getByText("Advanced").closest(".divide-y")).not.toHaveClass(
+      "hidden",
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    const body = createAgent.mock.calls[0][0] as Record<string, unknown>;
+    expect(body).toMatchObject({
+      name: "New Agent",
+      labels: [],
+      suggestedPrompts: [],
+      considerContextUntrusted: false,
+      identityProviderId: null,
+      accessAllTools: true,
+    });
+    // Omitted, not null: the backend resolves the org's landing environment.
+    expect(body).not.toHaveProperty("environmentId");
+    // What the hidden Tools step held is written against the new id.
+    expect(pendingSaveChanges).toHaveBeenCalledWith({
+      agentId: "created-agent",
+      resourceLabel: "agent",
+    });
+  });
+
+  it("deletes the record it just created when a follow-up write is refused", async () => {
+    const user = userEvent.setup();
+    const deleteCreated = vi.fn().mockResolvedValue({ id: "created-agent" });
+    useDeleteProfileMock.mockReturnValue({
+      mutateAsync: deleteCreated,
+      isPending: false,
+    });
+    pendingSaveChanges.mockRejectedValue(new Error("Tools were refused"));
+    const onCreated = vi.fn();
+    render(<AgentForm agentType="agent" onCreated={onCreated} />);
+
+    await user.type(
+      await screen.findByPlaceholderText("Enter agent name"),
+      "New Agent",
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() =>
+      expect(deleteCreated).toHaveBeenCalledWith("created-agent"),
+    );
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("Tools were refused");
   });
 });

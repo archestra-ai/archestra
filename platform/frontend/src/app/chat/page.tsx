@@ -32,7 +32,6 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -191,7 +190,6 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
@@ -323,9 +321,6 @@ export function ChatPageContent({
   const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
-
-  // Dialog management for MCP installation
-  const { isDialogOpened, closeDialog } = useDialogs<"edit-agent">();
 
   const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
@@ -1719,11 +1714,6 @@ export function ChatPageContent({
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
-  // Find the specific internal agent for this conversation (if any)
-  const _conversationInternalAgent = conversationAgentId
-    ? internalAgents.find((a) => a.id === conversationAgentId)
-    : undefined;
-
   // Get current agent info
   const currentProfileId = conversationAgentId;
   const conversationToolsStateId = isReadOnlyConversation
@@ -2956,7 +2946,7 @@ export function ChatPageContent({
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
-              <Link href="/agents?create=true">
+              <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
@@ -3637,21 +3627,6 @@ export function ChatPageContent({
             </div>
           )}
         </div>
-
-        <AgentDialog
-          open={isDialogOpened("edit-agent")}
-          onOpenChange={(open) => {
-            if (!open) closeDialog("edit-agent");
-          }}
-          agent={
-            conversationId && conversation
-              ? _conversationInternalAgent
-              : initialAgentId
-                ? internalAgents.find((a) => a.id === initialAgentId)
-                : undefined
-          }
-          agentType="agent"
-        />
 
         {canManageShare && conversationId && (
           <ShareConversationDialog

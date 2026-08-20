@@ -97,7 +97,7 @@ export function GatewayServersSummary({
       // Just open the gateway's edit form (same tab, matching the page's other
       // links) — don't force-open the tool picker; the user curates from there.
       <Link
-        href={`/mcp/gateways?edit=${encodeURIComponent(gatewayId)}`}
+        href={`/mcp/gateways/${encodeURIComponent(gatewayId)}/edit`}
         className="text-muted-foreground/80 underline decoration-muted-foreground/30 underline-offset-2 hover:text-foreground"
       >
         Edit on gateway

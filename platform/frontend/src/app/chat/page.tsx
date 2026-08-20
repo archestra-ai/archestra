@@ -1672,6 +1672,9 @@ export function ChatPageContent({
   const contextWindow = chatSession?.contextWindow ?? null;
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
+  const beginManualContextCompaction =
+    chatSession?.beginManualContextCompaction;
+  const endManualContextCompaction = chatSession?.endManualContextCompaction;
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
@@ -1764,8 +1767,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    // The compaction guard matters now that the composer stays usable during
-    // compaction when queueing is on — a second /compact must not re-enter.
+    // The composer stays usable for the whole compaction, so `/compact` is
+    // reachable again while one is already running — this guard is what stops
+    // a second run re-entering.
     if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }
@@ -1775,84 +1779,96 @@ export function ChatPageContent({
       message: "Compacting conversation context...",
     });
 
-    const result = await compactConversationMutation.mutateAsync({
-      id: conversationId,
-    });
-    if (!result) {
-      setManualCompactionFeedback({
-        status: "failed",
-        message: "Context compaction failed.",
+    // Mark the conversation busy for the whole REST round-trip. A manual
+    // compaction has no stream to carry compaction-start/finish parts, so
+    // without this the session would consider the conversation idle and both
+    // send a composer submit straight into the rewrite and drain the queue on
+    // top of it. Cleared in the `finally` below on every exit path.
+    beginManualContextCompaction?.();
+    try {
+      const result = await compactConversationMutation.mutateAsync({
+        id: conversationId,
       });
-      return;
-    }
-
-    syncPersistedMessageMetadata(
-      (result.conversation.messages ?? []) as UIMessage[],
-    );
-
-    switch (result.status) {
-      case "created": {
-        if (result.compaction) {
-          recordContextCompaction?.({
-            compactionId: result.compaction.id,
-            originalTokenEstimate: result.compaction.originalTokenEstimate,
-            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-            trigger: "manual",
-          });
-        }
-
-        setManualCompactionFeedback(null);
-        return;
-      }
-      case "existing": {
-        if (result.compaction) {
-          recordContextCompaction?.({
-            compactionId: result.compaction.id,
-            originalTokenEstimate: result.compaction.originalTokenEstimate,
-            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-            trigger: "manual",
-          });
-        }
-
-        setManualCompactionFeedback({
-          status: "skipped",
-          message: getManualCompactionSkippedMessage(
-            result.reason,
-            result.status,
-          ),
-        });
-        return;
-      }
-      case "skipped": {
-        setManualCompactionFeedback({
-          status: "skipped",
-          message: getManualCompactionSkippedMessage(
-            result.reason,
-            result.status,
-          ),
-        });
-        return;
-      }
-      case "failed": {
+      if (!result) {
         setManualCompactionFeedback({
           status: "failed",
           message: "Context compaction failed.",
         });
         return;
       }
-      default: {
-        // compile-time guard: a new status must be handled explicitly above
-        result.status satisfies never;
-        setManualCompactionFeedback({
-          status: "failed",
-          message: "Context compaction failed.",
-        });
-        return;
+
+      syncPersistedMessageMetadata(
+        (result.conversation.messages ?? []) as UIMessage[],
+      );
+
+      switch (result.status) {
+        case "created": {
+          if (result.compaction) {
+            recordContextCompaction?.({
+              compactionId: result.compaction.id,
+              originalTokenEstimate: result.compaction.originalTokenEstimate,
+              compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+              trigger: "manual",
+            });
+          }
+
+          setManualCompactionFeedback(null);
+          return;
+        }
+        case "existing": {
+          if (result.compaction) {
+            recordContextCompaction?.({
+              compactionId: result.compaction.id,
+              originalTokenEstimate: result.compaction.originalTokenEstimate,
+              compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+              trigger: "manual",
+            });
+          }
+
+          setManualCompactionFeedback({
+            status: "skipped",
+            message: getManualCompactionSkippedMessage(
+              result.reason,
+              result.status,
+            ),
+          });
+          return;
+        }
+        case "skipped": {
+          setManualCompactionFeedback({
+            status: "skipped",
+            message: getManualCompactionSkippedMessage(
+              result.reason,
+              result.status,
+            ),
+          });
+          return;
+        }
+        case "failed": {
+          setManualCompactionFeedback({
+            status: "failed",
+            message: "Context compaction failed.",
+          });
+          return;
+        }
+        default: {
+          // compile-time guard: a new status must be handled explicitly above
+          result.status satisfies never;
+          setManualCompactionFeedback({
+            status: "failed",
+            message: "Context compaction failed.",
+          });
+          return;
+        }
       }
+    } finally {
+      endManualContextCompaction?.();
     }
   }, [
+    beginManualContextCompaction,
     compactConversationMutation,
     conversationId,
+    endManualContextCompaction,
     isContextCompacting,
     isReadOnlyConversation,
     recordContextCompaction,
@@ -2082,6 +2098,7 @@ export function ChatPageContent({
       status,
       queueEnabled,
       directSendPending: directSendPendingRef.current,
+      isCompacting: isContextCompacting,
     });
 
     if (submitAction === "stop") {
@@ -2094,9 +2111,10 @@ export function ChatPageContent({
     }
 
     if (submitAction === "queue") {
-      // Streaming (or a direct send is still settling): queue the message; the
-      // conversation's ChatSessionHook sends it once the turn settles.
-      // Returning normally clears the textarea and draft, like a send.
+      // The conversation is busy — streaming, a direct send still settling, or
+      // a context compaction rewriting the thread. Queue the message; the
+      // conversation's ChatSessionHook sends it once the conversation is idle
+      // again. Returning normally clears the textarea and draft, like a send.
       enqueueSubmission();
       return;
     }

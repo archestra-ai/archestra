@@ -32,7 +32,9 @@ import type {
   AgentToolSortBy,
   CredentialResolutionMode,
   InsertAgentTool,
+  InternalMcpCatalogServerType,
   McpServerAgentUsage,
+  ResourceVisibilityScope,
   SortDirection,
   UpdateAgentTool,
 } from "@/types";
@@ -532,6 +534,67 @@ class AgentToolModel {
       })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, agentId));
+  }
+
+  /**
+   * The agent's assignments that pin one installed MCP connection — a binding
+   * the runtime follows as written. Returns the tool name plus the connection
+   * identity the assignment rules evaluate (scope/team/owner), so a caller can
+   * re-check pins the agent already holds against a scope or team membership
+   * it does not have yet. Soft-deleted connections are skipped: a pin to one
+   * resolves nothing either way.
+   */
+  static async findStaticPinnedAssignmentsByAgent(agentId: string): Promise<
+    {
+      toolId: string;
+      toolName: string;
+      mcpServer: {
+        id: string;
+        name: string;
+        ownerId: string | null;
+        teamId: string | null;
+        scope: ResourceVisibilityScope;
+        serverType: InternalMcpCatalogServerType;
+      };
+    }[]
+  > {
+    const rows = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        toolName: schema.toolsTable.name,
+        id: schema.mcpServersTable.id,
+        name: schema.mcpServersTable.name,
+        ownerId: schema.mcpServersTable.ownerId,
+        teamId: schema.mcpServersTable.teamId,
+        scope: schema.mcpServersTable.scope,
+        serverType: schema.mcpServersTable.serverType,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.agentToolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          // The mode is the whole test: only `dynamic` resolves the connection
+          // per caller at call time, so every other mode leaves `mcpServerId`
+          // as a pin the runtime targets. A null `mcpServerId` needs no
+          // predicate of its own — the join above already drops those rows.
+          ne(schema.agentToolsTable.credentialResolutionMode, "dynamic"),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return rows.map(({ toolId, toolName, ...mcpServer }) => ({
+      toolId,
+      toolName,
+      mcpServer,
+    }));
   }
 
   /**

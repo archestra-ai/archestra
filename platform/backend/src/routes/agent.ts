@@ -44,6 +44,7 @@ import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import {
@@ -623,7 +624,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
       };
-      const agent = await AgentModel.create(createData, user.id);
+      // Whether a new record starts out able to consult the Advisor is decided
+      // here, not by a follow-up write from the client: that second write
+      // forks another version and silently never happens for roles without
+      // `agent:read`.
+      const defaultExcludedSubagentIds =
+        await agentSubagentExclusionsService.getCreationDefaultExclusions({
+          organizationId: createData.organizationId ?? organizationId,
+          agentType,
+          accessAllSubagents: createData.accessAllSubagents === true,
+        });
+
+      const agent = await AgentModel.create(createData, user.id, {
+        defaultExcludedSubagentIds,
+      });
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
@@ -1624,6 +1638,33 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: existingAgent.agentType,
         });
       }
+
+      // A static tool assignment pins one installed connection, and a
+      // team-scoped connection is only assignable while the agent shares that
+      // team. Moving the agent's scope or teams therefore silently strips the
+      // right to a credential its tools still point at — the runtime trusts
+      // the persisted mcpServerId — so re-check the pins it already holds and
+      // refuse before anything is written (AgentModel.update syncs teams).
+      // The evaluated scope/team set is the merged one: the team-admin branch
+      // above may have rewritten body.teams to preserve teams it cannot touch.
+      // Known gap: an assignment or team-membership change racing this check
+      // can still land a stale pin; validating at call time is the follow-up.
+      const currentTeamIds = existingAgent.teams.map((team) => team.id);
+      await assertNoStaticPinsBrokenByTargetChange({
+        agentId: id,
+        currentTarget: {
+          organizationId: existingAgent.organizationId,
+          scope: existingAgent.scope,
+          authorId: existingAgent.authorId,
+          teamIds: currentTeamIds,
+        },
+        nextTarget: {
+          organizationId: existingAgent.organizationId,
+          scope: body.scope ?? existingAgent.scope,
+          authorId: existingAgent.authorId,
+          teamIds: body.teams ?? currentTeamIds,
+        },
+      });
 
       const agent = await AgentModel.update(id, updateData);
 

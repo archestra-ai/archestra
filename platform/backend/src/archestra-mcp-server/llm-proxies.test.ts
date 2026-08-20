@@ -38,6 +38,11 @@ describe("llm proxy tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "Successfully created llm proxy",
     );
+    // A proxy's edit page lives under /llm/proxies — the agents list cannot
+    // open one.
+    expect((result.content[0] as any).text).toContain(
+      `/llm/proxies/${extractCreatedId(result)}/edit`,
+    );
   });
 
   test("create_llm_proxy attributes the calling user as author", async () => {
@@ -85,6 +90,9 @@ describe("llm proxy tool execution", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain(
       "Successfully updated llm proxy",
+    );
+    expect((result.content[0] as any).text).toContain(
+      `/llm/proxies/${llmProxy.id}/edit`,
     );
 
     const updated = await AgentModel.findById(

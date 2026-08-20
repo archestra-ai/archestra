@@ -988,6 +988,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
   },
+  // Muting is a per-viewer display preference: it hides an alert from the
+  // caller's own registry and from nobody else's, so it is gated on the same
+  // :read that let them see the connection in the first place. The handler
+  // re-checks visibility of the specific install.
+  [RouteId.MuteMcpServerAlert]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.UnmuteMcpServerAlert]: {
+    mcpServerInstallation: ["read"],
+  },
   [RouteId.InitiateOAuth]: {
     mcpServerInstallation: ["create"],
   },
@@ -2061,6 +2071,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
+  "/mcp/registry/new": { mcpRegistry: ["create"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 

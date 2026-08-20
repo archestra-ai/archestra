@@ -106,6 +106,8 @@ export const RouteId = {
   HardResetMcpServer: "hardResetMcpServer",
   ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
+  MuteMcpServerAlert: "muteMcpServerAlert",
+  UnmuteMcpServerAlert: "unmuteMcpServerAlert",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",

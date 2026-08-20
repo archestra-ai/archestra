@@ -63,6 +63,7 @@ import {
   AppModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
+  McpServerAlertMuteModel,
   McpServerModel,
   McpToolCallModel,
   TeamModel,
@@ -1139,7 +1140,10 @@ class McpClient {
             !hasRefreshToken &&
             !usesClientCredentials
           ) {
-            await McpServerModel.update(targetMcpServerId, {
+            // Every later tool call against this connection lands here again;
+            // `recordOAuthRefreshFailure` keeps `oauthRefreshFailedAt` at the
+            // first observation so the fault has one stable start.
+            await McpServerModel.recordOAuthRefreshFailure(targetMcpServerId, {
               oauthRefreshError: "no_refresh_token",
               oauthRefreshErrorMessage: "no_refresh_token",
               oauthRefreshErrorDescription: null,
@@ -2893,7 +2897,10 @@ class McpClient {
       // transient failure persists nothing and is re-attempted next use.
       const failureFields = refreshFailureToServerFields(refreshResult.outcome);
       if (failureFields) {
-        await McpServerModel.update(targetMcpServerId, failureFields);
+        await McpServerModel.recordOAuthRefreshFailure(
+          targetMcpServerId,
+          failureFields,
+        );
       }
 
       return null;
@@ -2911,6 +2918,11 @@ class McpClient {
       oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
+
+    // The failure episode every mute on this connection was pinned to is over,
+    // so the mutes go with it. Dropped after the clear, never before: if the
+    // clear had failed, a still-valid mute must survive.
+    await McpServerAlertMuteModel.deleteForMcpServer(targetMcpServerId);
 
     try {
       // Re-fetch updated secrets and retry once

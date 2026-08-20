@@ -250,6 +250,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.restored",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // Registered without `fetchById`: the connection row is untouched by a mute,
+  // so snapshotting it would record an empty diff. The handler supplies both
+  // sides itself (the mute before and after), which is where the signal is.
+  // The explicit entry also stops the PUT/DELETE walk-up to
+  // `/api/mcp_server/:id` from logging a mute as `mcpServer.updated` and — far
+  // worse — an unmute as `mcpServer.deleted`.
+  "/api/mcp_server/:id/alert-mutes/:kind": {
+    resourceType: "mcpServer",
+    actionByMethod: {
+      PUT: "mcpServer.alert_muted",
+      DELETE: "mcpServer.alert_unmuted",
+    },
+  },
 
   "/api/roles": {
     resourceType: "role",

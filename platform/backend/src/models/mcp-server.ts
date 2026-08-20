@@ -1228,6 +1228,48 @@ class McpServerModel {
     return updatedServer;
   }
 
+  /**
+   * Persist a terminal OAuth refresh failure on an install.
+   *
+   * The three cause fields carry the latest diagnosis and are overwritten every
+   * time, but `oauthRefreshFailedAt` is a FIRST-failure stamp: it is written
+   * only on the transition into the failed state. Re-observing the same fault —
+   * which happens on every subsequent tool call against a connection whose
+   * credential is dead — leaves it alone.
+   *
+   * That is what makes the timestamp an episode key rather than a last-attempt
+   * clock: the registry's "failing since" reads the moment the fault began, and
+   * a viewer's alert mute pinned to it is not knocked loose seconds after it
+   * was taken. Clearing the fault (the null write, paired with dropping the
+   * connection's mutes) ends the episode.
+   *
+   * `coalesce` keeps the read and the write in one statement, so two concurrent
+   * failures cannot both conclude they are the transition.
+   */
+  static async recordOAuthRefreshFailure(
+    id: string,
+    failure: {
+      oauthRefreshError: "refresh_failed" | "no_refresh_token";
+      oauthRefreshErrorMessage: string;
+      oauthRefreshErrorDescription: string | null;
+      /**
+       * When this failure was observed. Persisted only when the install was not
+       * already failing; otherwise the existing stamp wins.
+       */
+      oauthRefreshFailedAt: Date;
+    },
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        oauthRefreshError: failure.oauthRefreshError,
+        oauthRefreshErrorMessage: failure.oauthRefreshErrorMessage,
+        oauthRefreshErrorDescription: failure.oauthRefreshErrorDescription,
+        oauthRefreshFailedAt: sql`coalesce(${schema.mcpServersTable.oauthRefreshFailedAt}, ${failure.oauthRefreshFailedAt.toISOString()})`,
+      })
+      .where(eq(schema.mcpServersTable.id, id));
+  }
+
   /** Atomically move every install sharing one reset to the same status. */
   static async updateInstallationStatuses(params: {
     ids: string[];

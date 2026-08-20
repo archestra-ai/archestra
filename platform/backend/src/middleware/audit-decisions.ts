@@ -459,6 +459,13 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: mcp server × user; parent (mcp server) audited",
   },
+  // Mutations are captured under the parent connection via
+  // /api/mcp_server/:id/alert-mutes/:kind → mcpServer.alert_muted/_unmuted.
+  mcpServerAlertMutesTable: {
+    audited: false,
+    reason:
+      "per-viewer alert mute; mutations captured under parent mcp server resource",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",

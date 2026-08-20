@@ -120,6 +120,11 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.reinstalled",
   "mcpServer.hardReset",
   "mcpServer.bulk_deleted",
+  // Recorded against the connection, not against the mute row: a mute is one
+  // viewer's decision to stop seeing an alert on that connection, and the
+  // administrator reading the log wants it under the connection it silences.
+  "mcpServer.alert_muted",
+  "mcpServer.alert_unmuted",
   // Retired with the MCP server installation request feature. Kept in the
   // vocabulary because audit rows written before its removal still carry these
   // names — dropping them would render that history as raw dotted keys. No

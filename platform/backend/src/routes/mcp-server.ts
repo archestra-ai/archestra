@@ -34,6 +34,7 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  McpServerAlertMuteModel,
   McpServerModel,
   MemberModel,
   TeamModel,
@@ -74,11 +75,16 @@ import {
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
   McpServerAgentUsageSchema,
+  type McpServerAlertMute,
+  McpServerAlertMuteSchema,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   McpServerHibernationModeSchema,
   // SPDX-SnippetEnd
+  McpServerListEntrySchema,
+  McpServerMutableAlertKindSchema,
+  MuteMcpServerAlertBodySchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectMcpServerSchema,
@@ -135,7 +141,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).",
             ),
         }),
-        response: constructResponseSchema(z.array(SelectMcpServerSchema)),
+        response: constructResponseSchema(z.array(McpServerListEntrySchema)),
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
@@ -163,7 +169,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (catalogId) {
           deleted = deleted.filter((s) => s.catalogId === catalogId);
         }
-        return reply.send(deleted);
+        // An uninstalled connection reports no alerts, so it carries no mutes.
+        return reply.send(deleted.map((s) => ({ ...s, alertMutes: [] })));
       }
 
       const [{ success: isMcpServerAdmin }, userIsPredefinedAdmin] =
@@ -203,7 +210,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      return reply.send(allServers);
+      // The caller's own still-applicable alert mutes, batched over the whole
+      // listing so the registry can render a silenced alert without a second
+      // round trip. Never anyone else's — a mute hides an alert for one person.
+      //
+      // Only connections that are actually failing can carry an applicable
+      // mute, and most listings have none, so the query is handed just those —
+      // and skipped entirely when there are none at all.
+      const alertMutesByServerId =
+        await McpServerAlertMuteModel.findApplicableForViewer({
+          userId: user.id,
+          mcpServers: allServers.filter(
+            (server) => server.oauthRefreshFailedAt !== null,
+          ),
+        });
+
+      return reply.send(
+        allServers.map((server) => ({
+          ...server,
+          alertMutes: alertMutesByServerId.get(server.id) ?? [],
+        })),
+      );
     },
   );
 
@@ -1503,6 +1530,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthRefreshFailedAt: null,
       });
 
+      // The failure episode every mute on this connection was pinned to is
+      // over, so the mutes go with it. Dropped after the clear, never before:
+      // if the clear had failed, a still-valid mute must survive.
+      await McpServerAlertMuteModel.deleteForMcpServer(id);
+
       // Re-auth swaps the secret behind the same MCP server ID. Cached MCP clients
       // are keyed by server ID and can otherwise keep reusing the stale auth/session.
       await mcpClient.invalidateConnectionsForServer(id);
@@ -1796,6 +1828,133 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
       return reply.send(restored);
+    },
+  );
+
+  fastify.put(
+    "/api/mcp_server/:id/alert-mutes/:kind",
+    {
+      schema: {
+        operationId: RouteId.MuteMcpServerAlert,
+        description:
+          "Mute one alert on an MCP connection for the calling user only — it stays visible to everyone else. " +
+          "Only `needs-reauth` is mutable, and only while the connection is actually reporting it: the mute is " +
+          "pinned to that refresh failure and stops applying the moment a fresh one is recorded. " +
+          "Re-muting replaces the caller's previous mute for the same alert.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+          kind: McpServerMutableAlertKindSchema,
+        }),
+        body: MuteMcpServerAlertBodySchema,
+        response: constructResponseSchema(McpServerAlertMuteSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        params: { id: mcpServerId, kind },
+        body: { reason },
+        user,
+        headers,
+      } = request;
+
+      // Visibility is the whole authorization rule here, deliberately weaker
+      // than the scoped lifecycle checks the destructive routes use: a mute
+      // changes nothing about the connection, only what this one caller sees,
+      // so anyone the connection is already visible to may take one.
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId,
+        userId: user.id,
+        headers,
+      });
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // The mute has to be pinned to a specific failure, so there must be one.
+      // The check and the write happen together under a row lock on the
+      // install: a failure that clears (or begins) mid-request must not leave
+      // behind a mute pinned to an episode that is already over, which the
+      // listing would ignore while the caller was told the alert was silenced.
+      const muted = await McpServerAlertMuteModel.muteLiveAlert({
+        userId: user.id,
+        mcpServerId,
+        issueKind: kind,
+        reason,
+      });
+      if (!muted) {
+        throw new ApiError(
+          409,
+          "This connection is not reporting a re-authentication alert, so there is nothing to mute.",
+        );
+      }
+
+      // The connection row is untouched by a mute, so the audit registry
+      // registers this route without a snapshot fetcher and the handler
+      // supplies both sides: the caller's mute before and after.
+      request.auditBefore = toAlertMuteAuditSnapshot({
+        mcpServerName: mcpServer.name,
+        mute: muted.previous,
+      });
+      request.auditAfter = toAlertMuteAuditSnapshot({
+        mcpServerName: mcpServer.name,
+        mute: muted.mute,
+      });
+
+      return reply.send(muted.mute);
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/:id/alert-mutes/:kind",
+    {
+      schema: {
+        operationId: RouteId.UnmuteMcpServerAlert,
+        description:
+          "Remove the calling user's mute on one MCP connection alert, bringing it back into their own view. " +
+          "404 when the caller has no mute for that alert.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+          kind: McpServerMutableAlertKindSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        params: { id: mcpServerId, kind },
+        user,
+        headers,
+      } = request;
+
+      const mcpServer = await findAccessibleMcpServer({
+        mcpServerId,
+        userId: user.id,
+        headers,
+      });
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Deleting by (viewer, connection, kind) can only ever reach the
+      // caller's own row, so another user's mute is untouchable from here.
+      const removed = await McpServerAlertMuteModel.unmute({
+        userId: user.id,
+        mcpServerId,
+        issueKind: kind,
+      });
+      if (!removed) {
+        throw new ApiError(404, "You have not muted this alert.");
+      }
+
+      request.auditBefore = toAlertMuteAuditSnapshot({
+        mcpServerName: mcpServer.name,
+        mute: removed,
+      });
+      request.auditAfter = null;
+
+      return reply.send({ success: true });
     },
   );
 
@@ -2868,6 +3027,26 @@ async function findAccessibleMcpServer(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * One side of a mute/unmute audit record. The connection's name rides along
+ * because the audit hook reads `name` to label the row, and the resource being
+ * labelled is the connection the alert was silenced on. Null means "no mute" —
+ * the `before` of a first mute, the `after` of an unmute.
+ */
+function toAlertMuteAuditSnapshot(params: {
+  mcpServerName: string;
+  mute: McpServerAlertMute | null;
+}): Record<string, unknown> | null {
+  const { mcpServerName, mute } = params;
+  if (!mute) return null;
+  return {
+    name: mcpServerName,
+    alertKind: mute.issueKind,
+    reason: mute.reason,
+    mutedAt: mute.mutedAt.toISOString(),
+  };
+}
 
 /**
  * The runtime's handle on a reset that is under way. Taken from the method

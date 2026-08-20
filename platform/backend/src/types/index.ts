@@ -66,6 +66,7 @@ export * from "./mcp-catalog-skill";
 export * from "./mcp-oauth-client";
 export * from "./mcp-server";
 export * from "./mcp-skill";
+export * from "./mcp-server-alert-mute";
 export * from "./mcp-tool-call";
 export * from "./member";
 export * from "./message";

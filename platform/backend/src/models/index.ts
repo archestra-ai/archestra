@@ -82,6 +82,7 @@ export { default as McpGatewayTaskModel } from "./mcp-gateway-task";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpOauthClientModel } from "./mcp-oauth-client";
 export { default as McpServerModel } from "./mcp-server";
+export { default as McpServerAlertMuteModel } from "./mcp-server-alert-mute";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";

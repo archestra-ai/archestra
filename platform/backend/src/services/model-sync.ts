@@ -323,7 +323,7 @@ export function buildModelsToUpsert(params: {
     }
   }
 
-  return [...uniqueModels.values()].map((model) => {
+  const built = [...uniqueModels.values()].map((model) => {
     // Bedrock/Azure model ids don't match models.dev keys, so derive pricing and
     // capabilities from the underlying vendor entry.
     const isReseller = provider === "bedrock" || provider === "azure";
@@ -415,7 +415,129 @@ export function buildModelsToUpsert(params: {
       lastSyncedAt: new Date(),
     };
   });
+
+  return withDistinctDescriptions(built);
 }
+
+/**
+ * Give every model in a provider's catalog a display name of its own.
+ *
+ * Two rows arrive sharing a name from two directions. The registry keys a model
+ * family by its undated id, so a provider that lists both the moving alias and
+ * a pinned snapshot — OpenAI serves `gpt-4.1` and `gpt-4.1-2025-04-14` side by
+ * side — has the snapshot borrow the family's name through the date-stripped
+ * fallback in `registryLookupCandidates`. And the registry names distinct ids
+ * alike of its own accord: `gemini-3-pro-image` and `gemini-3-pro-image-preview`
+ * are both "Nano Banana Pro". Either way every model picker renders rows a user
+ * cannot tell apart, and choosing between them is a coin flip.
+ *
+ * A colliding row is suffixed with the part of its id the rest of the group
+ * does not share, reproducing the convention the registry uses for the
+ * snapshots it names itself ("GPT-4o (2024-08-06)"). The row whose id is the
+ * group's shared stem keeps the bare name, and a name nothing else answers to
+ * is left alone — so a provider listing a dated id and no alias for it
+ * (Anthropic publishes only `claude-sonnet-4-5-20250929`) is untouched.
+ *
+ * Scoped to one provider catalog because that is the scope of the confusion:
+ * these are the rows a picker offers side by side. It is also idempotent —
+ * the name is re-derived from the registry on every sync, never from the
+ * previously stored one — so a decoration can never stack up across syncs.
+ */
+function withDistinctDescriptions(models: CreateModel[]): CreateModel[] {
+  const modelIdsByDescription = new Map<string, string[]>();
+  for (const { description, modelId } of models) {
+    if (!description) {
+      // A nameless row already falls back to its own id for display.
+      continue;
+    }
+    const modelIds = modelIdsByDescription.get(description);
+    if (modelIds) {
+      modelIds.push(modelId);
+    } else {
+      modelIdsByDescription.set(description, [modelId]);
+    }
+  }
+
+  const distinguishersByDescription = new Map<string, Map<string, string>>();
+  for (const [description, modelIds] of modelIdsByDescription) {
+    if (modelIds.length > 1) {
+      distinguishersByDescription.set(
+        description,
+        distinguishModelIds(modelIds),
+      );
+    }
+  }
+  if (distinguishersByDescription.size === 0) {
+    return models;
+  }
+
+  return models.map((model) => {
+    const distinguisher = model.description
+      ? distinguishersByDescription.get(model.description)?.get(model.modelId)
+      : undefined;
+    return distinguisher
+      ? { ...model, description: `${model.description} (${distinguisher})` }
+      : model;
+  });
+}
+
+/**
+ * What sets each of these model ids apart: everything past the leading tokens
+ * they all share, punctuated the way the id itself is.
+ *
+ * Whole tokens only. `claude-opus-4-thinking:32000` and `…:32768` share
+ * characters up to "32", and labelling them "(000)" and "(768)" would name
+ * something no provider ever published. The id that is exactly the shared stem
+ * gets an empty distinguisher and keeps its bare name.
+ *
+ * Ids that tokenise identically (`a-b` and `a.b`) leave two rows indistinct, so
+ * the whole group falls back to raw ids, which always tell them apart.
+ */
+function distinguishModelIds(modelIds: string[]): Map<string, string> {
+  // Splitting on a capturing group keeps the separators, so a distinguisher is
+  // rebuilt with the punctuation its own id used.
+  const partsByModelId = modelIds.map(
+    (modelId) => [modelId, modelId.split(MODEL_ID_SEPARATOR)] as const,
+  );
+  const sharedTokens = countSharedLeadingTokens(
+    partsByModelId.map(([, parts]) => parts),
+  );
+
+  const distinguishers = new Map(
+    partsByModelId.map(([modelId, parts]) => [
+      modelId,
+      // Tokens sit at even indices, each preceded by its separator at the odd
+      // index below it — so this drops the shared run and its trailing
+      // separator in one cut.
+      parts.slice(sharedTokens * 2).join(""),
+    ]),
+  );
+
+  const distinct = new Set(distinguishers.values());
+  return distinct.size === distinguishers.size
+    ? distinguishers
+    : new Map(modelIds.map((modelId) => [modelId, modelId]));
+}
+
+/** How many leading tokens every one of these split model ids has in common. */
+function countSharedLeadingTokens(partsPerModelId: string[][]): number {
+  const [first, ...rest] = partsPerModelId;
+  let shared = 0;
+  while (shared * 2 < first.length) {
+    const token = first[shared * 2];
+    if (rest.some((parts) => parts[shared * 2] !== token)) {
+      break;
+    }
+    shared++;
+  }
+  return shared;
+}
+
+/**
+ * The punctuation providers build model ids out of — `gpt-4.1-nano`,
+ * `openai.gpt-oss-120b-1:0`, `google/gemini-3-pro-image`.
+ */
+const MODEL_ID_SEPARATOR = /([-._:/])/;
 
 /**
  * The one place the size threshold is applied. Null (not `true`) when the

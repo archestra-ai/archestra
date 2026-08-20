@@ -1431,4 +1431,37 @@ describe("ModelSyncService", () => {
       "Claude 4 Opus Thinking (32768)",
     ]);
   });
+
+  test("falls back to raw ids when two colliding ids tokenise identically", () => {
+    // The safety net behind the invariant: `-` and `.` tokenise the same, so
+    // there is no distinguishing suffix to cut and the group would otherwise
+    // stay ambiguous. The raw ids always tell them apart.
+    const built = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "foo-bar" }, { id: "foo.bar" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "foo-bar": {
+              id: "foo-bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "foo.bar": {
+              id: "foo.bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Foo Bar (foo-bar)",
+      "Foo Bar (foo.bar)",
+    ]);
+  });
 });

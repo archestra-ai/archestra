@@ -227,15 +227,23 @@ export function AssignedToolsTable({
 
   const tools = toolsData?.data ?? [];
 
+  /**
+   * The ticked rows and the tool objects the bulk bar acts on are separate
+   * state, so dropping a selection has to drop both — clearing only the row
+   * ids leaves the bar reporting a count of tools nothing is ticking.
+   */
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setSelectedTools([]);
+  }, []);
+
   // Helper to update URL params
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
-      setRowSelection({});
-      setSelectedTools([]);
-
+      clearSelection();
       setPagination(newPagination);
     },
-    [setPagination],
+    [setPagination, clearSelection],
   );
 
   const handleRowSelectionChange = useCallback(
@@ -252,9 +260,8 @@ export function AssignedToolsTable({
   );
 
   const handleSearchChange = useCallback(() => {
-    setRowSelection({});
-    setSelectedTools([]);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
   const handleOriginFilterChange = useCallback(
     (value: string) => {
@@ -271,10 +278,9 @@ export function AssignedToolsTable({
         ...(leavingObservedTools && { observedBy: null, client: null }),
         page: "1", // Reset to first page
       });
-      setRowSelection({});
-      setSelectedTools([]);
+      clearSelection();
     },
-    [updateQueryParams],
+    [updateQueryParams, clearSelection],
   );
 
   const handleObservedByFilterChange = useCallback(
@@ -284,10 +290,9 @@ export function AssignedToolsTable({
         observedBy: value === DEFAULT_FILTER_ALL ? null : value,
         page: "1", // Reset to first page
       });
-      setRowSelection({});
-      setSelectedTools([]);
+      clearSelection();
     },
-    [updateQueryParams],
+    [updateQueryParams, clearSelection],
   );
 
   const handleClientFilterChange = useCallback(
@@ -297,10 +302,9 @@ export function AssignedToolsTable({
         client: value === DEFAULT_FILTER_ALL ? null : value,
         page: "1", // Reset to first page
       });
-      setRowSelection({});
-      setSelectedTools([]);
+      clearSelection();
     },
-    [updateQueryParams],
+    [updateQueryParams, clearSelection],
   );
 
   const handleSortingChange = useCallback(
@@ -896,7 +900,7 @@ export function AssignedToolsTable({
 
       <ToolPolicyBulkActionsBar
         selectedToolIds={selectedTools.map((tool) => tool.id)}
-        onClear={() => setRowSelection({})}
+        onClear={clearSelection}
       />
 
       <DataTable

@@ -86,6 +86,32 @@ describe("AgentSelector (single, flat)", () => {
     expect(within(option).getByText("Shared across the org")).toBeVisible();
   });
 
+  // The selection check reserves its 16px on every row, visible or not. Put it
+  // after the badge and it strands each badge short of the dropdown's right
+  // edge — the column the badge-less sentinel row's own check defines. The
+  // order has regressed twice, so pin it: nothing renders past the badge.
+  it("leaves the scope badge as the option row's trailing element", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select proxy"
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    const option = await screen.findByRole("option", { name: /Shared Proxy/ });
+    const badge = within(option).getByLabelText("Organization");
+    const lastRendered = [...option.querySelectorAll("*")].at(-1);
+
+    expect(badge.contains(lastRendered ?? null)).toBe(true);
+  });
+
   it("flat mode lists llm_proxy items that the grouped view would drop", async () => {
     const onValueChange = vi.fn();
     const user = userEvent.setup();

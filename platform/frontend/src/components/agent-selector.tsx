@@ -500,20 +500,23 @@ function AgentSelectorItem({
       className="justify-between"
     >
       <AgentSelectorRow agent={agent} variant="option" />
-      {/* The scope badge rides with the selection check in one right-anchored
-          cluster. The check is a fixed width, so every badge lands at the same
-          offset from the edge and the two read as columns down the list —
-          rather than each badge trailing its own name at a different x. */}
+      {/* Badge last, so it — not the check — owns the row's right edge. The
+          check always occupies its 16px whether or not it is visible, so
+          trailing it stranded every badge 22px short of the edge that the
+          badge-less sentinel row's own check defined. With the badge outermost,
+          the last rendered glyph of every row (a badge here, a bare check on
+          the sentinel) lands on one column. ScopeBadge is fixed-width, so the
+          checks that tuck inside a badge stay a column of their own too. */}
       <span className="flex shrink-0 items-center gap-1.5">
+        <Check
+          className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
+        />
         {agent.scope ? (
           <ScopeBadge
             scope={agent.scope}
             teamNames={agent.teams?.map((team) => team.name)}
           />
         ) : null}
-        <Check
-          className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
-        />
       </span>
     </CommandItem>
   );

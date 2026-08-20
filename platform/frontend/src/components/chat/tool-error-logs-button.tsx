@@ -21,7 +21,7 @@ interface ToolErrorLogsButtonProps {
 export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const { data: allMcpServers } = useMcpServers();
-  const deploymentStatuses = useMcpDeploymentStatuses();
+  const { statuses: deploymentStatuses } = useMcpDeploymentStatuses();
 
   const mcpServerName = parseFullToolName(toolName).serverName;
 

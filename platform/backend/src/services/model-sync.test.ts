@@ -14,6 +14,7 @@ import {
   buildModelsToUpsert,
   modelSyncService,
   resolveModelCapabilities,
+  withDistinctDisplayNames,
 } from "./model-sync";
 
 // Mock only the network boundary (the client singleton's fetch); keep the real
@@ -1462,6 +1463,47 @@ describe("ModelSyncService", () => {
     expect(built.map((model) => model.description)).toEqual([
       "Foo Bar (foo-bar)",
       "Foo Bar (foo.bar)",
+    ]);
+  });
+});
+
+describe("withDistinctDisplayNames", () => {
+  test("suffixes response rows that share a display name within one provider", () => {
+    // The read-time counterpart of the sync-time pass: stored descriptions can
+    // still collide (rows synced before names were disambiguated, or keys
+    // whose catalogs each contain only one member of the pair).
+    const models = withDistinctDisplayNames([
+      { id: "gpt-4.1", provider: "openai" as const, displayName: "GPT-4.1" },
+      {
+        id: "gpt-4.1-2025-04-14",
+        provider: "openai" as const,
+        displayName: "GPT-4.1",
+      },
+      {
+        id: "gpt-4.1-mini",
+        provider: "openai" as const,
+        displayName: "GPT-4.1 mini",
+      },
+    ]);
+
+    expect(models.map((model) => model.displayName)).toEqual([
+      "GPT-4.1",
+      "GPT-4.1 (2025-04-14)",
+      "GPT-4.1 mini",
+    ]);
+  });
+
+  test("a name shared across providers is not a collision", () => {
+    // The UI groups the list by provider, so these are never shown side by
+    // side under one name — and their ids only mean anything per provider.
+    const models = withDistinctDisplayNames([
+      { id: "gpt-4o", provider: "openai" as const, displayName: "GPT-4o" },
+      { id: "gpt-4o", provider: "azure" as const, displayName: "GPT-4o" },
+    ]);
+
+    expect(models.map((model) => model.displayName)).toEqual([
+      "GPT-4o",
+      "GPT-4o",
     ]);
   });
 });

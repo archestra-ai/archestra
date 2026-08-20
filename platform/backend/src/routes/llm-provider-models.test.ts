@@ -181,6 +181,76 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models/available disambiguates stored names that still collide", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Rows written before sync-time name disambiguation existed — or refreshed
+    // by a key whose catalog lists only one member of the pair — still share a
+    // description in the database. The response must tell them apart anyway.
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const base = {
+      provider: "openai" as const,
+      contextLength: 128_000,
+      inputModalities: ["text" as const],
+      outputModalities: ["text" as const],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    };
+    const models = await Promise.all([
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1",
+        modelId: "gpt-4.1",
+        description: "GPT-4.1",
+      }),
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1-2025-04-14",
+        modelId: "gpt-4.1-2025-04-14",
+        description: "GPT-4.1",
+      }),
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1-mini",
+        modelId: "gpt-4.1-mini",
+        description: "GPT-4.1 mini",
+      }),
+    ]);
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      models.map((model) => ({ id: model.id, modelId: model.modelId })),
+      "openai",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const displayNamesById = Object.fromEntries(
+      response
+        .json<Array<{ id: string; displayName: string }>>()
+        .map((model) => [model.id, model.displayName]),
+    );
+    expect(displayNamesById).toEqual({
+      "gpt-4.1": "GPT-4.1",
+      "gpt-4.1-2025-04-14": "GPT-4.1 (2025-04-14)",
+      "gpt-4.1-mini": "GPT-4.1 mini",
+    });
+  });
+
   test("GET /api/llm-models/available?isEmbedding=true only returns embedding models with configured dimensions", async ({
     makeSecret,
     makeLlmProviderApiKey,

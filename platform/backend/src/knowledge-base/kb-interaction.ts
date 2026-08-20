@@ -230,6 +230,9 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   SupportedProvider,
   SupportedProviderDiscriminator
 > = {
+  // Embeddings-only provider: it has no chat discriminator, and its only
+  // interactions are embedding calls, which are logged under this one.
+  voyage: "voyage:embeddings",
   openai: "openai:chatCompletions",
   archestra: "archestra:chatCompletions",
   gemini: "gemini:generateContent",

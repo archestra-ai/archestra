@@ -81,6 +81,9 @@ const BEDROCK_REGION_PREFIX = /^(us-gov|us|eu|apac|ap|sa|ca|jp|au|global)\./;
  * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
  */
 const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
+  // Embeddings-only provider: Voyage publishes no tokenizer, and this is only
+  // ever reached for local token estimates, so the generic one applies.
+  voyage: getTiktokenTokenizer,
   anthropic: getAnthropicTokenizer,
   archestra: getTiktokenTokenizer,
   azure: getTiktokenTokenizer,

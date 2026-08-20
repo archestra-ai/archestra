@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { ChatProvider } from "@archestra/shared";
 import {
   MICROSOFT_365_COPILOT_MODELS,
   type SupportedProvider,
@@ -2040,7 +2041,7 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: false,
     supportsCompression: true,
   }),
-} satisfies Record<SupportedProvider, ProviderTestConfig>;
+} satisfies Record<ChatProvider, ProviderTestConfig>;
 
 const perplexityResponsesConfig = makeConfig({
   providerName: "Perplexity Responses",

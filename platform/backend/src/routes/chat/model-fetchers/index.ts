@@ -19,6 +19,7 @@ import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
 import type { ModelFetcher, ModelInfo } from "./types";
 import { fetchVllmModels } from "./vllm";
+import { fetchVoyageModels } from "./voyage";
 import { fetchXaiModels } from "./xai";
 
 const ZHIPUAI_CHAT_PREFIXES = ["glm-", "chatglm-"];
@@ -90,6 +91,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 });
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
+  voyage: fetchVoyageModels,
   anthropic: fetchAnthropicModels,
   archestra: fetchArchestraModels,
   azure: fetchAzureModels,

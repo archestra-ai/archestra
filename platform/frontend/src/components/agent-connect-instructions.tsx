@@ -3,6 +3,7 @@
 import {
   type AgentType,
   type archestraApiTypes,
+  type ChatProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MCP_GATEWAY_OAUTH_SCOPE,
   type SupportedProvider,
@@ -86,7 +87,7 @@ export function LlmProxyConnectInstructions({
 }) {
   const { baseUrl, organization } = useConnectionBaseUrl();
   // Local selection — this content must not write providerId into the page URL.
-  const [selected, setSelected] = useState<"model-router" | SupportedProvider>(
+  const [selected, setSelected] = useState<"model-router" | ChatProvider>(
     "model-router",
   );
 

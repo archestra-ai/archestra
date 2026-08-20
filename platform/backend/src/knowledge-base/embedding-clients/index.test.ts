@@ -39,6 +39,35 @@ describe("Cohere direct embedding capability", () => {
   });
 });
 
+describe("Voyage embedding capability", () => {
+  test("drives text and images only for the multimodal models", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-multimodal-3.5"),
+    ).toEqual(["text", "image"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-multimodal-3"),
+    ).toEqual(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  });
+
+  test("keeps the text-only models text-only", () => {
+    expect(getEmbeddingClientInputModalities("voyage", "voyage-4")).toEqual([
+      "text",
+    ]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-4"),
+    ).toBeNull();
+  });
+
+  test("degrades a Voyage model outside the table to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-99-omni"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-99-omni"),
+    ).toBeNull();
+  });
+});
+
 describe("Gemini multimodal embedding capability", () => {
   test("enables the stable model with only its embedding image formats", () => {
     expect(

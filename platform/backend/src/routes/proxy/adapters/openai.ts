@@ -1653,7 +1653,7 @@ export const openaiAdapterFactory: LLMProvider<
   ): Promise<OpenAiResponse> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
-      ...request,
+      ...normalizeResponsesStyleCustomTools(request),
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
     return openaiClient.chat.completions.create(
@@ -1667,7 +1667,7 @@ export const openaiAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
-      ...request,
+      ...normalizeResponsesStyleCustomTools(request),
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
@@ -1822,6 +1822,49 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
 // =============================================================================
 // INTERNAL HELPERS
 // =============================================================================
+
+/**
+ * Some Responses-API-first clients (Cursor's ApplyPatch tool is the known
+ * case) attach custom tools to /chat/completions requests in the flat
+ * Responses shape — `name`/`format` at the top level with grammar fields
+ * inlined. OpenAI rejects that shape on Chat Completions with
+ * "Missing required parameter: 'tools[N].custom'", so normalize it to the
+ * nested Chat Completions shape before forwarding. Requests without a flat
+ * custom tool pass through untouched.
+ */
+function normalizeResponsesStyleCustomTools(
+  request: OpenAiRequest,
+): OpenAiRequest {
+  const tools = request.tools;
+  if (!tools?.some((t) => t.type === "custom" && !("custom" in t))) {
+    return request;
+  }
+  return {
+    ...request,
+    tools: tools.map((t) => {
+      if (t.type !== "custom" || "custom" in t) return t;
+      return {
+        type: "custom" as const,
+        custom: {
+          name: t.name,
+          ...(t.description !== undefined && { description: t.description }),
+          ...(t.format !== undefined && {
+            format:
+              t.format.type === "grammar"
+                ? {
+                    type: "grammar" as const,
+                    grammar: {
+                      definition: t.format.definition,
+                      syntax: t.format.syntax,
+                    },
+                  }
+                : { type: "text" as const },
+          }),
+        },
+      };
+    }),
+  };
+}
 
 /**
  * Some OpenAI-compatible upstreams (LiteLLM, OpenRouter, misconfigured

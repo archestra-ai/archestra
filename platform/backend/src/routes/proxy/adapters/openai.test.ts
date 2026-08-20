@@ -1018,3 +1018,84 @@ describe("OpenAIStreamAdapter", () => {
     expect(usageOf(adapter.formatEndSSE())).toBeUndefined();
   });
 });
+
+describe("execute custom-tool normalization", () => {
+  // Cursor attaches its ApplyPatch custom tool in the flat Responses-API
+  // shape; OpenAI's /chat/completions rejects that with "Missing required
+  // parameter: 'tools[N].custom'". The adapter must forward the nested Chat
+  // Completions shape instead, leaving other tools untouched.
+  const flatCustomTool = {
+    type: "custom",
+    name: "ApplyPatch",
+    description: "Use this tool to edit files.",
+    format: {
+      type: "grammar",
+      definition: "start: begin_patch hunk end_patch",
+      syntax: "lark",
+    },
+  };
+  const functionTool = {
+    type: "function",
+    function: { name: "Read", parameters: {} },
+  };
+
+  function captureClient() {
+    const captured: { params?: Record<string, unknown> } = {};
+    const client = {
+      chat: {
+        completions: {
+          create: (params: Record<string, unknown>) => {
+            captured.params = params;
+            return createMockResponse({ role: "assistant", content: "ok" });
+          },
+        },
+      },
+    };
+    return { captured, client };
+  }
+
+  test("nests a flat Responses-style custom tool before forwarding", async () => {
+    const { captured, client } = captureClient();
+    const request = createMockRequest([{ role: "user", content: "hi" }], {
+      tools: [
+        functionTool,
+        flatCustomTool,
+      ] as OpenAi.Types.ChatCompletionsRequest["tools"],
+    });
+
+    await openaiAdapterFactory.execute(client, request);
+
+    const tools = captured.params?.tools as Array<Record<string, unknown>>;
+    expect(tools[0]).toEqual(functionTool);
+    expect(tools[1]).toEqual({
+      type: "custom",
+      custom: {
+        name: "ApplyPatch",
+        description: "Use this tool to edit files.",
+        format: {
+          type: "grammar",
+          grammar: {
+            definition: "start: begin_patch hunk end_patch",
+            syntax: "lark",
+          },
+        },
+      },
+    });
+    // The caller's request object must not be mutated.
+    expect(request.tools?.[1]).toEqual(flatCustomTool);
+  });
+
+  test("leaves already-nested custom tools and tool-less requests untouched", async () => {
+    const { captured, client } = captureClient();
+    const nested = {
+      type: "custom",
+      custom: { name: "ApplyPatch" },
+    };
+    const request = createMockRequest([{ role: "user", content: "hi" }], {
+      tools: [nested] as OpenAi.Types.ChatCompletionsRequest["tools"],
+    });
+
+    await openaiAdapterFactory.execute(client, request);
+    expect((captured.params?.tools as unknown[])[0]).toEqual(nested);
+  });
+});

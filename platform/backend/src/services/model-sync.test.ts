@@ -1307,4 +1307,161 @@ describe("ModelSyncService", () => {
       stop: ["<|eot_id|>"],
     });
   });
+
+  test("distinguishes a pinned snapshot from the moving alias it borrows its name from", () => {
+    // OpenAI lists both, and the registry only keys the undated id, so the
+    // snapshot resolved its name through the date-stripped lookup and both rows
+    // rendered as an identical "GPT-4.1" in every model picker.
+    const built = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "gpt-4.1" }, { id: "gpt-4.1-2025-04-14" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "gpt-4.1": {
+              id: "gpt-4.1",
+              name: "GPT-4.1",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => [model.modelId, model.description])).toEqual([
+      ["gpt-4.1", "GPT-4.1"],
+      // Matches the convention the registry uses for the snapshots it does name
+      // itself, e.g. "GPT-4o (2024-08-06)".
+      ["gpt-4.1-2025-04-14", "GPT-4.1 (2025-04-14)"],
+    ]);
+  });
+
+  test("leaves a dated model id alone when the catalog lists no alias for it", () => {
+    // Anthropic publishes only the dated id, so there is nothing to confuse it
+    // with and the clean family name is the better label.
+    const [model] = buildModelsToUpsert({
+      provider: "anthropic",
+      models: [{ id: "claude-sonnet-4-5-20250929" }],
+      modelsDevData: {
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-5": {
+              id: "claude-sonnet-4-5",
+              name: "Claude Sonnet 4.5",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.description).toBe("Claude Sonnet 4.5");
+  });
+
+  test("distinguishes two model ids the registry itself names alike", () => {
+    // Not every collision comes from the date fallback: models.dev names
+    // `gemini-3-pro-image` and its `-preview` sibling identically.
+    const built = buildModelsToUpsert({
+      provider: "gemini",
+      models: [
+        { id: "gemini-3-pro-image" },
+        { id: "gemini-3-pro-image-preview" },
+      ],
+      modelsDevData: {
+        google: {
+          id: "google",
+          name: "Google",
+          models: {
+            "gemini-3-pro-image": {
+              id: "gemini-3-pro-image",
+              name: "Nano Banana Pro",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "gemini-3-pro-image-preview": {
+              id: "gemini-3-pro-image-preview",
+              name: "Nano Banana Pro",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Nano Banana Pro",
+      "Nano Banana Pro (preview)",
+    ]);
+  });
+
+  test("distinguishes colliding ids by whole tokens rather than mid-token characters", () => {
+    // The shared characters run into the middle of the context-window token, so
+    // a character-wise cut would label these "(000)" and "(768)".
+    const built = buildModelsToUpsert({
+      provider: "openrouter",
+      models: [
+        { id: "claude-opus-4-thinking:32000" },
+        { id: "claude-opus-4-thinking:32768" },
+      ],
+      modelsDevData: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "claude-opus-4-thinking:32000": {
+              id: "claude-opus-4-thinking:32000",
+              name: "Claude 4 Opus Thinking",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "claude-opus-4-thinking:32768": {
+              id: "claude-opus-4-thinking:32768",
+              name: "Claude 4 Opus Thinking",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Claude 4 Opus Thinking (32000)",
+      "Claude 4 Opus Thinking (32768)",
+    ]);
+  });
+
+  test("falls back to raw ids when two colliding ids tokenise identically", () => {
+    // The safety net behind the invariant: `-` and `.` tokenise the same, so
+    // there is no distinguishing suffix to cut and the group would otherwise
+    // stay ambiguous. The raw ids always tell them apart.
+    const built = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "foo-bar" }, { id: "foo.bar" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "foo-bar": {
+              id: "foo-bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "foo.bar": {
+              id: "foo.bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Foo Bar (foo-bar)",
+      "Foo Bar (foo.bar)",
+    ]);
+  });
 });

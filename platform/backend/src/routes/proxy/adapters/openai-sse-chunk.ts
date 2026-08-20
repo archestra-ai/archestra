@@ -15,6 +15,15 @@ export interface OpenAiStreamUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  /**
+   * OpenAI reports prompt-cache hits as a subset of `prompt_tokens`. Providers
+   * that count cache reads separately (Anthropic, Bedrock, Gemini) must publish
+   * them here, or the gross `prompt_tokens` above is indistinguishable from an
+   * uncached prompt of the same size — and a consumer that recovers the split
+   * the way this codebase does (`prompt_tokens - cached_tokens`, see the openai
+   * adapter's `getUsageTokens`) attributes the whole prompt to full-price input.
+   */
+  prompt_tokens_details?: { cached_tokens: number };
 }
 
 /**
@@ -22,10 +31,12 @@ export interface OpenAiStreamUsage {
  * `undefined` when the provider never reported any.
  *
  * Valid only where `UsageView.inputTokens` already equals the provider's gross
- * prompt count. It is NOT universal: `inputTokens` is normalized to *uncached*
- * input, so any adapter whose accumulator subtracts cache reads (gemini) must
- * map its own numbers instead, or the stream would report a smaller prompt than
- * the non-streaming reply for the identical turn.
+ * prompt count. It is NOT universal, and the exceptions are the rule for every
+ * cache-aware provider: `inputTokens` is normalized to *uncached* input, so an
+ * adapter whose provider reports cache tokens outside its input count
+ * (anthropic, bedrock, gemini) must map its own numbers instead — otherwise a
+ * heavily cached turn reports only the handful of tokens that missed the cache
+ * as its entire prompt.
  */
 export function toOpenAiStreamUsage(
   usage: UsageView | null | undefined,

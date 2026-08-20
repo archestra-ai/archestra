@@ -212,6 +212,9 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
   ...getJson("/api/agents/default-llm-proxy", null),
+  // The agents list asks which of the caller's agents is their personal
+  // default; unmocked, it reaches the real backend and trips the leak guard.
+  ...getJson("/api/members/default-agent", { defaultAgentId: null }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

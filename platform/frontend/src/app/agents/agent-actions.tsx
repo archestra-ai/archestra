@@ -19,6 +19,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 
 type Agent = NonNullable<
@@ -81,11 +82,19 @@ export function AgentActions({
         actions={[
           {
             icon: <RotateCcw className="h-4 w-4" />,
-            label: "Restore",
+            label: ACTION_LABEL.restore,
             permissions: { agent: ["delete"] },
             disabled: !canModify,
+            disabledTooltip: notYoursToChange({
+              resource: "agent",
+              scope: agent.scope,
+            }),
             onClick: () => onRestore(agent.id),
           },
+        ]}
+        // Destructive and irreversible, so it sits in the row menu rather than
+        // one pixel from Restore — the same place Delete sits on a live row.
+        dropdownActions={[
           permanentDeleteRowAction({
             admin,
             onClick: () => onPermanentlyDelete(agent),
@@ -99,15 +108,24 @@ export function AgentActions({
     canModify || isBuiltIn
       ? {
           icon: <Pencil className="h-4 w-4" />,
-          label: "Edit",
-          permissions: { agent: ["update"] },
+          label: ACTION_LABEL.edit,
+          // A built-in agent is an org-wide record that only a resource admin
+          // may change (`requireAgentModifyPermission`), so the row asks for
+          // the permission the destination will actually check. Asking for
+          // `agent:update` let any holder of it through to an edit page that
+          // renders every field disabled.
+          permissions: isBuiltIn ? { agent: ["admin"] } : { agent: ["update"] },
           disabled: !canModify && !isBuiltIn,
+          disabledTooltip: notYoursToChange({
+            resource: "agent",
+            scope: agent.scope,
+          }),
           onClick: () => onEdit(agent),
           testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
         }
       : {
           icon: <Eye className="h-4 w-4" />,
-          label: "View",
+          label: ACTION_LABEL.view,
           onClick: () => onView(agent),
           testId: `${E2eTestId.EditAgentButton}-${agent.name}`,
         };
@@ -115,7 +133,7 @@ export function AgentActions({
   const primaryActions: TableRowAction[] = [
     {
       icon: <Plug className="h-4 w-4" />,
-      label: "Connect",
+      label: ACTION_LABEL.connect,
       disabled: isBuiltIn,
       disabledTooltip: "Built-in agents cannot be connected",
       onClick: () => onConnect(agent),
@@ -123,7 +141,7 @@ export function AgentActions({
     },
     {
       icon: <MessageSquare className="h-4 w-4" />,
-      label: "Chat",
+      label: ACTION_LABEL.chat,
       disabled: isBuiltIn,
       disabledTooltip: "Built-in agents cannot be chatted with",
       href: `/chat/new?agent_id=${agent.id}`,
@@ -153,7 +171,7 @@ export function AgentActions({
       : []),
     {
       icon: <Copy className="h-4 w-4" />,
-      label: "Clone",
+      label: ACTION_LABEL.clone,
       disabled: isBuiltIn,
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be cloned"
@@ -176,7 +194,7 @@ export function AgentActions({
     },
     {
       icon: <History className="h-4 w-4" />,
-      label: "Version history",
+      label: ACTION_LABEL.versionHistory,
       permissions: { agent: ["read"] },
       testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
       onClick: () => onHistory(agent.id, canModify),
@@ -195,12 +213,12 @@ export function AgentActions({
     },
     {
       icon: <Trash2 className="h-4 w-4" />,
-      label: "Delete",
+      label: ACTION_LABEL.delete,
       permissions: { agent: ["delete"] },
       disabled: isBuiltIn || !canModify,
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be deleted"
-        : undefined,
+        : notYoursToChange({ resource: "agent", scope: agent.scope }),
       variant: "destructive",
       onClick: () => onDelete(agent.id),
       testId: `${E2eTestId.DeleteAgentButton}-${agent.name}`,

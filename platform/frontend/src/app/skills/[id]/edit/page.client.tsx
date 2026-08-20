@@ -13,9 +13,13 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  backToRecordLabel,
+  notYoursToChange,
+} from "@/lib/design/resource-lexicon";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
+import { useSkillAccess } from "@/lib/skills/use-skill-access";
 import { cn } from "@/lib/utils";
 import {
   GithubSnapshotNotice,
@@ -68,7 +72,17 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data: canUpdate } = useHasPermissions({ skill: ["update"] });
+  // `skill:update` alone is not enough: the backend also asks whose skill this
+  // is, so a holder of the permission editing somebody else's skill used to
+  // fill the whole wizard and collect a 403 from Save.
+  const {
+    canEdit,
+    canUpdate,
+    isPending: isAccessPending,
+  } = useSkillAccess(skill);
+  // Undecided is not refused. Reading the permissions as "no" while they load
+  // would flash the read-only notice at the author of the skill.
+  const isReadOnly = !isAccessPending && !canEdit;
   const updateSkill = useUpdateSkill();
 
   const step = resolveSkillEditStep(searchParams.get("step"));
@@ -190,7 +204,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
       backLink={
         <SkillBackLink
           href={detailHref}
-          label="Back to skill"
+          label={backToRecordLabel("skill")}
           onClick={(event) => {
             if (!isDirty) return;
             event.preventDefault();
@@ -209,11 +223,13 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
           }}
         />
 
-        {canUpdate === false && (
+        {isReadOnly && (
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              You can view this skill&apos;s configuration but not change it.
+              {canUpdate
+                ? `${notYoursToChange({ resource: "skill", scope: skill.scope })}.`
+                : "You can view this skill's configuration but not change it."}
             </AlertDescription>
           </Alert>
         )}
@@ -247,12 +263,12 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                     files: update(prev.files),
                   }))
                 }
-                readOnly={isSynced || canUpdate === false}
+                readOnly={isSynced || isReadOnly}
                 className="h-[calc(100vh-26rem)] min-h-[28rem]"
               />
             </div>
             {step === "access" && (
-              <fieldset disabled={canUpdate === false} className="contents">
+              <fieldset disabled={isReadOnly} className="contents">
                 <SkillAccessFields draft={draft} onChange={patchDraft} />
               </fieldset>
             )}

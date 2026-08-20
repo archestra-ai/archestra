@@ -76,6 +76,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -429,7 +430,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ? [
           {
             id: "environment",
-            header: "Environment",
+            header: FIELD_LABEL.environment,
             enableSorting: false,
             size: 160,
             cell: ({ row }) => {

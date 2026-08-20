@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,8 @@ export function PageLayout({
   documentTitle,
   backLink,
   description,
+  status,
+  summary,
   children,
   tabs = [],
   actionButton,
@@ -69,6 +72,27 @@ export function PageLayout({
   backLink?: React.ReactNode;
   /** Omit on pages whose title needs no gloss — nothing is rendered. */
   description?: React.ReactNode;
+  /**
+   * The one pill saying what state this thing is in right now, beside the
+   * title. For a state a runtime signal actually answers — an MCP server's
+   * probe says whether it is reachable — and for nothing else. A pill that
+   * every record on the page carries permanently ("Active" on every agent)
+   * tells the reader nothing they did not already know from the page being
+   * there, so it is left empty by default rather than filled with a constant.
+   *
+   * Colours come from `lib/design/status-tone.ts`; the caller renders the
+   * pill, this only places it.
+   */
+  status?: React.ReactNode;
+  /**
+   * A one-line provenance strip under the description: who made the record and
+   * when, in the phrasing `lib/design/resource-lexicon.ts` fixes. `meta` by
+   * construction, so it must never carry a string the reader has to read to
+   * decide what to click — anything that gates an action belongs in the body,
+   * not here. Empty by default: a page with nothing to say about its
+   * provenance says nothing.
+   */
+  summary?: React.ReactNode;
   actionButton?: React.ReactNode;
   mobileVisibleCount?: number;
   /**
@@ -123,12 +147,25 @@ export function PageLayout({
                   page-translate has re-parented them into <font> wrappers
                   (facebook/react#11538). Keying the wrappers by pathname
                   swaps a whole element per page instead. */}
-              <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-                <span key={pathname}>{title}</span>
-              </h1>
+              {/* The status pill is a sibling of the heading, not part of it:
+                  detail titles already compose an icon, a name and badges
+                  inside `title`, and folding a live state into the accessible
+                  heading name would make the heading change every time the
+                  probe does. */}
+              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="min-w-0 text-2xl font-semibold tracking-tight">
+                  <span key={pathname}>{title}</span>
+                </h1>
+                {status && <div className="shrink-0">{status}</div>}
+              </div>
               {description && (
                 <div className="text-sm text-muted-foreground">
                   <span key={pathname}>{description}</span>
+                </div>
+              )}
+              {summary && (
+                <div className={cn(typeRole({ role: "meta" }), "mt-1")}>
+                  <span key={pathname}>{summary}</span>
                 </div>
               )}
             </div>

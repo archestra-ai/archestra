@@ -68,8 +68,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
@@ -82,6 +83,8 @@ import {
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
+import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
@@ -272,6 +275,15 @@ function SkillsList() {
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  // Resolved once for the whole table, then applied per row: the scope check
+  // is a pure function precisely so a table cell does not have to call hooks.
+  const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
+  const { data: isSkillTeamAdmin } = useHasPermissions({
+    skill: ["team-admin"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
+  const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
 
   const items = skills?.data ?? [];
   const bulkDeleteSkills = useBulkDeleteSkills();
@@ -549,16 +561,52 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
+        // RBAC alone let any `skill:update` holder press Edit, Delete and
+        // Restore on somebody else's skill and collect a 403 at save. The
+        // backend runs a skill through the same scope rule it runs an agent
+        // through, so the row applies it before offering the control.
+        const canModify = computeCanModifySkill({
+          skill,
+          isAdmin: !!isSkillAdmin,
+          isTeamAdmin: !!isSkillTeamAdmin,
+          currentUserId,
+          userTeamIds: userTeamIdSet,
+        });
+        const notYours = notYoursToChange({
+          resource: "skill",
+          scope: skill.scope,
+        });
         // A soft-deleted skill can only be restored; edit/chat/usage/delete all
         // act on active rows and would 404.
         const actions: TableRowAction[] = isDeletedView
           ? [
               {
                 icon: <ArchiveRestore className="h-4 w-4" />,
-                label: "Restore",
+                label: ACTION_LABEL.restore,
                 permissions: { skill: ["delete"] },
+                disabled: !canModify,
+                disabledTooltip: notYours,
                 onClick: () => restoreSkill.mutate(skill.id),
               },
+            ]
+          : [
+              {
+                icon: <MessageSquare className="h-4 w-4" />,
+                label: ACTION_LABEL.chat,
+                permissions: { chat: ["read", "create"] },
+                href: `/chat/new?skill_id=${skill.id}`,
+              },
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: ACTION_LABEL.edit,
+                permissions: { skill: ["update"] },
+                disabled: !canModify,
+                disabledTooltip: notYours,
+                href: skillEditHref(skill.id),
+              },
+            ];
+        const dropdownActions: TableRowAction[] = isDeletedView
+          ? [
               permanentDeleteRowAction({
                 admin,
                 onClick: () => setPermanentlyDeletingSkill(skill),
@@ -573,18 +621,6 @@ function SkillsList() {
             ]
           : [
               {
-                icon: <Pencil className="h-4 w-4" />,
-                label: "Edit",
-                permissions: { skill: ["update"] },
-                href: skillEditHref(skill.id),
-              },
-              {
-                icon: <MessageSquare className="h-4 w-4" />,
-                label: "Chat",
-                permissions: { chat: ["read", "create"] },
-                href: `/chat/new?skill_id=${skill.id}`,
-              },
-              {
                 icon: <ChartColumn className="h-4 w-4" />,
                 label: "Usage",
                 permissions: { skill: ["read"] },
@@ -592,21 +628,27 @@ function SkillsList() {
               },
               {
                 icon: <History className="h-4 w-4" />,
-                label: "Version history",
+                label: ACTION_LABEL.versionHistory,
                 permissions: { skill: ["read"] },
                 onClick: () => setHistorySkillId(skill.id),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
-                label: "Delete",
+                label: ACTION_LABEL.delete,
                 variant: "destructive",
                 permissions: { skill: ["delete"] },
+                disabled: !canModify,
+                disabledTooltip: notYours,
                 onClick: () => setDeletingSkill(skill),
               },
             ];
         return (
           <div className="flex justify-end">
-            <TableRowActions actions={actions} itemName={skill.name} />
+            <TableRowActions
+              actions={actions}
+              dropdownActions={dropdownActions}
+              itemName={skill.name}
+            />
           </div>
         );
       },

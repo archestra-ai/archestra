@@ -62,6 +62,12 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import {
+  agentDetailHref,
+  agentListHref,
+  agentPageKindForType,
+} from "@/components/agent-pages/agent-page-config";
+import { AgentWizardFooter } from "@/components/agent-pages/agent-page-shell";
+import {
   AgentSkillsEditor,
   type EditableSkill,
 } from "@/components/agent-skills-editor";
@@ -205,6 +211,7 @@ import {
   normalizeSuggestedPrompts,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
+  TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
@@ -2317,6 +2324,12 @@ export function AgentForm({
     isDirty,
     canSubmit,
   };
+  // Where a read-only form's Cancel goes: the record it is showing, which is
+  // where the editable footer's Cancel lands too. A legacy `profile` has no
+  // family of its own, so it resolves to its canonical gateway route.
+  const readOnlyExitHref = agent
+    ? agentDetailHref(agentPageKindForType(agent.agentType), agent.id)
+    : agentListHref(agentPageKindForType(agentType));
   return (
     <form
       className="flex flex-col"
@@ -3333,17 +3346,21 @@ export function AgentForm({
                           Progressive tool loading
                         </Label>
                         <p className="text-xs text-muted-foreground">
+                          {/* Word for word the detail page's "Tools loaded"
+                              row, so the setting reads the same where it is
+                              chosen and where it is reported. */}
                           {toolExposureMode === "search_and_run_only" ? (
                             <>
-                              Only <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code>{" "}
-                              and <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> are
-                              pre-loaded into the context upfront. All the other
-                              tools are loaded on demand.
+                              The model starts with{" "}
+                              <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
+                              reaches the rest by searching for them
+                              mid-conversation.
                             </>
                           ) : (
                             <>
-                              All assigned tools are pre-loaded into the context
-                              upfront.
+                              Every assigned tool is in the model's context from
+                              the first message.
                             </>
                           )}{" "}
                           <ExternalDocsLink
@@ -3384,12 +3401,7 @@ export function AgentForm({
                           Tool connections
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.find(
-                            (option) =>
-                              option.value === missingCredentialBehavior,
-                          )?.describe(
-                            agentTypeDisplayName[agentType] || "agent",
-                          )}{" "}
+                          {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
                           <ExternalDocsLink
                             href={toolConnectionsDocsUrl}
                             className="underline"
@@ -3431,9 +3443,9 @@ export function AgentForm({
                             <SelectItem
                               key={option.value}
                               value={option.value}
-                              description={option.describe(
-                                agentTypeDisplayName[agentType] || "agent",
-                              )}
+                              description={
+                                TOOL_CONNECTION_PROMPTING[option.value]
+                              }
                             >
                               {option.label}
                             </SelectItem>
@@ -3970,7 +3982,18 @@ export function AgentForm({
           </AlertDescription>
         </Alert>
       )}
-      {!readOnly && footer(footerState)}
+      {readOnly ? (
+        // A read-only form disables every field and has nothing to save, but
+        // it still needs an exit: with no footer at all, a viewer who reached
+        // this page by URL could only leave it with the browser's back button.
+        <AgentWizardFooter>
+          <Button type="button" variant="outline" asChild>
+            <Link href={readOnlyExitHref}>Cancel</Link>
+          </Button>
+        </AgentWizardFooter>
+      ) : (
+        footer(footerState)
+      )}
     </form>
   );
 }

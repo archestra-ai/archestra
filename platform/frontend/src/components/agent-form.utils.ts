@@ -58,35 +58,42 @@ export function normalizeSuggestedPrompts(
 }
 
 /**
- * What happens when someone sharing the agent has not connected one of the
- * MCP servers its tools come from — the form's choices, in its words, so the
- * detail page describes the saved choice the same way.
+ * What happens when someone using the agent has not connected one of the MCP
+ * servers its tools come from — the choices, named once, so the wizard that
+ * sets one and the detail page that reports it cannot name them differently.
+ *
+ * `allow` is the default.
  */
 export const MISSING_CREDENTIAL_BEHAVIOR_OPTIONS: Array<{
   value: MissingCredentialBehavior;
   label: string;
-  /** One line on what a missing server connection means under this choice. */
-  describe: (noun: string) => string;
 }> = [
-  {
-    value: "allow",
-    label: "Requested when needed",
-    describe: () =>
-      "The default — nothing is shown up front. A connection is requested the moment a tool call needs one.",
-  },
-  {
-    value: "warn",
-    label: "Requested at chat start",
-    describe: () =>
-      "The chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.",
-  },
-  {
-    value: "block",
-    label: "Required before use",
-    describe: (noun) =>
-      `The ${noun} stays unavailable until every server its tools come from is connected.`,
-  },
+  { value: "allow", label: "Requested when needed" },
+  { value: "warn", label: "Requested at chat start" },
+  { value: "block", label: "Required before use" },
 ];
+
+/**
+ * When users get prompted to connect the servers behind these tools: one line
+ * per choice, in the order the options are offered.
+ *
+ * Written from inside a chat rather than from the wizard's side of the
+ * decision, because the same sentence has to serve a reader who is choosing
+ * and a reader who is looking up what was chosen. That also keeps the record's
+ * own noun out of it: a sentence naming the agent needs a different noun on a
+ * gateway and on a proxy, and interpolating one into a shared template is what
+ * let the two surfaces drift apart before.
+ */
+export const TOOL_CONNECTION_PROMPTING: Record<
+  MissingCredentialBehavior,
+  string
+> = {
+  allow:
+    "Nothing up front. The first tool call that needs a server prompts to connect it.",
+  warn: "The chat opens by listing the servers not connected yet, with an offer to connect. Their tools wait until then.",
+  block:
+    "Nothing works until every backing server is connected. No mid-chat prompts.",
+};
 
 /**
  * How each connectivity choice reads as a tone: an enforcement scale (lenient

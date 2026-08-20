@@ -23,13 +23,13 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
+import { CopyButton } from "@/components/copy-button";
 import { CopyableCode } from "@/components/copyable-code";
 import { EntityPill } from "@/components/entity-pill";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import type { SettingTone } from "@/components/setting-icon";
-import { SettingRow } from "@/components/setting-row";
+import { SettingGroup, SettingRow } from "@/components/setting-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -51,6 +51,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import {
+  ACTION_LABEL,
+  FIELD_LABEL,
+  formatCreated,
+} from "@/lib/design/resource-lexicon";
+import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import {
   useCatalogTools,
@@ -58,11 +64,16 @@ import {
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  type McpDeploymentFeedState,
   useAutoModeAgents,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
+import type {
+  McpServerIssue,
+  McpServerIssueKind,
+} from "@/lib/mcp/mcp-server-issues";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import {
   useDefaultEnvironment,
@@ -71,11 +82,13 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
+import type { SetupStepId } from "../_parts/catalog-setup-wizard";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
+  type DeploymentStatusSummary,
   getDeploymentStatusChipLabel,
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
@@ -84,7 +97,8 @@ import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
-import type { CatalogItem } from "../_parts/mcp-server-card";
+import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
+import { McpServerIssueBadge } from "../_parts/mcp-server-issue-badge";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
@@ -235,9 +249,16 @@ function CatalogItemDetails({
   });
 
   const { data: allMcpServers } = useMcpServers();
-  const deploymentStatuses = useMcpDeploymentStatuses();
+  const { statuses: deploymentStatuses, state: deploymentFeedState } =
+    useMcpDeploymentStatuses();
   const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
   const itemIssues = issuesByCatalog.get(item.id);
+  // The worst live issue first, exactly as the registry table's Status column
+  // reads it (mcp-server-table.tsx). Issues are kind-ordered and `muted` cuts
+  // across that order, so taking issues[0] made a server carrying a silenced
+  // "Failed to start" plus a live "Needs re-authentication" report the
+  // silenced fault here and the live one in the list.
+  const statusIssue = itemIssues?.find((i) => !i.muted) ?? itemIssues?.[0];
   useMcpInstallationStatusCacheSync();
   const { data: tools = [] } = useCatalogTools(item.id);
 
@@ -417,17 +438,13 @@ function CatalogItemDetails({
   const canRestartPods =
     canModify && variant === "local" && deploymentServerIds.length > 0;
 
-  const statusText =
-    variant === "local"
-      ? deploymentSummary
-        ? getDeploymentStatusChipLabel({
-            summary: deploymentSummary,
-            format: "ratio-with-state",
-          })
-        : "Not installed"
-      : connectionsCount > 0
-        ? "Connected"
-        : "Not installed";
+  // Where each outstanding issue is explained: beside the configuration that
+  // caused it, so the diagnosis and the remedy are one card apart.
+  const issuesByCard = groupIssuesByCard(itemIssues ?? [], {
+    // The built-in server is not reached over a connection anybody configures,
+    // so `ConfigurationSections` renders no Connection card for it.
+    hasConnectionCard: item.serverType !== "builtin",
+  });
 
   return (
     <PageLayout
@@ -544,56 +561,166 @@ function CatalogItemDetails({
 
         {effectiveTab === "overview" && (
           <div className="space-y-4">
-            {/* Outstanding issue, explained — same notice as the registry's
-                Needs-attention tab, so the diagnosis reads identically. */}
-            {itemIssues && itemIssues.length > 0 && (
-              <McpServerIssueNotice
-                item={item}
-                issues={itemIssues}
-                servers={allServersForCatalog}
-                hideName
+            {/* One card per subject rather than one panel of bands: whether
+                the server is working, how it is reached, how callers
+                authenticate, what it is given, what it exposes, and last the
+                record itself. */}
+            <DetailCard
+              title="Status"
+              description="Whether this server is answering right now."
+              // Health is not something the wizard wrote, so this card has no
+              // Edit; what it reports on is the wizard's Test Connection step,
+              // which is where a reader who wants to change the answer goes.
+              action={
+                canModify && variant !== "builtin" ? (
+                  <CardLink
+                    href={catalogEditHref(item.id, "test")}
+                    icon={<PlugZap className="h-4 w-4" />}
+                    label="Test connection"
+                    cardTitle="Status"
+                  />
+                ) : null
+              }
+            >
+              <ServerStatus
+                variant={variant}
+                issue={statusIssue}
+                deploymentSummary={deploymentSummary}
+                deploymentFeedState={deploymentFeedState}
+                connectionsCount={connectionsCount}
               />
-            )}
-            {/* One panel, as the wizard is: the server's facts open it as a
-                heading section, the capabilities follow. */}
-            <div className="divide-y rounded-lg border bg-card">
-              <section className="grid gap-x-6 gap-y-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                <OverviewField label="Status">
-                  <span className="inline-flex items-center gap-2">
-                    {deploymentSummary ? (
-                      <DeploymentStatusDot
-                        state={deploymentSummary.overallState}
-                      />
-                    ) : connectionsCount > 0 ? (
-                      <DeploymentStatusDot state="running" />
-                    ) : null}
-                    <span>{statusText}</span>
+              {/* An issue that belongs to the catalog entry rather than to any
+                  one installation has no configuration card to sit under. */}
+              <CardIssues
+                item={item}
+                issues={issuesByCard.summary}
+                servers={allServersForCatalog}
+              />
+            </DetailCard>
+
+            <ConfigurationSections
+              item={item}
+              canModify={canModify}
+              environmentLabel={environmentLabel ?? defaultEnvironment.name}
+              servers={allServersForCatalog}
+              issues={issuesByCard}
+            />
+
+            <DetailCard
+              title="Tools"
+              description="What this server exposes to agents, and the guardrails on it."
+              // "Guardrails" named half of what the control reaches: the
+              // wizard's Tools & Guardrails step edits the tool list too, and
+              // a card titled "Tools" whose only action says "Guardrails"
+              // leaves no way in for someone looking to change the tools.
+              action={
+                canModify ? (
+                  <CardEditLink
+                    href={catalogEditHref(item.id, "tools")}
+                    cardTitle="Tools"
+                  />
+                ) : null
+              }
+            >
+              {tools.length === 0 ? (
+                <Empty className="border-0 py-8">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <ShieldCheck />
+                    </EmptyMedia>
+                    <EmptyTitle>No tools discovered yet</EmptyTitle>
+                    <EmptyDescription>
+                      Tools appear once the server is connected and reachable.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <>
+                  <ul className="divide-y divide-border">
+                    {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
+                      <li
+                        key={tool.name}
+                        className="py-2.5 first:pt-0 last:pb-0"
+                      >
+                        <code
+                          className={cn(
+                            typeRole({ role: "code" }),
+                            "font-medium",
+                          )}
+                        >
+                          {parseFullToolName(tool.name).toolName || tool.name}
+                        </code>
+                        {tool.description && (
+                          <p
+                            className={cn(
+                              typeRole({ role: "meta" }),
+                              "mt-0.5 line-clamp-2",
+                            )}
+                          >
+                            {tool.description}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {tools.length > TOOLS_PREVIEW_LIMIT &&
+                    // The only listing of every tool is the wizard's step, so
+                    // a reader who may not edit the catalog is told how many
+                    // are hidden rather than sent to a route they cannot open.
+                    (canModify ? (
+                      <Link
+                        href={catalogEditHref(item.id, "tools")}
+                        className="inline-block text-sm font-medium text-primary hover:underline"
+                      >
+                        View all {tools.length} tools
+                      </Link>
+                    ) : (
+                      <p className={typeRole({ role: "meta" })}>
+                        Showing {TOOLS_PREVIEW_LIMIT} of {tools.length} tools.
+                      </p>
+                    ))}
+                </>
+              )}
+            </DetailCard>
+
+            {/* The record itself, last: nothing here was written on a wizard
+                step, so the card offers no way into one, and the last change
+                is a date alone — the catalog row records when it changed,
+                never by whom. */}
+            <DetailCard title="Details" action={null}>
+              <FieldGrid>
+                <OverviewField label="ID">
+                  <span className="flex min-w-0 items-center gap-1">
+                    <code
+                      className={cn(
+                        typeRole({ role: "code" }),
+                        "min-w-0 truncate",
+                      )}
+                    >
+                      {item.id}
+                    </code>
+                    <CopyButton text={item.id} className="shrink-0" />
                   </span>
                 </OverviewField>
-                {variant !== "builtin" && (
-                  <OverviewField label="Environment">
-                    {environmentLabel ?? defaultEnvironment.name}
+                <OverviewField label={FIELD_LABEL.created}>
+                  {formatCreated({ createdAt: item.createdAt })}
+                </OverviewField>
+                <OverviewField label={FIELD_LABEL.lastUpdated}>
+                  {formatDate({ date: item.updatedAt, dateFormat: "PP" })}
+                </OverviewField>
+                {/* Unlike the agent and skill pages, this page's title
+                    carries the server's type rather than its scope, so an
+                    org-wide server would otherwise read like a personal one.
+                    A personal server says nothing: this page is only
+                    reachable by the person it belongs to. */}
+                {item.scope === "org" && (
+                  <OverviewField label={FIELD_LABEL.accessibleTo}>
+                    Everyone in the organization
                   </OverviewField>
                 )}
-                <OverviewField label="Accessible to">
-                  {/*
-                    `showSelfAsMe` because this is a labelled field rather
-                    than one badge among many in a list: the viewer's own
-                    personal server must still say "Me" instead of leaving
-                    the field blank.
-                  */}
-                  <ResourceVisibilityBadge
-                    scope={item.scope}
-                    teams={item.teams}
-                    authorId={item.authorId}
-                    authorName={item.authorName}
-                    currentUserId={currentUserId}
-                    showSelfAsMe
-                  />
-                </OverviewField>
-                {item.scope === "team" && item.teams.length > 0 && (
-                  // The wizard grants each team either level; the badge above
-                  // names the teams but not what they may do.
+                {item.scope === "team" && item.teams.length > 0 ? (
+                  // The wizard grants each team either level, which no scope
+                  // badge can say.
                   <OverviewField label="Teams">
                     <ul className="flex flex-wrap gap-1.5">
                       {item.teams.map((team) => (
@@ -606,23 +733,9 @@ function CatalogItemDetails({
                       ))}
                     </ul>
                   </OverviewField>
-                )}
-                <OverviewField label="Created">
-                  <span>
-                    {item.authorName ? (
-                      <span>by {item.authorName} </span>
-                    ) : null}
-                    <span>
-                      on{" "}
-                      {formatDate({ date: item.createdAt, dateFormat: "PP" })}
-                    </span>
-                  </span>
-                </OverviewField>
-                {item.updatedAt !== item.createdAt && (
-                  <OverviewField label="Last updated">
-                    {formatDate({ date: item.updatedAt, dateFormat: "PPp" })}
-                  </OverviewField>
-                )}
+                ) : item.authorName ? (
+                  <OverviewField label="Owner">{item.authorName}</OverviewField>
+                ) : null}
                 {item.labels.length > 0 && (
                   <OverviewField label="Labels">
                     <div className="flex flex-wrap gap-1.5">
@@ -638,79 +751,8 @@ function CatalogItemDetails({
                     </div>
                   </OverviewField>
                 )}
-              </section>
-
-              <ConfigurationSections item={item} />
-
-              {/* Tools the server exposes — the wizard's own step, so it
-                  ranks a level above sections inside a step (h2 to their h3). */}
-              <section className="space-y-4 p-4 pt-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-semibold tracking-tight">
-                      Tools
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Capabilities this server exposes to agents.
-                    </p>
-                  </div>
-                  {tools.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
-                      className="-mr-2 shrink-0 text-muted-foreground"
-                    >
-                      <Link href={`/mcp/registry/${item.id}/edit?step=tools`}>
-                        <ShieldCheck className="h-4 w-4" />
-                        Guardrails
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-                {tools.length === 0 ? (
-                  <Empty className="border-0 py-8">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <ShieldCheck />
-                      </EmptyMedia>
-                      <EmptyTitle>No tools discovered yet</EmptyTitle>
-                      <EmptyDescription>
-                        Tools appear once the server is connected and reachable.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
-                  <>
-                    <ul className="divide-y divide-border">
-                      {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
-                        <li
-                          key={tool.name}
-                          className="py-2.5 first:pt-0 last:pb-0"
-                        >
-                          <code className="font-mono text-sm font-medium">
-                            {parseFullToolName(tool.name).toolName || tool.name}
-                          </code>
-                          {tool.description && (
-                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                              {tool.description}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    {tools.length > TOOLS_PREVIEW_LIMIT && (
-                      <Link
-                        href={`/mcp/registry/${item.id}/edit?step=tools`}
-                        className="inline-block text-sm font-medium text-primary hover:underline"
-                      >
-                        View all {tools.length} tools
-                      </Link>
-                    )}
-                  </>
-                )}
-              </section>
-            </div>
+              </FieldGrid>
+            </DetailCard>
           </div>
         )}
 
@@ -790,8 +832,24 @@ function CatalogItemDetails({
  * authenticates, and what it is given at run time. Derived through the
  * wizard's own `transformCatalogItemToFormValues`, so the page cannot drift
  * from the form that wrote the values.
+ *
+ * One card each. All three open the same wizard step, because that is where
+ * all three were written — the mapping cards owe the wizard is that every
+ * card leads to exactly one step, not that every step has exactly one card.
  */
-function ConfigurationSections({ item }: { item: CatalogItem }) {
+function ConfigurationSections({
+  item,
+  canModify,
+  environmentLabel,
+  servers,
+  issues,
+}: {
+  item: CatalogItem;
+  canModify: boolean;
+  environmentLabel: string;
+  servers: InstalledServer[];
+  issues: IssuesByCard;
+}) {
   const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
   const { data: identityProviders = [] } = useIdentityProviders();
   const isLocal = item.serverType === "local";
@@ -819,101 +877,122 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
   );
   const envFrom = local?.envFrom ?? [];
   const headers = values.additionalHeaders ?? [];
+  const editHref = canModify ? catalogEditHref(item.id, "configuration") : null;
 
   return (
     <>
-      <section className="space-y-4 p-4">
-        <SectionHeading
+      {/* The built-in server is not reached over a connection anybody
+          configures, so it has no Connection card rather than an empty one. */}
+      {item.serverType !== "builtin" && (
+        <DetailCard
           title="Connection"
           description={
             isLocal
               ? "How this server is built and run."
               : "Where this server is reached."
           }
-        />
-        <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          {item.serverType === "remote" && item.serverUrl && (
-            <OverviewField
-              label="Server URL"
-              className="sm:col-span-2 lg:col-span-3"
-            >
-              <CodeLine>{item.serverUrl}</CodeLine>
+          action={
+            editHref ? (
+              <CardEditLink href={editHref} cardTitle="Connection" />
+            ) : null
+          }
+        >
+          <FieldGrid>
+            <OverviewField label={FIELD_LABEL.environment}>
+              {environmentLabel}
             </OverviewField>
-          )}
-          {isLocal && (
-            <>
-              <OverviewField label="Deployment">
-                {values.multitenant
-                  ? "Multi-tenant — one shared deployment"
-                  : "Single-tenant — one deployment per installation"}
+            {item.serverType === "remote" && item.serverUrl && (
+              <OverviewField
+                label="Server URL"
+                className="sm:col-span-2 lg:col-span-3"
+              >
+                <CodeLine>{item.serverUrl}</CodeLine>
               </OverviewField>
-              <OverviewField label="Transport">
-                {local?.transportType === "stdio" ? (
-                  <span>stdio</span>
-                ) : (
-                  <span>
-                    Streamable HTTP
-                    {local?.httpPort || local?.httpPath ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        · {local?.httpPort ?? 8080}
-                        {local?.httpPath ?? "/mcp"}
-                      </span>
-                    ) : null}
-                  </span>
-                )}
-              </OverviewField>
-              <OverviewField label="Deployment spec">
-                {item.deploymentSpecYaml ? "Customized" : "Generated"}
-              </OverviewField>
-              {local?.dockerImage && (
-                <OverviewField
-                  label="Image"
-                  className="sm:col-span-2 lg:col-span-3"
-                >
-                  <CodeLine>{local.dockerImage}</CodeLine>
+            )}
+            {isLocal && (
+              <>
+                <OverviewField label="Deployment">
+                  {values.multitenant
+                    ? "Multi-tenant — one shared deployment"
+                    : "Single-tenant — one deployment per installation"}
                 </OverviewField>
-              )}
-              {commandLine && (
-                <OverviewField
-                  label="Command"
-                  className="sm:col-span-2 lg:col-span-3"
-                >
-                  {/* The command as it runs, on one line — long ones scroll
-                      rather than wrap, and the button copies the whole thing. */}
-                  <CopyableCode
-                    value={commandLine}
-                    toastMessage="Command copied"
-                    className="w-full"
+                <OverviewField label="Transport">
+                  {local?.transportType === "stdio" ? (
+                    <span>stdio</span>
+                  ) : (
+                    <span>
+                      Streamable HTTP
+                      {local?.httpPort || local?.httpPath ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {local?.httpPort ?? 8080}
+                          {local?.httpPath ?? "/mcp"}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </OverviewField>
+                <OverviewField label="Deployment spec">
+                  {item.deploymentSpecYaml ? "Customized" : "Generated"}
+                </OverviewField>
+                {local?.dockerImage && (
+                  <OverviewField
+                    label="Image"
+                    className="sm:col-span-2 lg:col-span-3"
                   >
-                    <code className="block overflow-x-auto whitespace-nowrap font-mono text-xs">
-                      {commandLine}
-                    </code>
-                  </CopyableCode>
-                </OverviewField>
-              )}
-              {local?.serviceAccount && (
-                <OverviewField label="Service account">
-                  <CodeLine>{local.serviceAccount}</CodeLine>
-                </OverviewField>
-              )}
-              {(local?.imagePullSecrets ?? []).length > 0 && (
-                <OverviewField label="Image pull secrets">
-                  {(local?.imagePullSecrets ?? []).length}
-                </OverviewField>
-              )}
-            </>
-          )}
-        </div>
-        <IdleHibernationRow item={item} />
-      </section>
+                    <CodeLine>{local.dockerImage}</CodeLine>
+                  </OverviewField>
+                )}
+                {commandLine && (
+                  <OverviewField
+                    label="Command"
+                    className="sm:col-span-2 lg:col-span-3"
+                  >
+                    {/* The command as it runs, on one line — long ones scroll
+                      rather than wrap, and the button copies the whole thing. */}
+                    <CopyableCode
+                      value={commandLine}
+                      toastMessage="Command copied"
+                      className="w-full"
+                    >
+                      <code className="block overflow-x-auto whitespace-nowrap font-mono text-xs">
+                        {commandLine}
+                      </code>
+                    </CopyableCode>
+                  </OverviewField>
+                )}
+                {local?.serviceAccount && (
+                  <OverviewField label="Service account">
+                    <CodeLine>{local.serviceAccount}</CodeLine>
+                  </OverviewField>
+                )}
+                {(local?.imagePullSecrets ?? []).length > 0 && (
+                  <OverviewField label="Image pull secrets">
+                    {(local?.imagePullSecrets ?? []).length}
+                  </OverviewField>
+                )}
+              </>
+            )}
+          </FieldGrid>
+          <IdleHibernationRow item={item} />
+          <CardIssues
+            item={item}
+            issues={issues.connection}
+            servers={servers}
+          />
+        </DetailCard>
+      )}
 
-      <section className="space-y-4 p-4">
-        <SectionHeading
-          title="Authentication"
-          description="How callers prove who they are to this server."
-        />
-        <div className="divide-y rounded-md border">
+      <DetailCard
+        title="Authentication"
+        description="How callers prove who they are to this server."
+        action={
+          editHref ? (
+            <CardEditLink href={editHref} cardTitle="Authentication" />
+          ) : null
+        }
+      >
+        <SettingGroup>
           <SettingRow
             icon={<KeyRound className="size-4" />}
             title="Method"
@@ -922,11 +1001,11 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
           >
             {auth.describe}
           </SettingRow>
-        </div>
+        </SettingGroup>
         {(values.authMethod === "oauth" ||
           values.authMethod === "oauth_client_credentials") &&
           oauth && (
-            <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <FieldGrid>
               {oauth.tokenEndpoint && (
                 <OverviewField
                   label="Token endpoint"
@@ -950,10 +1029,10 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
                   <CodeLine>{String(oauth.scopes)}</CodeLine>
                 </OverviewField>
               )}
-            </div>
+            </FieldGrid>
           )}
         {managed && (
-          <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <FieldGrid>
             <OverviewField label="Identity provider">
               {identityProviderName ?? "Not set"}
             </OverviewField>
@@ -967,7 +1046,7 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
                 {managed.tokenInjectionMode}
               </OverviewField>
             )}
-          </div>
+          </FieldGrid>
         )}
         {headers.length > 0 && (
           <div className="space-y-1.5">
@@ -992,14 +1071,23 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
             </ul>
           </div>
         )}
-      </section>
+        <CardIssues
+          item={item}
+          issues={issues.authentication}
+          servers={servers}
+        />
+      </DetailCard>
 
       {isLocal && (envVars.length > 0 || envFrom.length > 0) && (
-        <section className="space-y-4 p-4">
-          <SectionHeading
-            title="Environment"
-            description="What the server's container is given at run time."
-          />
+        <DetailCard
+          title="Environment variables"
+          description="What the server's container is given at run time."
+          action={
+            editHref ? (
+              <CardEditLink href={editHref} cardTitle="Environment variables" />
+            ) : null
+          }
+        >
           {promptedVars.length > 0 && (
             <div className="space-y-1.5">
               <SubHeading label="Asked at installation" />
@@ -1029,7 +1117,7 @@ function ConfigurationSections({ item }: { item: CatalogItem }) {
               </ul>
             </div>
           )}
-        </section>
+        </DetailCard>
       )}
     </>
   );
@@ -1068,7 +1156,7 @@ function IdleHibernationRow({ item }: { item: CatalogItem }) {
   const copy = mode ? HIBERNATION_COPY[mode] : undefined;
 
   return (
-    <div className="divide-y rounded-md border">
+    <SettingGroup>
       <SettingRow
         icon={<Moon className="size-4" />}
         title="Idle hibernation"
@@ -1080,7 +1168,7 @@ function IdleHibernationRow({ item }: { item: CatalogItem }) {
             ? "No installation to hibernate yet."
             : "Installations of this server disagree; the edit page can set them all.")}
       </SettingRow>
-    </div>
+    </SettingGroup>
   );
 }
 
@@ -1140,24 +1228,251 @@ function EnvVarPills({
   );
 }
 
-/** A section inside the wizard's Configuration step — h3, under the h2 steps. */
-function SectionHeading({
+/**
+ * One card of the overview: its title, a line on what is inside, and one
+ * action — the wizard step that wrote it, or nothing on the cards the wizard
+ * never wrote. Every title is the same rank; the cards are siblings, and the
+ * page title above is the only thing that outranks them.
+ */
+function DetailCard({
   title,
   description,
+  action,
+  children,
 }: {
   title: string;
-  description: string;
+  description?: string;
+  /** Explicit, including the `null` that says this card has no action. */
+  action: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <h3 className="text-base font-semibold">{title}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
+    <section className="space-y-4 rounded-lg border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
+          {description && (
+            <p className={typeRole({ role: "meta" })}>{description}</p>
+          )}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * A card's own way into the wizard, in the header's top-right corner. The
+ * `data-testid` marks it as the header's action rather than merely the first
+ * link inside the card: card bodies carry links of their own.
+ */
+function CardLink({
+  href,
+  icon,
+  label,
+  cardTitle,
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+  /**
+   * The card this action belongs to, appended to the accessible name. This
+   * page renders several actions labelled only "Edit", and a links list or a
+   * voice command of five identical "Edit" entries names nothing.
+   */
+  cardTitle: string;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      asChild
+      className="-mr-2 shrink-0 text-muted-foreground"
+      data-testid={CARD_ACTION_TEST_ID}
+    >
+      {/* `aria-label` rather than an extra sr-only span: the accessible name
+          of two adjacent inline spans concatenates with no separator, so they
+          read as one run-together word. The visible label stays inside the
+          aria-label, so a voice command on it still matches. */}
+      <Link href={href} aria-label={`${label} ${cardTitle}`}>
+        {icon}
+        <span>{label}</span>
+      </Link>
+    </Button>
+  );
+}
+
+const CARD_ACTION_TEST_ID = "card-action";
+
+function CardEditLink({
+  href,
+  cardTitle,
+}: {
+  href: string;
+  cardTitle: string;
+}) {
+  return (
+    <CardLink
+      href={href}
+      cardTitle={cardTitle}
+      icon={<Pencil className="h-4 w-4" />}
+      label={ACTION_LABEL.edit}
+    />
+  );
+}
+
+function FieldGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+      {children}
     </div>
   );
 }
 
+/**
+ * The status the registry list shows for this server, derived the same way:
+ * an outstanding issue IS the status, and only a server with none reads as
+ * installed. Deriving it from row existence alone put a green "Connected"
+ * directly above a notice saying the token had been rejected, and left the
+ * built-in server — which nobody installs — reading "Not installed".
+ */
+function ServerStatus({
+  variant,
+  issue,
+  deploymentSummary,
+  deploymentFeedState,
+  connectionsCount,
+}: {
+  variant: "builtin" | "local" | "remote";
+  /** The worst outstanding issue, as the list's Status column reads it. */
+  issue: McpServerIssue | undefined;
+  deploymentSummary: DeploymentStatusSummary | null;
+  /** Whether pod statuses can arrive at all, and whether any have yet. */
+  deploymentFeedState: McpDeploymentFeedState;
+  connectionsCount: number;
+}) {
+  if (variant === "builtin") {
+    return <Badge variant="secondary">Built-in</Badge>;
+  }
+  if (issue) {
+    return <McpServerIssueBadge issue={issue} />;
+  }
+  // A dot is a claim about a pod, so it is drawn only where a pod's state was
+  // actually reported.
+  if (deploymentSummary) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <DeploymentStatusDot state={deploymentSummary.overallState} />
+        <span className={typeRole({ role: "body" })}>
+          {getDeploymentStatusChipLabel({
+            summary: deploymentSummary,
+            format: "ratio-with-state",
+          })}
+        </span>
+      </span>
+    );
+  }
+  if (connectionsCount > 0) {
+    // No summary means no deployment entry for any of this server's ids. The
+    // feed's own state decides what that means, never the absence of an entry
+    // — the same rule the list's `installedStatusLabel` follows. A remote
+    // server has no pod at all, so "Installed" is its whole runtime story.
+    return (
+      <span className={typeRole({ role: "body" })}>
+        {variant === "remote" || deploymentFeedState === "disabled"
+          ? "Installed"
+          : deploymentFeedState === "loading"
+            ? "Checking…"
+            : "Status unavailable"}
+      </span>
+    );
+  }
+  return <span className={typeRole({ role: "body" })}>Not installed</span>;
+}
+
+/**
+ * The issues one card owns, explained where their cause is configured — the
+ * same notice the registry's Needs-attention tab renders, so the diagnosis
+ * reads identically. Tinted off the card so it reads as an inset rather than
+ * as a second card inside this one.
+ */
+function CardIssues({
+  item,
+  issues,
+  servers,
+}: {
+  item: CatalogItem;
+  issues: McpServerIssue[];
+  servers: InstalledServer[];
+}) {
+  if (issues.length === 0) return null;
+  return (
+    <McpServerIssueNotice
+      item={item}
+      issues={issues}
+      servers={servers}
+      hideName
+      className="bg-muted/40"
+    />
+  );
+}
+
+interface IssuesByCard {
+  /** Catalog-scope trouble, which belongs to no one installation. */
+  summary: McpServerIssue[];
+  connection: McpServerIssue[];
+  authentication: McpServerIssue[];
+}
+
+/**
+ * Which card owns each kind of trouble. A rejected token is an authentication
+ * fault and belongs beside the authentication configuration; a pod that will
+ * not start belongs beside how the server is built and run. An issue with no
+ * `serverId` is about the catalog entry rather than any installation, and
+ * stays with the status it explains.
+ *
+ * `hasConnectionCard` is the escape hatch, not a style choice: the built-in
+ * server has no Connection card, and `computeMcpServerIssues` does not
+ * exclude its catalog entry, so anything routed to that card would be dropped
+ * from the page without it. Every bucket must have a card that renders it.
+ */
+function groupIssuesByCard(
+  issues: McpServerIssue[],
+  { hasConnectionCard }: { hasConnectionCard: boolean },
+): IssuesByCard {
+  const grouped: IssuesByCard = {
+    summary: [],
+    connection: [],
+    authentication: [],
+  };
+  for (const issue of issues) {
+    const card = issue.serverId ? ISSUE_CARD[issue.kind] : "summary";
+    grouped[
+      card === "connection" && !hasConnectionCard ? "summary" : card
+    ].push(issue);
+  }
+  return grouped;
+}
+
+const ISSUE_CARD: Record<McpServerIssueKind, "connection" | "authentication"> =
+  {
+    "needs-reauth": "authentication",
+    "failed-to-start": "connection",
+    "not-running": "connection",
+    "stuck-starting": "connection",
+    starting: "connection",
+    "reinstall-required": "connection",
+    "awaiting-approval": "connection",
+  };
+
+/** The wizard, opened on the step that wrote what the reader is looking at. */
+function catalogEditHref(catalogId: string, step: SetupStepId) {
+  return `/mcp/registry/${encodeURIComponent(catalogId)}/edit?step=${step}`;
+}
+
 function SubHeading({ label }: { label: string }) {
-  return <p className="text-sm text-muted-foreground">{label}</p>;
+  return <p className={typeRole({ role: "label" })}>{label}</p>;
 }
 
 function CodeLine({ children }: { children: ReactNode }) {
@@ -1207,9 +1522,11 @@ function OverviewField({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1", className)}>
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div>{children}</div>
+    <div className={cn("min-w-0 space-y-1", className)}>
+      <div className={typeRole({ role: "label" })}>{label}</div>
+      <div className={cn(typeRole({ role: "body" }), "break-words")}>
+        {children}
+      </div>
     </div>
   );
 }

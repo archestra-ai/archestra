@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+// The scope check behind Edit/Delete asks which teams the caller belongs to.
+vi.mock("@/lib/teams/team.query");
 // Monaco does not render in jsdom; the canonical mock is a textarea.
 vi.mock("@/components/editor");
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -27,6 +29,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSkill } from "@/lib/skills/skill.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { SkillDetailPage } from "./page.client";
 
 function mockSkill(overrides: Record<string, unknown> = {}) {
@@ -67,7 +70,7 @@ function mockSkill(overrides: Record<string, unknown> = {}) {
 }
 
 function section(name: string) {
-  // Step-rank sections render h2, the sections inside a step h3.
+  // Every card title is one rank; cards are siblings, not a hierarchy.
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
   if (!root) throw new Error(`No section around "${name}"`);
@@ -95,45 +98,75 @@ describe("SkillDetailPage", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
     mockSkill();
   });
 
-  it("reads the skill: its facts as the heading section, then its content, nothing editable", () => {
+  it("reads the skill as cards: its content, who may use it, then the record itself", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(
       screen.getByRole("heading", { name: /pdf-tools/ }),
     ).toBeInTheDocument();
-    // The facts: who can use it, where, where it comes from, which version.
-    expect(screen.getByText("Accessible to")).toBeInTheDocument();
-    expect(screen.getByText("All environments")).toBeInTheDocument();
-    expect(screen.getByText("Written in Archestra")).toBeInTheDocument();
-    expect(screen.getByText("v7")).toBeInTheDocument();
-    expect(screen.getByText(/3 times/)).toBeInTheDocument();
 
     // The content, in the wizard's own editor, read-only — with its files.
-    const content = section("Content");
+    const content = section("Instructions and files");
     const editor = content.getByRole("textbox", {
       name: "File contents",
     }) as HTMLTextAreaElement;
     expect(editor.value).toContain("Use pdftotext -layout.");
     expect(editor).toHaveAttribute("readonly");
     expect(content.getByText("notes.md")).toBeInTheDocument();
-    // No save anywhere: the page header's Edit is the way to change it.
+    // No save anywhere: editing goes through the wizard.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
-    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
-      "href",
-      "/skills/skill-1/edit",
-    );
+
+    // Who may use it, and where.
+    const access = section("Who can use it");
+    expect(access.getByText("All environments")).toBeInTheDocument();
+    // A skill only its owner can reach says so through the page title's
+    // scope badge; "Accessible to: Me" repeated it and was cut.
+    expect(screen.queryByText("Accessible to")).toBeNull();
+
+    // The record itself, last and with nothing to edit.
+    const details = section("Details");
+    expect(details.getByText("skill-1")).toBeInTheDocument();
+    expect(
+      details.getByRole("button", { name: /copy to clipboard/i }),
+    ).toBeInTheDocument();
+    expect(details.getByText("Written in Archestra")).toBeInTheDocument();
+    expect(details.getByText("v7")).toBeInTheDocument();
+    expect(details.getByText(/3 times/)).toBeInTheDocument();
+    expect(details.getByText("Created")).toBeInTheDocument();
+    expect(details.getByText("Last updated")).toBeInTheDocument();
+    // The skill row records when it changed, never by whom.
+    expect(details.queryByText(/updated by/i)).toBeNull();
+    expect(details.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 
-  it("offers no Edit to someone who may not update skills", () => {
+  it("sends each card to the wizard step that wrote it, and the header to the wizard's start", () => {
+    render(<SkillDetailPage id="skill-1" />);
+
+    expect(
+      screen
+        .getAllByRole("link", { name: /^Edit\b/ })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/skills/skill-1/edit",
+      "/skills/skill-1/edit?step=content",
+      "/skills/skill-1/edit?step=access",
+    ]);
+  });
+
+  it("offers no Edit anywhere to someone who may not update skills", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     render(<SkillDetailPage id="skill-1" />);
-    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 
   it("says where a synced skill's content comes from and how it keeps up", () => {
@@ -165,6 +198,6 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Skill not found")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 });

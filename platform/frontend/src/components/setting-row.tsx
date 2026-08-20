@@ -7,11 +7,6 @@ import {
 } from "@/components/setting-icon";
 import { cn } from "@/lib/utils";
 
-/** A group of read-only setting rows, as one bordered list. */
-export function SettingRows({ children }: { children: ReactNode }) {
-  return <div className="divide-y rounded-md border">{children}</div>;
-}
-
 /**
  * One of the wizard's switch-and-select settings, read-only: the wizard's own
  * row — an icon, the setting's name and a line on what its current state
@@ -82,4 +77,15 @@ export function SettingRow({
       {action}
     </div>
   );
+}
+
+/**
+ * The wizard's setting rows inside the card that owns them, rather than in a
+ * bordered box of their own: one rule is enough to say the settings are not
+ * more of the prose above them. Shared, because the agent pages and the MCP
+ * registry page render the same rows and a group that disagreed between them
+ * would read as two different products.
+ */
+export function SettingGroup({ children }: { children: ReactNode }) {
+  return <div className="-mx-3 divide-y border-t">{children}</div>;
 }

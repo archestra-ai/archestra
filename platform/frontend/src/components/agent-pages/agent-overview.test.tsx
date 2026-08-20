@@ -14,6 +14,7 @@ import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useFeature } from "@/lib/config/config.query";
+import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
@@ -110,22 +111,35 @@ const baseAgent = {
 function renderOverview(
   kind: "agent" | "llm_proxy" | "mcp_gateway",
   overrides: Partial<typeof baseAgent> = {},
+  { canEdit = false }: { canEdit?: boolean } = {},
 ) {
   return render(
     <AgentOverview
       kind={kind}
       agent={{ ...baseAgent, ...overrides } as unknown as Agent}
+      canEdit={canEdit}
     />,
   );
 }
 
-/** The section whose heading names it, so assertions can be scoped to it. */
+/** The card whose heading names it, so assertions can be scoped to it. */
 function section(name: string) {
-  // Step-rank sections render h2, the sections inside a step h3.
+  // Every card title is one rank; cards are siblings, not a hierarchy.
   const heading = screen.getByRole("heading", { name });
   const element = heading.closest("section");
   if (!element) throw new Error(`No section around "${name}"`);
   return within(element);
+}
+
+/** The Edit link of the card named, or null when the card offers none. */
+function cardEditHref(name: string) {
+  return (
+    // Each card carries at most one Edit, and its accessible name is suffixed
+    // with the card's own title so seven of them are not one set.
+    section(name)
+      .queryByRole("link", { name: new RegExp(`^${ACTION_LABEL.edit}\\b`) })
+      ?.getAttribute("href") ?? null
+  );
 }
 
 /** A labelled field of the summary card, so assertions can be scoped to it. */
@@ -197,42 +211,105 @@ describe("AgentOverview", () => {
     } as unknown as ReturnType<typeof useAgentSkillExclusions>);
   });
 
-  it("offers no edit control of its own — the page header owns that action", () => {
+  it("offers no edit control to a reader who may not change the record", () => {
     renderOverview("agent", {
       systemPrompt: "Be brief.",
     } as unknown as Partial<typeof baseAgent>);
 
-    expect(screen.queryByRole("link", { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
   });
 
-  it("opens with the record's facts, then the wizard's sections in the wizard's order", () => {
+  it("sends every card to the one wizard step that wrote it, and every step is reachable", () => {
+    vi.mocked(useFeature).mockReturnValue(
+      true as unknown as ReturnType<typeof useFeature>,
+    );
+    // Published skills is the one card gated on a read permission.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useAgentSkills).mockReturnValue({
+      data: { accessAllSkills: false, skillIds: [], skills: [] },
+    } as unknown as ReturnType<typeof useAgentSkills>);
+    renderOverview(
+      "agent",
+      {
+        systemPrompt: "Be brief.",
+        suggestedPrompts: [{ summaryTitle: "Status", prompt: "How are we?" }],
+      } as unknown as Partial<typeof baseAgent>,
+      { canEdit: true },
+    );
+
+    expect(cardEditHref("Model and environment")).toBe(
+      "/agents/a1/edit?step=configuration",
+    );
+    expect(cardEditHref("Instruction")).toBe(
+      "/agents/a1/edit?step=configuration",
+    );
+    expect(cardEditHref("Suggested prompts")).toBe(
+      "/agents/a1/edit?step=configuration",
+    );
+    expect(cardEditHref("Tools and knowledge sources")).toBe(
+      "/agents/a1/edit?step=tools",
+    );
+    expect(cardEditHref("Subagents")).toBe("/agents/a1/edit?step=tools");
+    expect(cardEditHref("Published skills")).toBe("/agents/a1/edit?step=tools");
+    expect(cardEditHref("Security and identity")).toBe(
+      "/agents/a1/edit?step=advanced",
+    );
+    // The record's own facts were never written on a wizard step, so the
+    // card that shows them offers no way into one.
+    expect(cardEditHref("Details")).toBeNull();
+  });
+
+  it("closes with the record itself: id, dates, owner and labels, never an updater", () => {
+    renderOverview("agent", {
+      authorName: "Ada",
+      labels: [{ key: "team", value: "support" }],
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-18T09:00:00.000Z",
+    } as unknown as Partial<typeof baseAgent>);
+
+    const details = section("Details");
+    expect(details.getByText("a1")).toBeVisible();
+    expect(
+      details.getByRole("button", { name: /copy to clipboard/i }),
+    ).toBeVisible();
+    expect(details.getByText("Created")).toBeVisible();
+    expect(details.getByText("Last updated")).toBeVisible();
+    expect(details.getByText("Ada")).toBeVisible();
+    // Labels classify the record, so they close the page with it.
+    expect(details.getByText("Labels")).toBeVisible();
+    // The agent row records when it changed, never by whom.
+    expect(details.queryByText(/updated by/i)).toBeNull();
+    // "Accessible to: Me" on a page only this reader can open said nothing;
+    // the visibility badge beside the page title carries the scope.
+    expect(screen.queryByText("Accessible to")).toBeNull();
+  });
+
+  it("opens with what the agent answers with, and stacks one card per subject at one heading rank", () => {
     renderOverview("agent", {
       labels: [{ key: "team", value: "support" }],
     } as unknown as Partial<typeof baseAgent>);
 
-    // The heading section: what it answers with, where it runs, who can use
-    // it, labels, when — untitled, before the first titled section.
-    const facts = screen.getByText("Model").closest("section");
-    if (!facts) throw new Error("No heading section around the facts");
-    expect(within(facts).getByText("Environment")).toBeVisible();
-    expect(within(facts).getByText("Accessible to")).toBeVisible();
-    expect(within(facts).getByText("Created")).toBeVisible();
-    expect(facts.querySelector("h3")).toBeNull();
-    expect(
-      facts.compareDocumentPosition(
-        screen.getByRole("heading", { level: 3, name: "Instruction" }),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const facts = section("Model and environment");
+    expect(facts.getByText("Model")).toBeVisible();
+    expect(facts.getByText("Environment")).toBeVisible();
 
-    // Sections that ARE wizard steps rank a level above the sections
-    // inside a step: h2 to the others' h3.
+    // Cards are siblings, so their titles are one rank — the three h3s that
+    // used to precede the page's first h2 said a hierarchy that was not there.
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((el) => el.textContent),
-    ).toEqual(["Tools & Knowledge Sources", "Advanced"]);
-    expect(
-      screen.getAllByRole("heading", { level: 3 }).map((el) => el.textContent),
-    ).toEqual(["Instruction", "Subagents"]);
+    ).toEqual([
+      "Model and environment",
+      "Instruction",
+      "Tools and knowledge sources",
+      "Subagents",
+      "Security and identity",
+      "Details",
+    ]);
+    expect(screen.queryAllByRole("heading", { level: 3 })).toEqual([]);
   });
 
   it("reads the instruction in the wizard's editor, read-only, keeping its Handlebars highlighting", () => {
@@ -372,7 +449,7 @@ describe("AgentOverview", () => {
     } as unknown as ReturnType<typeof useAgentToolExclusions>);
     renderOverview("agent", { accessAllTools: true });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("2/3 disabled")).toBeVisible();
     expect(tools.queryByText("GitHub")).toBeNull();
     // An id no visible server accounts for is still counted, not dropped.
@@ -407,13 +484,45 @@ describe("AgentOverview", () => {
       ],
     } as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     // The server pill carries the count; two tools, not three.
     expect(tools.getByText("GitHub")).toBeInTheDocument();
     expect(tools.getByText("(2)")).toBeInTheDocument();
     expect(tools.getByText("create_issue")).toBeInTheDocument();
     expect(tools.getByText("list_issues")).toBeInTheDocument();
     expect(tools.queryByText("delegate_to_researcher")).toBeNull();
+    // The server has a page; its pill opens it. A single tool has none, so
+    // its badge stays inert rather than offering a dead click.
+    expect(tools.getByRole("link", { name: /GitHub/ })).toHaveAttribute(
+      "href",
+      "/mcp/registry/cat-1",
+    );
+    expect(tools.queryByRole("link", { name: "create_issue" })).toBeNull();
+  });
+
+  it("counts the disabled subagents past the cap instead of dropping them", () => {
+    const roster = Array.from({ length: 14 }, (_, index) => ({
+      id: `sub-${index}`,
+      name: `Agent ${index}`,
+      icon: null,
+    }));
+    vi.mocked(useDelegationTargetAgents).mockReturnValue({
+      data: roster,
+    } as unknown as ReturnType<typeof useDelegationTargetAgents>);
+    vi.mocked(useAgentSubagentExclusions).mockReturnValue({
+      data: { excludedSubagentIds: roster.map((target) => target.id) },
+    } as unknown as ReturnType<typeof useAgentSubagentExclusions>);
+    renderOverview("agent", { accessAllSubagents: true });
+
+    const subagents = section("Subagents");
+    expect(subagents.getByText("Agent 0")).toBeInTheDocument();
+    expect(subagents.queryByText("Agent 12")).toBeNull();
+    expect(subagents.getByText("+2 more")).toBeInTheDocument();
+    // Each named one opens the agent it disables.
+    expect(subagents.getByRole("link", { name: /Agent 0/ })).toHaveAttribute(
+      "href",
+      "/agents/sub-0",
+    );
   });
 
   it("shows Auto mode as the wizard describes it, with both settings as rows — the connection one dormant", () => {
@@ -426,7 +535,7 @@ describe("AgentOverview", () => {
       missingCredentialBehavior: "block",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Auto")).toBeInTheDocument();
     expect(tools.getByText("Disabled tools")).toBeInTheDocument();
     // The pills carry the counts; no heading repeats them.
@@ -443,6 +552,9 @@ describe("AgentOverview", () => {
     expect(tools.getByText("Tool connections")).toBeInTheDocument();
     expect(tools.getByText("Not needed")).toBeInTheDocument();
     expect(tools.queryByText("Required before use")).toBeNull();
+    expect(
+      tools.getByText(/reaches only servers each caller has already connected/),
+    ).toBeInTheDocument();
   });
 
   it("names the knowledge sources Auto mode searches — the environment's, not the stored assignment", () => {
@@ -479,7 +591,7 @@ describe("AgentOverview", () => {
       connectorIds: ["c3"],
     } as unknown as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Knowledge sources")).toBeInTheDocument();
     expect(tools.getByText("Handbook")).toBeInTheDocument();
     expect(tools.getByText("Tickets")).toBeInTheDocument();
@@ -513,7 +625,7 @@ describe("AgentOverview", () => {
       knowledgeBaseIds: ["kb-9"],
     } as unknown as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Handbook")).toBeInTheDocument();
     // Two ids this reader cannot resolve: named as a count, not silently lost.
     expect(tools.getByText("+2 not visible to you")).toBeInTheDocument();
@@ -527,7 +639,7 @@ describe("AgentOverview", () => {
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
     renderOverview("agent", { accessAllTools: true });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(
       tools.getByText(/Knowledge search is off — no embedding model/),
     ).toBeInTheDocument();
@@ -539,11 +651,13 @@ describe("AgentOverview", () => {
       missingCredentialBehavior: "warn",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Progressively")).toBeInTheDocument();
     expect(
-      tools.getByText(/are pre-loaded into the context upfront/),
+      tools.getByText(
+        /reaches the rest by searching for them mid-conversation/,
+      ),
     ).toBeInTheDocument();
     // Each setting points at its public docs.
     const learnMore = tools.getAllByRole("link", { name: /Learn more/ });
@@ -555,10 +669,12 @@ describe("AgentOverview", () => {
       "href",
       expect.stringContaining("#tool-connections"),
     );
+    // The state names the choice as the wizard does; the line under it says
+    // what a user will actually see happen, without repeating "agent".
     expect(tools.getByText("Tool connections")).toBeInTheDocument();
     expect(tools.getByText("Requested at chat start")).toBeInTheDocument();
     expect(
-      tools.getByText(/naming the servers not yet connected/),
+      tools.getByText(/opens by listing the servers not connected yet/),
     ).toBeInTheDocument();
   });
 
@@ -568,18 +684,18 @@ describe("AgentOverview", () => {
       missingCredentialBehavior: "allow",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Upfront")).toBeInTheDocument();
     expect(tools.queryByText("Off")).toBeNull();
     expect(
       tools.getByText(
-        "All assigned tools are pre-loaded into the context upfront.",
+        "Every assigned tool is in the model's context from the first message.",
       ),
     ).toBeInTheDocument();
     expect(tools.getByText("Requested when needed")).toBeInTheDocument();
     expect(
-      tools.getByText(/requested the moment a tool call needs one/),
+      tools.getByText(/first tool call that needs a server prompts to connect/),
     ).toBeInTheDocument();
   });
 

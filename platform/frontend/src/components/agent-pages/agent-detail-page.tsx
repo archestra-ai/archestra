@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
@@ -39,6 +39,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useDeleteProfile,
@@ -46,6 +47,12 @@ import {
   useProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import {
+  ACTION_LABEL,
+  backToListLabel,
+  notYoursToChange,
+} from "@/lib/design/resource-lexicon";
 import { AgentConnectContent } from "./agent-connect-content";
 import { AgentOverview } from "./agent-overview";
 import {
@@ -96,7 +103,7 @@ export function AgentDetailPage({
   }, [agent, kind, id, router]);
 
   const backLink = (
-    <BackLink href={agentListHref(kind)}>{config.plural}</BackLink>
+    <BackLink href={agentListHref(kind)}>{backToListLabel(kind)}</BackLink>
   );
 
   if (isPending || (isLeavingAfterDelete && !agent)) {
@@ -186,8 +193,16 @@ function AgentDetails({
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { resource, canModify, canEdit, canCreate, canDelete, isBuiltIn } =
-    useAgentAccess(agent, kind);
+  const {
+    resource,
+    canModify,
+    canUpdate,
+    canEdit,
+    canCreate,
+    canDelete,
+    isBuiltIn,
+    isPending: isAccessPending,
+  } = useAgentAccess(agent, kind);
   // The record's own resource, not the route family's: a legacy profile shown
   // under the proxy pages is authorized as an `agent` everywhere, version
   // history included.
@@ -216,15 +231,47 @@ function AgentDetails({
   const exportAgent = useExportAgent();
   const deleteAgent = useDeleteProfile();
 
-  const canExport = kind === "agent" && !isBuiltIn;
-  const canConvertToSkill = kind === "agent" && !isBuiltIn && !!canCreateSkill;
-  const canClone = !isBuiltIn && canCreate;
-  const showMoreMenu =
-    canClone ||
-    canExport ||
-    canConvertToSkill ||
-    !!canReadResource ||
-    canDelete;
+  // Export and Convert to skill exist on the agents family alone, so on the
+  // other two they are absent rather than refused: there is no such action for
+  // the menu to refuse. Everything the family does offer stays in the menu
+  // with its reason.
+  const hasExport = kind === "agent";
+  const hasConvertToSkill = kind === "agent";
+  // Why a mutating action is refused, when it is refused. Built-in records
+  // belong to nobody and are org-wide, so they answer to the resource admin
+  // rather than to the scope check every other record answers to. The name
+  // comes from the lexicon rather than from lowercasing the title-case plural,
+  // which turned "MCP Gateways" into "mcp gateways".
+  const refusalReason = isBuiltIn
+    ? `Only an administrator can change a built-in ${config.singularInSentence}`
+    : notYoursToChange({ resource: kind, scope: agent.scope });
+  // One reason per refusal, and the true one: a reader who holds no `create`
+  // is refused by RBAC, not by whose record this is.
+  const cloneReason = isBuiltIn
+    ? `A built-in ${config.singularInSentence} cannot be cloned`
+    : canCreate
+      ? undefined
+      : formatPermissionConstraint({ [resource]: ["create"] });
+  const exportReason = isBuiltIn
+    ? `A built-in ${config.singularInSentence} cannot be exported`
+    : undefined;
+  const historyReason = canReadResource
+    ? undefined
+    : formatPermissionConstraint({ [resource]: ["read"] });
+  const convertReason = isBuiltIn
+    ? `A built-in ${config.singularInSentence} cannot be converted to a skill`
+    : canCreateSkill
+      ? undefined
+      : formatPermissionConstraint({ skill: ["create"] });
+  // `canDelete` is the delete permission AND the scope check AND not built-in,
+  // so which of the three refused decides which sentence is the true one.
+  const deleteReason = canDelete
+    ? undefined
+    : isBuiltIn
+      ? `A built-in ${config.singularInSentence} cannot be deleted`
+      : canModify
+        ? formatPermissionConstraint({ [resource]: ["delete"] })
+        : refusalReason;
 
   const handleExport = () => {
     exportAgent.mutate(agent.id, {
@@ -268,79 +315,103 @@ function AgentDetails({
       description={agent.description ?? ""}
       tabs={tabs}
       actionButton={
+        // One primary (Edit), one secondary (Chat), the rest in the kebab with
+        // the destructive item under a divider.
         <div className="flex shrink-0 items-center gap-2">
           {kind === "agent" && !isBuiltIn && (
             <Button variant="outline" asChild>
               <Link href={`/chat/new?agent_id=${agent.id}`}>
                 <MessageSquare className="h-4 w-4" />
-                Chat
+                {ACTION_LABEL.chat}
               </Link>
             </Button>
           )}
-          {canEdit && (
+          {/* Refused, not removed: a reader who simply cannot see Edit has no
+              way to learn the record is not theirs to change. Undecided is not
+              refused either, so while the permission reads are in flight the
+              header holds the button's space rather than stating a reason that
+              is about to stop being true. */}
+          {isAccessPending ? (
+            <Skeleton className="h-9 w-24" />
+          ) : canEdit ? (
             <Button asChild data-testid={E2eTestId.AgentDetailEditButton}>
               <Link href={agentEditHref(kind, agent.id)}>
                 <Pencil className="h-4 w-4" />
-                Edit
+                {ACTION_LABEL.edit}
               </Link>
             </Button>
+          ) : (
+            <PermissionButton
+              permissions={{ [resource]: ["update"] }}
+              // The ownership sentence is the right one only for a reader who
+              // holds the update permission; without it PermissionButton states
+              // the permission constraint, which is what actually refused them.
+              disabled={canUpdate}
+              tooltip={canUpdate ? refusalReason : undefined}
+              data-testid={E2eTestId.AgentDetailEditButton}
+            >
+              <Pencil className="h-4 w-4" />
+              {ACTION_LABEL.edit}
+            </PermissionButton>
           )}
-          {showMoreMenu && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">More actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {canClone && (
-                  <DropdownMenuItem onClick={() => setCloning(true)}>
-                    <Copy className="h-4 w-4" />
-                    Clone
-                  </DropdownMenuItem>
-                )}
-                {canExport && (
-                  <DropdownMenuItem
-                    disabled={exportAgent.isPending}
-                    onClick={handleExport}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export
-                  </DropdownMenuItem>
-                )}
-                {canReadResource && (
-                  <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
-                    <History className="h-4 w-4" />
-                    Version history
-                  </DropdownMenuItem>
-                )}
-                {canConvertToSkill && (
-                  <DropdownMenuItem onClick={() => setConverting(true)}>
-                    <Sparkles className="h-4 w-4" />
-                    Convert to skill
-                  </DropdownMenuItem>
-                )}
-                {canDelete && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => setDeleteRequested(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">More actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* Every item this family offers is here whether or not the
+                  reader may take it: an action that vanishes leaves them
+                  nothing to read, and a menu whose items all vanish opens on
+                  its own divider. */}
+              <KebabItem
+                icon={<Copy className="h-4 w-4" />}
+                label={ACTION_LABEL.clone}
+                reason={cloneReason}
+                onSelect={() => setCloning(true)}
+              />
+              {hasExport && (
+                <KebabItem
+                  icon={<Download className="h-4 w-4" />}
+                  label="Export"
+                  reason={exportReason}
+                  isBusy={exportAgent.isPending}
+                  onSelect={handleExport}
+                />
+              )}
+              <KebabItem
+                icon={<History className="h-4 w-4" />}
+                label={ACTION_LABEL.versionHistory}
+                reason={historyReason}
+                onSelect={() => setHistoryOpen(true)}
+              />
+              {hasConvertToSkill && (
+                <KebabItem
+                  icon={<Sparkles className="h-4 w-4" />}
+                  label="Convert to skill"
+                  reason={convertReason}
+                  onSelect={() => setConverting(true)}
+                />
+              )}
+              <DropdownMenuSeparator />
+              <KebabItem
+                variant="destructive"
+                icon={<Trash2 className="h-4 w-4" />}
+                label={ACTION_LABEL.delete}
+                reason={deleteReason}
+                onSelect={() => setDeleteRequested(true)}
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
     >
       <div className="space-y-4">
-        {tab === "overview" && <AgentOverview kind={kind} agent={agent} />}
+        {tab === "overview" && (
+          <AgentOverview kind={kind} agent={agent} canEdit={canEdit} />
+        )}
         {tab === "connect" && (
           <div className="rounded-lg border bg-card p-6">
             <AgentConnectContent kind={kind} agent={agent} origin="table" />
@@ -401,6 +472,66 @@ function AgentDetails({
         />
       )}
     </PageLayout>
+  );
+}
+
+/**
+ * One item of the header's kebab, refused in place rather than removed.
+ *
+ * `reason` is why the reader may not take the action, and `undefined` means
+ * they may. `aria-disabled` rather than Radix's `disabled`: a disabled item is
+ * taken out of the menu's roving focus and typeahead, which would put the
+ * reason out of reach of exactly the users it is written for. The refusal is
+ * enforced by preventing the select and the click instead.
+ */
+function KebabItem({
+  icon,
+  label,
+  reason,
+  isBusy,
+  variant,
+  onSelect,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  reason?: string;
+  /** Permitted, but already running: taking it again would export twice. */
+  isBusy?: boolean;
+  variant?: "destructive";
+  onSelect: () => void;
+}) {
+  const reasonId = useId();
+  const isDisabled = !!reason || !!isBusy;
+
+  return (
+    <DropdownMenuItem
+      variant={variant}
+      aria-disabled={isDisabled || undefined}
+      aria-describedby={reason ? reasonId : undefined}
+      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
+      onSelect={(event) => {
+        if (isDisabled) event.preventDefault();
+      }}
+      onClick={(event) => {
+        if (isDisabled) {
+          event.preventDefault();
+          return;
+        }
+        onSelect();
+      }}
+    >
+      {icon}
+      {label}
+      {/* The reason as text, not only as a tooltip: a menu item reached by
+          keyboard never opens one. `aria-hidden` keeps it out of the accessible
+          name, where it would duplicate the description a screen reader already
+          reads from `aria-describedby`. */}
+      {reason && (
+        <span id={reasonId} aria-hidden="true" className="sr-only">
+          {reason}
+        </span>
+      )}
+    </DropdownMenuItem>
   );
 }
 

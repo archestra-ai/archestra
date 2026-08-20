@@ -14,6 +14,7 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpCatalogItemPage } from "./page.client";
 
 // The overview is a small part of a page that pulls in install dialogs,
@@ -25,7 +26,12 @@ import { McpCatalogItemPage } from "./page.client";
 // stubbed — the overview is one part of a page whose install dialogs, logs
 // and inspectors reach for the rest — and the handful this test depends on
 // are given real answers.
-const { useInternalMcpCatalog, stubs } = vi.hoisted(() => {
+const {
+  useInternalMcpCatalog,
+  useMcpServers,
+  useMcpDeploymentStatuses,
+  stubs,
+} = vi.hoisted(() => {
   const quiet = () => ({
     data: undefined,
     isPending: false,
@@ -36,7 +42,12 @@ const { useInternalMcpCatalog, stubs } = vi.hoisted(() => {
     Object.fromEntries(
       names.map((name) => [name, overrides[name] ?? quiet]),
     ) as Record<string, unknown>;
-  return { useInternalMcpCatalog: vi.fn(), stubs: stubbed };
+  return {
+    useInternalMcpCatalog: vi.fn(),
+    useMcpServers: vi.fn(),
+    useMcpDeploymentStatuses: vi.fn(),
+    stubs: stubbed,
+  };
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -83,18 +94,20 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useReauthenticateMcpServer",
       "useReinstallMcpServer",
       "useMcpDeploymentStatuses",
+      "useMuteMcpServerAlert",
+      "useUnmuteMcpServerAlert",
     ],
     {
-      useMcpServers: () => ({ data: [] }),
+      useMcpServers: () => useMcpServers(),
       useAutoModeAgents: () => ({ data: [] }),
-      useMcpDeploymentStatuses: () => ({ data: {} }),
+      useMcpDeploymentStatuses: () => useMcpDeploymentStatuses(),
       useMcpInstallationStatusCacheSync: () => {},
     },
   ),
 );
 
 vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
-  useMcpServerIssues: () => ({ issuesByCatalog: new Map() }),
+  useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
 vi.mock("@/lib/organization.query", () => ({
@@ -165,11 +178,24 @@ function renderPage(overrides: Record<string, unknown> = {}) {
   );
 }
 
+/** The card whose heading names it. Every card title is one rank. */
 function section(name: string) {
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
   if (!root) throw new Error(`No section around "${name}"`);
   return within(root);
+}
+
+/**
+ * The href of the action in the named card's header, or null when it has none.
+ * Matched on the header action's own test id rather than on "the first link in
+ * the card": card bodies carry links too (the Connection card's hibernation
+ * row has a "Learn more"), and DOM order is not a contract.
+ */
+function cardActionHref(name: string) {
+  return (
+    section(name).queryByTestId("card-action")?.getAttribute("href") ?? null
+  );
 }
 
 describe("McpCatalogItemDetailPage overview", () => {
@@ -191,7 +217,32 @@ describe("McpCatalogItemDetailPage overview", () => {
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
     vi.mocked(useMissingPermissions).mockReturnValue({});
+    // Nothing wrong with the server unless a test says so — `clearAllMocks`
+    // keeps implementations, so a per-test issue would otherwise leak into
+    // every test after it.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map(),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    // Nothing installed and a live Kubernetes feed, unless a test says so.
+    useMcpServers.mockReturnValue({ data: [] });
+    useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
   });
+
+  /** One installed connection for this catalog entry, with no pod reported. */
+  function installedWithNoDeploymentEntry() {
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-1",
+          catalogId: "cat-1",
+          serverType: "local",
+          ownerId: "u1",
+          teamId: null,
+          createdAt: "2026-08-02T10:00:00.000Z",
+        },
+      ],
+    });
+  }
 
   it("reads the command as one runnable line, from the API's argument array", () => {
     renderPage();
@@ -219,7 +270,7 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("names the environment variables, split by when they are supplied", () => {
     renderPage();
 
-    const environment = section("Environment");
+    const environment = section("Environment variables");
     expect(environment.getByText("Asked at installation")).toBeInTheDocument();
     expect(environment.getByText("API_TOKEN")).toBeInTheDocument();
     expect(environment.getByText("Set on the server")).toBeInTheDocument();
@@ -265,11 +316,165 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(within(teams).getByText("Use")).toBeInTheDocument();
   });
 
-  it("credits the author and the last change", () => {
+  it("closes with the record itself: id, dates and owner, and no way to edit it", () => {
     renderPage();
-    // The author and date are separate spans inside the one field.
-    const created = screen.getByText("Created").parentElement as HTMLElement;
-    expect(created).toHaveTextContent(/by Admin on/);
-    expect(screen.getByText("Last updated")).toBeInTheDocument();
+
+    const details = section("Details");
+    expect(details.getByText("cat-1")).toBeInTheDocument();
+    expect(
+      details.getByRole("button", { name: /copy to clipboard/i }),
+    ).toBeInTheDocument();
+    expect(details.getByText("Created")).toBeInTheDocument();
+    expect(details.getByText("Last updated")).toBeInTheDocument();
+    expect(details.getByText("Admin")).toBeInTheDocument();
+    // The catalog row records when it changed, never by whom.
+    expect(details.queryByText(/updated by/i)).toBeNull();
+    expect(cardActionHref("Details")).toBeNull();
+  });
+
+  it("sends each card to the wizard step that wrote what it shows", () => {
+    renderPage();
+
+    expect(cardActionHref("Connection")).toBe(
+      "/mcp/registry/cat-1/edit?step=configuration",
+    );
+    expect(cardActionHref("Authentication")).toBe(
+      "/mcp/registry/cat-1/edit?step=configuration",
+    );
+    expect(cardActionHref("Environment variables")).toBe(
+      "/mcp/registry/cat-1/edit?step=configuration",
+    );
+    expect(cardActionHref("Tools")).toBe("/mcp/registry/cat-1/edit?step=tools");
+    // Health is not the wizard's to write, but the step that re-tests it is
+    // where a reader who wants to change the answer goes.
+    expect(cardActionHref("Status")).toBe("/mcp/registry/cat-1/edit?step=test");
+  });
+
+  it("reads the status the way the registry list does, so the two cannot disagree", () => {
+    // A remote connection whose token was rejected: a row exists, and it is
+    // not working. Deriving the status from the row alone read "Connected"
+    // with a green dot directly above the notice saying otherwise.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              severity: "down",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "invalid_grant",
+              since: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const status = section("Status");
+    expect(status.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(status.queryByText("Connected")).toBeNull();
+    // An authentication fault is explained beside the authentication
+    // configuration, not floating above the page.
+    expect(status.queryByTestId(/mcp-registry-attention-row/)).toBeNull();
+    expect(
+      section("Authentication").getByTestId(
+        "mcp-registry-attention-row-internal-tools",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("reports the live fault, not the one the reader silenced", () => {
+    // Issues are kind-ordered, and muting cuts across that order. Taking the
+    // first issue made this page say "Failed to start" with a bell-off icon
+    // while the registry list said "Needs re-authentication" for the same row.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "failed-to-start",
+              severity: "down",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: null,
+              since: null,
+              muted: true,
+              mutedReason: null,
+            },
+            {
+              kind: "needs-reauth",
+              severity: "down",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-2",
+              detail: null,
+              since: null,
+              muted: false,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage();
+
+    const status = section("Status");
+    expect(status.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(status.queryByText("Failed to start")).toBeNull();
+  });
+
+  it("does not claim a pod is running when no pod status has been reported", () => {
+    installedWithNoDeploymentEntry();
+    renderPage();
+
+    // A green dot is a claim about a pod. With Kubernetes reachable and no
+    // entry for this install, the honest answer is that the state is unknown.
+    const status = section("Status");
+    expect(status.getByText("Status unavailable")).toBeInTheDocument();
+    expect(status.queryByText("Installed")).toBeNull();
+  });
+
+  it("says a remote server is installed, since it has no pod to be running", () => {
+    installedWithNoDeploymentEntry();
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(section("Status").getByText("Installed")).toBeInTheDocument();
+  });
+
+  it("says it is still checking while the deployment feed is loading", () => {
+    installedWithNoDeploymentEntry();
+    useMcpDeploymentStatuses.mockReturnValue({
+      statuses: {},
+      state: "loading",
+    });
+    renderPage();
+
+    expect(section("Status").getByText("Checking…")).toBeInTheDocument();
+  });
+
+  it("names each card's Edit after the card, so five of them are not one set", () => {
+    renderPage();
+
+    // "Edit" alone, five times over, is unresolvable in a links list or to a
+    // voice command.
+    expect(
+      screen.getByRole("link", { name: "Edit Connection" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Edit Tools" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says a built-in server is built in, rather than not installed", () => {
+    renderPage({ serverType: "builtin", localConfig: null });
+
+    expect(section("Status").getByText("Built-in")).toBeInTheDocument();
+    expect(screen.queryByText("Not installed")).toBeNull();
   });
 });

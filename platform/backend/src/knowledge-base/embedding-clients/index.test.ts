@@ -18,6 +18,56 @@ import {
   OpenAIEmbeddingError,
 } from "./index";
 
+describe("Cohere direct embedding capability", () => {
+  test("drives text and images for the table's multimodal models, with Cohere's image formats", () => {
+    expect(getEmbeddingClientInputModalities("cohere", "embed-v4.0")).toEqual([
+      "text",
+      "image",
+    ]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("cohere", "embed-english-v3.0"),
+    ).toEqual(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  });
+
+  test("degrades a Cohere model outside the table to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("cohere", "embed-english-v2.0"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("cohere", "embed-english-v2.0"),
+    ).toBeNull();
+  });
+});
+
+describe("Voyage embedding capability", () => {
+  test("drives text and images only for the multimodal models", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-multimodal-3.5"),
+    ).toEqual(["text", "image"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-multimodal-3"),
+    ).toEqual(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  });
+
+  test("keeps the text-only models text-only", () => {
+    expect(getEmbeddingClientInputModalities("voyage", "voyage-4")).toEqual([
+      "text",
+    ]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-4"),
+    ).toBeNull();
+  });
+
+  test("degrades a Voyage model outside the table to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-99-omni"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-99-omni"),
+    ).toBeNull();
+  });
+});
+
 describe("Gemini multimodal embedding capability", () => {
   test("enables the stable model with only its embedding image formats", () => {
     expect(
@@ -168,7 +218,6 @@ describe("callEmbedding provider gating", () => {
   test.each([
     "anthropic",
     "archestra",
-    "cohere",
     "cerebras",
     "deepseek",
     "groq",

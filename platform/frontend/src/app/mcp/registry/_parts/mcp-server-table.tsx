@@ -26,9 +26,11 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -42,6 +44,8 @@ type McpServerTableProps = {
     isInstallInProgress?: boolean;
   };
   envLabelByCatalog: Map<string, string | null>;
+  /** Outstanding issues per catalog id; items with none are absent. */
+  issuesByCatalog: Map<string, McpServerIssue[]>;
   installingItemId: string | null;
   onInstall: (item: CatalogItem) => void;
   onReinstall: (
@@ -60,6 +64,7 @@ export function McpServerTable({
   items,
   getServerInfo,
   envLabelByCatalog,
+  issuesByCatalog,
   installingItemId,
   onInstall,
   onReinstall,
@@ -128,7 +133,9 @@ export function McpServerTable({
     },
     {
       id: "status",
-      size: 140,
+      // Wide enough for the longest issue label ("Needs re-authentication");
+      // the badge itself is capped to the cell so nothing can spill.
+      size: 210,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;
@@ -143,6 +150,11 @@ export function McpServerTable({
         }
         if (item.serverType === "builtin") {
           return <Badge variant="secondary">Built-in</Badge>;
+        }
+        // Worst issue first; the pill carries the cause in its tooltip.
+        const issue = issuesByCatalog.get(item.id)?.[0];
+        if (issue) {
+          return <McpServerIssueBadge issue={issue} />;
         }
         if (installedServer) {
           return <Badge variant="secondary">Installed</Badge>;

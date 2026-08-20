@@ -10,6 +10,7 @@ import {
   collapseWhitespace,
   getModelReadableMimeTypes,
   isModelSelectionComplete,
+  isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   requiresOpenAiResponsesApi,
@@ -968,6 +969,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   userId: user.id,
                   agentId: conversation.agentId ?? undefined,
                   conversationId,
+                  provider,
+                  model: selectedModel,
                 })
               : (messages as ChatMessage[]);
 
@@ -1549,7 +1552,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (e.g. Anthropic's ~4096) truncated large tool-call payloads
                 // and final submission turns.
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
-                  outputLength: modelRow?.outputLength ?? null,
+                  // Resolved, so an admin-set max-output override on a model
+                  // whose provider reports no limit is what the turn asks for.
+                  outputLength: modelRow
+                    ? ModelModel.resolveEffectiveOutputLength(modelRow)
+                    : null,
                   ceiling: config.chat.maxOutputTokensCeiling,
                   rateMeteredCeiling:
                     config.chat.rateMeteredMaxOutputTokensCeiling,
@@ -1580,6 +1587,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
+
+                // vLLM and Ollama's `/v1` speak `reasoning_effort` too, but
+                // their depth cannot ride the `openai` key above: those models
+                // are built by @ai-sdk/openai-compatible, which reads its
+                // options from the fixed `openaiCompatible` namespace rather
+                // than from the name each provider instance was created with.
+                // Anything under that instance name is passed through only when
+                // the key is NOT one the package already knows, so a
+                // `providerOptions.vllm.reasoningEffort` is filtered out and
+                // silently reaches nothing.
+                //
+                // vLLM turns the field into its chat template's thinking switch
+                // and Ollama into `think` — which is how a depth reaches a
+                // self-hosted model at all.
+                if (
+                  isThinkingEffortSelfHostedProvider(provider) &&
+                  openAiThinkingProviderOptions
+                ) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openaiCompatible: {
+                      ...streamTextConfig.providerOptions?.openaiCompatible,
+                      ...openAiThinkingProviderOptions,
+                    },
+                  };
                 }
 
                 // Send the per-model generation parameters

@@ -454,7 +454,11 @@ export async function executeA2AMessage(
     // inject a small default max (e.g. Anthropic's ~4096) truncated large
     // tool-call payloads.
     const maxOutputTokens = resolveAgentMaxOutputTokens({
-      outputLength: modelRow?.outputLength ?? null,
+      // Resolved, so an admin-set max-output override on a model whose provider
+      // reports no limit is what the turn asks for.
+      outputLength: modelRow
+        ? ModelModel.resolveEffectiveOutputLength(modelRow)
+        : null,
       ceiling: config.chat.maxOutputTokensCeiling,
       rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,

@@ -1,4 +1,6 @@
 import {
+  type ModelInputModality,
+  type ModelOutputModality,
   OPENROUTER_FREE_MODEL_ID,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -468,6 +470,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -479,6 +482,40 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("normalizes KB-supported Cohere embedding models to the KB client's modality support", () => {
+    const base = {
+      description: null,
+      contextLength: null,
+      outputLength: null,
+      inputModalities: ["text"] as ModelInputModality[],
+      outputModalities: ["text"] as ModelOutputModality[],
+      supportsToolCalling: true,
+      supportsReasoningEffort: null,
+      supportedEndpoints: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      cacheReadPricePerToken: null,
+      cacheWritePricePerToken: null,
+    };
+    const v4 = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      capabilities: base,
+    });
+    expect(v4.inputModalities).toEqual(["text", "image"]);
+    expect(v4.outputModalities).toEqual([]);
+    expect(v4.supportsToolCalling).toBe(false);
+
+    // A Cohere model outside the KB table keeps whatever the registries say.
+    const unknown = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      capabilities: base,
+    });
+    expect(unknown.inputModalities).toEqual(["text"]);
+    expect(unknown.outputModalities).toEqual(["text"]);
   });
 
   test("normalizes KB-supported Bedrock embedding models to the KB client's modality support", () => {
@@ -494,6 +531,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -517,6 +555,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: null,
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -668,6 +707,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -690,6 +730,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
@@ -1184,6 +1225,70 @@ describe("ModelSyncService", () => {
     expect(model.promptPricePerToken).toBe("2e-8");
   });
 
+  test("describes a vLLM model's reasoning from the registry entry for those weights", () => {
+    // A self-hosted server publishes no capabilities, and the id is a
+    // HuggingFace path rather than a registry key — the trailing segment is
+    // what bridges the two.
+    const [model] = buildModelsToUpsert({
+      provider: "vllm",
+      models: [{ id: "Qwen/Qwen3.8-27B" }],
+      modelsDevData: {
+        // A reseller, deliberately: no first-party entry exists for this model,
+        // which is the ordinary case for open weights.
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "qwen/qwen3.8-27b": {
+              id: "qwen/qwen3.8-27b",
+              name: "Qwen3.8 27B",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(true);
+    // The deployment's own price stays out: the operator serves this model.
+    expect(model.promptPricePerToken).toBeNull();
+  });
+
+  test("lets the Ollama server outrank the registry on whether a model thinks", () => {
+    // The registry describes the weights; /api/show answers for the build this
+    // server will actually run.
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "qwen3",
+          capabilities: { supportsReasoningEffort: false },
+        },
+      ],
+      modelsDevData: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            qwen3: {
+              id: "qwen3",
+              name: "Qwen3",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(false);
+  });
+
   test("persists fetched default parameters", () => {
     const [model] = buildModelsToUpsert({
       provider: "ollama",
@@ -1201,5 +1306,162 @@ describe("ModelSyncService", () => {
       num_ctx: 4096,
       stop: ["<|eot_id|>"],
     });
+  });
+
+  test("distinguishes a pinned snapshot from the moving alias it borrows its name from", () => {
+    // OpenAI lists both, and the registry only keys the undated id, so the
+    // snapshot resolved its name through the date-stripped lookup and both rows
+    // rendered as an identical "GPT-4.1" in every model picker.
+    const built = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "gpt-4.1" }, { id: "gpt-4.1-2025-04-14" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "gpt-4.1": {
+              id: "gpt-4.1",
+              name: "GPT-4.1",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => [model.modelId, model.description])).toEqual([
+      ["gpt-4.1", "GPT-4.1"],
+      // Matches the convention the registry uses for the snapshots it does name
+      // itself, e.g. "GPT-4o (2024-08-06)".
+      ["gpt-4.1-2025-04-14", "GPT-4.1 (2025-04-14)"],
+    ]);
+  });
+
+  test("leaves a dated model id alone when the catalog lists no alias for it", () => {
+    // Anthropic publishes only the dated id, so there is nothing to confuse it
+    // with and the clean family name is the better label.
+    const [model] = buildModelsToUpsert({
+      provider: "anthropic",
+      models: [{ id: "claude-sonnet-4-5-20250929" }],
+      modelsDevData: {
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-5": {
+              id: "claude-sonnet-4-5",
+              name: "Claude Sonnet 4.5",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.description).toBe("Claude Sonnet 4.5");
+  });
+
+  test("distinguishes two model ids the registry itself names alike", () => {
+    // Not every collision comes from the date fallback: models.dev names
+    // `gemini-3-pro-image` and its `-preview` sibling identically.
+    const built = buildModelsToUpsert({
+      provider: "gemini",
+      models: [
+        { id: "gemini-3-pro-image" },
+        { id: "gemini-3-pro-image-preview" },
+      ],
+      modelsDevData: {
+        google: {
+          id: "google",
+          name: "Google",
+          models: {
+            "gemini-3-pro-image": {
+              id: "gemini-3-pro-image",
+              name: "Nano Banana Pro",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "gemini-3-pro-image-preview": {
+              id: "gemini-3-pro-image-preview",
+              name: "Nano Banana Pro",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Nano Banana Pro",
+      "Nano Banana Pro (preview)",
+    ]);
+  });
+
+  test("distinguishes colliding ids by whole tokens rather than mid-token characters", () => {
+    // The shared characters run into the middle of the context-window token, so
+    // a character-wise cut would label these "(000)" and "(768)".
+    const built = buildModelsToUpsert({
+      provider: "openrouter",
+      models: [
+        { id: "claude-opus-4-thinking:32000" },
+        { id: "claude-opus-4-thinking:32768" },
+      ],
+      modelsDevData: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "claude-opus-4-thinking:32000": {
+              id: "claude-opus-4-thinking:32000",
+              name: "Claude 4 Opus Thinking",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "claude-opus-4-thinking:32768": {
+              id: "claude-opus-4-thinking:32768",
+              name: "Claude 4 Opus Thinking",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Claude 4 Opus Thinking (32000)",
+      "Claude 4 Opus Thinking (32768)",
+    ]);
+  });
+
+  test("falls back to raw ids when two colliding ids tokenise identically", () => {
+    // The safety net behind the invariant: `-` and `.` tokenise the same, so
+    // there is no distinguishing suffix to cut and the group would otherwise
+    // stay ambiguous. The raw ids always tell them apart.
+    const built = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "foo-bar" }, { id: "foo.bar" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "foo-bar": {
+              id: "foo-bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+            "foo.bar": {
+              id: "foo.bar",
+              name: "Foo Bar",
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(built.map((model) => model.description)).toEqual([
+      "Foo Bar (foo-bar)",
+      "Foo Bar (foo.bar)",
+    ]);
   });
 });

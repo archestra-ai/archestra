@@ -44,6 +44,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "gemini:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
   "bedrock:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
+  // Cohere (direct) embeddings are normalized to the OpenAI embedding shape.
+  "cohere:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),

@@ -199,4 +199,82 @@ describe("reciprocalRankFusion", () => {
     expect(result[1].id).toBe("c");
     expect(result[2].id).toBe("a");
   });
+
+  it("does not let a lane that cannot see an item count against it", () => {
+    // The keyword lane (index 1) can never return a media chunk. Without an
+    // eligibility rule its structural absence outweighs being the single best
+    // semantic hit, and the image loses to any chunk that placed in both lanes.
+    const vectorResults: Item[] = [
+      { id: "image", value: "data:image/webp;base64,AAAA" },
+      { id: "text-1", value: "text one" },
+      { id: "text-2", value: "text two" },
+    ];
+    const fullTextResults: Item[] = [
+      { id: "text-1", value: "text one" },
+      { id: "text-2", value: "text two" },
+    ];
+
+    const withoutEligibility = reciprocalRankFusion({
+      rankings: [vectorResults, fullTextResults],
+      idExtractor: id,
+      k: 60,
+    }).map((r) => r.id);
+    expect(withoutEligibility[0]).toBe("text-1");
+    expect(withoutEligibility.indexOf("image")).toBe(2);
+
+    const withEligibility = reciprocalRankFusion({
+      rankings: [vectorResults, fullTextResults],
+      idExtractor: id,
+      k: 60,
+      isEligible: (item, laneIndex) =>
+        laneIndex !== 1 || !item.value.startsWith("data:image/"),
+    }).map((r) => r.id);
+    // Vector rank 1, and the only lane that could judge it says so.
+    expect(withEligibility[0]).toBe("image");
+  });
+
+  it("still penalizes an item a lane could have returned but did not", () => {
+    // text-only is eligible for both lanes and the keyword lane skipped it, so
+    // it must stay below a chunk both lanes ranked. Eligibility must not become
+    // a blanket boost for anything vector-only.
+    const vectorResults: Item[] = [
+      { id: "text-only", value: "vector only" },
+      { id: "both", value: "in both" },
+    ];
+    const fullTextResults: Item[] = [{ id: "both", value: "in both" }];
+
+    const ids = reciprocalRankFusion({
+      rankings: [vectorResults, fullTextResults],
+      idExtractor: id,
+      k: 60,
+      isEligible: (item, laneIndex) =>
+        laneIndex !== 1 || !item.value.startsWith("data:image/"),
+    }).map((r) => r.id);
+
+    expect(ids).toEqual(["both", "text-only"]);
+  });
+
+  it("leaves ordering unchanged when every item is eligible everywhere", () => {
+    const listA: Item[] = [
+      { id: "a", value: "a" },
+      { id: "b", value: "b" },
+      { id: "c", value: "c" },
+    ];
+    const listB: Item[] = [
+      { id: "b", value: "b" },
+      { id: "d", value: "d" },
+    ];
+
+    const plain = reciprocalRankFusion({
+      rankings: [listA, listB],
+      idExtractor: id,
+    }).map((r) => r.id);
+    const eligibleEverywhere = reciprocalRankFusion({
+      rankings: [listA, listB],
+      idExtractor: id,
+      isEligible: () => true,
+    }).map((r) => r.id);
+
+    expect(eligibleEverywhere).toEqual(plain);
+  });
 });

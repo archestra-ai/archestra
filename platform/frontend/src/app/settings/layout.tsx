@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { useSettingsTabs } from "./settings-tabs";
+import { SectionNav } from "@/components/section-nav";
+import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {
@@ -14,9 +15,13 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
       "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
   },
   "/settings/agents": {
-    title: "Chat",
+    title: "Agents",
     description:
-      "Defaults for chats and agents — default model, default agent, and file uploads.",
+      "Defaults for agents and chats — default model, default agent, file uploads, and the channels agents can be reached through.",
+  },
+  "/settings/apps": {
+    title: "Apps",
+    description: "How apps behave when an agent creates one.",
   },
   "/settings/security": {
     title: "Security",
@@ -42,6 +47,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Knowledge",
     description:
       "Configure embedding, reranking, and knowledge system defaults.",
+  },
+  "/settings/connection": {
+    title: "Connection",
+    description:
+      "Configure the connect page: which clients it offers, the defaults it pre-selects, and the base URLs it hands out.",
   },
   "/settings/llm": {
     title: "LLM",
@@ -133,10 +143,19 @@ export default function SettingsLayout({
       <PageLayout
         title={config.title}
         description={config.description}
-        tabs={tabs}
         actionButton={actionButton}
       >
-        {children}
+        {/* The section list sits beside the content rather than as a tab row
+            above it: at sixteen entries the row scrolled sideways, so the
+            settings you were not already looking at were off-screen. */}
+        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <SectionNav
+            label="Settings sections"
+            items={tabs}
+            activeHref={resolveSettingsSection(pathname, tabs)}
+          />
+          <div className="min-w-0">{children}</div>
+        </div>
       </PageLayout>
     </SettingsLayoutContext.Provider>
   );

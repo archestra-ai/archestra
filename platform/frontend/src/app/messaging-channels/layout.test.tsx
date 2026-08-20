@@ -85,11 +85,16 @@ describe("messaging channels layout", () => {
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
-  it("keeps the admin settings dialog reachable when every channel is off", () => {
+  it("no longer offers a per-page settings dialog", () => {
     renderLayout(ALL_OFF);
 
+    // Availability moved to Agent settings, so the page carries no admin
+    // control of its own — only the explanation of why it is empty.
     expect(
-      screen.getByTestId("messaging-channel-page-settings"),
+      screen.queryByTestId("messaging-channel-page-settings"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No messaging channels are available"),
     ).toBeInTheDocument();
   });
 

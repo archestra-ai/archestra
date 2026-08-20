@@ -9,4 +9,5 @@ export * as mcp from "./mcp";
 export * as rag from "./rag";
 export * as sandbox from "./sandbox";
 export * as scheduleTrigger from "./schedule-trigger";
+export * as skill from "./skill";
 export * as taskQueue from "./task-queue";

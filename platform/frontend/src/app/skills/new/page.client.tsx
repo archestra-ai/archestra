@@ -12,10 +12,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
+import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import {
   type SkillCatalogResult,
+  useCreateSkill,
   useSearchSkillCatalog,
 } from "@/lib/skills/skill.query";
 import {
@@ -23,26 +27,47 @@ import {
   type IndexedSkillSelection,
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
-import { SkillEditorDialog } from "../_parts/skill-editor-dialog";
+import { SkillAccessFields } from "../_parts/skill-access-fields";
+import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  blankSkillDraft,
+  buildSkillSaveBody,
+  type SkillDraft,
+} from "../_parts/skill-draft";
+import { SkillBackLink } from "../_parts/skill-page-shell";
+
+type CreateStep = "source" | "content" | "access";
+
+const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
+  { id: "source", title: "Source" },
+  { id: "content", title: "Content" },
+  { id: "access", title: "Access" },
+];
+
+const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
+  source: "Import from a GitHub repo or start from a blank template.",
+  content:
+    "Write the SKILL.md manifest and add any resource files the skill needs.",
+  access: "Choose who can use the skill and where.",
+};
 
 export default function NewSkillPage() {
   return (
     <div className="h-full w-full">
       <ErrorBoundary>
-        <NewSkillChooser />
+        <NewSkillWizard />
       </ErrorBoundary>
     </div>
   );
 }
 
-function NewSkillChooser() {
+function NewSkillWizard() {
   const router = useRouter();
   const [importState, setImportState] = useState<{
     repoUrl: string;
     autoDiscover: boolean;
     initialSkill?: IndexedSkillSelection;
   } | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
@@ -50,10 +75,40 @@ function NewSkillChooser() {
   // Fail closed: only offer the public skill catalog (popular repos + skill
   // index search) and the GitHub-import entry points once the org read confirms
   // it is enabled. A missing/stale read keeps them hidden rather than exposing
-  // them against an admin's intent. When disabled, the page skips the chooser
-  // and opens the blank-template form directly.
+  // them against an admin's intent. When disabled, the wizard skips the source
+  // step and opens on the blank template.
   const catalogEnabled = organization?.onlineSkillCatalogEnabled === true;
   const catalogDisabled = !isOrganizationPending && !catalogEnabled;
+
+  const [step, setStep] = useState<CreateStep>("source");
+  const effectiveStep: CreateStep =
+    catalogDisabled && step === "source" ? "content" : step;
+  const steps = catalogDisabled
+    ? CREATE_STEPS.filter((s) => s.id !== "source")
+    : CREATE_STEPS;
+  const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
+
+  // The draft outlives the steps: content is written on one, access on the
+  // next, and both go up together on create.
+  const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
+  const patchDraft = (patch: Partial<SkillDraft>) =>
+    setDraft((prev) => ({ ...prev, ...patch }));
+  const parsed = useMemo(
+    () => parseManifestFields(draft.manifest),
+    [draft.manifest],
+  );
+  const contentComplete = parsed.hasName && parsed.hasDescription;
+
+  const createSkill = useCreateSkill();
+  const handleCreate = async () => {
+    // A handled failure resolves to null and a rejection is reported by the
+    // mutation's own `onError`; both keep the wizard where it is with the
+    // draft intact, so the author can retry without retyping.
+    const created = await createSkill
+      .mutateAsync(buildSkillSaveBody(draft, null))
+      .catch(() => null);
+    if (created) router.push(`/skills/${created.id}`);
+  };
 
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
@@ -71,6 +126,7 @@ function NewSkillChooser() {
       },
     });
   const goToSkills = () => router.push("/skills");
+  const goToContentStep = () => setStep("content");
 
   const catalogSearch = useSearchSkillCatalog(search);
   const skillResults = catalogSearch.data?.results ?? [];
@@ -92,131 +148,205 @@ function NewSkillChooser() {
     <>
       <PageLayout
         title="Add a new skill"
-        description="Import from a GitHub repo or start from a blank template."
-        actionButton={
-          <Button variant="outline" asChild>
-            <Link href="/skills">
-              <ArrowLeft className="h-4 w-4" />
-              Back to skills
-            </Link>
-          </Button>
-        }
+        description={STEP_DESCRIPTIONS[effectiveStep]}
+        backLink={<SkillBackLink href="/skills" label="Skills" />}
+        maxWidth="wizard"
       >
-        <div className="mx-auto max-w-3xl space-y-8">
+        <div className="space-y-6">
           {isOrganizationPending ? (
             <LoadingSpinner className="my-8" />
-          ) : catalogEnabled ? (
+          ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <ActionCard
-                  icon={<Github className="size-5" />}
-                  title="Custom GitHub URL"
-                  description="Paste any repository with SKILL.md directories."
-                  onClick={openImport}
-                />
-                <ActionCard
-                  icon={<FileText className="size-5" />}
-                  title="Blank template"
-                  description="Write a SKILL.md manifest from scratch."
-                  onClick={() => setIsCreateOpen(true)}
-                />
-              </div>
+              <WizardStepper
+                steps={steps}
+                activeStep={effectiveStep}
+                // Only steps already passed are reachable from the stepper; the
+                // footer's Continue button is the way forward.
+                onStepClick={(target) => {
+                  const targetIndex = steps.findIndex((s) => s.id === target);
+                  if (targetIndex < stepIndex) setStep(target);
+                }}
+              />
 
-              <Card className="gap-0 py-0">
-                <CardHeader className="gap-3 border-b py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-base">
-                      {isSearchingSkills
-                        ? "Skill index"
-                        : "Popular repositories"}
-                    </CardTitle>
-                    <Badge variant="secondary" className="tabular-nums">
-                      {isSearchingSkills
-                        ? `${skillResults.length} / ${skillTotalCount ?? "…"}`
-                        : POPULAR_REPOS.length}
-                    </Badge>
+              {effectiveStep === "source" && (
+                <div className="mx-auto max-w-3xl space-y-8">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <ActionCard
+                      icon={<Github className="size-5" />}
+                      title="Custom GitHub URL"
+                      description="Paste any repository with SKILL.md directories."
+                      onClick={openImport}
+                    />
+                    <ActionCard
+                      icon={<FileText className="size-5" />}
+                      title="Blank template"
+                      description="Write a SKILL.md manifest from scratch."
+                      onClick={goToContentStep}
+                    />
                   </div>
-                  <SearchInput
-                    value={search}
-                    onSearchChange={setSearch}
-                    syncQueryParams={false}
-                    placeholder="Search skills by name, repo, or use case..."
-                    className="relative w-full"
-                  />
-                </CardHeader>
-                <CardContent className="p-0">
-                  {isSearchingSkills ? (
-                    catalogSearch.isLoading ? (
-                      <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        <span>Searching the skill index…</span>
+
+                  <Card className="gap-0 py-0">
+                    <CardHeader className="gap-3 border-b py-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <CardTitle className="text-base">
+                          {isSearchingSkills
+                            ? "Skill index"
+                            : "Popular repositories"}
+                        </CardTitle>
+                        <Badge variant="secondary" className="tabular-nums">
+                          {isSearchingSkills
+                            ? `${skillResults.length} / ${skillTotalCount ?? "…"}`
+                            : POPULAR_REPOS.length}
+                        </Badge>
                       </div>
-                    ) : catalogSearch.isError ? (
-                      <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        <span>
-                          Could not search the skill index. Try again.
-                        </span>
-                      </div>
-                    ) : skillResults.length === 0 ? (
-                      <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        <span>No indexed skills match “{search}”.</span>
-                      </div>
-                    ) : (
-                      <ul>
-                        {skillResults.map((skill, idx) => (
-                          <li key={`${skill.repo}:${skill.skillPath}`}>
-                            {idx > 0 && <Separator />}
-                            <SkillIndexResult
-                              skill={skill}
-                              onClick={() => importIndexedSkill(skill)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    )
-                  ) : filteredRepos.length === 0 ? (
-                    <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                      No repositories match “{search}”.
-                    </div>
-                  ) : (
-                    <ul>
-                      {filteredRepos.map((item, idx) => {
-                        const owner = item.repo.split("/")[0];
-                        return (
-                          <li key={item.repo}>
-                            {idx > 0 && <Separator />}
-                            <button
-                              type="button"
-                              onClick={() => importPopular(item.repo)}
-                              className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
-                            >
-                              <Avatar className="size-8">
-                                <AvatarImage
-                                  src={`https://github.com/${owner}.png?size=64`}
-                                  alt=""
+                      <SearchInput
+                        value={search}
+                        onSearchChange={setSearch}
+                        syncQueryParams={false}
+                        placeholder="Search skills by name, repo, or use case..."
+                        className="relative w-full"
+                      />
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {isSearchingSkills ? (
+                        catalogSearch.isLoading ? (
+                          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                            <span>Searching the skill index…</span>
+                          </div>
+                        ) : catalogSearch.isError ? (
+                          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                            <span>
+                              Could not search the skill index. Try again.
+                            </span>
+                          </div>
+                        ) : skillResults.length === 0 ? (
+                          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                            <span>No indexed skills match “{search}”.</span>
+                          </div>
+                        ) : (
+                          <ul>
+                            {skillResults.map((skill, idx) => (
+                              <li key={`${skill.repo}:${skill.skillPath}`}>
+                                {idx > 0 && <Separator />}
+                                <SkillIndexResult
+                                  skill={skill}
+                                  onClick={() => importIndexedSkill(skill)}
                                 />
-                                <AvatarFallback>
-                                  <Github className="size-4 text-muted-foreground" />
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-mono text-sm font-medium">
-                                  {item.repo}
-                                </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                  {item.description}
-                                </div>
-                              </div>
-                              <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      ) : filteredRepos.length === 0 ? (
+                        <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                          No repositories match “{search}”.
+                        </div>
+                      ) : (
+                        <ul>
+                          {filteredRepos.map((item, idx) => {
+                            const owner = item.repo.split("/")[0];
+                            return (
+                              <li key={item.repo}>
+                                {idx > 0 && <Separator />}
+                                <button
+                                  type="button"
+                                  onClick={() => importPopular(item.repo)}
+                                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                                >
+                                  <Avatar className="size-8">
+                                    <AvatarImage
+                                      src={`https://github.com/${owner}.png?size=64`}
+                                      alt=""
+                                    />
+                                    <AvatarFallback>
+                                      <Github className="size-4 text-muted-foreground" />
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate font-mono text-sm font-medium">
+                                      {item.repo}
+                                    </div>
+                                    <div className="truncate text-xs text-muted-foreground">
+                                      {item.description}
+                                    </div>
+                                  </div>
+                                  <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {effectiveStep === "content" && (
+                <div className="flex flex-col rounded-lg border">
+                  <div className="p-6">
+                    <SkillContentEditor
+                      manifest={draft.manifest}
+                      files={draft.files}
+                      onManifestChange={(manifest) => patchDraft({ manifest })}
+                      onFilesChange={(update) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          files: update(prev.files),
+                        }))
+                      }
+                      className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                    />
+                  </div>
+                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                    {catalogDisabled ? (
+                      <Button variant="outline" asChild>
+                        <Link href="/skills">Cancel</Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => setStep("source")}
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Back
+                      </Button>
+                    )}
+                    <Button
+                      disabled={!contentComplete}
+                      onClick={() => setStep("access")}
+                    >
+                      Continue
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {effectiveStep === "access" && (
+                <div className="flex flex-col rounded-lg border">
+                  <div className="p-6">
+                    <SkillAccessFields draft={draft} onChange={patchDraft} />
+                  </div>
+                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setStep("content")}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back
+                    </Button>
+                    <PermissionButton
+                      permissions={{ skill: ["create"] }}
+                      disabled={!contentComplete || createSkill.isPending}
+                      onClick={handleCreate}
+                    >
+                      {createSkill.isPending ? "Creating..." : "Create skill"}
+                    </PermissionButton>
+                  </div>
+                </div>
+              )}
             </>
-          ) : null}
+          )}
         </div>
       </PageLayout>
 
@@ -229,18 +359,6 @@ function NewSkillChooser() {
           if (!open) setImportState(null);
         }}
         onImported={goToSkills}
-      />
-
-      <SkillEditorDialog
-        skillId={null}
-        open={isCreateOpen || catalogDisabled}
-        onOpenChange={(open) => {
-          setIsCreateOpen(open);
-          // When the catalog is disabled the blank-template form IS the page,
-          // so dismissing it returns to the skills list rather than a bare page.
-          if (!open && catalogDisabled) goToSkills();
-        }}
-        onSaved={goToSkills}
       />
     </>
   );

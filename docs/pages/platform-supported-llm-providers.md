@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-15
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,6 +11,30 @@ lastUpdated: 2026-08-15
 ## Overview
 
 Archestra Platform acts as a security proxy between your AI applications and LLM providers. It currently supports the following LLM providers.
+
+## Turning Providers Off
+
+Most organizations only allow a few providers. Go to **Settings → LLM → Model providers** and switch **Available** off for the rest. A turned-off provider disappears from every picker, and the API refuses to configure it.
+
+![Model providers on the LLM settings page](/docs/automated_screenshots/platform-supported-llm-providers_model-providers.webp)
+
+A provider added by a later release arrives switched on.
+
+Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
+
+## Renaming a Provider
+
+Each row also takes a name. It replaces the built-in one everywhere the provider appears — pickers, tables, and the setup copy on the connect page. Leave it empty to keep the name the provider ships with.
+
+Vendor names stay as they are. Rename AWS Bedrock to "Northwind Model Cloud" and its region field still reads "The AWS region to send Northwind Model Cloud requests to", because AWS is the vendor and the region is theirs.
+
+## Model Context and Output Limits
+
+Archestra syncs each model's context window and maximum output tokens from the provider and a public model registry. Self-hosted endpoints and models first seen in proxy traffic often report neither.
+
+You can set both yourself. Go to **LLM → Models**, edit the model, and fill in **Context window** and **Max output tokens** under **Limits**. What you set replaces what the provider reports, and survives the next model refresh. Clear a field to go back to the provider's own number.
+
+The context window sizes the [chat context ring](/docs/platform-chat#context-window-visualizer) and decides when auto-compaction runs. The output limit is what an agent turn asks the provider for. Without one, a turn falls back to a conservative 8192-token budget, which can cut a long answer short.
 
 ## OpenAI-Compatible Model Router
 
@@ -23,7 +47,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
 - **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API and return `501 Not Implemented`.
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API through the Model Router and return `501 Not Implemented`. This only concerns the router — [Knowledge](/docs/platform-knowledge#image-embedding) embeds with Bedrock and Cohere through its own clients.
 
 ### GitHub Copilot Through the Model Router
 
@@ -213,6 +237,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 - **Chat API** (`/chat`)
 - **Streaming**
+- **Embed API** (`/v2/embed`) — used by [Knowledge](/docs/platform-knowledge#image-embedding) for Cohere Embed v3 and v4, text and images; not exposed through the proxy
 
 ### Cohere Connection Details
 
@@ -441,7 +466,7 @@ Open **LLM → Models**, edit a native-transport model, and set any generation p
 
 ### Context Window
 
-Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
+Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer). A window you set under [Limits](#model-context-and-output-limits) is the architectural length for this purpose, so a Modelfile `num_ctx` still caps it.
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 

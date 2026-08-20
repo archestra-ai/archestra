@@ -2955,6 +2955,41 @@
       "when": 1787039911186,
       "tag": "0421_mcp_idle_hibernation",
       "breakpoints": true
+    },
+    {
+      "idx": 422,
+      "version": "7",
+      "when": 1787079223098,
+      "tag": "0422_app_skill_cost_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 423,
+      "version": "7",
+      "when": 1787085224831,
+      "tag": "0423_gray_king_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 424,
+      "version": "7",
+      "when": 1787177198298,
+      "tag": "0424_naive_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 425,
+      "version": "7",
+      "when": 1787185607593,
+      "tag": "0425_kb_bm25_keyword_ranking",
+      "breakpoints": true
+    },
+    {
+      "idx": 426,
+      "version": "7",
+      "when": 1787215258447,
+      "tag": "0426_member_default_agent_explicit_only",
+      "breakpoints": true
     }
   ]
 }

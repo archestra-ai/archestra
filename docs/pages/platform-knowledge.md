@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-17
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -45,7 +45,7 @@ A search runs both a semantic and a keyword pass, then narrows the results.
 1. **Expand the query.** The reranking model rewrites the question into a semantic phrasing and a set of keyword queries. This catches documents that use different words than the asker did. Identifiers, ticket numbers, and error codes are preserved verbatim.
 2. **Search both ways.** Every query variant runs against the vector index and the keyword index in parallel.
 3. **Fuse.** Results are merged with Reciprocal Rank Fusion, which favors chunks that rank well across several variants rather than one.
-4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones.
+4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones. See [Query Results Ranking](#query-results-ranking).
 5. **Filter by access.** Chunks the asking user cannot read are removed. This applies to every result, at every stage.
 6. **Widen.** The chunks either side of each hit are stitched back on, so a passage that starts mid-sentence arrives with its surroundings. See [Context Expansion](#context-expansion).
 
@@ -61,6 +61,49 @@ flowchart LR
     ACL --> CE[Context Expansion]
     CE --> R[Results]
 ```
+
+### Query Results Ranking
+
+A short primer on the terms behind the settings, and how Archestra puts them together. Each search runs the stages below in order, and every stage is on by default except reranking.
+
+- **RAG (retrieval-augmented generation).** The agent does not know your documents. For each question it retrieves the most relevant passages and answers from them. Retrieval quality caps answer quality — the ranking below decides what the agent gets to read.
+- **Vector ranking (semantic search).** At sync, the embedding model turns every chunk into a vector. At query time the question is embedded the same way and chunks are ranked by how close their vectors are — close in meaning, even when the words differ. Configured under [Embedding Configuration](#embedding-configuration); pgvector does the arithmetic.
+- **Keyword ranking.** Passages that contain the question's words are ranked by how well the words match. It catches what embeddings blur — an identifier, an error code, a product name. Fine-tuned under [Keyword Ranking](#keyword-ranking).
+- **BM25.** The standard keyword scoring function, used by Lucene, Elasticsearch, and most search engines — and Archestra's keyword ranker. Rare words count more than common ones, a word that repeats earns less each time, and long passages are held back, so a short passage that answers directly beats a long one that merely repeats the words. Archestra computes it in plain SQL, so it runs on any PostgreSQL with no extension.
+- **Hybrid search.** Vector and keyword ranking run together, each finding what the other misses: the meaning without the words, the words without the meaning. Archestra always runs both; `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED=false` drops the keyword leg.
+- **Reciprocal Rank Fusion (RRF).** Vector and keyword scores are on different scales, so the two lists are merged by rank position, not score. A chunk near the top of both lists wins. Nothing to configure.
+- **Cross-encoder reranking.** A model reads the question and one chunk together and scores that pair — more accurate than comparing vectors, and far more expensive, so it runs only on the fused shortlist. In Archestra the reranking model is a chat model, or a Cohere Rerank model (a purpose-built cross-encoder). Optional, configured under [Search Ranking Configuration](#search-ranking-configuration).
+
+In order, a search is: question → [query expansion](#querying) → vector ranking and keyword ranking in parallel → RRF → reranking → [access filtering](#querying) → [context expansion](#context-expansion). Keyword ranking and reranking are two stages of one search, not alternatives: keyword ranking decides which chunks reach the shortlist, reranking decides the final order of that shortlist. Both live under **Settings > Knowledge > Search Ranking Configuration**, in that order.
+
+```mermaid
+flowchart LR
+    Q[Question] --> VS[Vector ranking]
+    Q --> KS["① Keyword ranking"]
+    VS --> F[RRF fusion]
+    KS --> F
+    F -->|shortlist| RR["② Reranking"]
+    RR --> R[Ranked results]
+```
+
+Why it is set up this way: BM25 is simply better than PostgreSQL's built-in `ts_rank` at ordering keyword matches, so it is the keyword ranker rather than an option — computed without an extension so it works on managed PostgreSQL. Reranking is off until a model is chosen because it costs one model call per search.
+
+#### Keyword Ranking
+
+Step 1 of search ranking. Passages that contain the question's words are scored with BM25 and merged with the passages that match by meaning. There is nothing to set up. Two factors under **Settings > Knowledge > Search Ranking Configuration** fine-tune it — a change applies to the next search, and nothing is re-indexed. The defaults suit almost every knowledge base.
+
+- **Term Saturation** (`k1`, 0–10, default 1.2) — how much repeating a word keeps helping a passage. Lower it when long, repetitive documents keep crowding out concise answers; raise it when the best passages genuinely use a term over and over.
+- **Length Normalization** (`b`, 0–1, default 0.75) — how much long passages are held back. Lower it when long, detailed passages deserve an equal chance; raise it when short, focused passages should pull ahead.
+
+Each field shows the deployment default until you change it; setting it back to the default returns it to following that default. The defaults come from `ARCHESTRA_KNOWLEDGE_BASE_BM25_K1` and `_B` — see [Deployment](/docs/platform-deployment#knowledge-base-configuration).
+
+BM25 scores from statistics that Archestra rebuilds in the background — right after startup, then hourly. The statistics cover the whole deployment, not one organization. Until the first build, keyword matches rank with PostgreSQL's built-in full-text ranking. The Keyword ranking section shows where this stands: ready, still building — with when the next update runs — updating right now, nothing indexed yet, or the last update failed.
+
+#### Reranking
+
+Step 2 of search ranking. The reranking model reads each shortlisted chunk together with the question, scores it, reorders the list, and drops the chunks it finds irrelevant. A chunk that matched on words alone — the right terms in the wrong context — falls away here.
+
+Reranking is optional. Without it, results come back in fused order. Query expansion and [contextual retrieval](#contextual-retrieval) use the same model, so they are off too. Reranking costs one model call per search, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - Reranker". Set it up under [Search Ranking Configuration](#search-ranking-configuration).
 
 ### Citations
 
@@ -103,7 +146,7 @@ Chunk size and contextual retrieval apply at ingest, so a change takes effect as
 
 ## Configuration
 
-Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. A reranking model is optional.
+Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. Document OCR and a reranking model are optional. Keyword ranking needs no setup, though two factors can be tuned — see [Keyword Ranking](#keyword-ranking).
 
 ### Embedding Configuration
 
@@ -125,16 +168,26 @@ Connectors index image files only when the configured embedding model accepts im
 | Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
 | AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
 | AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
+| Cohere      | Cohere Embed v4 (`embed-v4.0`)                                        | JPEG, PNG, WebP, GIF         |
+| Cohere      | Cohere Embed English v3, Multilingual v3, and their Light variants    | JPEG, PNG, WebP, GIF         |
 
 Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
 
-Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 2048 characters — roughly 500 tokens. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model when your corpus is mostly documents.
+Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 512 text tokens per input — on Bedrock, 2048 characters. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model, or Cohere Embed v4, when your corpus is mostly documents.
 
-### Reranking Configuration
+Cohere embedding models come from the Cohere key's model list in **LLM Providers > Models** with their dimensions preset — Embed v4 at 1536 (256, 512, or 1024 on request), v3 at 1024, and the Light variants at 384.
 
-![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
+With a text-only embedding model, image files are skipped and the connector page says so. Scanned pages inside PDFs are a separate case: [Document OCR](#document-ocr) transcribes them whatever the embedding model is. It does not read standalone image files.
 
-Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
+### Search Ranking Configuration
+
+![Search Ranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge_search-ranking.webp)
+
+One card for both ranking stages — what each does is described under [Query Results Ranking](#query-results-ranking).
+
+**Keyword ranking** is always on. Its two settings — Term Saturation and Length Normalization — are explained under [Keyword Ranking](#keyword-ranking); they show the defaults until you change them.
+
+**Reranking** takes the model that scores and reorders search results by relevance. It is optional; without it, results come back in fused order.
 
 - **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
@@ -289,7 +342,7 @@ Global admins can also delete an entry from the trash for good, with **Delete pe
 
 ## Supported Connectors
 
-Archestra ships with these built-in connector types.
+Archestra ships with these built-in connector types. Go to **Settings → Knowledge → Available connectors** to remove any your organization does not allow. A connector type you remove disappears from the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them.
 
 A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 

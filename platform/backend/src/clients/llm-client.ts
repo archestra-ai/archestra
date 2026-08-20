@@ -11,6 +11,7 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   ANTHROPIC_THINKING_OFF_HEADER,
+  APP_ID_HEADER,
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
@@ -197,6 +198,12 @@ export function createLLMModel(params: {
    * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
    */
   delegationBillingEnvironmentId?: string | null;
+  /**
+   * MCP App whose runtime is making this call, so the interaction is attributed
+   * to it rather than only to the shared App Runtime agent. Loopback-gated on
+   * the proxy side; see APP_ID_HEADER.
+   */
+  appId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }): LLMModel {
@@ -215,6 +222,7 @@ export function createLLMModel(params: {
     dualLlmProgressChannel,
     lockedChatKey,
     delegationBillingEnvironmentId,
+    appId,
     supportedEndpoints,
   } = params;
 
@@ -263,6 +271,11 @@ export function createLLMModel(params: {
   if (delegationBillingEnvironmentId) {
     clientHeaders[DELEGATION_BILLING_ENVIRONMENT_HEADER] =
       delegationBillingEnvironmentId;
+  }
+  // App runtime completions attribute their spend to the calling app; the proxy
+  // re-validates this against the executing agent's organization.
+  if (appId) {
+    clientHeaders[APP_ID_HEADER] = appId;
   }
 
   // Never logged: the header name is on the logging redaction denylist and
@@ -572,6 +585,20 @@ function reasoningCompatibleCreateModel(params: {
  * until the corresponding config is added.
  */
 const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
+  // Embeddings-only provider: Voyage publishes no chat API, so there is no chat
+  // model to construct. Reaching here means something resolved a Voyage model
+  // for a conversation despite the catalog tagging every one of them as an
+  // embedding model — fail loudly rather than build a client that would 404 on
+  // every request.
+  voyage: {
+    createModel: () => {
+      throw new Error(
+        "Voyage AI is an embeddings-only provider and cannot serve chat requests",
+      );
+    },
+    defaultBaseUrl: config.llm.voyage.baseUrl,
+  },
+
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 
   anthropic: {

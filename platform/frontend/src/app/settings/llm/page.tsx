@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
+import { ModelProvidersSection } from "@/app/settings/llm/_parts/model-providers-section";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -272,6 +273,9 @@ export default function LlmSettingsPage() {
         )}
       </SettingsBlock>
       <SettingsBlock
+        // Linked from every agent's Advisor Subagent row, on the detail page
+        // and in the setup wizard.
+        id="advisor"
         title={
           <span className="flex items-center gap-2">
             Advisor
@@ -287,8 +291,8 @@ export default function LlmSettingsPage() {
             than on every turn, so this usually costs less than running the
             stronger model throughout, though each call is billed at the advisor
             model&apos;s rates. Pick the advisor&apos;s model on the Advisor
-            agent, then turn on &quot;Enable Advisor&quot; for the agents and
-            MCP Gateways that should reach it.
+            agent, then turn on the &quot;Advisor Subagent&quot; switch on the
+            agents and MCP Gateways that should reach it.
           </>
         }
         control={
@@ -316,6 +320,7 @@ export default function LlmSettingsPage() {
       >
         <DefaultUserLimitsSection />
       </WithPermissions>
+      <ModelProvidersSection />
     </SettingsSectionStack>
   );
 }

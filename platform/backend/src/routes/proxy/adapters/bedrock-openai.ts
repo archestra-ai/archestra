@@ -45,6 +45,9 @@ class BedrockOpenaiResponseAdapter
 {
   readonly provider = "bedrock" as const;
   private inner: LLMResponseAdapter<BedrockResponse>;
+  // The inner (logged-shape) response after a dispatch-mode repair, so
+  // getLoggedResponse persists the rewritten turn rather than the original.
+  private rewrittenInner: BedrockResponse | null = null;
   private ctx: OpenaiContext;
 
   constructor(response: BedrockResponse, ctx: OpenaiContext) {
@@ -90,7 +93,7 @@ class BedrockOpenaiResponseAdapter
   }
 
   getLoggedResponse(): BedrockResponse {
-    return this.inner.getOriginalResponse();
+    return this.rewrittenInner ?? this.inner.getOriginalResponse();
   }
 
   /**
@@ -98,6 +101,25 @@ class BedrockOpenaiResponseAdapter
    * the Bedrock-style refusal shape would not round-trip correctly through
    * OpenAI SDK parsers.
    */
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): BedrockResponse {
+    // Rewrite in the inner wire shape (which is what gets logged), then
+    // translate for the client exactly as getOriginalResponse does. If the
+    // inner adapter cannot rewrite, hand back the untouched translation — the
+    // handler only reaches here when the planner produced a rewrite, and a
+    // silent no-op would strand the client with a call it cannot execute; but
+    // every inner adapter this wraps does implement it.
+    const inner =
+      this.inner.withRewrittenToolCalls?.(toolCalls) ??
+      this.inner.getOriginalResponse();
+    this.rewrittenInner = inner;
+    return converseResponseToOpenai(
+      inner,
+      this.ctx,
+    ) as unknown as BedrockResponse;
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -208,6 +230,18 @@ class BedrockOpenaiStreamAdapter
     // already emits a self-contained "stop" finish for the wire.
     this.inner.formatCompleteTextSSE(text);
     return this.encoder.formatCompleteText(text);
+  }
+
+  formatToolCallsSSE(
+    toolCalls: StreamAccumulatorState["toolCalls"],
+  ): Uint8Array[] {
+    // Inner read for its side effect only (release semantics for the persisted
+    // Converse-shape turn); the wire bytes are the OpenAI-shaped ones. The
+    // cached translated events name the calls the model made directly and are
+    // dropped — that is the call being repaired.
+    this.inner.formatToolCallsSSE?.(toolCalls);
+    this.pendingToolCallEventBytes = [];
+    return this.encoder.formatToolCalls(toolCalls);
   }
 
   formatEndSSE(): Uint8Array {

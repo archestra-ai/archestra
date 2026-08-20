@@ -599,6 +599,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
 
+      let deletedAgent = false;
+
       // If the caller wants the source agent gone, prove they may delete it
       // BEFORE creating the skill, so a permission failure doesn't leave an
       // orphan skill behind. Mirrors the agent DELETE route's authorization.
@@ -623,12 +625,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userTeamIds: agentUserTeamIds,
           userId: user.id,
         });
-        if (await MemberModel.isAgentDefault(agent.id)) {
-          throw new ApiError(
-            400,
-            "Cannot delete a default agent. Set another agent as default first.",
-          );
-        }
       }
 
       const { draft, teamIds, report } = agentToSkill(agent, {
@@ -658,7 +654,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // transaction so convert+delete is all-or-nothing: a failed delete rolls
       // back the skill insert, so a retry never collides with a half-created
       // skill and the user is never left with duplicated state.
-      let deletedAgent = false;
       const skill = await withTeamFkErrorMapped(() =>
         withDbTransaction(async (tx) => {
           const created = await SkillModel.createWithFiles(
@@ -687,6 +682,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Eligibility was checked above; delete inside the same transaction.
           if (body.deleteAgent) {
             deletedAgent = await AgentModel.delete(agent.id, tx);
+            // Same as the agent DELETE route: members who chose this agent as
+            // their personal default fall back to the organization default.
+            if (deletedAgent) {
+              await MemberModel.clearDefaultAgent(agent.id, tx);
+            }
           }
           return created;
         }),

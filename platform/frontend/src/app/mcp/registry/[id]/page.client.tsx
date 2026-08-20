@@ -9,7 +9,9 @@ import {
 import {
   ArrowLeft,
   Copy,
+  KeyRound,
   MessageSquare,
+  Moon,
   MoreHorizontal,
   PackageX,
   Pencil,
@@ -20,19 +22,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { CopyableCode } from "@/components/copyable-code";
+import { EntityPill } from "@/components/entity-pill";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import type { SettingTone } from "@/components/setting-icon";
+import { SettingRow } from "@/components/setting-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +49,8 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import {
   useCatalogTools,
@@ -61,7 +63,11 @@ import {
   useMcpInstallationStatusCacheSync,
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
+import {
+  useDefaultEnvironment,
+  useOrganization,
+} from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
@@ -74,9 +80,11 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
+import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem } from "../_parts/mcp-server-card";
+import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
@@ -139,6 +147,7 @@ export function McpCatalogItemPage({ id }: { id: string }) {
         title="MCP Server"
         description=""
         backLink={<BackToRegistryLink />}
+        maxWidth="wizard"
       >
         <ItemPageSkeleton />
       </PageLayout>
@@ -151,6 +160,7 @@ export function McpCatalogItemPage({ id }: { id: string }) {
         title="MCP Server"
         description=""
         backLink={<BackToRegistryLink />}
+        maxWidth="wizard"
       >
         <Empty className="border">
           <EmptyHeader>
@@ -225,6 +235,8 @@ function CatalogItemDetails({
 
   const { data: allMcpServers } = useMcpServers();
   const deploymentStatuses = useMcpDeploymentStatuses();
+  const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
+  const itemIssues = issuesByCatalog.get(item.id);
   useMcpInstallationStatusCacheSync();
   const { data: tools = [] } = useCatalogTools(item.id);
 
@@ -415,19 +427,11 @@ function CatalogItemDetails({
       : connectionsCount > 0
         ? "Connected"
         : "Not installed";
-  const endpoint =
-    variant === "remote"
-      ? item.serverUrl
-      : variant === "local"
-        ? [item.localConfig?.command, ...(item.localConfig?.arguments ?? [])]
-            .filter(Boolean)
-            .join(" ") ||
-          item.localConfig?.dockerImage ||
-          null
-        : null;
 
   return (
     <PageLayout
+      // The wizard's column, so Edit opens in the same one this page reads in.
+      maxWidth="wizard"
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
@@ -534,152 +538,172 @@ function CatalogItemDetails({
 
         {effectiveTab === "overview" && (
           <div className="space-y-4">
-            {/* Capabilities + details */}
-            <div className="grid items-start gap-4 lg:grid-cols-3">
-              {/* Tools the server exposes */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5">
-                      <CardTitle>
-                        Tools
-                        {!!(tools.length || item.toolCount) && (
-                          <span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">
-                            {tools.length || item.toolCount}
-                          </span>
-                        )}
-                      </CardTitle>
-                      <CardDescription>
-                        Capabilities this server exposes to agents.
-                      </CardDescription>
-                    </div>
-                    {tools.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        asChild
-                        className="-mr-2 shrink-0 text-muted-foreground"
-                      >
-                        <Link href={`/mcp/registry/${item.id}/edit?step=tools`}>
-                          <ShieldCheck className="h-4 w-4" />
-                          Guardrails
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {tools.length === 0 ? (
-                    <Empty className="border-0 py-8">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <ShieldCheck />
-                        </EmptyMedia>
-                        <EmptyTitle>No tools discovered yet</EmptyTitle>
-                        <EmptyDescription>
-                          Tools appear once the server is connected and
-                          reachable.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <>
-                      <ul className="divide-y divide-border">
-                        {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
-                          <li
-                            key={tool.name}
-                            className="py-2.5 first:pt-0 last:pb-0"
-                          >
-                            <code className="font-mono text-sm font-medium">
-                              {parseFullToolName(tool.name).toolName ||
-                                tool.name}
-                            </code>
-                            {tool.description && (
-                              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                                {tool.description}
-                              </p>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                      {tools.length > TOOLS_PREVIEW_LIMIT && (
-                        <Link
-                          href={`/mcp/registry/${item.id}/edit?step=tools`}
-                          className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-                        >
-                          View all {tools.length} tools
-                        </Link>
-                      )}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Server details — operational summary */}
-              <Card>
-                <CardContent className="space-y-4 text-sm">
-                  <OverviewField label="Status">
-                    <span className="inline-flex items-center gap-2">
-                      {deploymentSummary ? (
-                        <DeploymentStatusDot
-                          state={deploymentSummary.overallState}
-                        />
-                      ) : connectionsCount > 0 ? (
-                        <DeploymentStatusDot state="running" />
-                      ) : null}
-                      <span>{statusText}</span>
+            {/* Outstanding issue, explained — same notice as the registry's
+                Needs-attention tab, so the diagnosis reads identically. */}
+            {itemIssues && itemIssues.length > 0 && (
+              <McpServerIssueNotice
+                item={item}
+                issues={itemIssues}
+                servers={allServersForCatalog}
+                hideName
+              />
+            )}
+            {/* One panel, as the wizard is: the server's facts open it as a
+                heading section, the capabilities follow. */}
+            <div className="divide-y rounded-lg border bg-card">
+              <section className="grid gap-x-6 gap-y-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <OverviewField label="Status">
+                  <span className="inline-flex items-center gap-2">
+                    {deploymentSummary ? (
+                      <DeploymentStatusDot
+                        state={deploymentSummary.overallState}
+                      />
+                    ) : connectionsCount > 0 ? (
+                      <DeploymentStatusDot state="running" />
+                    ) : null}
+                    <span>{statusText}</span>
+                  </span>
+                </OverviewField>
+                {variant !== "builtin" && (
+                  <OverviewField label="Environment">
+                    {environmentLabel ?? defaultEnvironment.name}
+                  </OverviewField>
+                )}
+                <OverviewField label="Accessible to">
+                  {/*
+                    `showSelfAsMe` because this is a labelled field rather
+                    than one badge among many in a list: the viewer's own
+                    personal server must still say "Me" instead of leaving
+                    the field blank.
+                  */}
+                  <ResourceVisibilityBadge
+                    scope={item.scope}
+                    teams={item.teams}
+                    authorId={item.authorId}
+                    authorName={item.authorName}
+                    currentUserId={currentUserId}
+                    showSelfAsMe
+                  />
+                </OverviewField>
+                {item.scope === "team" && item.teams.length > 0 && (
+                  // The wizard grants each team either level; the badge above
+                  // names the teams but not what they may do.
+                  <OverviewField label="Teams">
+                    <ul className="flex flex-wrap gap-1.5">
+                      {item.teams.map((team) => (
+                        <li key={team.id}>
+                          <EntityPill
+                            name={team.name}
+                            note={team.level === "write" ? "Manage" : "Use"}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </OverviewField>
+                )}
+                <OverviewField label="Created">
+                  <span>
+                    {item.authorName ? (
+                      <span>by {item.authorName} </span>
+                    ) : null}
+                    <span>
+                      on{" "}
+                      {formatDate({ date: item.createdAt, dateFormat: "PP" })}
                     </span>
+                  </span>
+                </OverviewField>
+                {item.updatedAt !== item.createdAt && (
+                  <OverviewField label="Last updated">
+                    {formatDate({ date: item.updatedAt, dateFormat: "PPp" })}
                   </OverviewField>
-                  {variant !== "builtin" && (
-                    <OverviewField label="Environment">
-                      {environmentLabel ?? defaultEnvironment.name}
-                    </OverviewField>
-                  )}
-                  <OverviewField label="Accessible to">
-                    {/*
-                      `showSelfAsMe` because this is a labelled field rather
-                      than one badge among many in a list: the viewer's own
-                      personal server must still say "Me" instead of leaving
-                      the field blank.
-                    */}
-                    <ResourceVisibilityBadge
-                      scope={item.scope}
-                      teams={item.teams}
-                      authorId={item.authorId}
-                      authorName={item.authorName}
-                      currentUserId={currentUserId}
-                      showSelfAsMe
-                    />
+                )}
+                {item.labels.length > 0 && (
+                  <OverviewField label="Labels">
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.labels.map((label) => (
+                        <Badge
+                          key={`${label.key}-${label.value}`}
+                          variant="outline"
+                          className="font-normal"
+                        >
+                          {label.key}: {label.value}
+                        </Badge>
+                      ))}
+                    </div>
                   </OverviewField>
-                  {endpoint && (
-                    <OverviewField
-                      label={variant === "remote" ? "Server URL" : "Command"}
+                )}
+              </section>
+
+              <ConfigurationSections item={item} />
+
+              {/* Tools the server exposes — the wizard's own step, so it
+                  ranks a level above sections inside a step (h2 to their h3). */}
+              <section className="space-y-4 p-4 pt-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-semibold tracking-tight">
+                      Tools
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Capabilities this server exposes to agents.
+                    </p>
+                  </div>
+                  {tools.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="-mr-2 shrink-0 text-muted-foreground"
                     >
-                      <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
-                        {endpoint}
-                      </code>
-                    </OverviewField>
+                      <Link href={`/mcp/registry/${item.id}/edit?step=tools`}>
+                        <ShieldCheck className="h-4 w-4" />
+                        Guardrails
+                      </Link>
+                    </Button>
                   )}
-                  <OverviewField label="Created">
-                    {formatDate({ date: item.createdAt, dateFormat: "PP" })}
-                  </OverviewField>
-                  {item.labels.length > 0 && (
-                    <OverviewField label="Labels">
-                      <div className="flex flex-wrap gap-1.5">
-                        {item.labels.map((label) => (
-                          <Badge
-                            key={`${label.key}-${label.value}`}
-                            variant="outline"
-                            className="font-normal"
-                          >
-                            {label.key}: {label.value}
-                          </Badge>
-                        ))}
-                      </div>
-                    </OverviewField>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
+                {tools.length === 0 ? (
+                  <Empty className="border-0 py-8">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <ShieldCheck />
+                      </EmptyMedia>
+                      <EmptyTitle>No tools discovered yet</EmptyTitle>
+                      <EmptyDescription>
+                        Tools appear once the server is connected and reachable.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <>
+                    <ul className="divide-y divide-border">
+                      {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
+                        <li
+                          key={tool.name}
+                          className="py-2.5 first:pt-0 last:pb-0"
+                        >
+                          <code className="font-mono text-sm font-medium">
+                            {parseFullToolName(tool.name).toolName || tool.name}
+                          </code>
+                          {tool.description && (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                              {tool.description}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {tools.length > TOOLS_PREVIEW_LIMIT && (
+                      <Link
+                        href={`/mcp/registry/${item.id}/edit?step=tools`}
+                        className="inline-block text-sm font-medium text-primary hover:underline"
+                      >
+                        View all {tools.length} tools
+                      </Link>
+                    )}
+                  </>
+                )}
+              </section>
             </div>
           </div>
         )}
@@ -754,6 +778,419 @@ function CatalogItemDetails({
   );
 }
 
+/**
+ * The configuration the setup wizard's first step holds, read-only and in the
+ * order the wizard asks for it: how the server is reached and run, how it
+ * authenticates, and what it is given at run time. Derived through the
+ * wizard's own `transformCatalogItemToFormValues`, so the page cannot drift
+ * from the form that wrote the values.
+ */
+function ConfigurationSections({ item }: { item: CatalogItem }) {
+  const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
+  const { data: identityProviders = [] } = useIdentityProviders();
+  const isLocal = item.serverType === "local";
+  // Only the derivations come from the form shape (auth method, headers):
+  // its `localConfig` is textarea-shaped — `arguments` is one newline-joined
+  // string there — so everything factual reads the API's own object.
+  const local = item.localConfig;
+  const auth = AUTH_METHOD_COPY[values.authMethod] ?? AUTH_METHOD_COPY.none;
+  const oauth = values.oauthConfig;
+  const managed = values.enterpriseManagedConfig;
+  const identityProviderName = managed?.identityProviderId
+    ? (identityProviders.find(
+        (provider) => provider.id === managed.identityProviderId,
+      )?.issuer ?? "Not visible to you")
+    : null;
+  const commandLine = [local?.command, ...(local?.arguments ?? [])]
+    .filter(Boolean)
+    .join(" ");
+  const envVars = local?.environment ?? [];
+  const promptedVars = envVars.filter(
+    (variable) => variable.promptOnInstallation,
+  );
+  const fixedVars = envVars.filter(
+    (variable) => !variable.promptOnInstallation,
+  );
+  const envFrom = local?.envFrom ?? [];
+  const headers = values.additionalHeaders ?? [];
+
+  return (
+    <>
+      <section className="space-y-4 p-4">
+        <SectionHeading
+          title="Connection"
+          description={
+            isLocal
+              ? "How this server is built and run."
+              : "Where this server is reached."
+          }
+        />
+        <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {item.serverType === "remote" && item.serverUrl && (
+            <OverviewField
+              label="Server URL"
+              className="sm:col-span-2 lg:col-span-3"
+            >
+              <CodeLine>{item.serverUrl}</CodeLine>
+            </OverviewField>
+          )}
+          {isLocal && (
+            <>
+              <OverviewField label="Deployment">
+                {values.multitenant
+                  ? "Multi-tenant — one shared deployment"
+                  : "Single-tenant — one deployment per installation"}
+              </OverviewField>
+              <OverviewField label="Transport">
+                {local?.transportType === "stdio" ? (
+                  <span>stdio</span>
+                ) : (
+                  <span>
+                    Streamable HTTP
+                    {local?.httpPort || local?.httpPath ? (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {local?.httpPort ?? 8080}
+                        {local?.httpPath ?? "/mcp"}
+                      </span>
+                    ) : null}
+                  </span>
+                )}
+              </OverviewField>
+              <OverviewField label="Deployment spec">
+                {item.deploymentSpecYaml ? "Customized" : "Generated"}
+              </OverviewField>
+              {local?.dockerImage && (
+                <OverviewField
+                  label="Image"
+                  className="sm:col-span-2 lg:col-span-3"
+                >
+                  <CodeLine>{local.dockerImage}</CodeLine>
+                </OverviewField>
+              )}
+              {commandLine && (
+                <OverviewField
+                  label="Command"
+                  className="sm:col-span-2 lg:col-span-3"
+                >
+                  {/* The command as it runs, on one line — long ones scroll
+                      rather than wrap, and the button copies the whole thing. */}
+                  <CopyableCode
+                    value={commandLine}
+                    toastMessage="Command copied"
+                    className="w-full"
+                  >
+                    <code className="block overflow-x-auto whitespace-nowrap font-mono text-xs">
+                      {commandLine}
+                    </code>
+                  </CopyableCode>
+                </OverviewField>
+              )}
+              {local?.serviceAccount && (
+                <OverviewField label="Service account">
+                  <CodeLine>{local.serviceAccount}</CodeLine>
+                </OverviewField>
+              )}
+              {(local?.imagePullSecrets ?? []).length > 0 && (
+                <OverviewField label="Image pull secrets">
+                  {(local?.imagePullSecrets ?? []).length}
+                </OverviewField>
+              )}
+            </>
+          )}
+        </div>
+        <IdleHibernationRow item={item} />
+      </section>
+
+      <section className="space-y-4 p-4">
+        <SectionHeading
+          title="Authentication"
+          description="How callers prove who they are to this server."
+        />
+        <div className="divide-y rounded-md border">
+          <SettingRow
+            icon={<KeyRound className="size-4" />}
+            title="Method"
+            tone={values.authMethod === "none" ? "off" : "on"}
+            state={auth.label}
+          >
+            {auth.describe}
+          </SettingRow>
+        </div>
+        {(values.authMethod === "oauth" ||
+          values.authMethod === "oauth_client_credentials") &&
+          oauth && (
+            <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {oauth.tokenEndpoint && (
+                <OverviewField
+                  label="Token endpoint"
+                  className="sm:col-span-2 lg:col-span-3"
+                >
+                  <CodeLine>{oauth.tokenEndpoint}</CodeLine>
+                </OverviewField>
+              )}
+              {oauth.client_id && (
+                <OverviewField label="Client ID">
+                  <CodeLine>{oauth.client_id}</CodeLine>
+                </OverviewField>
+              )}
+              <OverviewField label="Client secret">
+                {item.clientSecretId || oauth.client_secret
+                  ? "Configured"
+                  : "Not set"}
+              </OverviewField>
+              {oauth.scopes && (
+                <OverviewField label="Scopes">
+                  <CodeLine>{String(oauth.scopes)}</CodeLine>
+                </OverviewField>
+              )}
+            </div>
+          )}
+        {managed && (
+          <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <OverviewField label="Identity provider">
+              {identityProviderName ?? "Not set"}
+            </OverviewField>
+            {managed.requestedCredentialType && (
+              <OverviewField label="Requested credential">
+                {managed.requestedCredentialType}
+              </OverviewField>
+            )}
+            {managed.tokenInjectionMode && (
+              <OverviewField label="Injection">
+                {managed.tokenInjectionMode}
+              </OverviewField>
+            )}
+          </div>
+        )}
+        {headers.length > 0 && (
+          <div className="space-y-1.5">
+            <SubHeading label="Headers" />
+            <ul className="flex flex-wrap gap-1.5">
+              {headers.map((header) => (
+                <li key={header.headerName}>
+                  <EntityPill
+                    name={header.headerName}
+                    note={[
+                      header.promptOnInstallation
+                        ? "asked at install"
+                        : "fixed",
+                      header.required ? "required" : null,
+                      header.sensitive ? "sensitive" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {isLocal && (envVars.length > 0 || envFrom.length > 0) && (
+        <section className="space-y-4 p-4">
+          <SectionHeading
+            title="Environment"
+            description="What the server's container is given at run time."
+          />
+          {promptedVars.length > 0 && (
+            <div className="space-y-1.5">
+              <SubHeading label="Asked at installation" />
+              <EnvVarPills variables={promptedVars} />
+            </div>
+          )}
+          {fixedVars.length > 0 && (
+            <div className="space-y-1.5">
+              <SubHeading label="Set on the server" />
+              <EnvVarPills variables={fixedVars} />
+            </div>
+          )}
+          {envFrom.length > 0 && (
+            <div className="space-y-1.5">
+              <SubHeading label="From Kubernetes" />
+              <ul className="flex flex-wrap gap-1.5">
+                {envFrom.map((source) => (
+                  <li key={`${source.type}:${source.name}`}>
+                    <EntityPill
+                      name={source.name}
+                      note={
+                        source.type === "configMap" ? "ConfigMap" : "Secret"
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+/**
+ * The per-server idle-hibernation override, read-only — mirroring the edit
+ * page's own section, including when it does not exist: only a self-hosted
+ * server in an organization that hibernates idle servers has one. The value
+ * lives on the install rows, and a reinstall can move one of them alone, so
+ * divergence reads as "Mixed" rather than whichever row happens to be first.
+ */
+function IdleHibernationRow({ item }: { item: CatalogItem }) {
+  const { data: organization } = useOrganization();
+  const enterpriseCoreActive = useEnterpriseFeature("core");
+  const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
+  const { data: servers = [] } = useMcpServers();
+
+  if (
+    item.serverType !== "local" ||
+    !hibernationBeta ||
+    !enterpriseCoreActive ||
+    !organization?.mcpIdleHibernationEnabled
+  ) {
+    return null;
+  }
+
+  const modes = [
+    ...new Set(
+      servers
+        .filter((server) => server.catalogId === item.id)
+        .map((server) => server.hibernationMode ?? "inherit"),
+    ),
+  ];
+  const mode = modes.length === 1 ? modes[0] : undefined;
+  const copy = mode ? HIBERNATION_COPY[mode] : undefined;
+
+  return (
+    <div className="divide-y rounded-md border">
+      <SettingRow
+        icon={<Moon className="size-4" />}
+        title="Idle hibernation"
+        tone={copy?.tone ?? "info"}
+        state={copy?.label ?? (modes.length === 0 ? "Not installed" : "Mixed")}
+      >
+        {copy?.describe ??
+          (modes.length === 0
+            ? "No installation to hibernate yet."
+            : "Installations of this server disagree; the edit page can set them all.")}
+      </SettingRow>
+    </div>
+  );
+}
+
+/** What each hibernation choice means for a server that goes idle. */
+const HIBERNATION_COPY: Record<
+  string,
+  { label: string; tone: SettingTone; describe: string }
+> = {
+  inherit: {
+    label: "Organization setting",
+    tone: "info",
+    describe:
+      "Hibernates when idle if the organization hibernates idle servers.",
+  },
+  enabled: {
+    label: "Always allowed",
+    tone: "on",
+    describe: "Scales to zero when idle and starts again on the next call.",
+  },
+  disabled: {
+    label: "Never",
+    tone: "off",
+    describe:
+      "Stays running even while the organization hibernates idle servers.",
+  },
+};
+
+/** One environment variable per chip: secrets keyed, files marked, required noted. */
+function EnvVarPills({
+  variables,
+}: {
+  variables: NonNullable<
+    NonNullable<CatalogItem["localConfig"]>["environment"]
+  >;
+}) {
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {variables.map((variable) => (
+        <li key={variable.key}>
+          <EntityPill
+            icon={
+              variable.type === "secret" ? (
+                <KeyRound className="size-3.5 text-muted-foreground" />
+              ) : undefined
+            }
+            name={variable.key}
+            note={[
+              variable.mounted ? "file" : null,
+              variable.required ? "required" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A section inside the wizard's Configuration step — h3, under the h2 steps. */
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
+function SubHeading({ label }: { label: string }) {
+  return <p className="text-sm text-muted-foreground">{label}</p>;
+}
+
+function CodeLine({ children }: { children: ReactNode }) {
+  return (
+    <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
+      {children}
+    </code>
+  );
+}
+
+/** What each authentication method means, in the wizard's own words. */
+const AUTH_METHOD_COPY: Record<string, { label: string; describe: string }> = {
+  none: {
+    label: "None",
+    describe: "Callers reach this server without credentials.",
+  },
+  bearer: {
+    label: "Token header",
+    describe: "Each person supplies a token when they connect.",
+  },
+  oauth: {
+    label: "OAuth 2.1",
+    describe: "Each person signs in to the server, which issues the token.",
+  },
+  oauth_client_credentials: {
+    label: "OAuth client credentials",
+    describe: "One machine identity authenticates every call.",
+  },
+  enterprise_managed: {
+    label: "Identity provider exchange",
+    describe:
+      "The gateway exchanges the caller's identity for a credential the server accepts.",
+  },
+  idp_jwt: {
+    label: "Identity provider JWT",
+    describe: "The caller's signed identity token is passed through as it is.",
+  },
+};
+
 function OverviewField({
   label,
   children,
@@ -765,9 +1202,7 @@ function OverviewField({
 }) {
   return (
     <div className={cn("space-y-1", className)}>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div>{children}</div>
     </div>
   );

@@ -47,9 +47,12 @@ export function emptyRegistryFilters(): RegistryFilters {
   return { status: new Set(), environment: new Set(), author: new Set() };
 }
 
+export const NEEDS_ATTENTION_STATUS_VALUE = "needs-attention";
+
 export const STATUS_OPTIONS: FilterOption[] = [
   { value: "installed", label: "Installed" },
   { value: "not-installed", label: "Not installed" },
+  { value: NEEDS_ATTENTION_STATUS_VALUE, label: "Needs attention" },
 ];
 
 const GROUP_LABELS: Record<FilterGroup, string> = {
@@ -58,10 +61,9 @@ const GROUP_LABELS: Record<FilterGroup, string> = {
   author: "Author",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  installed: "Installed",
-  "not-installed": "Not installed",
-};
+const STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
 
 // Lists longer than this get an inline search box.
 const SEARCH_THRESHOLD = 6;

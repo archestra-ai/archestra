@@ -208,7 +208,10 @@ export function ResourceScopeFilter({
   );
 
   return (
-    <div className="flex items-center gap-2">
+    // Wraps: at a phone width the fixed-width selects below overflow one row,
+    // and this group shares that row with a list page's search box, which is
+    // then squeezed to its magnifier with no room left to show what was typed.
+    <div className="flex flex-wrap items-center gap-2">
       <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
         <SelectTrigger aria-label="Filter by type" className="w-[180px]">
           <SelectValue />

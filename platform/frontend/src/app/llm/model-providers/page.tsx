@@ -28,7 +28,6 @@ import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { IntegrationSettingsDialog } from "@/components/integration-settings-dialog";
 import {
   deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -385,16 +384,6 @@ export default function ApiKeysPage() {
 
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
-      <IntegrationSettingsDialog
-        field="modelProviderOverrides"
-        title="Model provider settings"
-        description="Admin only — turn off the providers your organization does not allow, and rename the ones it does. Turned-off providers disappear from every picker and cannot be given credentials."
-        allowRename
-        entityNamePlural="providers"
-        items={providerSettingsItems}
-        overrides={providerCatalog.overrides}
-        testId="model-provider-page-settings"
-      />
       <Button
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}

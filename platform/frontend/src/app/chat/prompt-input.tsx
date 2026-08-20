@@ -707,16 +707,33 @@ const PromptInputContent = ({
     [storageByteLimit],
   );
 
-  const submitStatus = status === "error" ? "ready" : status;
   const isResponseInFlight = status === "submitted" || status === "streaming";
+  // Mid-stream a submit queues the message instead of sending it (see
+  // classifyChatSubmitAction), but only when there is something queueable: a
+  // conversation to queue into and typed text. Attachments cannot be queued
+  // (the page rejects them with a toast), so staged files keep the Stop face
+  // rather than promising a queue that would fail.
+  const isQueueingSubmit =
+    isResponseInFlight &&
+    !!conversationId &&
+    controller.textInput.value.trim().length > 0 &&
+    controller.attachments.files.length === 0;
+  // A queueable draft puts the button back on its ordinary Send face, so what
+  // Enter is about to do is visible before pressing it; left on Stop, nothing
+  // said the message could be queued at all.
+  const submitStatus =
+    status === "error" || isQueueingSubmit ? "ready" : status;
 
-  // Context compaction normally locks the composer, but when queueing can
-  // absorb the message (live conversation, response in flight) the composer
-  // stays usable: Enter enqueues — the session-level drain already defers to
-  // compaction — and the button keeps its Stop role. Without this, mid-turn
-  // auto-compaction silently swallows Enter and drops keyboard focus, which
-  // reads as "queueing stopped working".
-  const canComposeDuringCompaction = !!conversationId && isResponseInFlight;
+  // Context compaction normally locks the composer, but a live conversation can
+  // always absorb the message into its queue, so the composer stays usable for
+  // the whole compaction: Enter enqueues (classifyChatSubmitAction routes a
+  // submit during compaction to the queue) and the session-level drain holds it
+  // until compaction settles. This covers both shapes — auto-compaction inside
+  // a streaming turn, and a manual `/compact` that runs while the conversation
+  // is otherwise idle. Without it, compaction silently swallows Enter and drops
+  // keyboard focus, which reads as "queueing stopped working". Only the
+  // new-chat composer (nothing to queue into) still locks.
+  const canComposeDuringCompaction = !!conversationId;
   const composerLocked =
     submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
   // Messages queued while a response was in-flight; sent automatically (in
@@ -1031,7 +1048,9 @@ const PromptInputContent = ({
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
                     // (which would queue the typed text — see onStop docs).
-                    if (onStop && isResponseInFlight) {
+                    // With a queueable draft the button is a Send button, so
+                    // the click must submit (and queue) instead; Esc stops.
+                    if (onStop && isResponseInFlight && !isQueueingSubmit) {
                       event.preventDefault();
                       onStop();
                     }
@@ -1043,7 +1062,7 @@ const PromptInputContent = ({
                   <span>
                     Connect the subscription or choose another credential
                   </span>
-                ) : isResponseInFlight && onStop ? (
+                ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
                   <span className="flex items-center gap-1.5">
                     Stop <Kbd>Esc</Kbd>
                   </span>

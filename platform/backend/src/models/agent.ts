@@ -74,7 +74,6 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
-import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
@@ -438,6 +437,16 @@ class AgentModel {
        * onto the new agent.
        */
       skipCreationDefaultTools?: boolean;
+      /**
+       * Delegation targets the new agent starts with excluded from its
+       * Auto-subagent surface (today: the Advisor, which is opt-in). Applied
+       * inside create so version 1's snapshot already records them — a
+       * follow-up write from the caller would fork a second version, and one
+       * made by the client silently never happens for roles without
+       * `agent:read`. Which ids these are is the caller's rule; see
+       * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
+       */
+      defaultExcludedSubagentIds?: string[];
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -588,6 +597,30 @@ class AgentModel {
       });
       if (flipped) {
         Object.assign(createdAgent, flipped);
+      }
+    }
+
+    // Seed the caller's default Auto-mode subagent exclusions. Before the
+    // version-1 fork below, so the first snapshot carries them like any other
+    // part of the created config. Best-effort, like the fork itself: the agent
+    // row and its junctions are already committed (create is not transactional,
+    // and this write is a delete+insert of its own), so throwing here would
+    // leave a half-made agent behind. One that starts with the Advisor
+    // reachable is degraded, not broken.
+    if (
+      options?.defaultExcludedSubagentIds &&
+      options.defaultExcludedSubagentIds.length > 0
+    ) {
+      try {
+        await AgentExcludedSubagentModel.replaceForAgent(
+          createdAgent.id,
+          options.defaultExcludedSubagentIds,
+        );
+      } catch (error) {
+        logger.warn(
+          { error, agentId: createdAgent.id },
+          "Default subagent exclusions were not seeded; agent created without them",
+        );
       }
     }
 
@@ -2960,20 +2993,33 @@ class AgentModel {
   }
 
   /**
-   * Ensure a personal default chat agent exists for a member.
-   * Idempotent: skips if member already has a defaultAgentId set.
+   * Ensure a personal chat agent exists for a member, and return the one they
+   * should chat with — their oldest live personal chat agent.
+   *
+   * Idempotent, and deliberately keyed on authorship alone: having *ever*
+   * authored a personal chat agent in this organization is the durable marker
+   * (soft-deleted rows count), so deleting the seeded assistant does not bring
+   * it straight back on the next login, app chat, or backend start. It must not
+   * key on `members.default_agent_id`, which now records only a deliberate
+   * choice and is null for almost everyone — reading it here would re-seed an
+   * assistant per login for every member who never picked one.
+   *
+   * Returns null only for a member who authored personal chat agents and then
+   * deleted them all: seeding is skipped by design, and they have none live.
    */
   static async ensurePersonalChatAgent(params: {
     userId: string;
     organizationId: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const { userId, organizationId } = params;
 
-    const existingDefault = await MemberModel.getDefaultAgentId(
-      userId,
-      organizationId,
-    );
-    if (existingDefault !== null) return;
+    // Live agents first: this is the common path (every login and app chat),
+    // and it answers in one indexed query.
+    const [existing] = await AgentModel.findOwnPersonalChatAgentIds(params);
+    if (existing) return existing;
+    // None live. Seed only for a member who never had one — soft-deleted rows
+    // are the durable marker that they did and chose to delete it.
+    if (await AgentModel.hasEverAuthoredPersonalChatAgent(params)) return null;
 
     const agent = await AgentModel.create(
       {
@@ -2996,12 +3042,65 @@ class AgentModel {
     // The default built-in tools (artifact_write, todo_write,
     // query_knowledge_sources) are assigned inside AgentModel.create along
     // with the rest of the creation-default set.
-    await MemberModel.setDefaultAgent(userId, organizationId, agent.id);
 
     logger.info(
       { userId, organizationId, agentId: agent.id },
-      "Created personal default chat agent",
+      "Created personal chat agent",
     );
+
+    return agent.id;
+  }
+
+  /**
+   * Live personal chat agents this member authored in the organization,
+   * oldest first, excluding `excludeId`.
+   */
+  private static async findOwnPersonalChatAgentIds(params: {
+    userId: string;
+    organizationId: string;
+    excludeId?: string;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.authorId, params.userId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.scope, "personal"),
+          eq(schema.agentsTable.builtIn, false),
+          params.excludeId
+            ? ne(schema.agentsTable.id, params.excludeId)
+            : undefined,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      // `id` breaks a createdAt tie so "the member's own personal chat agent"
+      // is one stable answer — the same order migration 0426 used to recognise
+      // the implicitly adopted defaults it cleared.
+      .orderBy(asc(schema.agentsTable.createdAt), asc(schema.agentsTable.id));
+    return rows.map((row) => row.id);
+  }
+
+  private static async hasEverAuthoredPersonalChatAgent(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.authorId, params.userId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.scope, "personal"),
+          eq(schema.agentsTable.builtIn, false),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /**

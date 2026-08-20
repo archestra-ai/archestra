@@ -224,6 +224,24 @@ export interface LLMResponseAdapter<TResponse> {
    */
   getLoggedResponse?(): TResponse;
 
+  /**
+   * Return this response with its tool calls replaced, for the non-streaming
+   * counterpart of {@link LLMStreamAdapter.formatToolCallsSSE}: the proxy
+   * repairs a dispatch-mode agent's direct tool call by re-addressing it to
+   * `run_tool` (see `planDispatchModeToolCallRewrites`).
+   *
+   * `toolCalls` is positional — one entry per call this response already
+   * carries, in order — so an adapter rewrites in place and preserves each
+   * call's id, which is what the client correlates its tool result by.
+   *
+   * Optional, on the same terms as `formatToolCallsSSE`: an adapter that does
+   * not implement it keeps the pre-existing refusal-with-steer behavior for its
+   * provider, so no response shape is ever rewritten speculatively.
+   */
+  withRewrittenToolCalls?(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): TResponse;
+
   /** Get finish reasons array for OTEL tracing (e.g., ["stop"], ["tool_calls"]) */
   getFinishReasons(): string[];
 
@@ -345,6 +363,28 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * Returns provider-specific events that form a valid complete response.
    */
   formatCompleteTextSSE(text: string): (string | Uint8Array)[];
+
+  /**
+   * Re-emit this turn's tool calls as SSE, replacing the buffered raw events.
+   *
+   * Used when the proxy repairs a dispatch-mode agent's *direct* tool call by
+   * re-addressing it to `run_tool` (see `planDispatchModeToolCallRewrites`).
+   * The buffered events cannot simply be edited: they are provider-native
+   * fragments, with the name and the argument JSON split across chunks.
+   *
+   * Emits ONLY the tool-call portion of the message. Any text the model
+   * produced in the same turn has already been streamed to the client, so this
+   * must continue that message rather than open a new one — unlike
+   * {@link formatCompleteTextSSE}, which replaces the response wholesale.
+   *
+   * Optional: an adapter that does not implement it keeps the pre-existing
+   * behavior for its provider (the calls are refused with the
+   * "cannot be called directly" steer), so coverage can grow one wire format at
+   * a time without any provider silently emitting a malformed stream.
+   */
+  formatToolCallsSSE?(
+    toolCalls: StreamAccumulatorState["toolCalls"],
+  ): (string | Uint8Array)[];
 
   /** Format the stream end marker */
   formatEndSSE(): string | Uint8Array;

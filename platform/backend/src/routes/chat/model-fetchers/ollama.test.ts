@@ -164,6 +164,27 @@ describe("fetchOllamaModels", () => {
     expect(model.capabilities?.contextLength).toBe(8192);
   });
 
+  test("reads the thinking capability, so a reasoning depth can be offered", async () => {
+    listBody = { data: [{ id: "qwen3" }] };
+    showByModel.qwen3 = {
+      body: {
+        capabilities: ["completion", "tools", "thinking"],
+        model_info: { "qwen3.context_length": 262144 },
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.supportsReasoningEffort).toBe(true);
+  });
+
+  test("reports false for a model this server says cannot think", async () => {
+    // Ollama rejects `think` on such a model, so the false has to survive to
+    // the row rather than being left unknown.
+    listBody = { data: [{ id: "llama3" }] };
+    showByModel.llama3 = { body: { capabilities: ["completion", "tools"] } };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.supportsReasoningEffort).toBe(false);
+  });
+
   test("leaves embeddingDimensions undefined when /api/show omits capabilities (older Ollama)", async () => {
     listBody = { data: [{ id: "legacy" }] };
     showByModel.legacy = {
@@ -171,6 +192,7 @@ describe("fetchOllamaModels", () => {
     };
     const [model] = await fetchOllamaModels("k");
     expect(model.capabilities?.embeddingDimensions).toBeUndefined();
+    expect(model.capabilities?.supportsReasoningEffort).toBeUndefined();
     expect(model.capabilities?.contextLength).toBe(4096);
   });
 

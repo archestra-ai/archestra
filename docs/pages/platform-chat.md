@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-17
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,9 @@ Reasoning models think before answering by default. A Low/Medium/High control si
 
 Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Medium is the default, matching what these models do on their own, so a chat only changes behaviour when you ask it to.
 
-The control appears only on models that take a reasoning level. Today that is Gemini 3 and newer, Flash and Pro alike.
+The control appears only on models that take a reasoning level: Gemini 3 and newer, the OpenAI GPT-5 and o-series models, and the Claude models that already reason.
+
+Self-hosted models count too. A model you serve with vLLM or Ollama shows the control when Archestra can tell it reasons — Ollama reports that itself, and for vLLM the model registry answers. Sync your models after upgrading if a model you expect is missing it.
 
 ### Available Commands
 
@@ -35,6 +37,8 @@ When the agent has the [code sandbox](./platform-code-sandbox) available, a mess
 ### Message Queueing
 
 Press Enter while a response is streaming to queue your message. Queued messages appear above the prompt input and send in order as each turn finishes — you can keep typing without waiting. Remove a queued message with its X, or press ArrowUp on an empty prompt to pull the newest one back for editing.
+
+Queueing works during [context compaction](#context-compaction) too. A message you send while the conversation is being compacted waits in the queue, then sends once compaction finishes — so a long chat never drops what you typed.
 
 While a response streams, the send button becomes Stop. Clicking it (or pressing Esc) stops the response and pauses the queue; sending a new message resumes it.
 
@@ -75,6 +79,10 @@ Expand any category to see the largest individual contributors (top tools by sch
 Use **Compact now** in the panel to summarize earlier turns before auto-compaction does it for you. When a compaction frees tokens, a note appears showing how many were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
+
+### Speech to Text
+
+The microphone in the prompt input dictates into the message box. It listens in your own language, taken from your browser's language preferences — if your browser is set to German, so is the microphone. Browsers ship different language packs, so one that cannot listen in your language falls back to its own default rather than going silent.
 
 ### File Attachments
 

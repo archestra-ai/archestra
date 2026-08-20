@@ -28,9 +28,9 @@
 # model = "openrouter/owl-alpha"
 
 [[lane]]
-name = "deepseek-flash"
+name = "deepseek-flash-0731"
 provider = "openrouter"
-model = "deepseek/deepseek-v4-flash"
+model = "deepseek/deepseek-v4-flash-0731"
 
 [[lane]]
 name = "qwen37-plus"
@@ -43,9 +43,9 @@ provider = "openrouter"
 model = "google/gemma-4-31b-it"
 
 [[lane]]
-name = "gemini-35-flash"
+name = "gemini-37-flash"
 provider = "openrouter"
-model = "google/gemini-3.5-flash"
+model = "google/gemini-3.7-flash"
 
 [[lane]]
 name = "minimax-27"
@@ -98,7 +98,7 @@ openrouter_model = "moonshotai/kimi-k2.7-code"
 [[lane]]
 name = "glm"
 provider = "anthropic"
-model = "glm-5.2"
+model = "glm-5.3"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.2"
@@ -107,4 +107,4 @@ openrouter_model = "z-ai/glm-5.2"
 name = "mimo-25-adv-deepseek-flash"
 provider = "openrouter"
 model = "xiaomi/mimo-v2.5"
-advisor = "deepseek-flash"
+advisor = "deepseek-flash-0731"

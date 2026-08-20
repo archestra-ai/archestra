@@ -12,7 +12,13 @@ import {
 import { providerSupportsPdfInput } from "@/knowledge-base/pdf-ocr";
 import { RERANKER_OUTPUT_CONTRACT } from "@/knowledge-base/reranker-prompt";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, ModelModel } from "@/models";
+import {
+  KbChunkModel,
+  LlmProviderApiKeyModel,
+  ModelModel,
+  TaskModel,
+} from "@/models";
+import type { KeywordRankingStatus } from "@/types";
 import { repairStructuredOutputText } from "@/utils/structured-output-repair";
 
 interface KnowledgeConfigValidationResult {
@@ -24,9 +30,49 @@ interface KnowledgeConfigValidationResult {
  * Validates Knowledge-settings configurations by actually exercising them (a real
  * embedding call, a real structured-output reranker call) — not merely confirming
  * fields are filled in. Used by the save route (to block an invalid save) and the
- * standalone connection test.
+ * standalone connection test. Also reports where BM25 keyword ranking stands
+ * for the settings page.
  */
 class KnowledgeSettingsService {
+  /**
+   * Where BM25 keyword ranking stands for an organization: whether statistics
+   * cover every language it has documents in (else keyword search ranks that
+   * language with `ts_rank`), and the refresh task's last success, next run,
+   * whether one is in flight, and its latest failure.
+   */
+  async getKeywordRankingStatus(
+    organizationId: string,
+  ): Promise<KeywordRankingStatus> {
+    const [coverage, indexedAnything, refresh] = await Promise.all([
+      KbChunkModel.getBm25StatsCoverage(organizationId),
+      KbChunkModel.hasIndexedChunks(organizationId),
+      TaskModel.getPeriodicTaskStatus("kb_bm25_stats_refresh"),
+    ]);
+    // Degraded exactly where the query gate degrades: a language holding
+    // chunks whose statistics are not built yet. A language with nothing
+    // indexed never gets statistics from `ts_stat`, so counting it would
+    // pin the page at "building" forever while searches rank with BM25.
+    const degraded = coverage.some(
+      (language) => language.hasChunks && !language.hasStats,
+    );
+    // `coverage` is empty when no live connector remains, which is also when
+    // no search can reach the organization's chunks — reporting "ready" there
+    // would describe ranking that never runs.
+    const searchable = indexedAnything && coverage.length > 0;
+    const status = !searchable
+      ? "no_documents"
+      : degraded
+        ? "pending"
+        : "ready";
+    return {
+      status,
+      lastRefreshedAt: refresh.lastSucceededAt?.toISOString() ?? null,
+      nextRefreshAt: refresh.nextRunAt?.toISOString() ?? null,
+      refreshing: refresh.running,
+      lastRefreshFailed: refresh.lastAttemptError !== null,
+    };
+  }
+
   async validateEmbeddingConfig(params: {
     keyId: string;
     model: string;

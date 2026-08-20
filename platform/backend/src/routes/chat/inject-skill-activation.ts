@@ -2,6 +2,7 @@ import {
   type ChatMessage,
   ChatMessageMetadataSchema,
   SKILL_TOOL_PREFIX,
+  type SupportedProvider,
   slugify,
 } from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
@@ -13,6 +14,7 @@ import {
   SkillTeamModel,
   SkillVersionModel,
 } from "@/models";
+import { reportSkillActivation } from "@/observability/metrics/skill";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   buildSkillActivationPromptContext,
@@ -20,6 +22,7 @@ import {
   formatSkillActivation,
   neutralizeFrameTags,
 } from "@/skills/skill-activation";
+import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import { spliceText } from "./augment-last-user-message";
@@ -43,6 +46,8 @@ export async function injectSkillActivation({
   userId,
   agentId,
   conversationId,
+  provider,
+  model,
 }: {
   messages: ChatMessage[];
   organizationId: string;
@@ -51,6 +56,9 @@ export async function injectSkillActivation({
   agentId: string | undefined;
   /** Conversation the skill is activated in — pins/reads the mounted version. */
   conversationId: string | undefined;
+  /** Resolved turn provider/model, so the injected block is measured on this model's tokenizer. */
+  provider: SupportedProvider;
+  model: string;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -170,9 +178,39 @@ export async function injectSkillActivation({
   const { version, mounted } = activation;
   const files = await SkillVersionModel.findFiles(version.id);
 
+  const activationBlock = formatSkillActivation({
+    skill: {
+      name: skill.name,
+      content: version.content,
+      compatibility: skill.compatibility,
+      allowedTools: skill.allowedTools,
+      templated: skill.templated,
+    },
+    version: version.version,
+    files,
+    // only claim sandbox runnability when this skill actually holds the mount.
+    canRunSandbox: mounted,
+    promptContext: skill.templated
+      ? await buildSkillActivationPromptContext({ userId, organizationId })
+      : null,
+  });
+
   // an inline slash-command activation counts one use; the agent-designated
-  // branch above doesn't — its use is counted at delegation dispatch.
-  SkillModel.recordUsage({ skillId: skill.id, userId });
+  // branch above doesn't — its use is counted at delegation dispatch. The
+  // conversation id is also the interaction session id every turn of this chat
+  // is recorded under, which is what makes the activation's spend attributable.
+  const contextTokens = measureSkillContextTokens({
+    block: activationBlock,
+    provider,
+    model,
+  });
+  SkillModel.recordUsage({
+    skillId: skill.id,
+    userId,
+    sessionId: conversationId ?? null,
+    contextTokens,
+  });
+  reportSkillActivation({ activationType: "slash_command", contextTokens });
   logger.info(
     {
       organizationId,
@@ -180,30 +218,12 @@ export async function injectSkillActivation({
       version: version.version,
       mounted,
       fileCount: files.length,
+      contextTokens,
     },
     "[Skills] Skill activated via slash command",
   );
 
   const next = [...messages];
-  next[lastUserIndex] = spliceText(
-    userMessage,
-    formatSkillActivation({
-      skill: {
-        name: skill.name,
-        content: version.content,
-        compatibility: skill.compatibility,
-        allowedTools: skill.allowedTools,
-        templated: skill.templated,
-      },
-      version: version.version,
-      files,
-      // only claim sandbox runnability when this skill actually holds the mount.
-      canRunSandbox: mounted,
-      promptContext: skill.templated
-        ? await buildSkillActivationPromptContext({ userId, organizationId })
-        : null,
-    }),
-    "prepend",
-  );
+  next[lastUserIndex] = spliceText(userMessage, activationBlock, "prepend");
   return next;
 }

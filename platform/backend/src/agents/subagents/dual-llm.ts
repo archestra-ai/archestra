@@ -419,7 +419,7 @@ async function resolveBuiltInAgentModel(params: {
   const { agent, organizationId, userId } = params;
 
   // The shared built-in-subagent chain: the agent's explicitly configured
-  // model/key, then the ORGANIZATION DEFAULT model (Settings → Chat), then
+  // model/key, then the ORGANIZATION DEFAULT model (Settings → Agents), then
   // the best available key, then the env fallback.
   const selection = await resolveAgentLlmOrDefault({
     agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },

@@ -2,13 +2,13 @@ import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
-  BedrockPartialEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
   getEmbeddingDiscriminator,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
+  PartialEmbeddingError,
 } from "./embedding-clients";
 import { normalizeEmbeddingError, toKnowledgeBaseUserMessage } from "./errors";
 import {
@@ -19,6 +19,7 @@ import {
   type EmbeddingConfig,
   getDefaultOrgEmbeddingConfig,
 } from "./kb-llm-client";
+import { parseImageDataUrl } from "./media-chunk";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
@@ -335,7 +336,7 @@ class EmbeddingService {
           },
           "[Embedder] Batch embedding API call failed",
         );
-        if (error instanceof BedrockPartialEmbeddingError) {
+        if (error instanceof PartialEmbeddingError) {
           for (const success of error.successes) {
             const chunk = batch[success.index];
             if (chunk) {
@@ -448,7 +449,7 @@ class EmbeddingService {
           }),
         buildInteractionOnError: (error) => {
           if (
-            !(error instanceof BedrockPartialEmbeddingError) ||
+            !(error instanceof PartialEmbeddingError) ||
             error.successes.length === 0
           ) {
             return null;
@@ -483,7 +484,7 @@ class EmbeddingService {
         response = await callObserved(pending.map(({ input }) => input));
       } catch (error) {
         let retryReason: unknown = error;
-        if (error instanceof BedrockPartialEmbeddingError) {
+        if (error instanceof PartialEmbeddingError) {
           promptTokens += error.tokens;
           for (const success of error.successes) {
             const original = pending[success.index];
@@ -512,16 +513,16 @@ class EmbeddingService {
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
         const canRetry =
           !isLastAttempt &&
-          (error instanceof BedrockPartialEmbeddingError
+          (error instanceof PartialEmbeddingError
             ? pending.length > 0
             : isRetryableEmbeddingError(error));
         if (!canRetry) {
           if (
-            error instanceof BedrockPartialEmbeddingError ||
+            error instanceof PartialEmbeddingError ||
             successes.size > 0 ||
             terminalFailures.length > 0
           ) {
-            if (!(error instanceof BedrockPartialEmbeddingError)) {
+            if (!(error instanceof PartialEmbeddingError)) {
               terminalFailures.push(
                 ...pending.map(({ index }) => ({ index, reason: error })),
               );
@@ -533,7 +534,7 @@ class EmbeddingService {
                 })),
               );
             }
-            throw aggregateBedrockPartialError({
+            throw aggregatePartialEmbeddingError({
               successes,
               failures: terminalFailures,
               tokens: promptTokens,
@@ -568,7 +569,7 @@ class EmbeddingService {
       pending = [];
 
       if (terminalFailures.length > 0) {
-        throw aggregateBedrockPartialError({
+        throw aggregatePartialEmbeddingError({
           successes,
           failures: terminalFailures,
           tokens: promptTokens,
@@ -604,19 +605,21 @@ function embeddingInputLogValue(input: EmbeddingInput): string {
   return typeof input === "string" ? input : `[image:${input.mimeType}]`;
 }
 
-function aggregateBedrockPartialError(params: {
+function aggregatePartialEmbeddingError(params: {
   successes: Map<number, number[]>;
   failures: Array<{ index: number; reason: unknown }>;
   tokens: number;
-}): BedrockPartialEmbeddingError {
-  return new BedrockPartialEmbeddingError(
-    [...params.successes.entries()].map(([index, embedding]) => ({
+}): PartialEmbeddingError {
+  // Reasons are already the clients' typed errors (or raw network errors) —
+  // kept as-is so the caller sees the original cause.
+  return new PartialEmbeddingError({
+    successes: [...params.successes.entries()].map(([index, embedding]) => ({
       index,
       embedding,
     })),
-    params.failures,
-    params.tokens,
-  );
+    failures: params.failures,
+    tokens: params.tokens,
+  });
 }
 
 /**
@@ -675,26 +678,6 @@ function chunkToEmbeddingInput(params: {
     (contextualHeader ?? "") + content + (metadataSuffix ?? ""),
     "search_document",
   );
-}
-
-/**
- * Parse an image data URL (`data:<mimeType>;base64,<data>`) into an inline
- * image input, or null when the content is ordinary text.
- */
-function parseImageDataUrl(
-  content: string,
-): { mimeType: string; data: string } | null {
-  if (!content.startsWith("data:image/")) {
-    return null;
-  }
-  const semicolonIdx = content.indexOf(";base64,");
-  if (semicolonIdx <= 5) {
-    return null;
-  }
-  return {
-    mimeType: content.slice(5, semicolonIdx),
-    data: content.slice(semicolonIdx + 8), // len(";base64,") === 8
-  };
 }
 
 /**

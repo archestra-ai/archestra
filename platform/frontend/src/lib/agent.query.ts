@@ -7,7 +7,7 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   createAgent,
@@ -29,6 +29,7 @@ const {
   getLabelKeys,
   getLabelValues,
   getMemberDefaultAgent,
+  updateMemberDefaultAgent,
 } = archestraApiSdk;
 
 export const internalAgentsQueryKey = [
@@ -111,13 +112,14 @@ export function useCloneAgent() {
         body,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       if (data.id) {
         queryClient.setQueryData(["agents", data.id], data);
       }
@@ -138,7 +140,7 @@ export function useConvertAgentToSkill() {
         body,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return data;
     },
@@ -168,8 +170,7 @@ export function useSuggestSkillDescription() {
     mutationFn: async (id: string) => {
       const { data, error } = await suggestSkillDescription({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data?.description ?? null;
     },
@@ -310,13 +311,14 @@ export function useCreateProfile() {
     mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
       const { data: responseData, error } = await createAgent({ body: data });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       // Invalidate profile tokens for the new profile
       if (data?.id) {
         queryClient.invalidateQueries({
@@ -342,7 +344,7 @@ export function useUpdateProfile() {
         body: data,
       });
       if (error) {
-        handleApiError(error);
+        throw reportApiError(error);
       }
       return responseData;
     },
@@ -375,14 +377,16 @@ export function useDeleteProfile() {
     mutationFn: async (id: string) => {
       const { data, error } = await deleteAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // Deleting a member's personal default moves it to their next personal
+      // agent (or clears it), so the cached value is stale.
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
     },
   });
 }
@@ -393,14 +397,14 @@ export function useRestoreProfile() {
     mutationFn: async (id: string) => {
       const { data, error } = await restoreAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       queryClient.setQueryData(["agents", data.id], data);
     },
   });
@@ -420,8 +424,7 @@ export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
     mutationFn: async (id: string) => {
       const { data, error } = await permanentlyDeleteAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -461,16 +464,41 @@ export function useLabelValues(params?: { key?: string }) {
   });
 }
 
+export const memberDefaultAgentQueryKey = ["member-default-agent"] as const;
+
 /**
- * Get the current user's default agent ID.
+ * The current user's personal default agent id: one of their own personal
+ * chat agents, or null when they have none set (the org default applies).
  */
 export function useDefaultAgentId() {
   return useQuery({
-    queryKey: ["member-default-agent"],
+    queryKey: memberDefaultAgentQueryKey,
     queryFn: async () => {
       const { data, error } = await getMemberDefaultAgent();
       throwOnApiError(error, { toastOnError: false });
       return data?.defaultAgentId ?? null;
+    },
+  });
+}
+
+/**
+ * Set (an id) or clear (null) the current user's personal default agent.
+ */
+export function useUpdateDefaultAgentId() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (defaultAgentId: string | null) => {
+      const { data, error } = await updateMemberDefaultAgent({
+        body: { defaultAgentId },
+      });
+      if (error) {
+        throw reportApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.setQueryData(memberDefaultAgentQueryKey, data.defaultAgentId);
     },
   });
 }
@@ -526,8 +554,7 @@ export function useExportAgent() {
     mutationFn: async (id: string) => {
       const { data, error } = await exportAgent({ path: { id } });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
@@ -544,14 +571,14 @@ export function useImportAgent() {
     mutationFn: async (payload: archestraApiTypes.ImportAgentData["body"]) => {
       const { data, error } = await importAgent({ body: payload });
       if (error) {
-        handleApiError(error);
-        return null;
+        throw reportApiError(error);
       }
       return data;
     },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
 
       const warningCount = data.warnings.length;
       if (warningCount > 0) {

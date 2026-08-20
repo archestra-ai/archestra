@@ -201,11 +201,18 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   PromptInputSubmit: ({
     status,
     disabled,
+    onClick,
   }: {
     status?: string;
     disabled?: boolean;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
   }) => (
-    <button data-testid="prompt-submit" type="submit" disabled={disabled}>
+    <button
+      data-testid="prompt-submit"
+      type="submit"
+      disabled={disabled}
+      onClick={onClick}
+    >
       Submit {status ?? "unset"}
     </button>
   ),
@@ -236,7 +243,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       setInput: mockTextInputSetInput,
       clear: mockTextInputClear,
     },
-    attachments: { files: [] },
+    attachments: { files: mockControllerState.files },
   }),
   usePromptInputAttachments: () => ({
     openFileDialog: vi.fn(),
@@ -1525,6 +1532,103 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
+  describe("queue affordance on the submit button", () => {
+    // The composer's Send/Stop face is the only thing announcing what Enter
+    // will do mid-stream: with a queueable draft the submit stays an ordinary
+    // Send button (status "ready") instead of turning into Stop.
+    const getSubmitButton = () =>
+      screen.getByTestId("prompt-submit") as HTMLButtonElement;
+
+    it("keeps the Send face while a response streams and the composer holds a queueable draft", () => {
+      mockControllerState.value = "follow-up";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+          conversationId="conv-queue-face"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit ready");
+      // ...and with it the ordinary Send tooltip, not the Stop one.
+      expect(screen.getByText(/^Send$/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Stop$/)).not.toBeInTheDocument();
+    });
+
+    it("clicking the Send face queues instead of stopping", () => {
+      const onStop = vi.fn();
+      const onSubmit = vi.fn();
+      mockControllerState.value = "follow-up";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-queue-click"
+        />,
+      );
+
+      fireEvent.click(getSubmitButton());
+
+      expect(onStop).not.toHaveBeenCalled();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the Stop face while streaming with an empty composer", () => {
+      const onStop = vi.fn();
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-stop-face"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
+      expect(screen.getByText(/^Stop$/)).toBeInTheDocument();
+
+      fireEvent.click(getSubmitButton());
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the Stop face when attachments are staged, since they cannot be queued", () => {
+      mockControllerState.value = "follow-up";
+      mockControllerState.files = [{ url: "blob:attachment" }];
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+          conversationId="conv-queue-attachments"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
+    });
+
+    it("keeps the Stop face on the new-chat composer, which has no conversation to queue into", () => {
+      mockControllerState.value = "first message";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
+    });
+  });
+
   describe("context compaction", () => {
     // The Enter path is routed through the submit button's disabled state (the
     // textarea refuses to requestSubmit while the button is disabled), so the
@@ -1574,18 +1678,30 @@ describe("ArchestraPromptInput", () => {
       expect(getSubmitButton()).toBeDisabled();
     });
 
-    it("locks the composer during an idle (manual) compaction", () => {
+    // A manual `/compact` runs over REST with the SDK idle, so nothing about
+    // it is "in flight" from the composer's point of view — but the thread is
+    // being rewritten, and the message has a queue to wait in.
+    it("keeps the composer usable during an idle (manual) compaction", () => {
+      const onSubmit = vi.fn();
+
       render(
         <ArchestraPromptInput
           {...defaultProps}
+          onSubmit={onSubmit}
           status="ready"
           conversationId="conv-compacting-idle"
           isContextCompacting
         />,
       );
 
-      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
-      expect(getSubmitButton()).toBeDisabled();
+      expect(
+        screen.getByTestId(E2eTestId.ChatPromptTextarea),
+      ).not.toBeDisabled();
+      expect(getSubmitButton()).not.toBeDisabled();
+
+      mockControllerState.value = "queued during manual compaction";
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
     });
   });
 });

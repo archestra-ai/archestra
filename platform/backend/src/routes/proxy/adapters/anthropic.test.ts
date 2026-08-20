@@ -1451,3 +1451,109 @@ describe("anthropicAdapterFactory - unsupported sampling params", () => {
     expect(create.mock.calls[1][0]).toMatchObject({ stream: true });
   });
 });
+
+// The proxy swallows the upstream `message_delta` and synthesizes its own after
+// policy evaluation, and rebuilds the turn as a `MessagesResponse` for the
+// interaction log. Both used to report `output_tokens` (plus, for the response,
+// `input_tokens`) and nothing else — so a prompt that was 99% cache reads was
+// described on the wire and in storage as a prompt of the few tokens that
+// missed, contradicting the interaction row's own cache_read_tokens column.
+describe("AnthropicStreamAdapter carries cache usage to the end of the turn", () => {
+  const messageStart = {
+    type: "message_start",
+    message: {
+      id: "msg_cached",
+      model: "claude-opus-4-5",
+      usage: {
+        input_tokens: 4,
+        output_tokens: 1,
+        cache_read_input_tokens: 90_000,
+        cache_creation_input_tokens: 1_200,
+        cache_creation: {
+          ephemeral_1h_input_tokens: 400,
+          ephemeral_5m_input_tokens: 800,
+        },
+      },
+    },
+  };
+
+  function streamCachedTurn() {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.processChunk(messageStart as never);
+    adapter.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn", stop_sequence: null },
+      usage: { output_tokens: 55 },
+    } as never);
+    return adapter;
+  }
+
+  // `formatEndSSE` is typed `string | Uint8Array` across the adapter interface
+  // (some providers encode their own bytes), so decode before parsing frames.
+  function endEventUsage(endSse: string | Uint8Array): unknown {
+    const text =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const deltaFrame = text
+      .split("\n\n")
+      .find((frame) => frame.startsWith("event: message_delta"));
+    return JSON.parse(
+      (deltaFrame as string).replace(/^event: message_delta\ndata: /, ""),
+    ).usage;
+  }
+
+  test("the synthesized message_delta reports the turn's cumulative usage", () => {
+    expect(endEventUsage(streamCachedTurn().formatEndSSE())).toEqual({
+      input_tokens: 4,
+      output_tokens: 55,
+      cache_read_input_tokens: 90_000,
+      cache_creation_input_tokens: 1_200,
+    });
+  });
+
+  test("the reconstructed response persists the cache counts and their TTL split", () => {
+    expect(streamCachedTurn().toProviderResponse().usage).toEqual({
+      input_tokens: 4,
+      output_tokens: 55,
+      cache_read_input_tokens: 90_000,
+      cache_creation_input_tokens: 1_200,
+      cache_creation: {
+        ephemeral_1h_input_tokens: 400,
+        ephemeral_5m_input_tokens: 800,
+      },
+    });
+  });
+
+  // The stream adapter's own accumulator is what the interaction row and the
+  // cost calc read, so the rebuilt response has to agree with it — otherwise the
+  // stored body and the stored columns describe different turns.
+  test("agrees with the accumulator the interaction row is written from", () => {
+    const adapter = streamCachedTurn();
+    const usage = adapter.toProviderResponse().usage;
+
+    expect(usage.cache_read_input_tokens).toBe(
+      adapter.state.usage?.cacheReadTokens,
+    );
+    expect(usage.cache_creation_input_tokens).toBe(
+      adapter.state.usage?.cacheWriteTokens,
+    );
+  });
+
+  test("a turn that wrote nothing to the cache omits the TTL split", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      type: "message_start",
+      message: {
+        id: "msg_plain",
+        model: "claude-opus-4-5",
+        usage: { input_tokens: 100, output_tokens: 1 },
+      },
+    } as never);
+
+    expect(adapter.toProviderResponse().usage).toEqual({
+      input_tokens: 100,
+      output_tokens: 1,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
+  });
+});

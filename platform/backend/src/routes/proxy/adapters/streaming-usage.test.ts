@@ -1,5 +1,9 @@
 import { describe, expect, test } from "@/test";
 import { makeAnthropicOpenaiAdapterFactory } from "./anthropic-openai";
+import {
+  converseResponseToOpenai,
+  createConverseToOpenaiSseEncoder,
+} from "./bedrock-openai-translator";
 import { cerebrasAdapterFactory } from "./cerebras";
 import { makeCohereOpenaiAdapterFactory } from "./cohere-openai";
 import { makeGeminiOpenaiAdapterFactory } from "./gemini-openai";
@@ -102,6 +106,14 @@ const TRANSLATOR_CTX = {
   requestedModel: "archestra:test",
 };
 
+// Bedrock's encoder only emits the usage chunk when the client asked for it.
+const BEDROCK_CTX = {
+  chatcmplId: "chatcmpl-test",
+  createdUnix: 0,
+  requestedModel: "archestra:test",
+  includeUsageInStream: true,
+};
+
 const TRANSLATORS = {
   "anthropic-openai": () =>
     makeAnthropicOpenaiAdapterFactory(TRANSLATOR_CTX).createStreamAdapter(),
@@ -134,11 +146,14 @@ describe("OpenAI-compat translators carry usage into the final SSE", () => {
 });
 
 // `UsageView.inputTokens` is normalized to *uncached* input, but OpenAI's
-// `prompt_tokens` is the gross prompt count — so an adapter whose accumulator
-// subtracts cache reads cannot map through the shared helper. Gemini is the one
-// that does (promptTokenCount - cachedContentTokenCount), and its `totalTokenCount`
-// additionally counts thinking tokens. Streaming and non-streaming answer the
-// same route, so they must report the same numbers for the same turn.
+// `prompt_tokens` is the gross prompt count — so an adapter whose provider
+// reports cache tokens outside its input count cannot map through the shared
+// helper. That is every cache-aware provider behind this surface: Gemini
+// (promptTokenCount - cachedContentTokenCount, and its `totalTokenCount` also
+// counts thinking tokens), Anthropic and Bedrock (`input_tokens` is what MISSED
+// the cache; reads and writes are counted alongside it). Streaming and
+// non-streaming answer the same route, so they must report the same numbers for
+// the same turn.
 describe("gemini-openai reports the same usage streaming and non-streaming", () => {
   const geminiResponse = {
     candidates: [
@@ -184,5 +199,119 @@ describe("gemini-openai reports the same usage streaming and non-streaming", () 
     expect(usageOf(adapter.formatEndSSE())).toEqual(
       geminiResponseToOpenai(geminiResponse as never, TRANSLATOR_CTX).usage,
     );
+  });
+});
+
+// A cached agent turn is the normal case for Claude behind the model router:
+// almost the whole prompt is read back from the cache and only a few tokens
+// miss. Mapping Anthropic's `input_tokens` straight onto `prompt_tokens` — as
+// both surfaces did — reported that handful as the entire prompt and dropped
+// the cache read from the wire altogether, so a client (or a chained Archestra,
+// which recovers the split as `prompt_tokens - cached_tokens`) billed a 91k
+// prompt as 4 tokens of input and no cache at all.
+describe("anthropic-openai reports the gross prompt count", () => {
+  const usage = {
+    input_tokens: 4,
+    output_tokens: 55,
+    cache_read_input_tokens: 90_000,
+    cache_creation_input_tokens: 1_200,
+  };
+  // 4 missed + 90_000 read back + 1_200 newly written.
+  const expected = {
+    prompt_tokens: 91_204,
+    completion_tokens: 55,
+    total_tokens: 91_259,
+    prompt_tokens_details: { cached_tokens: 90_000 },
+  };
+  const response = {
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    model: "claude-opus-4-5",
+    content: [{ type: "text", text: "hi", citations: null }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage,
+  };
+
+  test("streams cache reads and writes as part of the prompt", () => {
+    const adapter =
+      makeAnthropicOpenaiAdapterFactory(TRANSLATOR_CTX).createStreamAdapter();
+    adapter.processChunk({
+      type: "message_start",
+      message: { id: "msg_1", model: "claude-opus-4-5", usage },
+    } as never);
+
+    expect(usageOf(adapter.formatEndSSE())).toEqual(expected);
+  });
+
+  test("matches the non-streaming translation exactly", () => {
+    const adapter = makeAnthropicOpenaiAdapterFactory(
+      TRANSLATOR_CTX,
+    ).createResponseAdapter(response as never);
+
+    expect(
+      (adapter.getOriginalResponse() as unknown as { usage: unknown }).usage,
+    ).toEqual(expected);
+  });
+
+  test("omits cached_tokens when nothing was read from the cache", () => {
+    const adapter =
+      makeAnthropicOpenaiAdapterFactory(TRANSLATOR_CTX).createStreamAdapter();
+    adapter.processChunk({
+      type: "message_start",
+      message: {
+        id: "msg_1",
+        model: "claude-opus-4-5",
+        usage: { input_tokens: 100, output_tokens: 40 },
+      },
+    } as never);
+
+    expect(usageOf(adapter.formatEndSSE())).toEqual({
+      prompt_tokens: 100,
+      completion_tokens: 40,
+      total_tokens: 140,
+    });
+  });
+});
+
+// Converse counts cache reads/writes alongside `inputTokens`, not inside it —
+// which is why its own `totalTokens` exceeded the `prompt + completion` this
+// surface reported. Same defect, same shape, for Claude on Bedrock.
+describe("bedrock-openai reports the gross prompt count", () => {
+  const bedrockUsage = {
+    inputTokens: 4,
+    outputTokens: 55,
+    cacheReadInputTokens: 90_000,
+    cacheWriteInputTokens: 1_200,
+    totalTokens: 91_259,
+  };
+  const expected = {
+    prompt_tokens: 91_204,
+    completion_tokens: 55,
+    total_tokens: 91_259,
+    prompt_tokens_details: { cached_tokens: 90_000 },
+  };
+
+  test("translates a non-streaming Converse response", () => {
+    expect(
+      converseResponseToOpenai(
+        {
+          output: { message: { role: "assistant", content: [{ text: "hi" }] } },
+          stopReason: "end_turn",
+          usage: bedrockUsage,
+        } as never,
+        BEDROCK_CTX,
+      ).usage,
+    ).toEqual(expected);
+  });
+
+  test("emits the same counts on the stream's usage chunk", () => {
+    const chunk = createConverseToOpenaiSseEncoder(
+      BEDROCK_CTX,
+    ).encodeBedrockEvent({ metadata: { usage: bedrockUsage } } as never);
+
+    expect(chunk).not.toBeNull();
+    expect(usageOf(chunk as Uint8Array)).toEqual(expected);
   });
 });

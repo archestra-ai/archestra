@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  allowedIntegrationIds,
   integrationLabel,
   isIntegrationHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
   pruneIntegrationOverrides,
+  withAllowedIntegrationIds,
 } from "./integration-overrides";
 import { CONNECTOR_TYPE_LABELS } from "./knowledge-base";
 
@@ -88,5 +90,70 @@ describe("catalog id schemas", () => {
       expect(MessagingChannelIdSchema.safeParse(channel).success).toBe(true);
     }
     expect(MessagingChannelIdSchema.safeParse("discord").success).toBe(false);
+  });
+});
+
+const CATALOG = ["openai", "anthropic", "gemini"] as const;
+
+describe("allowedIntegrationIds", () => {
+  it("offers the whole catalog when nothing is switched off", () => {
+    expect(allowedIntegrationIds(null, CATALOG)).toEqual([
+      "openai",
+      "anthropic",
+      "gemini",
+    ]);
+  });
+
+  it("drops the entries an admin hid, keeping catalog order", () => {
+    expect(
+      allowedIntegrationIds({ anthropic: { hidden: true } }, CATALOG),
+    ).toEqual(["openai", "gemini"]);
+  });
+
+  it("counts a renamed-but-visible entry as offered", () => {
+    expect(
+      allowedIntegrationIds({ openai: { displayName: "Approved" } }, CATALOG),
+    ).toEqual(["openai", "anthropic", "gemini"]);
+  });
+});
+
+describe("withAllowedIntegrationIds", () => {
+  it("stores nothing when every entry stays on", () => {
+    expect(withAllowedIntegrationIds(null, CATALOG, CATALOG)).toBeNull();
+  });
+
+  it("hides exactly the entries left out of the allowed list", () => {
+    expect(withAllowedIntegrationIds(null, CATALOG, ["openai"])).toEqual({
+      anthropic: { hidden: true },
+      gemini: { hidden: true },
+    });
+  });
+
+  it("keeps the organization's name for an entry it switches off", () => {
+    expect(
+      withAllowedIntegrationIds(
+        { openai: { displayName: "OpenAI (approved)" } },
+        CATALOG,
+        ["anthropic", "gemini"],
+      ),
+    ).toEqual({ openai: { hidden: true, displayName: "OpenAI (approved)" } });
+  });
+
+  it("restores an entry without losing the name it was given", () => {
+    expect(
+      withAllowedIntegrationIds(
+        { openai: { hidden: true, displayName: "OpenAI (approved)" } },
+        CATALOG,
+        CATALOG,
+      ),
+    ).toEqual({ openai: { displayName: "OpenAI (approved)" } });
+  });
+
+  it("hides the whole catalog when the last chip is removed", () => {
+    expect(withAllowedIntegrationIds(null, CATALOG, [])).toEqual({
+      openai: { hidden: true },
+      anthropic: { hidden: true },
+      gemini: { hidden: true },
+    });
   });
 });

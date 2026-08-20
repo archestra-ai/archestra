@@ -744,10 +744,13 @@ function AgentSettingsView({
   const instructionsChanged =
     (instructions.trim() || null) !== (agent?.systemPrompt ?? null);
 
+  // Every save below fires and forgets, so all of them use `mutate`: a refused
+  // update rejects, and an unawaited `mutateAsync` would turn that into an
+  // unhandled rejection. The failure is already toasted by the mutation.
   const saveInstructions = useCallback(() => {
     if (!agent || !instructionsChanged) return;
     setIsSaving(true);
-    updateProfile.mutateAsync(
+    updateProfile.mutate(
       {
         id: agent.id,
         data: { systemPrompt: instructions.trim() || null },
@@ -765,7 +768,7 @@ function AgentSettingsView({
         return;
       }
       setIsSaving(true);
-      updateProfile.mutateAsync(
+      updateProfile.mutate(
         { id: agent.id, data: { name: trimmed } },
         { onSettled: () => setIsSaving(false) },
       );
@@ -777,7 +780,7 @@ function AgentSettingsView({
   const saveIcon = useCallback(
     (icon: string | null) => {
       if (!agent) return;
-      updateProfile.mutateAsync({ id: agent.id, data: { icon } });
+      updateProfile.mutate({ id: agent.id, data: { icon } });
       setIsEditingIcon(false);
     },
     [agent, updateProfile],
@@ -787,7 +790,7 @@ function AgentSettingsView({
     (kbId: string) => {
       if (!agent) return;
       const currentIds = agent.knowledgeBaseIds ?? [];
-      updateProfile.mutateAsync({
+      updateProfile.mutate({
         id: agent.id,
         data: { knowledgeBaseIds: currentIds.filter((id) => id !== kbId) },
       });
@@ -799,7 +802,7 @@ function AgentSettingsView({
     (connectorId: string) => {
       if (!agent) return;
       const currentIds = agent.connectorIds ?? [];
-      updateProfile.mutateAsync({
+      updateProfile.mutate({
         id: agent.id,
         data: {
           connectorIds: currentIds.filter((id) => id !== connectorId),
@@ -1051,7 +1054,7 @@ function AgentSettingsView({
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
         {canReadAgents ? (
           <Link
-            href={`/agents?edit=${agent.id}`}
+            href={`/agents/${agent.id}/edit`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
             Full configuration <ExternalLink className="size-3" />
@@ -1849,7 +1852,7 @@ function AddDelegationView({
               </button>
             ))}
             <a
-              href="/agents?create=true"
+              href="/agents/new"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"

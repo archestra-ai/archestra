@@ -38,6 +38,7 @@ import config, {
   parseBodyLimit,
   parseChatMaxOutputTokens,
   parseChatRateMeteredMaxOutputTokens,
+  parseClampedFloat,
   parseClampedInt,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
@@ -3246,6 +3247,35 @@ describe("parseClampedInt", () => {
 
   test("allows zero when the range permits it", () => {
     expect(parseClampedInt("0", 1, 0, 4)).toBe(0);
+  });
+});
+
+describe("parseClampedFloat", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseClampedFloat(undefined, 1.2, 0, 10)).toBe(1.2);
+    expect(parseClampedFloat("", 1.2, 0, 10)).toBe(1.2);
+    expect(parseClampedFloat("not-a-number", 1.2, 0, 10)).toBe(1.2);
+  });
+
+  test("keeps the fractional part", () => {
+    // The whole reason this exists: parseClampedInt would read 0.75 as 0,
+    // silently turning BM25's length normalization off.
+    expect(parseClampedFloat("0.75", 1.2, 0, 10)).toBe(0.75);
+  });
+
+  test("clamps out-of-range values to the nearest bound", () => {
+    expect(parseClampedFloat("-3", 0.75, 0, 1)).toBe(0);
+    expect(parseClampedFloat("42", 0.75, 0, 1)).toBe(1);
+  });
+
+  test("falls back rather than clamping non-finite input", () => {
+    // Clamping NaN yields NaN, which would poison every score derived from it.
+    expect(parseClampedFloat("NaN", 1.2, 0, 10)).toBe(1.2);
+    expect(parseClampedFloat("Infinity", 1.2, 0, 10)).toBe(1.2);
+  });
+
+  test("allows zero when the range permits it", () => {
+    expect(parseClampedFloat("0", 0.75, 0, 1)).toBe(0);
   });
 });
 

@@ -70,7 +70,12 @@ type AgentSelectorProps =
        * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`).
        */
       flat?: boolean;
-      personalDefaultOption?: {
+      /**
+       * An extra choice rendered above the agent list whose value is not an
+       * agent id — e.g. "All agents" in a log filter, or "Each user personal"
+       * in a default picker. Hidden while a search excludes its label.
+       */
+      sentinelOption?: {
         value: string;
         label: string;
       };
@@ -119,14 +124,14 @@ function SingleAgentSelector({
   className,
   hint,
   flat,
-  personalDefaultOption,
+  sentinelOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogContainer = dialogPortalContainer(triggerRef.current);
   const selectedAgent = agents.find((agent) => agent.id === value);
-  const isPersonalDefaultSelected = personalDefaultOption?.value === value;
+  const isSentinelSelected = sentinelOption?.value === value;
   const groupedAgents = useGroupedAgents(agents, search);
   const visibleAgents = useVisibleAgents(agents, search);
 
@@ -164,17 +169,20 @@ function SingleAgentSelector({
           <span className="min-w-0 flex-1 truncate text-left">
             {selectedAgent ? (
               <AgentSelectorRow agent={selectedAgent} />
-            ) : isPersonalDefaultSelected ? (
-              personalDefaultOption.label
+            ) : isSentinelSelected ? (
+              <span>{sentinelOption.label}</span>
             ) : (
-              placeholder
+              <span>{placeholder}</span>
             )}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
+        // Rows carry a scope badge, a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
         portalContainer={dialogContainer}
         collisionBoundary={dialogContainer ?? undefined}
         collisionPadding={8}
@@ -192,24 +200,23 @@ function SingleAgentSelector({
           )}
           <CommandList className="min-h-0 flex-1">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
-            {personalDefaultOption &&
-              matchesSearch(personalDefaultOption.label, search) && (
-                <CommandGroup>
-                  <CommandItem
-                    value={personalDefaultOption.value}
-                    onSelect={() => handleSelect(personalDefaultOption.value)}
-                    className="justify-between"
-                  >
-                    <span>{personalDefaultOption.label}</span>
-                    <Check
-                      className={cn(
-                        "h-4 w-4",
-                        isPersonalDefaultSelected ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                  </CommandItem>
-                </CommandGroup>
-              )}
+            {sentinelOption && matchesSearch(sentinelOption.label, search) && (
+              <CommandGroup>
+                <CommandItem
+                  value={sentinelOption.value}
+                  onSelect={() => handleSelect(sentinelOption.value)}
+                  className="justify-between"
+                >
+                  <span>{sentinelOption.label}</span>
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      isSentinelSelected ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </CommandItem>
+              </CommandGroup>
+            )}
             {flat ? (
               <CommandGroup>
                 {visibleAgents.map((agent) => (
@@ -340,7 +347,10 @@ function MultiAgentSelector({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
+        // Rows carry a scope badge, a description and an owner email, so the
+        // list keeps a readable floor even when the trigger is a narrow filter
+        // control — capped to the viewport so it can't overflow a phone.
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
         align="start"
         onOpenAutoFocus={(event) => event.preventDefault()}
         portalContainer={dialogContainer}
@@ -489,30 +499,52 @@ function AgentSelectorItem({
       onSelect={() => onSelect(agent.id)}
       className="justify-between"
     >
-      <AgentSelectorRow agent={agent} showDescription />
-      <Check
-        className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
-      />
+      <AgentSelectorRow agent={agent} variant="option" />
+      {/* Badge last, so it — not the check — owns the row's right edge. The
+          check always occupies its 16px whether or not it is visible, so
+          trailing it stranded every badge 22px short of the edge that the
+          badge-less sentinel row's own check defined. With the badge outermost,
+          the last rendered glyph of every row (a badge here, a bare check on
+          the sentinel) lands on one column. ScopeBadge is fixed-width, so the
+          checks that tuck inside a badge stay a column of their own too. */}
+      <span className="flex shrink-0 items-center gap-1.5">
+        <Check
+          className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
+        />
+        {agent.scope ? (
+          <ScopeBadge
+            scope={agent.scope}
+            teamNames={agent.teams?.map((team) => team.name)}
+          />
+        ) : null}
+      </span>
     </CommandItem>
   );
 }
 
 function AgentSelectorRow({
   agent,
-  showDescription = false,
+  variant = "trigger",
 }: {
   agent: AgentSelectorAgent;
   /**
-   * Render the agent description as a secondary line — used in the dropdown
-   * list, but not the (compact) trigger button so a selected value stays short.
+   * "option" is a dropdown row: it has room for the description, and stretches
+   * to the full row width so the text stays left-aligned while the row's own
+   * scope badge sits in {@link AgentSelectorItem}'s right-hand cluster.
+   * "trigger" is the compact button showing the current value — no
+   * description, and the badge stays beside the name rather than stranded
+   * across the control.
    */
-  showDescription?: boolean;
+  variant?: "trigger" | "option";
 }) {
+  const isOption = variant === "option";
   const owner = getOwnerLabel(agent);
-  const description = showDescription ? agent.description?.trim() : null;
+  const description = isOption ? agent.description?.trim() : null;
 
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span
+      className={cn("flex min-w-0 items-center gap-2", isOption && "flex-1")}
+    >
       <AgentIcon
         icon={agent.icon}
         fallbackType={agent.agentType === "profile" ? "agent" : agent.agentType}
@@ -521,11 +553,13 @@ function AgentSelectorRow({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{agent.name}</span>
-          {agent.scope ? (
-            <ScopeBadge
-              scope={agent.scope}
-              teamNames={agent.teams?.map((team) => team.name)}
-            />
+          {!isOption && agent.scope ? (
+            <span className="shrink-0">
+              <ScopeBadge
+                scope={agent.scope}
+                teamNames={agent.teams?.map((team) => team.name)}
+              />
+            </span>
           ) : null}
         </span>
         {description && (

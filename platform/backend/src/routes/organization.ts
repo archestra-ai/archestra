@@ -52,6 +52,7 @@ import {
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  KeywordRankingStatusSchema,
   type NetworkPolicy,
   type OrganizationRole,
   SelectOrganizationSchema,
@@ -1027,6 +1028,28 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         success: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/knowledge-settings/keyword-ranking-status",
+    {
+      schema: {
+        operationId: RouteId.GetKeywordRankingStatus,
+        description:
+          "Where BM25 keyword ranking stands for the organization: whether " +
+          "its corpus statistics cover every language with indexed " +
+          "documents (until they do, keyword search ranks that language " +
+          "with PostgreSQL's built-in ts_rank), when they were last rebuilt " +
+          "and when the next rebuild is due",
+        tags: ["Organization"],
+        response: constructResponseSchema(KeywordRankingStatusSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(
+        await knowledgeSettingsService.getKeywordRankingStatus(organizationId),
+      );
     },
   );
 

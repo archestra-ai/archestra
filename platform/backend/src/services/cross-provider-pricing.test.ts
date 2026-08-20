@@ -4,6 +4,7 @@ import {
   resolveCrossProviderPrices,
   resolveDiscoveredModelRegistryEntry,
   resolveSelfHostedModelMetadata,
+  resolveSelfHostedModelReasoning,
 } from "./cross-provider-pricing";
 
 // Minimal models.dev fixture mirroring real shapes: the canonical `anthropic`
@@ -440,6 +441,89 @@ describe("resolveSelfHostedModelMetadata", () => {
       resolveSelfHostedModelMetadata({
         modelId: "meta-llama/Llama-4-Maverick",
         modelsDevData: ambiguous,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveSelfHostedModelReasoning", () => {
+  /** `count` providers listing one model, each with the given reasoning flag. */
+  function registry(
+    entries: Array<{ reasoning: boolean; count: number }>,
+  ): ModelsDevApiResponse {
+    const data: ModelsDevApiResponse = {};
+    let n = 0;
+    for (const { reasoning, count } of entries) {
+      for (let i = 0; i < count; i += 1) {
+        n += 1;
+        data[`host-${n}`] = {
+          id: `host-${n}`,
+          name: `Host ${n}`,
+          models: {
+            "qwen/qwen3.8-27b": {
+              id: "qwen/qwen3.8-27b",
+              name: "Qwen3.8 27B",
+              reasoning,
+              modalities: { input: ["text"], output: ["text"] },
+            },
+          },
+        };
+      }
+    }
+    return data;
+  }
+
+  test("answers for a model no first-party vendor lists", () => {
+    // The ordinary case for open weights: only resellers carry the entry, and
+    // the id arrives as the HuggingFace path an operator served it under.
+    expect(
+      resolveSelfHostedModelReasoning({
+        modelId: "Qwen/Qwen3.8-27B",
+        modelsDevData: registry([{ reasoning: true, count: 12 }]),
+      }),
+    ).toBe(true);
+  });
+
+  test("a mislabelled minority does not flip the verdict", () => {
+    // Real spread for this family: a few hosts label the non-thinking sibling
+    // under the same id.
+    expect(
+      resolveSelfHostedModelReasoning({
+        modelId: "Qwen/Qwen3.8-27B",
+        modelsDevData: registry([
+          { reasoning: true, count: 22 },
+          { reasoning: false, count: 3 },
+        ]),
+      }),
+    ).toBe(true);
+  });
+
+  test("a non-reasoning model reads as one", () => {
+    expect(
+      resolveSelfHostedModelReasoning({
+        modelId: "Qwen/Qwen3.8-27B",
+        modelsDevData: registry([
+          { reasoning: true, count: 1 },
+          { reasoning: false, count: 28 },
+        ]),
+      }),
+    ).toBe(false);
+  });
+
+  test("an even split and an unknown model both claim nothing", () => {
+    expect(
+      resolveSelfHostedModelReasoning({
+        modelId: "Qwen/Qwen3.8-27B",
+        modelsDevData: registry([
+          { reasoning: true, count: 2 },
+          { reasoning: false, count: 2 },
+        ]),
+      }),
+    ).toBeNull();
+    expect(
+      resolveSelfHostedModelReasoning({
+        modelId: "acme/private-finetune",
+        modelsDevData: registry([{ reasoning: true, count: 3 }]),
       }),
     ).toBeNull();
   });

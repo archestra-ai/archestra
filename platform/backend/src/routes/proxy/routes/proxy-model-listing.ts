@@ -181,9 +181,13 @@ export async function appendClaudeContextVariants(
   for (const model of models) {
     withVariants.push(model);
     const variantId = `${model.id}[1m]`;
-    const contextLength = catalogRows.get(
-      `anthropic:${model.id}`,
-    )?.contextLength;
+    // Resolved, not raw: an admin-set window is a statement about what this
+    // model's endpoint actually serves, and it is what the rest of the
+    // platform sizes against.
+    const catalogRow = catalogRows.get(`anthropic:${model.id}`);
+    const contextLength = catalogRow
+      ? ModelModel.resolveArchitecturalContextLength(catalogRow)
+      : null;
     if (
       contextLength != null &&
       contextLength >= ONE_MILLION_TOKEN_CONTEXT &&

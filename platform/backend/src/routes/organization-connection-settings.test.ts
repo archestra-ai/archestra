@@ -74,7 +74,6 @@ describe("PATCH /api/organization/connection-settings", () => {
         connectionDefaultMcpGatewayId: gateway.id,
         connectionDefaultLlmProxyId: proxy.id,
         connectionShownClientIds: ["claude-code"],
-        connectionShownProviders: ["openai", "anthropic"],
       },
     });
 
@@ -83,7 +82,18 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(body.connectionDefaultMcpGatewayId).toBe(gateway.id);
     expect(body.connectionDefaultLlmProxyId).toBe(proxy.id);
     expect(body.connectionShownClientIds).toEqual(["claude-code"]);
-    expect(body.connectionShownProviders).toEqual(["openai", "anthropic"]);
+  });
+
+  test("refuses the retired connect-page provider list", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionShownProviders: ["openai"] },
+    });
+
+    // Silently stripping it would let a stale tab look like it gated
+    // providers while changing nothing.
+    expect(response.statusCode).toBe(400);
   });
 
   test("rejects a gateway that belongs to another organization", async ({

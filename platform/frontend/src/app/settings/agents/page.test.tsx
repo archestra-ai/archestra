@@ -145,6 +145,7 @@ import {
   useAppearanceSettings,
   useOrganization,
   useUpdateAgentSettings,
+  useUpdateIntegrationSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 
@@ -163,6 +164,10 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateIntegrationSettings>);
   vi.clearAllMocks();
   mockOrganization = {
     defaultModelId: "gemini-2.5-pro",
@@ -257,12 +262,12 @@ describe("AgentSettingsPage", () => {
     const props = agentSelectorCall?.[0] as unknown as {
       mode: string;
       agents: typeof mockAgents;
-      personalDefaultOption: { value: string; label: string };
+      sentinelOption: { value: string; label: string };
     };
 
     expect(props.mode).toBe("single");
     expect(props.agents).toEqual(mockAgents);
-    expect(props.personalDefaultOption).toMatchObject({
+    expect(props.sentinelOption).toMatchObject({
       value: "__personal__",
       label: "User's personal agent",
     });

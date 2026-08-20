@@ -8,7 +8,6 @@ import {
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import {
-  AlertTriangle,
   ArrowUpRight,
   Bot,
   Copy,
@@ -64,6 +63,8 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { tidyMcpServerErrorText } from "@/lib/mcp/mcp-server-issues";
+import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
@@ -91,7 +92,6 @@ import {
   UninstallServerDialog,
   type UninstallServerInstall,
 } from "./uninstall-server-dialog";
-import { useCanReauthenticate } from "./use-can-reauthenticate";
 import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
 
 export type CatalogItem =
@@ -1035,12 +1035,23 @@ export function McpServerCard({
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
-              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
-              <TruncatedTooltip content={item.name}>
-                <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
-                  {item.name}
-                </span>
-              </TruncatedTooltip>
+              {/* The name opens the server's page, as a table row does: the
+                  card itself is too full of its own controls to be one link. */}
+              <Link
+                href={`/mcp/registry/${item.id}`}
+                className="flex min-w-0 items-center gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <McpCatalogIcon
+                  icon={item.icon}
+                  catalogId={item.id}
+                  size={20}
+                />
+                <TruncatedTooltip content={item.name}>
+                  <span className="text-lg font-semibold whitespace-nowrap text-ellipsis overflow-hidden">
+                    {item.name}
+                  </span>
+                </TruncatedTooltip>
+              </Link>
               {environmentLabel && (
                 <Badge
                   variant="outline"
@@ -1124,44 +1135,32 @@ export function McpServerCard({
             });
           })().map((failed) => {
             const errorMsg =
-              failed.localInstallationError ?? "Installation failed";
+              tidyMcpServerErrorText(failed.localInstallationError) ??
+              "The server exited during start.";
+            // The card is a summary tile: one status line in the
+            // DeploymentStatusBanner shape plus the evidence link. The
+            // diagnosis (cause, what to change, actions) lives on the
+            // server's Overview and the registry's Needs-attention tab.
             return (
               <div
                 key={failed.id}
-                className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm"
                 data-testid={`${E2eTestId.McpServerError}-${item.name}-default`}
+                title={errorMsg}
               >
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">Installation failed</p>
-                    <p className="truncate text-xs" title={errorMsg}>
-                      {errorMsg}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="h-auto p-0 text-destructive"
-                      data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
-                      onClick={() => goToItemPage("logs", failed.id)}
-                    >
-                      View logs
-                    </Button>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="h-auto p-0 text-destructive"
-                      data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-default`}
-                      onClick={() =>
-                        router.push(`/mcp/registry/${item.id}/edit`)
-                      }
-                    >
-                      Edit config
-                    </Button>
-                  </div>
-                </div>
+                <DeploymentStatusDot state="failed" />
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  Failed to start
+                </span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto shrink-0 p-0 text-xs"
+                  data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
+                  onClick={() => goToItemPage("logs", failed.id)}
+                >
+                  View logs
+                </Button>
               </div>
             );
           })}

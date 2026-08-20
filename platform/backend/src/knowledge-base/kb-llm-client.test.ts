@@ -300,6 +300,76 @@ describe("resolveEmbeddingConfig", () => {
     expect(result?.acceptedImageMimeTypes).toEqual(["image/jpeg", "image/png"]);
   });
 
+  test("resolves a Cohere direct key to the KB's Cohere client with its image formats", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Cohere Key",
+      provider: "cohere",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "embed-v4.0",
+    });
+    await ModelModel.create({
+      externalId: "cohere/embed-v4.0",
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.provider).toBe("cohere");
+    expect(result?.dimensions).toBe(1536);
+    expect(result?.inputModalities).toEqual(["text", "image"]);
+    expect(result?.acceptedImageMimeTypes).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ]);
+  });
+
+  test("clamps image off a Cohere embedding model the KB client does not know", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Cohere Key",
+      provider: "cohere",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "embed-english-v2.0",
+    });
+    await ModelModel.create({
+      externalId: "cohere/embed-english-v2.0",
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text"]);
+  });
+
   test("trusts the models table for an allowlisted multimodal Gemini model", async ({
     makeOrganization,
   }) => {

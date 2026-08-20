@@ -1,4 +1,5 @@
 import {
+  isSelfHostedProvider,
   isSmallModel,
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
@@ -16,6 +17,8 @@ import {
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
+import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
+import { findVoyageEmbeddingModel } from "@/knowledge-base/embedding-clients/voyage-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -35,6 +38,7 @@ import {
   resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
   resolveSelfHostedModelMetadata,
+  resolveSelfHostedModelReasoning,
 } from "@/services/cross-provider-pricing";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -286,6 +290,7 @@ interface ProviderModelCapabilities {
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
+  supportsReasoningEffort: boolean | null;
   supportedEndpoints: SupportedProviderEndpoint[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
@@ -319,7 +324,7 @@ export function buildModelsToUpsert(params: {
     }
   }
 
-  return [...uniqueModels.values()].map((model) => {
+  const built = [...uniqueModels.values()].map((model) => {
     // Bedrock/Azure model ids don't match models.dev keys, so derive pricing and
     // capabilities from the underlying vendor entry.
     const isReseller = provider === "bedrock" || provider === "azure";
@@ -362,11 +367,23 @@ export function buildModelsToUpsert(params: {
           }) ?? SELF_HOSTED_TEXT_ONLY)
         : null;
 
+    // Only the registry can say whether an operator's model reasons, and it
+    // has to be asked for every self-hosted provider rather than just the one
+    // whose metadata is resolved above: Ollama answers for itself only while
+    // its server is new enough to report capabilities.
+    const selfHostedReasoning = isSelfHostedProvider(provider)
+      ? resolveSelfHostedModelReasoning({
+          modelId: model.id,
+          modelsDevData,
+        })
+      : null;
+
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
       capabilities: lookupModelsDevCapabilities(capabilitiesMap, model.id),
       fetched: model.capabilities,
+      selfHostedReasoning,
       crossProviderPrices,
       crossProviderMetadata,
       awsPrices,
@@ -384,6 +401,7 @@ export function buildModelsToUpsert(params: {
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
+      supportsReasoningEffort: capabilities.supportsReasoningEffort,
       supportedEndpoints: capabilities.supportedEndpoints,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
@@ -398,7 +416,129 @@ export function buildModelsToUpsert(params: {
       lastSyncedAt: new Date(),
     };
   });
+
+  return withDistinctDescriptions(built);
 }
+
+/**
+ * Give every model in a provider's catalog a display name of its own.
+ *
+ * Two rows arrive sharing a name from two directions. The registry keys a model
+ * family by its undated id, so a provider that lists both the moving alias and
+ * a pinned snapshot — OpenAI serves `gpt-4.1` and `gpt-4.1-2025-04-14` side by
+ * side — has the snapshot borrow the family's name through the date-stripped
+ * fallback in `registryLookupCandidates`. And the registry names distinct ids
+ * alike of its own accord: `gemini-3-pro-image` and `gemini-3-pro-image-preview`
+ * are both "Nano Banana Pro". Either way every model picker renders rows a user
+ * cannot tell apart, and choosing between them is a coin flip.
+ *
+ * A colliding row is suffixed with the part of its id the rest of the group
+ * does not share, reproducing the convention the registry uses for the
+ * snapshots it names itself ("GPT-4o (2024-08-06)"). The row whose id is the
+ * group's shared stem keeps the bare name, and a name nothing else answers to
+ * is left alone — so a provider listing a dated id and no alias for it
+ * (Anthropic publishes only `claude-sonnet-4-5-20250929`) is untouched.
+ *
+ * Scoped to one provider catalog because that is the scope of the confusion:
+ * these are the rows a picker offers side by side. It is also idempotent —
+ * the name is re-derived from the registry on every sync, never from the
+ * previously stored one — so a decoration can never stack up across syncs.
+ */
+function withDistinctDescriptions(models: CreateModel[]): CreateModel[] {
+  const modelIdsByDescription = new Map<string, string[]>();
+  for (const { description, modelId } of models) {
+    if (!description) {
+      // A nameless row already falls back to its own id for display.
+      continue;
+    }
+    const modelIds = modelIdsByDescription.get(description);
+    if (modelIds) {
+      modelIds.push(modelId);
+    } else {
+      modelIdsByDescription.set(description, [modelId]);
+    }
+  }
+
+  const distinguishersByDescription = new Map<string, Map<string, string>>();
+  for (const [description, modelIds] of modelIdsByDescription) {
+    if (modelIds.length > 1) {
+      distinguishersByDescription.set(
+        description,
+        distinguishModelIds(modelIds),
+      );
+    }
+  }
+  if (distinguishersByDescription.size === 0) {
+    return models;
+  }
+
+  return models.map((model) => {
+    const distinguisher = model.description
+      ? distinguishersByDescription.get(model.description)?.get(model.modelId)
+      : undefined;
+    return distinguisher
+      ? { ...model, description: `${model.description} (${distinguisher})` }
+      : model;
+  });
+}
+
+/**
+ * What sets each of these model ids apart: everything past the leading tokens
+ * they all share, punctuated the way the id itself is.
+ *
+ * Whole tokens only. `claude-opus-4-thinking:32000` and `…:32768` share
+ * characters up to "32", and labelling them "(000)" and "(768)" would name
+ * something no provider ever published. The id that is exactly the shared stem
+ * gets an empty distinguisher and keeps its bare name.
+ *
+ * Ids that tokenise identically (`a-b` and `a.b`) leave two rows indistinct, so
+ * the whole group falls back to raw ids, which always tell them apart.
+ */
+function distinguishModelIds(modelIds: string[]): Map<string, string> {
+  // Splitting on a capturing group keeps the separators, so a distinguisher is
+  // rebuilt with the punctuation its own id used.
+  const partsByModelId = modelIds.map(
+    (modelId) => [modelId, modelId.split(MODEL_ID_SEPARATOR)] as const,
+  );
+  const sharedTokens = countSharedLeadingTokens(
+    partsByModelId.map(([, parts]) => parts),
+  );
+
+  const distinguishers = new Map(
+    partsByModelId.map(([modelId, parts]) => [
+      modelId,
+      // Tokens sit at even indices, each preceded by its separator at the odd
+      // index below it — so this drops the shared run and its trailing
+      // separator in one cut.
+      parts.slice(sharedTokens * 2).join(""),
+    ]),
+  );
+
+  const distinct = new Set(distinguishers.values());
+  return distinct.size === distinguishers.size
+    ? distinguishers
+    : new Map(modelIds.map((modelId) => [modelId, modelId]));
+}
+
+/** How many leading tokens every one of these split model ids has in common. */
+function countSharedLeadingTokens(partsPerModelId: string[][]): number {
+  const [first, ...rest] = partsPerModelId;
+  let shared = 0;
+  while (shared * 2 < first.length) {
+    const token = first[shared * 2];
+    if (rest.some((parts) => parts[shared * 2] !== token)) {
+      break;
+    }
+    shared++;
+  }
+  return shared;
+}
+
+/**
+ * The punctuation providers build model ids out of — `gpt-4.1-nano`,
+ * `openai.gpt-oss-120b-1:0`, `google/gemini-3-pro-image`.
+ */
+const MODEL_ID_SEPARATOR = /([-._:/])/;
 
 /**
  * The one place the size threshold is applied. Null (not `true`) when the
@@ -478,6 +618,14 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-2") {
     return 3072;
   }
+  if (provider === "cohere") {
+    return findCohereEmbeddingModel(id)?.dimensions ?? null;
+  }
+  // Voyage is embeddings-only, so every model it offers is an embedding model
+  // and the table is the only source for its dimension.
+  if (provider === "voyage") {
+    return findVoyageEmbeddingModel(id)?.dimensions ?? null;
+  }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
   }
@@ -509,6 +657,8 @@ export function resolveModelCapabilities(params: {
   crossProviderPrices?: CrossProviderPrices | null;
   /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderMetadata?: CrossProviderMetadata | null;
+  /** Registry verdict on whether a self-hosted model's weights reason. */
+  selfHostedReasoning?: boolean | null;
   /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
   /** Prices from a vendor's own list. Used where the registry has none. */
@@ -523,6 +673,7 @@ export function resolveModelCapabilities(params: {
     fetched,
     crossProviderPrices,
     crossProviderMetadata,
+    selfHostedReasoning,
     awsPrices,
     publishedPrices,
     underlyingModelName,
@@ -579,6 +730,17 @@ export function resolveModelCapabilities(params: {
         capabilities?.supportsToolCalling ??
         inferredCapabilities.supportsToolCalling ??
         crossProviderMetadata?.supportsToolCalling ??
+        null,
+      // The serving backend outranks the registry here for the same reason it
+      // does above, and more sharply: Ollama answers for the model it will
+      // actually run, while a registry entry describes the weights wherever
+      // anyone hosts them.
+      supportsReasoningEffort:
+        fetched?.supportsReasoningEffort ??
+        capabilities?.supportsReasoningEffort ??
+        inferredCapabilities.supportsReasoningEffort ??
+        crossProviderMetadata?.supportsReasoningEffort ??
+        selfHostedReasoning ??
         null,
       // Fetcher-only: no other tier knows which wire format a provider serves
       // a given model over. models.dev describes the model, not the transport
@@ -678,6 +840,7 @@ function buildCapabilitiesMap(
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
+        supportsReasoningEffort: model.reasoning ?? null,
         // models.dev describes the model, not which transport a given provider
         // exposes it on — only a fetcher can know that.
         supportedEndpoints: null,
@@ -731,6 +894,7 @@ const SELF_HOSTED_TEXT_ONLY: CrossProviderMetadata = {
   inputModalities: ["text"],
   outputModalities: ["text"],
   supportsToolCalling: null,
+  supportsReasoningEffort: null,
 };
 
 function inferModelCapabilities(params: {
@@ -954,10 +1118,41 @@ function normalizeKnownModelCapabilities(params: {
     }
   }
 
+  // KB-supported Cohere (direct) embedding models: same reasoning as Bedrock
+  // below — the KB's Cohere client decides which modalities it drives.
+  if (provider === "cohere") {
+    const embedding = findCohereEmbeddingModel(modelId);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
+  // KB-supported Voyage embedding models: same reasoning — the KB's Voyage
+  // client is the only thing that drives them, so its table decides the
+  // modalities. Voyage has no chat models at all, so there is no non-embedding
+  // branch to fall through to.
+  if (provider === "voyage") {
+    const embedding = findVoyageEmbeddingModel(modelId);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
+  }
+
   // KB-supported Bedrock embedding models: the KB's own Bedrock client is the
   // only thing that drives them, so its declared modality support outranks
   // whatever the models.dev / cross-provider tiers say about the vendor's model
-  // (Cohere Embed v3 direct also takes images, but that's a different client).
+  // (Cohere Embed direct is driven by the KB's Cohere client, which has its own
+  // table).
   if (provider === "bedrock") {
     const embedding =
       findBedrockEmbeddingModel(modelId) ??
@@ -984,6 +1179,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     outputLength: null,
     inputModalities: null,
     outputModalities: null,
+    supportsReasoningEffort: null,
     supportsToolCalling: null,
     supportedEndpoints: null,
     promptPricePerToken: null,

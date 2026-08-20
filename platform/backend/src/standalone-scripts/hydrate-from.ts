@@ -186,7 +186,8 @@ try {
         // NOTHING would preserve target's row — including target's DEFAULT
         // values for fields the source admin actually edited (custom prices,
         // ignored flag). Upsert just those admin-editable columns from source
-        // so hydrating carries the admin's intent across. Catalog columns
+        // so hydrating carries the admin's intent across — the custom limit
+        // overrides included, since those are admin intent too. Catalog columns
         // (externalId, contextLength, modalities, pricing-from-models.dev) are
         // left as-is because target's models.dev sync may be fresher.
         const result = await tx
@@ -197,6 +198,8 @@ try {
             set: {
               customPricePerMillionInput: sql`excluded.custom_price_per_million_input`,
               customPricePerMillionOutput: sql`excluded.custom_price_per_million_output`,
+              customContextLength: sql`excluded.custom_context_length`,
+              customOutputLength: sql`excluded.custom_output_length`,
               ignored: sql`excluded.ignored`,
             },
           })

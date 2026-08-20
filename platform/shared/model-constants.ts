@@ -27,6 +27,7 @@ export const SupportedProvidersSchema = z.enum([
   "github-copilot",
   "microsoft-365-copilot",
   "archestra",
+  "voyage",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -43,6 +44,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "bedrock:invoke",
   "bedrock:embeddings",
   "cohere:chat",
+  "cohere:embeddings",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
@@ -66,6 +68,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
+  "voyage:embeddings",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -180,7 +183,52 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   "microsoft-365-copilot": "Microsoft 365 Copilot",
   // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   archestra: "Archestra",
+  voyage: "Voyage AI",
 };
+
+/**
+ * Providers that serve embeddings only — they publish no chat/completion API at
+ * all, so they exist in this enum purely to be selectable as a knowledge-base
+ * embedding provider.
+ *
+ * `SupportedProvider` is otherwise a list of *chat* providers, and a good deal
+ * of the platform (the model router, the connection page's proxy instructions,
+ * tokenizers, optimization rules) reasonably assumes every member can hold a
+ * conversation. Rather than let those surfaces advertise a provider that would
+ * 404 on every chat request, they filter on this set. The chat/embedding split
+ * at the *model* level is separate and already handled by
+ * `embeddingDimensions` — this set is the *provider*-level half of it.
+ */
+const EMBEDDING_ONLY_PROVIDER_LIST = [
+  "voyage",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export const EMBEDDING_ONLY_PROVIDERS = new Set<SupportedProvider>(
+  EMBEDDING_ONLY_PROVIDER_LIST,
+);
+
+export type EmbeddingOnlyProvider =
+  (typeof EMBEDDING_ONLY_PROVIDER_LIST)[number];
+
+/**
+ * The providers that can actually hold a conversation — `SupportedProvider`
+ * minus the embeddings-only ones. Chat-shaped exhaustive maps key off this so
+ * adding a *chat* provider still breaks them (the point of those maps), while
+ * an embeddings-only provider is not forced to invent a chat implementation it
+ * does not have.
+ */
+export type ChatProvider = Exclude<SupportedProvider, EmbeddingOnlyProvider>;
+
+/**
+ * True when the provider publishes a chat/completion API. Chat-only surfaces
+ * gate on this so an embeddings-only provider is never offered for a
+ * conversation, a proxy endpoint, or a model-router mapping.
+ */
+export function providerSupportsChat(
+  provider: SupportedProvider,
+): provider is ChatProvider {
+  return !EMBEDDING_ONLY_PROVIDERS.has(provider);
+}
 
 /**
  * Providers where an API key can be omitted when creating a provider key.
@@ -552,6 +600,9 @@ export function bedrockRegionFromBaseUrl(
  * Used as placeholder hints in the UI and as fallback values when no per-key base URL is configured.
  */
 export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
+  // Embeddings-only: both the text (`/embeddings`) and multimodal
+  // (`/multimodalembeddings`) endpoints hang off this root.
+  voyage: "https://api.voyageai.com/v1",
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
   gemini: "https://generativelanguage.googleapis.com",
@@ -710,6 +761,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   // The upstream Archestra can front any provider, so match common flagship
   // families across vendors (most- to least-preferred).
   archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
+  // Embeddings-only, so these mark the best *embedding* model rather than a
+  // chat one — the retrieval-quality flagship first.
+  voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
 };
 
 /**
@@ -717,6 +771,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+  // Embeddings-only: never used to start a conversation, only as the fallback
+  // embedding model when no synced "best" row exists.
+  voyage: "voyage-4",
   anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
@@ -995,6 +1052,18 @@ export const MODELS_DEV_ENRICHMENT_PROVIDER_MAP: Record<
  * an out-of-range value reach the backend and come back as a bare 400.
  */
 export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+
+/**
+ * Absolute ceiling for an admin-set context window or max-output-token count on
+ * the models page. Like {@link MAX_CONFIGURABLE_NUM_CTX} it is a runaway-typo
+ * guard rather than a claim about any real model: these overrides exist because
+ * a provider reported nothing, so there is no per-row limit to check them
+ * against.
+ *
+ * Shared so the models-page form mirrors the server rule instead of letting an
+ * out-of-range value reach the backend and come back as a bare 400.
+ */
+export const MAX_CUSTOM_MODEL_TOKEN_LIMIT = 10_000_000;
 
 /** Ollama only ever honours a handful of stop sequences. */
 export const MAX_STOP_SEQUENCES = 16;

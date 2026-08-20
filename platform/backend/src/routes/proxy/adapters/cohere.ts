@@ -349,6 +349,31 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
     return this.response;
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): CohereResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    const existing = this.response?.message?.tool_calls;
+    if (!existing) return this.response;
+    const tool_calls = existing.map((toolCall, index) => {
+      const rewritten = toolCalls[index];
+      if (!rewritten) return toolCall;
+      return {
+        ...toolCall,
+        function: {
+          ...toolCall.function,
+          name: rewritten.name,
+          arguments: rewritten.arguments,
+        },
+      };
+    });
+    return {
+      ...this.response,
+      message: { ...this.response.message, tool_calls },
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -624,6 +649,35 @@ class CohereStreamAdapter
     return this.state.rawToolCallEvents.map(
       (event) => `data: ${JSON.stringify(event)}\n\n`,
     );
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // The same three-frame shape processChunk builds for a live call
+    // (start carries id/name, delta carries the whole argument string, end
+    // closes it), so @ai-sdk/cohere accumulates it identically.
+    return toolCalls.flatMap((toolCall) => [
+      `data: ${JSON.stringify({
+        type: "tool-call-start",
+        delta: {
+          message: {
+            tool_calls: {
+              id: toolCall.id,
+              type: "function",
+              function: { name: toolCall.name, arguments: "" },
+            },
+          },
+        },
+      })}\n\n`,
+      `data: ${JSON.stringify({
+        type: "tool-call-delta",
+        delta: {
+          message: {
+            tool_calls: { function: { arguments: toolCall.arguments } },
+          },
+        },
+      })}\n\n`,
+      `data: ${JSON.stringify({ type: "tool-call-end" })}\n\n`,
+    ]);
   }
 
   formatCompleteTextSSE(text: string): string[] {

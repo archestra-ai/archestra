@@ -289,6 +289,11 @@ export function buildMcpGatewayTool(params: {
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
+                // Every runner that drives an agent lands here — web
+                // chat, A2A, ChatOps, schedule triggers, incoming email
+                // — and all of them put the result through this file's
+                // bounded media extraction before a model sees it.
+                deliversMediaAsImageParts: true,
                 // LockedChat: a run_tool dispatch persists via mcpClient, so
                 // its stored row needs the same treatment as a direct call —
                 // encrypted under the conversation key, not redacted.
@@ -670,6 +675,11 @@ export async function buildArchestraToolOutput(params: {
   if (!response.isError && response.content.some((c) => c.type === "image")) {
     return {
       content: text,
+      // The text summary above ends in a "[image]" marker line, so it is no
+      // longer parseable JSON. Keep the tool's own structured copy so readers
+      // that need the payload (the knowledge citation chips) have one that is
+      // not mangled by the marker.
+      structuredContent: response.structuredContent,
       _meta: {
         ...(response._meta as Record<string, unknown>),
         ...executedAsMeta,

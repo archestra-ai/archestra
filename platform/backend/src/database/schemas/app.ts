@@ -118,6 +118,25 @@ const appsTable = softDeletablePgTable(
      * which this value — an opaque, short-lived build key — does not justify.
      */
     creationGraceSessionKey: text("lock_grace_session_key"),
+    /**
+     * The LLM session that authored this app — the *build cost* link. Equals the
+     * `interactions.session_id` its authoring turns were recorded under (the
+     * conversation id in UI chat, the execution's session id in a headless run),
+     * so "how much did this app cost to build" is a sum over that session.
+     *
+     * Deliberately the interaction session id and not a `conversations` foreign
+     * key: it has to work for headless authoring too, and the value's whole
+     * purpose is to join to `interactions.session_id`, which is a varchar
+     * carrying either. Null for an app created outside an authoring session (the
+     * Apps page / REST path, an external MCP client), which spent no tokens
+     * being built and correctly reports a zero build cost.
+     *
+     * One session can author several apps. Spend is not divided between them —
+     * the session's cost is reported for each, and readers disclose the sharing
+     * (see `StatisticsModel.getAppStatistics`, which returns how many apps a
+     * build session is shared with).
+     */
+    authoringSessionId: text("authoring_session_id"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -129,6 +148,9 @@ const appsTable = softDeletablePgTable(
     // Backing-server lookups (findByMcpServerId, the catalog-derived access JOINs)
     // filter on this FK, so index it.
     index("apps_mcp_server_id_idx").on(table.mcpServerId),
+    // Build-cost reporting counts how many apps share an authoring session, so
+    // it looks apps up by that session rather than by id.
+    index("apps_authoring_session_id_idx").on(table.authoringSessionId),
     // Display-name uniqueness per author (soft-deleted rows excluded so deleting
     // an app frees its name). Visibility (scope/teams) and environment are owned
     // by the backing internal_mcp_catalog, not the app row.

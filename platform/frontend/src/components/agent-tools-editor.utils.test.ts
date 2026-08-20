@@ -13,7 +13,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildBulkToolUpdate,
   computeMcpEnvConflicts,
-  computeSharedPersonalPins,
   filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
@@ -669,132 +668,6 @@ describe("computeMcpEnvConflicts", () => {
   });
 });
 
-describe("computeSharedPersonalPins", () => {
-  const personal = {
-    id: "srv-personal",
-    scope: "personal",
-    ownerId: "user-1",
-    ownerEmail: "owner@example.com",
-    catalogName: "GitHub",
-    name: "github-personal",
-  };
-  const team = {
-    id: "srv-team",
-    scope: "team",
-    ownerId: "user-2",
-    ownerEmail: "team-owner@example.com",
-    catalogName: "Jira",
-    name: "jira-team",
-  };
-
-  it("flags a static pin to a resolvable personal connection", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: "srv-personal",
-          resolvableServers: [personal],
-        },
-      ],
-      "user-2",
-    );
-    expect(pins).toEqual([
-      {
-        catalogId: "cat-a",
-        mcpName: "GitHub",
-        ownerEmail: "owner@example.com",
-        isCurrentUser: false,
-      },
-    ]);
-  });
-
-  it("marks the current user's own connection", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: "srv-personal",
-          resolvableServers: [personal],
-        },
-      ],
-      "user-1",
-    );
-    expect(pins[0]?.isCurrentUser).toBe(true);
-  });
-
-  it("ignores a pin whose server is no longer resolvable (already reset / out of group)", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: "srv-personal",
-          resolvableServers: [team],
-        },
-      ],
-      "user-1",
-    );
-    expect(pins).toEqual([]);
-  });
-
-  it("ignores team- and org-scoped pins (shared by design)", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: "srv-team",
-          resolvableServers: [team],
-        },
-      ],
-      "user-1",
-    );
-    expect(pins).toEqual([]);
-  });
-
-  it("ignores catalogs that resolve at call time (no pin)", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: null,
-          resolvableServers: [personal],
-        },
-      ],
-      "user-1",
-    );
-    expect(pins).toEqual([]);
-  });
-
-  it("falls back to the raw name and a placeholder owner", () => {
-    const pins = computeSharedPersonalPins(
-      [
-        {
-          catalogId: "cat-a",
-          pinnedServerId: "srv-x",
-          resolvableServers: [
-            {
-              id: "srv-x",
-              scope: "personal",
-              ownerId: null,
-              ownerEmail: null,
-              catalogName: null,
-              name: "raw-name",
-            },
-          ],
-        },
-      ],
-      "user-1",
-    );
-    expect(pins).toEqual([
-      {
-        catalogId: "cat-a",
-        mcpName: "raw-name",
-        ownerEmail: "Deleted user",
-        isCurrentUser: false,
-      },
-    ]);
-  });
-});
-
 describe("setsEqual", () => {
   it("treats sets with the same members as equal regardless of order", () => {
     expect(setsEqual(new Set(["a", "b"]), new Set(["b", "a"]))).toBe(true);
@@ -965,6 +838,77 @@ describe("buildBulkToolUpdate", () => {
       removals: [],
       hasChanges: false,
     });
+  });
+
+  // The shape every built-in tool is stored in (and a pin whose server was
+  // uninstalled): the editor shows it as resolve-at-call-time, so an untouched
+  // pick is not an edit — it used to make a pristine Tools step dirty and
+  // rewrite every such tool on save.
+  it("treats a static assignment with no pinned server as the untouched dynamic pick", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending(
+          ARCHESTRA_MCP_CATALOG_ID,
+          ["t1", "t2"],
+          DYNAMIC_CREDENTIAL_VALUE,
+          {
+            serverType: "builtin",
+          },
+        ),
+      ],
+      assignedToolsByCatalog: new Map([
+        [
+          ARCHESTRA_MCP_CATALOG_ID,
+          [assigned("t1", null, "static"), assigned("t2", null, "static")],
+        ],
+      ]),
+      isNewAgent: false,
+    });
+
+    expect(result).toEqual({
+      assignments: [],
+      removals: [],
+      hasChanges: false,
+    });
+  });
+
+  it("measures a credential change against the pick seeded from the first saved row", () => {
+    // Rows with mixed modes: the editor shows the first row's pin, and an
+    // untouched pick is not an edit even though the second row differs.
+    const untouched = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [pending("cat-a", ["t1", "t2"], "srv-a")],
+      assignedToolsByCatalog: new Map([
+        ["cat-a", [assigned("t1", "srv-a"), assigned("t2", null, "dynamic")]],
+      ]),
+      isNewAgent: false,
+    });
+    expect(untouched.hasChanges).toBe(false);
+    expect(untouched.assignments).toEqual([]);
+
+    // Switching that pick re-binds every kept row, the mixed one included.
+    const switched = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending("cat-a", ["t1", "t2"], DYNAMIC_CREDENTIAL_VALUE),
+      ],
+      assignedToolsByCatalog: new Map([
+        ["cat-a", [assigned("t1", "srv-a"), assigned("t2", null, "dynamic")]],
+      ]),
+      isNewAgent: false,
+    });
+    expect(switched.hasChanges).toBe(true);
+    expect(switched.assignments.map((a) => a.toolId).sort()).toEqual([
+      "t1",
+      "t2",
+    ]);
+    expect(
+      switched.assignments.every(
+        (a) =>
+          a.credentialResolutionMode === "dynamic" && a.mcpServerId === null,
+      ),
+    ).toBe(true);
   });
 
   it.each([

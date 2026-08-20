@@ -6,8 +6,8 @@ import {
 import config from "@/config";
 import { isDbStatementTimeoutError } from "@/database/retry";
 import logger from "@/logging";
-import { KbChunkModel } from "@/models";
-import type { VectorSearchResult } from "@/models/kb-chunk";
+import { KbChunkModel, OrganizationModel } from "@/models";
+import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { expandChunkContext } from "./context-expansion";
@@ -22,6 +22,7 @@ import {
   withKbObservability,
 } from "./kb-interaction";
 import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
+import { isMediaChunkContent, parseImageDataUrl } from "./media-chunk";
 import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
@@ -30,6 +31,12 @@ import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 
 interface ChunkResult {
+  /**
+   * What the model reads. For a media chunk this is a short descriptor, never
+   * the payload: the stored content is a base64 data URL (a 180KB image is
+   * ~45-60k tokens of unreadable text), and the bytes travel out-of-band via
+   * `media` instead.
+   */
   content: string;
   score: number;
   chunkIndex: number;
@@ -41,6 +48,11 @@ interface ChunkResult {
    * change.
    */
   ref: string;
+  /**
+   * Present only for a media chunk: the payload the caller may deliver to a
+   * vision-capable model as an image part, plus its type. Text chunks omit it.
+   */
+  media?: { kind: "image"; mimeType: string; data: string };
   citation: {
     title: string;
     sourceUrl: string | null;
@@ -102,6 +114,10 @@ class QueryService {
         : Promise.resolve([]),
     ]);
 
+    const bm25 = hybridEnabled
+      ? await this.resolveBm25(organizationId, searchLanguages, connectorIds)
+      : undefined;
+
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
         this.searchSingleQuery({
@@ -116,6 +132,7 @@ class QueryService {
           type: eq.type,
           hybridEnabled,
           searchLanguages,
+          bm25,
         }),
       ),
     );
@@ -250,6 +267,8 @@ class QueryService {
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
     searchLanguages: TextSearchLanguage[];
+    /** BM25 constants for the keyword lane; unset ranks it with ts_rank. */
+    bm25: Bm25Tuning | undefined;
   }): Promise<SingleQuerySearchResult> {
     const {
       queryText,
@@ -262,6 +281,7 @@ class QueryService {
       environmentId,
       type,
       hybridEnabled,
+      bm25,
       searchLanguages,
     } = params;
 
@@ -345,6 +365,7 @@ class QueryService {
               connectorIds,
               queryText,
               languages: searchLanguages,
+              bm25,
               limit,
               userAcl,
               bypassAcl,
@@ -381,14 +402,60 @@ class QueryService {
       idExtractor: (row) => row.id,
       k: 60,
       weights: innerWeights,
+      // Lane 1 is the keyword lane, which matches words: a media chunk stores a
+      // base64 data URL and can never appear there. Without this the best
+      // possible image — vector rank 1 — scores below any text chunk that
+      // merely placed in both lanes, and the post-fusion slice drops it.
+      isEligible: (row, laneIndex) =>
+        laneIndex !== KEYWORD_LANE_INDEX || !isMediaChunkContent(row.content),
     });
 
     return { rows: fused.slice(0, limit), lanesAttempted, lanesTimedOut };
   }
 
+  /**
+   * The BM25 constants the keyword lane scores with, or `undefined` while it
+   * must rank with `ts_rank` instead.
+   *
+   * BM25 scores by joining the corpus-statistics tables, so a text-search
+   * configuration with indexed chunks but no statistics contributes no rows at
+   * all — an empty keyword lane that reads like an empty corpus. The
+   * statistics are rebuilt on a schedule (`kb_bm25_stats_refresh`), so they
+   * can be missing right after the upgrade that introduced them, or for a
+   * language first indexed since the last rebuild. Until they exist, `ts_rank`
+   * ranks instead. A language with nothing indexed never triggers this (see
+   * {@link KbChunkModel.hasBm25Stats}).
+   *
+   * The constants are an organization's Knowledge-settings override where set,
+   * else the deployment default — resolved per query so a change saved in the
+   * settings tab applies to the very next search (scores are computed at query
+   * time from stored statistics, so nothing needs rebuilding).
+   */
+  private async resolveBm25(
+    organizationId: string,
+    searchLanguages: TextSearchLanguage[],
+    connectorIds: string[],
+  ): Promise<Bm25Tuning | undefined> {
+    const [statsReady, org] = await Promise.all([
+      KbChunkModel.hasBm25Stats(searchLanguages, connectorIds),
+      OrganizationModel.getById(organizationId),
+    ]);
+    if (!statsReady) {
+      logger.warn(
+        { organizationId, searchLanguages },
+        "[QueryService] BM25 corpus statistics are missing for a text-search configuration in this query; keyword search ranks with ts_rank until the kb_bm25_stats_refresh task has built them",
+      );
+      return undefined;
+    }
+    return {
+      k1: org?.kbBm25K1 ?? config.kb.bm25K1,
+      b: org?.kbBm25B ?? config.kb.bm25B,
+    };
+  }
+
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {
     return rows.map((row) => ({
-      content: row.content,
+      ...describeChunkContent(row),
       score: row.score,
       chunkIndex: row.chunkIndex,
       metadata: row.metadata,
@@ -460,3 +527,24 @@ export function findEmbeddingDimensionMismatch(
   if (populatedDimensions.has(configuredDimension)) return null;
   return [...populatedDimensions];
 }
+
+/**
+ * What a caller should read for a chunk, and — for a media chunk — the payload
+ * to deliver out-of-band. Text is passed through untouched.
+ */
+function describeChunkContent(row: VectorSearchResult): {
+  content: string;
+  media?: { kind: "image"; mimeType: string; data: string };
+} {
+  const image = parseImageDataUrl(row.content);
+  if (!image) {
+    return { content: row.content };
+  }
+  return {
+    content: `[image: ${row.title} (${image.mimeType})]`,
+    media: { kind: "image", mimeType: image.mimeType, data: image.data },
+  };
+}
+
+/** Index of the keyword lane in the inner hybrid fusion. */
+const KEYWORD_LANE_INDEX = 1;

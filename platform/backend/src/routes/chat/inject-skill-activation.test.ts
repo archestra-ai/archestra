@@ -1,4 +1,6 @@
 import type { ChatMessage } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { EnvironmentModel, SkillModel } from "@/models";
 import { expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -55,6 +57,8 @@ test("prepends the skill activation block to the last user message", async ({
     userId: user.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   const text = result[0].parts?.[0]?.text ?? "";
@@ -92,6 +96,8 @@ test("ignores a skill that belongs to another organization", async ({
     userId: user.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -123,6 +129,8 @@ test("ignores a skill the user cannot access under its scope", async ({
     userId: otherUser.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -158,6 +166,8 @@ test("ignores a slash-command skill when the user lacks skill:read", async ({
     userId: user.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -180,6 +190,8 @@ test("returns the messages unchanged when no skill metadata is present", async (
     userId: user.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   expect(result).toBe(messages);
@@ -224,6 +236,8 @@ test("leaves the message unchanged when the skill is outside the agent's environ
     userId: user.id,
     agentId: agent.id,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   expect(result).toBe(messages);
@@ -257,6 +271,8 @@ test("injects a delegation directive instead of the body for an agent-designated
     userId: user.id,
     agentId: undefined,
     conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
   });
 
   const text = result[0].parts?.[0]?.text ?? "";
@@ -268,4 +284,48 @@ test("injects a delegation directive instead of the body for an agent-designated
   // the skill's instructions never reach the parent context
   expect(text).not.toContain("Follow the Deep Research steps.");
   expect(text).not.toContain("<skill_content");
+});
+
+test("records the conversation and measured block size on the activation", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const skill = await seedSkill(org.id, "Costed");
+  // A real conversation id is a uuid, and the activation path resolves sandbox
+  // state by it.
+  const conversationId = crypto.randomUUID();
+
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "do the thing" }],
+      metadata: { skill: { id: skill.id, name: skill.name } },
+    },
+  ];
+
+  await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    agentId: undefined,
+    conversationId,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+  });
+  await drainBackgroundWork();
+
+  const [event] = await db
+    .select()
+    .from(schema.skillUsageEventsTable)
+    .where(eq(schema.skillUsageEventsTable.skillId, skill.id));
+  // The conversation id is also the interaction session id this chat's turns are
+  // recorded under, which is what makes the activation's spend attributable.
+  expect(event.sessionId).toBe(conversationId);
+  // Injecting the block is the skill's whole mechanism, so its size is the one
+  // cost that belongs to the skill alone — and it is unrecoverable later.
+  expect(event.contextTokens).toBeGreaterThan(0);
 });

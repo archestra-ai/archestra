@@ -4,6 +4,7 @@ import type {
 } from "@archestra/shared";
 import { callAzureEmbedding } from "./azure";
 import { callBedrockEmbedding } from "./bedrock";
+import { callCohereEmbedding } from "./cohere";
 import { callGeminiEmbedding } from "./gemini";
 import { callOpenAIEmbedding } from "./openai";
 import type {
@@ -11,6 +12,7 @@ import type {
   EmbeddingInput,
   EmbeddingPurpose,
 } from "./types";
+import { callVoyageEmbedding } from "./voyage";
 
 type EmbeddingCall = (params: {
   inputs: EmbeddingInput[];
@@ -57,7 +59,8 @@ const OPENAI_WIRE_FIXED_DIMENSION: EmbeddingAdapter = {
  * rejected — never silently sent to the OpenAI-compatible client (spec item 2).
  * The allowlist is verified against provider documentation and this repo's own
  * proxy embedding routes, not assumed:
- *   - native: gemini (own SDK), azure (Azure OpenAI), bedrock (Amazon Titan);
+ *   - native: gemini (own SDK), azure (Azure OpenAI), bedrock (Amazon Titan,
+ *     Cohere on Bedrock), cohere (Embed v3/v4 over /v2/embed);
  *   - OpenAI-compatible /v1/embeddings: openai, openrouter, zhipuai, ollama,
  *     mistral, vllm;
  *   - everything else → null.
@@ -83,6 +86,16 @@ export const EMBEDDING_ADAPTERS: Record<
   // Bedrock is the only client that accepts a nullable key: `null` selects
   // IAM/IRSA auth rather than a bearer placeholder.
   bedrock: { call: callBedrockEmbedding, discriminator: "bedrock:embeddings" },
+  cohere: {
+    call: withPlaceholderKey(callCohereEmbedding),
+    discriminator: "cohere:embeddings",
+  },
+  // Embeddings-only provider: it has no chat path to be the "rest" of, so this
+  // adapter is the entire reason `voyage` is a SupportedProvider at all.
+  voyage: {
+    call: withPlaceholderKey(callVoyageEmbedding),
+    discriminator: "voyage:embeddings",
+  },
 
   // OpenAI-compatible, honor the `dimensions` parameter.
   openai: OPENAI_WIRE,
@@ -99,7 +112,6 @@ export const EMBEDDING_ADAPTERS: Record<
   // through the OpenAI-compatible `ollama` provider above, so reject here.
   "ollama-native": null,
   anthropic: null,
-  cohere: null,
   cerebras: null,
   deepseek: null,
   groq: null,

@@ -806,6 +806,46 @@ describe("ModelModel", () => {
       expect(after?.customPricePerMillionInput).toBeNull();
       expect(after?.customPricePerMillionOutput).toBeNull();
     });
+
+    test("resets custom limit overrides on full refresh", async () => {
+      const created = await ModelModel.create({
+        externalId: "openai/full-custom-limits",
+        provider: "openai",
+        modelId: "full-custom-limits",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(created.id, {
+        customContextLength: 32000,
+        customOutputLength: 4096,
+      });
+
+      await ModelModel.bulkUpsertFull([
+        {
+          externalId: "openai/full-custom-limits",
+          provider: "openai",
+          modelId: "full-custom-limits",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          contextLength: 128000,
+          outputLength: 16384,
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      // Same contract as the custom prices above: a full refresh puts the row
+      // back to what the provider says, so an override that would keep
+      // shadowing the freshly synced numbers has to go with them.
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "full-custom-limits",
+      );
+      expect(after?.customContextLength).toBeNull();
+      expect(after?.customOutputLength).toBeNull();
+      expect(after?.contextLength).toBe(128000);
+      expect(after?.outputLength).toBe(16384);
+    });
   });
 
   describe("delete", () => {
@@ -1749,6 +1789,139 @@ describe("ModelModel", () => {
         ignored: true,
       });
       expect(afterUnrelated?.configuredParameters).toEqual({ top_k: 40 });
+    });
+  });
+
+  describe("admin-set context/output limits", () => {
+    async function makeUnreportedModel() {
+      // The shape this feature exists for: a row a proxy request created, with
+      // no catalog entry behind it, so neither limit is known.
+      return ModelModel.create({
+        externalId: "vllm/local-llama",
+        provider: "vllm",
+        modelId: "local-llama",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    test("an override supplies the window and output ceiling a provider never reported", async () => {
+      const created = await makeUnreportedModel();
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBeNull();
+      expect(ModelModel.resolveEffectiveOutputLength(created)).toBeNull();
+
+      const updated = await ModelModel.update(created.id, {
+        customContextLength: 128000,
+        customOutputLength: 8192,
+      });
+
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(128000);
+      expect(
+        ModelModel.resolveEffectiveOutputLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
+    test("an override wins over the synced value", async () => {
+      const created = await ModelModel.create({
+        externalId: "openai/gpt-fixture",
+        provider: "openai",
+        modelId: "gpt-fixture",
+        contextLength: 128000,
+        outputLength: 4096,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      const updated = await ModelModel.update(created.id, {
+        customContextLength: 32000,
+        customOutputLength: 16000,
+      });
+
+      // The synced columns are left intact, so clearing the override restores
+      // the provider's own figures.
+      expect(updated?.contextLength).toBe(128000);
+      expect(updated?.outputLength).toBe(4096);
+      expect(
+        ModelModel.resolveArchitecturalContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(32000);
+      expect(
+        ModelModel.resolveEffectiveOutputLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(16000);
+
+      const cleared = await ModelModel.update(created.id, {
+        customContextLength: null,
+        customOutputLength: null,
+      });
+      expect(
+        ModelModel.resolveArchitecturalContextLength(
+          cleared as NonNullable<typeof cleared>,
+        ),
+      ).toBe(128000);
+      expect(
+        ModelModel.resolveEffectiveOutputLength(
+          cleared as NonNullable<typeof cleared>,
+        ),
+      ).toBe(4096);
+    });
+
+    test("an Ollama Modelfile still caps an admin-set window", async () => {
+      // The override states what the model architecturally has; `num_ctx` is
+      // what Ollama will actually run with, and remains the smaller of the two.
+      const created = await ModelModel.create({
+        externalId: "ollama/capped",
+        provider: "ollama-native",
+        modelId: "capped",
+        defaultParameters: { num_ctx: "8192" },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const updated = await ModelModel.update(created.id, {
+        customContextLength: 131072,
+      });
+
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
+    test("leaves the overrides untouched when the fields are omitted", async () => {
+      const created = await makeUnreportedModel();
+      await ModelModel.update(created.id, {
+        customContextLength: 65536,
+        customOutputLength: 4096,
+      });
+      const afterUnrelated = await ModelModel.update(created.id, {
+        ignored: true,
+      });
+      expect(afterUnrelated?.customContextLength).toBe(65536);
+      expect(afterUnrelated?.customOutputLength).toBe(4096);
+    });
+
+    test("findByIdForAudit reports the resolved limits", async () => {
+      const created = await makeUnreportedModel();
+      await ModelModel.update(created.id, { customOutputLength: 8192 });
+
+      // Without the resolved output limit here, a max-output-only save moves
+      // nothing but `updatedAt` (which the audit hook strips) and the audit
+      // diff comes out empty.
+      const snapshot = await ModelModel.findByIdForAudit(created.id, "org-1");
+      expect(snapshot?.outputLength).toBe(8192);
+      expect(snapshot?.contextLength).toBeNull();
     });
   });
 });

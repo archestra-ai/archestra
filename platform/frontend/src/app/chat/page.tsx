@@ -32,7 +32,6 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -191,7 +190,6 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
@@ -323,9 +321,6 @@ export function ChatPageContent({
   const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
-
-  // Dialog management for MCP installation
-  const { isDialogOpened, closeDialog } = useDialogs<"edit-agent">();
 
   const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
@@ -1677,6 +1672,9 @@ export function ChatPageContent({
   const contextWindow = chatSession?.contextWindow ?? null;
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
+  const beginManualContextCompaction =
+    chatSession?.beginManualContextCompaction;
+  const endManualContextCompaction = chatSession?.endManualContextCompaction;
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
@@ -1718,11 +1716,6 @@ export function ChatPageContent({
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
-
-  // Find the specific internal agent for this conversation (if any)
-  const _conversationInternalAgent = conversationAgentId
-    ? internalAgents.find((a) => a.id === conversationAgentId)
-    : undefined;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -1774,8 +1767,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    // The compaction guard matters now that the composer stays usable during
-    // compaction when queueing is on — a second /compact must not re-enter.
+    // The composer stays usable for the whole compaction, so `/compact` is
+    // reachable again while one is already running — this guard is what stops
+    // a second run re-entering.
     if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }
@@ -1785,84 +1779,96 @@ export function ChatPageContent({
       message: "Compacting conversation context...",
     });
 
-    const result = await compactConversationMutation.mutateAsync({
-      id: conversationId,
-    });
-    if (!result) {
-      setManualCompactionFeedback({
-        status: "failed",
-        message: "Context compaction failed.",
+    // Mark the conversation busy for the whole REST round-trip. A manual
+    // compaction has no stream to carry compaction-start/finish parts, so
+    // without this the session would consider the conversation idle and both
+    // send a composer submit straight into the rewrite and drain the queue on
+    // top of it. Cleared in the `finally` below on every exit path.
+    beginManualContextCompaction?.();
+    try {
+      const result = await compactConversationMutation.mutateAsync({
+        id: conversationId,
       });
-      return;
-    }
-
-    syncPersistedMessageMetadata(
-      (result.conversation.messages ?? []) as UIMessage[],
-    );
-
-    switch (result.status) {
-      case "created": {
-        if (result.compaction) {
-          recordContextCompaction?.({
-            compactionId: result.compaction.id,
-            originalTokenEstimate: result.compaction.originalTokenEstimate,
-            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-            trigger: "manual",
-          });
-        }
-
-        setManualCompactionFeedback(null);
-        return;
-      }
-      case "existing": {
-        if (result.compaction) {
-          recordContextCompaction?.({
-            compactionId: result.compaction.id,
-            originalTokenEstimate: result.compaction.originalTokenEstimate,
-            compactedTokenEstimate: result.compaction.compactedTokenEstimate,
-            trigger: "manual",
-          });
-        }
-
-        setManualCompactionFeedback({
-          status: "skipped",
-          message: getManualCompactionSkippedMessage(
-            result.reason,
-            result.status,
-          ),
-        });
-        return;
-      }
-      case "skipped": {
-        setManualCompactionFeedback({
-          status: "skipped",
-          message: getManualCompactionSkippedMessage(
-            result.reason,
-            result.status,
-          ),
-        });
-        return;
-      }
-      case "failed": {
+      if (!result) {
         setManualCompactionFeedback({
           status: "failed",
           message: "Context compaction failed.",
         });
         return;
       }
-      default: {
-        // compile-time guard: a new status must be handled explicitly above
-        result.status satisfies never;
-        setManualCompactionFeedback({
-          status: "failed",
-          message: "Context compaction failed.",
-        });
-        return;
+
+      syncPersistedMessageMetadata(
+        (result.conversation.messages ?? []) as UIMessage[],
+      );
+
+      switch (result.status) {
+        case "created": {
+          if (result.compaction) {
+            recordContextCompaction?.({
+              compactionId: result.compaction.id,
+              originalTokenEstimate: result.compaction.originalTokenEstimate,
+              compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+              trigger: "manual",
+            });
+          }
+
+          setManualCompactionFeedback(null);
+          return;
+        }
+        case "existing": {
+          if (result.compaction) {
+            recordContextCompaction?.({
+              compactionId: result.compaction.id,
+              originalTokenEstimate: result.compaction.originalTokenEstimate,
+              compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+              trigger: "manual",
+            });
+          }
+
+          setManualCompactionFeedback({
+            status: "skipped",
+            message: getManualCompactionSkippedMessage(
+              result.reason,
+              result.status,
+            ),
+          });
+          return;
+        }
+        case "skipped": {
+          setManualCompactionFeedback({
+            status: "skipped",
+            message: getManualCompactionSkippedMessage(
+              result.reason,
+              result.status,
+            ),
+          });
+          return;
+        }
+        case "failed": {
+          setManualCompactionFeedback({
+            status: "failed",
+            message: "Context compaction failed.",
+          });
+          return;
+        }
+        default: {
+          // compile-time guard: a new status must be handled explicitly above
+          result.status satisfies never;
+          setManualCompactionFeedback({
+            status: "failed",
+            message: "Context compaction failed.",
+          });
+          return;
+        }
       }
+    } finally {
+      endManualContextCompaction?.();
     }
   }, [
+    beginManualContextCompaction,
     compactConversationMutation,
     conversationId,
+    endManualContextCompaction,
     isContextCompacting,
     isReadOnlyConversation,
     recordContextCompaction,
@@ -2092,6 +2098,7 @@ export function ChatPageContent({
       status,
       queueEnabled,
       directSendPending: directSendPendingRef.current,
+      isCompacting: isContextCompacting,
     });
 
     if (submitAction === "stop") {
@@ -2104,9 +2111,10 @@ export function ChatPageContent({
     }
 
     if (submitAction === "queue") {
-      // Streaming (or a direct send is still settling): queue the message; the
-      // conversation's ChatSessionHook sends it once the turn settles.
-      // Returning normally clears the textarea and draft, like a send.
+      // The conversation is busy — streaming, a direct send still settling, or
+      // a context compaction rewriting the thread. Queue the message; the
+      // conversation's ChatSessionHook sends it once the conversation is idle
+      // again. Returning normally clears the textarea and draft, like a send.
       enqueueSubmission();
       return;
     }
@@ -2956,7 +2964,7 @@ export function ChatPageContent({
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
-              <Link href="/agents?create=true">
+              <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
@@ -3637,21 +3645,6 @@ export function ChatPageContent({
             </div>
           )}
         </div>
-
-        <AgentDialog
-          open={isDialogOpened("edit-agent")}
-          onOpenChange={(open) => {
-            if (!open) closeDialog("edit-agent");
-          }}
-          agent={
-            conversationId && conversation
-              ? _conversationInternalAgent
-              : initialAgentId
-                ? internalAgents.find((a) => a.id === initialAgentId)
-                : undefined
-          }
-          agentType="agent"
-        />
 
         {canManageShare && conversationId && (
           <ShareConversationDialog

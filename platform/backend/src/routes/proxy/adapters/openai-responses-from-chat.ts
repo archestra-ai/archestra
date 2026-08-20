@@ -7,6 +7,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   OpenAi,
+  StreamAccumulatorState,
   UsageView,
 } from "@/types";
 import {
@@ -14,6 +15,7 @@ import {
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { formatResponsesFunctionCallFrames } from "./responses-tool-call-rewrite";
 import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -23,6 +25,8 @@ class ResponsesFromChatAdapter<TResponse>
 {
   readonly provider: SupportedProvider;
   private inner: LLMResponseAdapter<TResponse>;
+  // The inner (logged-shape) response after a dispatch-mode repair.
+  private rewrittenInner: TResponse | null = null;
   private ctx: OpenaiResponsesContext;
 
   constructor(
@@ -66,9 +70,25 @@ class ResponsesFromChatAdapter<TResponse>
   }
 
   getLoggedResponse(): TResponse {
+    if (this.rewrittenInner !== null) {
+      return this.rewrittenInner;
+    }
     return this.inner.getLoggedResponse
       ? this.inner.getLoggedResponse()
       : this.inner.getOriginalResponse();
+  }
+
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): TResponse {
+    const inner =
+      this.inner.withRewrittenToolCalls?.(toolCalls) ??
+      this.inner.getOriginalResponse();
+    this.rewrittenInner = inner;
+    return chatCompletionToResponses(
+      inner as unknown as OpenAiResponse,
+      this.ctx,
+    ) as unknown as TResponse;
   }
 
   getFinishReasons(): string[] {
@@ -233,6 +253,32 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     ];
   }
 
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // completeOutput() has already written a `response.completed` naming the
+    // calls the model made directly (it fires on the inner stream's final
+    // chunk, before the gate decides). The client keeps the LAST completed
+    // envelope, so the repair ends by re-issuing one that names the rewritten
+    // calls. Text keeps output index 0 (the message item), so the calls start
+    // at 1 — the same layout getRawToolCallEvents produces.
+    this.inner.formatToolCallsSSE?.(toolCalls);
+    const frames = formatResponsesFunctionCallFrames({
+      toolCalls,
+      firstOutputIndex: 1,
+      nextSequenceNumber: () => this.nextSequenceNumber(),
+    });
+    frames.push(
+      this.toSse({
+        type: "response.completed",
+        sequence_number: this.nextSequenceNumber(),
+        response: {
+          ...this.buildResponsesResponse(toolCalls),
+          usage: toResponsesUsage(this.state.usage),
+        },
+      }),
+    );
+    return frames;
+  }
+
   formatEndSSE(): string {
     return "data: [DONE]\n\n";
   }
@@ -349,7 +395,9 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     ].join("");
   }
 
-  private buildResponsesResponse() {
+  private buildResponsesResponse(
+    toolCallsOverride?: StreamAccumulatorState["toolCalls"],
+  ) {
     const output = [];
 
     // On a refusal the blocked tool calls are dropped and the refusal message
@@ -373,7 +421,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
     if (this.replacedText === null) {
       output.push(
-        ...this.state.toolCalls.map((toolCall) => ({
+        ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
           id: toolCall.id,
           call_id: toolCall.id,
           type: "function_call",

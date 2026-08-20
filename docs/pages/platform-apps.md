@@ -44,7 +44,7 @@ A locked app is immutable. Agents refuse every change to it — edits, tool assi
 
 ## Defaults for New Apps
 
-Two settings in **Settings → Chat** govern how new apps start. Both are off by default. Flipping them never touches existing apps.
+Two settings in **Settings → Apps** govern how new apps start. Both are off by default. Flipping them never touches existing apps.
 
 **New apps are disabled by default** creates every new app disabled. The app stays author-only and cannot be run until you enable it in App settings.
 

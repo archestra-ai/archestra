@@ -1,4 +1,7 @@
-import { MAX_CONFIGURABLE_NUM_CTX } from "@archestra/shared";
+import {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_CUSTOM_MODEL_TOKEN_LIMIT,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildConfiguredParameters,
@@ -9,8 +12,11 @@ import {
   isKnowledgeBaseEmbeddingModel,
   type ModelsPageAvailableApiKey,
   type ModelsPageFilterableModel,
+  parseCustomTokenLimit,
   resolveDisplayContextLength,
+  resolveDisplayOutputLength,
   validateConfiguredParameter,
+  validateCustomTokenLimit,
 } from "./models-page-utils";
 
 const availableApiKeys = [
@@ -302,7 +308,12 @@ describe("resolveDisplayContextLength", () => {
         contextLength: 262144,
         effectiveContextLength: 8192,
       }),
-    ).toEqual({ display: 8192, architectural: 262144, isCapped: true });
+    ).toEqual({
+      display: 8192,
+      architectural: 262144,
+      isCapped: true,
+      isCustom: false,
+    });
   });
 
   it("does not flag a model running at its architectural window", () => {
@@ -311,7 +322,12 @@ describe("resolveDisplayContextLength", () => {
         contextLength: 262144,
         effectiveContextLength: 262144,
       }),
-    ).toEqual({ display: 262144, architectural: 262144, isCapped: false });
+    ).toEqual({
+      display: 262144,
+      architectural: 262144,
+      isCapped: false,
+      isCustom: false,
+    });
   });
 
   it("falls back to the architectural value when none was resolved", () => {
@@ -321,7 +337,12 @@ describe("resolveDisplayContextLength", () => {
         contextLength: 200000,
         effectiveContextLength: null,
       }),
-    ).toEqual({ display: 200000, architectural: 200000, isCapped: false });
+    ).toEqual({
+      display: 200000,
+      architectural: 200000,
+      isCapped: false,
+      isCustom: false,
+    });
   });
 
   it("shows an enforced window even when the architectural one is unknown", () => {
@@ -331,7 +352,12 @@ describe("resolveDisplayContextLength", () => {
         contextLength: null,
         effectiveContextLength: 8192,
       }),
-    ).toEqual({ display: 8192, architectural: null, isCapped: false });
+    ).toEqual({
+      display: 8192,
+      architectural: null,
+      isCapped: false,
+      isCustom: false,
+    });
   });
 
   it("reports nothing when neither value is known", () => {
@@ -339,7 +365,98 @@ describe("resolveDisplayContextLength", () => {
       display: null,
       architectural: null,
       isCapped: false,
+      isCustom: false,
     });
+  });
+
+  it("shows an admin-set window on a model the provider reports nothing for", () => {
+    // The row a proxy request created: no catalog entry, so the override is the
+    // only window there is.
+    expect(
+      resolveDisplayContextLength({
+        contextLength: null,
+        customContextLength: 128000,
+        effectiveContextLength: 128000,
+      }),
+    ).toEqual({
+      display: 128000,
+      architectural: 128000,
+      isCapped: false,
+      isCustom: true,
+    });
+  });
+
+  it("compares a Modelfile cap against the admin-set window, not the provider's", () => {
+    // The override exists because the provider's number is wrong, so claiming
+    // "supports 262144, capped at 8192" would quote the value being corrected.
+    expect(
+      resolveDisplayContextLength({
+        contextLength: 262144,
+        customContextLength: 32768,
+        effectiveContextLength: 8192,
+      }),
+    ).toEqual({
+      display: 8192,
+      architectural: 32768,
+      isCapped: true,
+      isCustom: true,
+    });
+  });
+});
+
+describe("resolveDisplayOutputLength", () => {
+  it("prefers the admin override over the provider's limit", () => {
+    expect(
+      resolveDisplayOutputLength({
+        outputLength: 4096,
+        customOutputLength: 32000,
+      }),
+    ).toEqual({ display: 32000, isCustom: true });
+  });
+
+  it("falls back to the provider's limit", () => {
+    expect(
+      resolveDisplayOutputLength({
+        outputLength: 4096,
+        customOutputLength: null,
+      }),
+    ).toEqual({ display: 4096, isCustom: false });
+  });
+
+  it("reports nothing when neither is known", () => {
+    expect(resolveDisplayOutputLength({})).toEqual({
+      display: null,
+      isCustom: false,
+    });
+  });
+});
+
+describe("custom token limits", () => {
+  it("accepts an empty field as clearing the override", () => {
+    expect(validateCustomTokenLimit("")).toBe(true);
+    expect(validateCustomTokenLimit("   ")).toBe(true);
+    expect(parseCustomTokenLimit("")).toBeNull();
+  });
+
+  it("rejects what the update route would reject", () => {
+    // Each of these came back as a bare 400 before the form mirrored the rule.
+    expect(validateCustomTokenLimit("abc")).toBe("Must be a number");
+    expect(validateCustomTokenLimit("1.5")).toBe(
+      "Must be a whole number of tokens",
+    );
+    expect(validateCustomTokenLimit("0")).toBe("Must be 1 or greater");
+    expect(validateCustomTokenLimit("-8192")).toBe("Must be 1 or greater");
+    expect(
+      validateCustomTokenLimit(String(MAX_CUSTOM_MODEL_TOKEN_LIMIT + 1)),
+    ).toContain("or less");
+  });
+
+  it("accepts a whole number of tokens up to the ceiling", () => {
+    expect(validateCustomTokenLimit("128000")).toBe(true);
+    expect(parseCustomTokenLimit(" 128000 ")).toBe(128000);
+    expect(validateCustomTokenLimit(String(MAX_CUSTOM_MODEL_TOKEN_LIMIT))).toBe(
+      true,
+    );
   });
 });
 

@@ -1,7 +1,12 @@
+import {
+  EMBEDDING_ONLY_PROVIDERS,
+  providerSupportsChat,
+  SupportedProviders,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   deriveMcpServerName,
-  getShownProviders,
+  getConnectableProviders,
   resolveEffectiveId,
   resolveInitialClientId,
   toMcpServerSlug,
@@ -164,29 +169,28 @@ describe("resolveInitialClientId", () => {
   });
 });
 
-describe("getShownProviders", () => {
-  it("returns null when organization is undefined", () => {
-    expect(getShownProviders(undefined)).toBeNull();
+describe("getConnectableProviders", () => {
+  it("offers every chat provider when the deployment has switched none off", () => {
+    expect(getConnectableProviders({ modelProviderOverrides: null })).toEqual(
+      SupportedProviders.filter(providerSupportsChat),
+    );
   });
 
-  it("returns null when the field is null (show all)", () => {
-    expect(getShownProviders({ connectionShownProviders: null })).toBeNull();
+  it("never offers an embeddings-only provider, which has no chat endpoint", () => {
+    const providers = getConnectableProviders({ modelProviderOverrides: null });
+    for (const provider of EMBEDDING_ONLY_PROVIDERS) {
+      expect(providers).not.toContain(provider);
+    }
+    // Guards the assertion above against silently passing on an empty set.
+    expect(EMBEDDING_ONLY_PROVIDERS.size).toBeGreaterThan(0);
   });
 
-  it("returns known providers unchanged", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
-  });
-
-  it("drops unknown provider IDs silently", () => {
-    expect(
-      getShownProviders({
-        connectionShownProviders: ["openai", "not-a-provider", "anthropic"],
-      }),
-    ).toEqual(["openai", "anthropic"]);
+  it("drops the providers the deployment switched off", () => {
+    const providers = getConnectableProviders({
+      modelProviderOverrides: { anthropic: { hidden: true } },
+    });
+    expect(providers).not.toContain("anthropic");
+    expect(providers).toContain("openai");
   });
 });
 

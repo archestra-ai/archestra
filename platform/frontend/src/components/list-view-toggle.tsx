@@ -14,12 +14,15 @@ export type ListViewMode = "cards" | "table";
 
 /**
  * Cards-or-table preference for a list page. Pure UI preference, persisted per
- * browser in localStorage under a per-page key. Renders "cards" on the server
- * and first client paint (localStorage is only readable after mount), then
- * adopts the stored choice.
+ * browser in localStorage under a per-page key. Renders the page's default
+ * on the server and first client paint (localStorage is only readable after
+ * mount), then adopts the stored choice.
  */
-export function useListViewMode(storageKey: string) {
-  const [mode, setMode] = useState<ListViewMode>("cards");
+export function useListViewMode(
+  storageKey: string,
+  defaultMode: ListViewMode = "cards",
+) {
+  const [mode, setMode] = useState<ListViewMode>(defaultMode);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(storageKey);
@@ -40,27 +43,38 @@ export function useListViewMode(storageKey: string) {
 export function ListViewToggle({
   value,
   onChange,
+  order = ["cards", "table"],
 }: {
   value: ListViewMode;
   onChange: (mode: ListViewMode) => void;
+  /** The page's default view goes first. */
+  order?: readonly [ListViewMode, ListViewMode];
 }) {
   return (
     <div className="inline-flex items-center gap-0.5 rounded-md border p-0.5">
-      <ListViewToggleButton
-        label="View as cards"
-        icon={<LayoutGrid className="h-4 w-4" />}
-        active={value === "cards"}
-        onClick={() => onChange("cards")}
-      />
-      <ListViewToggleButton
-        label="View as table"
-        icon={<List className="h-4 w-4" />}
-        active={value === "table"}
-        onClick={() => onChange("table")}
-      />
+      {order.map((mode) => (
+        <ListViewToggleButton
+          key={mode}
+          label={VIEW_LABELS[mode]}
+          icon={
+            mode === "cards" ? (
+              <LayoutGrid className="h-4 w-4" />
+            ) : (
+              <List className="h-4 w-4" />
+            )
+          }
+          active={value === mode}
+          onClick={() => onChange(mode)}
+        />
+      ))}
     </div>
   );
 }
+
+const VIEW_LABELS: Record<ListViewMode, string> = {
+  cards: "View as cards",
+  table: "View as table",
+};
 
 // === internal components ===
 

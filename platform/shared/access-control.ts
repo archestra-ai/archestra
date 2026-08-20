@@ -1465,6 +1465,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TestOcrConnection]: {
     knowledgeSettings: ["update"],
   },
+  [RouteId.GetKeywordRankingStatus]: {
+    knowledgeSettings: ["read"],
+  },
 
   /**
    * Get public identity providers route (minimal info for login page)
@@ -1552,6 +1555,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
+  [RouteId.UpdateMemberDefaultAgent]: {},
   [RouteId.GetMemberDefaultModel]: {},
   [RouteId.UpdateMemberDefaultModel]: {},
 
@@ -1573,6 +1577,17 @@ export const requiredEndpointPermissionsMap: Partial<
   // rather than the whole org (see the GetUserStatistics handler).
   [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
+  },
+  // Per-app and per-skill cost additionally narrow to what the caller can see:
+  // the routes resolve the same visibility the Apps page and the skills list use,
+  // so cost reporting never lists an app or skill the caller has no access to.
+  [RouteId.GetAppStatistics]: {
+    llmCost: ["read"],
+    app: ["read"],
+  },
+  [RouteId.GetSkillStatistics]: {
+    llmCost: ["read"],
+    skill: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
@@ -1987,6 +2002,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
@@ -2003,6 +2019,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/proxies/new": { llmProxy: ["create"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
@@ -2012,6 +2029,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
@@ -2031,6 +2049,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { mcpSettings: ["read"] },
   "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/apps": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
@@ -2042,6 +2061,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
+  "/settings/connection": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

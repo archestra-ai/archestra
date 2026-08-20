@@ -357,9 +357,10 @@ describe("useUpdateSkill", () => {
         mutations: { retry: false },
       },
     });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client: queryClient }, children);
-    return renderHook(() => useUpdateSkill(), { wrapper });
+    return { ...renderHook(() => useUpdateSkill(), { wrapper }), invalidate };
   }
 
   const editArgs = {
@@ -379,14 +380,20 @@ describe("useUpdateSkill", () => {
       },
     } as never);
 
-    const { result } = setupUpdate();
+    const { result, invalidate } = setupUpdate();
     result.current.mutate(editArgs);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
 
     expect(toast.error).toHaveBeenCalledWith(
-      "This skill changed while you were editing it. Reopen it to pick up the latest version, then reapply your changes.",
+      "This skill changed while you were editing it. Discard your changes to load the latest version, then reapply them.",
     );
     expect(toast.success).not.toHaveBeenCalled();
+    // The editor stays open on the rejected draft, so the head that overtook
+    // it has to be pulled for "Discard changes" to have anything current to
+    // fall back to — otherwise every retry re-sends the same stale anchor.
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["skills", "skill-1"],
+    });
   });
 
   it("still reports a name collision as itself, though it is a 409 too", async () => {

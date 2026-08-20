@@ -554,6 +554,34 @@ class MinimaxResponseAdapter implements LLMResponseAdapter<MinimaxResponse> {
    * Convert response to refusal format for blocked tool calls
    * MiniMax doesn't have a refusal field, so we use content only
    */
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): MinimaxResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    const choice = this.response.choices[0];
+    if (!choice?.message.tool_calls) return this.response;
+    const tool_calls = choice.message.tool_calls.map((toolCall, index) => {
+      const rewritten = toolCalls[index];
+      if (!rewritten || toolCall.type !== "function") return toolCall;
+      return {
+        ...toolCall,
+        function: {
+          ...toolCall.function,
+          name: rewritten.name,
+          arguments: rewritten.arguments,
+        },
+      };
+    });
+    return {
+      ...this.response,
+      choices: [
+        { ...choice, message: { ...choice.message, tool_calls } },
+        ...this.response.choices.slice(1),
+      ],
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -774,6 +802,34 @@ class MinimaxStreamAdapter
     return this.state.rawToolCallEvents.map((chunk) => {
       return `data: ${JSON.stringify(chunk)}\n\n`;
     });
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // OpenAI-chat-shaped wire: one chunk carrying every call complete.
+    const chunk: MinimaxStreamChunk = {
+      id: this.state.responseId || `chatcmpl-${Date.now()}`,
+      model: this.state.model || "minimax",
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: toolCalls.map((toolCall, index) => ({
+              index,
+              id: toolCall.id,
+              type: "function" as const,
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              },
+            })),
+          },
+          finish_reason: null,
+        },
+      ],
+    };
+    return [`data: ${JSON.stringify(chunk)}\n\n`];
   }
 
   formatCompleteTextSSE(text: string): string[] {

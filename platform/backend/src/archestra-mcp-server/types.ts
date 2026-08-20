@@ -122,4 +122,18 @@ export interface ArchestraContext {
    * its content permanently.
    */
   lockedChatAudit?: LockedChatAuditContext | null;
+  /**
+   * The caller feeds this tool result to a model through the chat tool
+   * pipeline, which bounds, strips and persists inline images
+   * (`chat-tool-builder.ts` for the model-bound copy,
+   * `strip-images-from-messages.ts` for the persisted one).
+   *
+   * Only such a caller may be handed binary payloads as MCP image parts. Raw
+   * MCP/API surfaces — the gateway serving an external client, the app proxy —
+   * hand a tool result back verbatim with none of that machinery, so for them a
+   * payload must stay where it has always been: inside the JSON, as the data
+   * URL the chunk is stored as. Optional and read as false when absent, so a
+   * new call site is image-free until it opts in deliberately.
+   */
+  deliversMediaAsImageParts?: boolean;
 }

@@ -1,4 +1,8 @@
 import {
+  BM25_B_MAX,
+  BM25_B_MIN,
+  BM25_K1_MAX,
+  BM25_K1_MIN,
   EmbeddingDimensionsSchema,
   KnowledgeConnectorOverridesSchema,
   MessagingChannelOverridesSchema,
@@ -480,7 +484,57 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   rerankerModel: z.string().nullable().optional(),
   ocrChatApiKeyId: z.string().uuid().nullable().optional(),
   ocrModel: z.string().nullable().optional(),
+  // BM25 keyword-ranker tuning. `null` clears the override back to the
+  // deployment default; bounds are shared with the env parser and the UI.
+  kbBm25K1: z
+    .number()
+    .finite()
+    .min(BM25_K1_MIN)
+    .max(BM25_K1_MAX)
+    .nullable()
+    .optional(),
+  kbBm25B: z
+    .number()
+    .finite()
+    .min(BM25_B_MIN)
+    .max(BM25_B_MAX)
+    .nullable()
+    .optional(),
 });
+
+/**
+ * Where BM25 keyword ranking stands for an organization — shown under
+ * Keyword ranking in Knowledge settings.
+ *
+ * BM25 scores from corpus statistics that the `kb_bm25_stats_refresh` task
+ * rebuilds on a schedule; until a language's statistics exist, keyword search
+ * ranks it with PostgreSQL's built-in `ts_rank`. `status` is that fact for
+ * everything the organization can search; the timestamps say when the
+ * statistics were last rebuilt and when they will be next.
+ */
+export const KeywordRankingStatusSchema = z.object({
+  status: z.enum([
+    // Statistics exist for every language with indexed documents.
+    "ready",
+    // Documents are indexed in a language whose statistics are not built
+    // yet — keyword search ranks it with ts_rank until the next refresh.
+    "pending",
+    // Nothing indexed yet; statistics are built on the first refresh after a
+    // sync indexes documents.
+    "no_documents",
+  ]),
+  lastRefreshedAt: z.string().datetime().nullable(),
+  nextRefreshAt: z.string().datetime().nullable(),
+  refreshing: z.boolean(),
+  // Whether the latest finished rebuild failed; false once a later one
+  // succeeds. Deliberately a flag and not the error text: the rebuild is
+  // deployment-wide, so its message can describe another organization's
+  // corpus, and it is a raw database error. The text stays in the task row
+  // and the logs, where operators look.
+  lastRefreshFailed: z.boolean(),
+});
+
+export type KeywordRankingStatus = z.infer<typeof KeywordRankingStatusSchema>;
 
 export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
@@ -510,9 +564,19 @@ export const UpdateConnectionSettingsSchema = z.object({
     .max(50)
     .nullable()
     .optional(),
+  /**
+   * Retired: the connect page carried its own provider list, which only ever
+   * narrowed what it displayed rather than what could be configured. One
+   * deployment-wide list under LLM settings now answers both.
+   *
+   * Rejected rather than stripped, so a browser tab left open across the
+   * upgrade cannot appear to gate providers and change nothing.
+   */
   connectionShownProviders: z
-    .array(SupportedProvidersSchema)
-    .nullable()
+    .never({
+      error:
+        "connectionShownProviders was retired. Set provider availability under Settings → LLM → Available model providers.",
+    })
     .optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)

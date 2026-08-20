@@ -47,7 +47,12 @@ export function CustomDateTimeRangeDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={!startDate || !endDate}>
+          <Button
+            type="submit"
+            // A range that ends at or before it starts describes no window, so
+            // there is nothing to apply.
+            disabled={!startDate || !endDate || endDate <= startDate}
+          >
             {applyLabel}
           </Button>
         </>

@@ -121,6 +121,71 @@ function SourceIcon({ connectorType }: { connectorType: string | null }) {
   return <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }
 
+/** An image a knowledge query retrieved, ready to render inline. */
+interface RetrievedImage {
+  /** `documentId#chunkIndex` — stable per retrieved chunk. */
+  key: string;
+  src: string;
+  alt: string;
+}
+
+const DISPLAYABLE_IMAGE_MIME_TYPE = /^image\/(png|jpe?g|webp|gif)$/;
+
+/**
+ * Images a knowledge query returned. The tool result carries them as MCP image
+ * blocks on `rawContent` (its `content` text holds only an
+ * `[image: title (mime)]` descriptor), and the persist path keeps a bounded
+ * copy, so this renders both live and on reload. Blocks whose payload was
+ * stripped for context — or whose type is not an image format we display — are
+ * skipped rather than rendered broken.
+ */
+function extractRetrievedImages(
+  parts: KnowledgeGraphCitationsProps["parts"],
+): RetrievedImage[] {
+  const images: RetrievedImage[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts) {
+    if (!isKnowledgeBaseQueryPart(part) || part.state !== "output-available") {
+      continue;
+    }
+    const output = part.output;
+    if (!output || typeof output !== "object") continue;
+    const rawContent = (output as { rawContent?: unknown }).rawContent;
+    if (!Array.isArray(rawContent)) continue;
+
+    rawContent.forEach((block, index) => {
+      if (!block || typeof block !== "object") return;
+      const { type, data, mimeType } = block as Record<string, unknown>;
+      if (
+        type !== "image" ||
+        typeof data !== "string" ||
+        typeof mimeType !== "string" ||
+        !DISPLAYABLE_IMAGE_MIME_TYPE.test(mimeType) ||
+        // The context stripper replaces a dropped payload with a short notice.
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(data)
+      ) {
+        return;
+      }
+      const key = `${getToolCallId(part) ?? "kb"}#${index}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      images.push({
+        key,
+        src: `data:${mimeType};base64,${data}`,
+        alt: "Image retrieved from the knowledge base",
+      });
+    });
+  }
+
+  return images;
+}
+
+function getToolCallId(part: ChatMessagePart): string | null {
+  const id = (part as { toolCallId?: unknown }).toolCallId;
+  return typeof id === "string" ? id : null;
+}
+
 export interface KnowledgeGraphCitationsProps {
   parts: ChatMessagePart[];
   /**
@@ -222,8 +287,9 @@ export function KnowledgeGraphCitations({
     () => new Set(),
   );
   const citations = extractCitations(parts);
+  const retrievedImages = extractRetrievedImages(parts);
 
-  if (citations.length === 0) return null;
+  if (citations.length === 0 && retrievedImages.length === 0) return null;
 
   const quotesByDoc = new Map<string, CitationSourceEntry[]>();
   for (const entry of citedQuotes ?? []) {
@@ -257,9 +323,25 @@ export function KnowledgeGraphCitations({
 
   return (
     <div className="mt-3 space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Sources
-      </p>
+      {retrievedImages.length > 0 && (
+        <div className="flex flex-wrap gap-2 pb-1">
+          {retrievedImages.map((image) => (
+            // biome-ignore lint/performance/noImgElement: the payload is an
+            // inline data URI from the tool result, not a served asset.
+            <img
+              key={image.key}
+              src={image.src}
+              alt={image.alt}
+              className="max-h-80 max-w-full rounded-md border object-contain"
+            />
+          ))}
+        </div>
+      )}
+      {citations.length > 0 && (
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Sources
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {visibleCitations.map((citation) => (
           <CitationChip
@@ -335,6 +417,14 @@ function parseToolOutput(
     return JSON.parse(output);
   }
   if (output && typeof output === "object") {
+    // A result carrying an image appends a "[image]" marker line to `content`,
+    // which makes it invalid JSON — the tool's structured copy is the clean
+    // one, so prefer it whenever it is present.
+    const structured = (output as { structuredContent?: unknown })
+      .structuredContent;
+    if (structured && typeof structured === "object") {
+      return structured as { results?: unknown; tool_result?: unknown };
+    }
     const content = (output as { content?: unknown }).content;
     if (typeof content === "string") {
       return JSON.parse(content);

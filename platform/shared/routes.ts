@@ -545,6 +545,7 @@ export const RouteId = {
   TestEmbeddingConnection: "testEmbeddingConnection",
   TestRerankerConnection: "testRerankerConnection",
   TestOcrConnection: "testOcrConnection",
+  GetKeywordRankingStatus: "getKeywordRankingStatus",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -561,6 +562,7 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
   GetMemberDefaultModel: "getMemberDefaultModel",
   UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
@@ -583,6 +585,8 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetUserStatistics: "getUserStatistics",
+  GetAppStatistics: "getAppStatistics",
+  GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 

@@ -52,6 +52,28 @@ const modelsTable = pgTable(
     /** Maximum output size in tokens (from the model source's output limit) */
     outputLength: integer("output_length"),
 
+    /**
+     * Admin-set context window, in tokens. Overrides `contextLength` when set.
+     *
+     * Separate from `contextLength` rather than an edit to it, mirroring the
+     * `custom_price_per_million_*` columns: a provider catalog that publishes
+     * no limits at all (self-hosted endpoints, proxy-discovered rows) leaves
+     * `contextLength` null with nothing for the context ring or the output
+     * budget to work from, and an admin has to be able to say what the window
+     * is. Keeping the synced value intact is what makes the override clearable
+     * back to whatever the provider reports.
+     */
+    customContextLength: integer("custom_context_length"),
+
+    /**
+     * Admin-set maximum output size in tokens. Overrides `outputLength` when
+     * set. Same rationale as {@link customContextLength} — and it must be a
+     * separate column here, because the sync prefers the freshly synced
+     * `output_length` over the stored one, so an edit written into that column
+     * would be erased the moment the provider started reporting a limit.
+     */
+    customOutputLength: integer("custom_output_length"),
+
     /** Supported input modalities */
     inputModalities: jsonb("input_modalities").$type<ModelInputModality[]>(),
 
@@ -60,6 +82,18 @@ const modelsTable = pgTable(
 
     /** Whether the model supports function/tool calling */
     supportsToolCalling: boolean("supports_tool_calling"),
+
+    /**
+     * Whether this model takes a reasoning depth, for providers whose model
+     * names carry no such rule. Tri-state: true/false are reported by a source
+     * (Ollama's `/api/show` capabilities, or the registry entry describing the
+     * weights), null means nothing said so and the composer offers nothing.
+     *
+     * Only self-hosted providers read this column: openai/anthropic/gemini ids
+     * are vendor-fixed, so their rules stay in code where a wrong row cannot
+     * turn the control on for a model that would 400 on it.
+     */
+    supportsReasoningEffort: boolean("supports_reasoning_effort"),
 
     /**
      * Provider surfaces this model can be invoked through, when the provider

@@ -56,6 +56,20 @@ Reference page in this voice: `docs/pages/platform-projects.md`.
 
 Every page should open with at least one screenshot; add more where they help. Capture them with your browser-automation MCP against the running platform at `localhost:3000` (docs run at `:3001` — never screenshot the docs site). Stage realistic data first: real project/team/file names from the page's use case scenario, forms pre-filled, scroll position checked so no important element is hidden. Save as `docs/assets/automated_screenshots/{page-name}_{shot-name}.webp` (convert PNG via the `sharp` package in `platform/node_modules`). Embed as `![alt](/docs/automated_screenshots/{page-name}_{shot-name}.webp)`.
 
+### Always Capture in Dark Mode
+
+Every screenshot in the docs is dark. One light shot in a dark set reads as a different product, so the mode is not yours to pick — it is dark whatever the machine you are on happens to be showing.
+
+The platform keeps the theme per browser in `localStorage`, so you must set it yourself before capturing:
+
+```js
+localStorage.setItem("theme", "dark");
+```
+
+The key only takes effect on reload. Reload, confirm the rendered page is actually dark, then capture. Put the previous value back when you are done — it is the user's own preference, not yours.
+
+Replacing an existing screenshot follows the same rule. A retake that comes back light is a regression even when the content is right.
+
 ## Page Frontmatter
 
 `category` and `order` place the page in the nav (categories derive from frontmatter; there is no registry). Check sibling pages for free `order` slots. Set `lastUpdated` to today. Create a worktree or branch from `main`, and open a PR when you are done.

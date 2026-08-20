@@ -43,9 +43,9 @@ test.describe("Skills bulk actions", () => {
       await page.getByRole("checkbox", { name: `Select ${names[1]}` }).click();
       await expect(selectionCount(page)).toHaveText("2 skills selected");
 
-      // Ticking a row must not also open that row's editor, which the row
-      // click opens.
-      await expect(page.getByRole("dialog")).toHaveCount(0);
+      // Ticking a row must not also follow the row click, which opens the
+      // skill's own page.
+      await expect(page).toHaveURL(/\/skills\?/);
 
       await page.getByRole("button", { name: "Edit visibility" }).click();
       const dialog = page.getByRole("dialog");

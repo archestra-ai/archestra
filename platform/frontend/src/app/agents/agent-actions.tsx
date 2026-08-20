@@ -6,6 +6,8 @@ import {
   History,
   MessageSquare,
   Pencil,
+  Pin,
+  PinOff,
   Plug,
   RotateCcw,
   Sparkles,
@@ -36,6 +38,16 @@ type AgentActionsProps = {
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
   /**
+   * The caller's personal default agent, when this row is one of the caller's
+   * own personal chat agents. `null` = none set; `undefined` = not applicable
+   * to this row (someone else's, org/team scope, or not a chat agent), so no
+   * toggle is offered.
+   */
+  personalDefault?: {
+    isDefault: boolean;
+    onToggle: (agent: Agent, makeDefault: boolean) => void;
+  };
+  /**
    * Carries `canModify` with the id: the history dialog offers a restore,
    * which is an update, so it needs the same scope check the row's own
    * mutating buttons apply rather than RBAC alone.
@@ -55,6 +67,7 @@ export function AgentActions({
   onClone,
   onExport,
   onConvertToSkill,
+  personalDefault,
   onHistory,
 }: AgentActionsProps) {
   const admin = useIsGlobalAdmin();
@@ -119,6 +132,25 @@ export function AgentActions({
   ];
 
   const dropdownActions: TableRowAction[] = [
+    ...(personalDefault
+      ? [
+          personalDefault.isDefault
+            ? {
+                icon: <PinOff className="h-4 w-4" />,
+                label: "Unpin default",
+                tooltip: "New chats go back to the organization default.",
+                onClick: () => personalDefault.onToggle(agent, false),
+                testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
+              }
+            : {
+                icon: <Pin className="h-4 w-4" />,
+                label: "Pin default",
+                tooltip: "Your new chats will start on this agent.",
+                onClick: () => personalDefault.onToggle(agent, true),
+                testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
+              },
+        ]
+      : []),
     {
       icon: <Copy className="h-4 w-4" />,
       label: "Clone",

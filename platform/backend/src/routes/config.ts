@@ -123,6 +123,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               kbMfilesConnectorEnabled: z.boolean(),
               kbMfilesOauthEnabled: z.boolean(),
               /**
+               * The BM25 tuning constants an organization inherits until it
+               * sets its own in Knowledge settings; the settings tab shows them
+               * as the effective values wherever the organization has not.
+               */
+              kbBm25DefaultK1: z.number(),
+              kbBm25DefaultB: z.number(),
+              /**
                * Individual ("connect my own Drive") auth for the Google Drive
                * knowledge connector. `redirectUri` is the exact string that
                * has to be registered on the Google OAuth client, so the setup
@@ -227,6 +234,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
           kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
+          kbBm25DefaultK1: config.kb.bm25K1,
+          kbBm25DefaultB: config.kb.bm25B,
           kbGoogleDriveOAuth: {
             configured: isGoogleDriveOAuthConfigured(),
             redirectUri: getGoogleDriveOAuthRedirectUri(),
@@ -248,6 +257,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           gemini: config.llm.gemini.baseUrl || null,
           bedrock: config.llm.bedrock.baseUrl || null,
           cohere: config.llm.cohere.baseUrl || null,
+          voyage: config.llm.voyage.baseUrl || null,
           cerebras: config.llm.cerebras.baseUrl || null,
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,

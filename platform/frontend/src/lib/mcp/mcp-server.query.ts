@@ -997,6 +997,28 @@ export function useMcpDeploymentStatuses(): McpDeploymentStatusFeed {
     };
   }, [isK8sEnabled]);
 
+  useEffect(() => {
+    if (isK8sEnabled !== true || sessionUserId === null) return;
+    resetDeploymentFeedForUser(sessionUserId);
+  }, [isK8sEnabled, sessionUserId]);
+
+  if (isK8sEnabled === undefined) return CONFIG_PENDING_DEPLOYMENT_FEED;
+  if (!isK8sEnabled) return DISABLED_DEPLOYMENT_FEED;
+  return feed;
+}
+
+/**
+ * Keeps the backend's subscription pointed at the servers this session can
+ * actually see: it captures the accessible list once per subscribe, so a newly
+ * installed server is invisible until we re-subscribe.
+ *
+ * Mounted ONCE, by the app shell. Watching the query cache from every consumer
+ * meant a cache write during one component's render pushed a store update into
+ * another's, which React reports as a setState during render.
+ */
+export function useMcpDeploymentFeedDriver(): void {
+  const isK8sEnabled = useFeature("orchestratorK8sRuntime");
+  const queryClient = useQueryClient();
   const subscribeToQueryCache = useCallback(
     (onCacheChange: () => void) =>
       queryClient.getQueryCache().subscribe(onCacheChange),
@@ -1016,15 +1038,6 @@ export function useMcpDeploymentStatuses(): McpDeploymentStatusFeed {
     if (isK8sEnabled !== true || serversSignature === null) return;
     refreshDeploymentFeedForServers(serversSignature);
   }, [isK8sEnabled, serversSignature]);
-
-  useEffect(() => {
-    if (isK8sEnabled !== true || sessionUserId === null) return;
-    resetDeploymentFeedForUser(sessionUserId);
-  }, [isK8sEnabled, sessionUserId]);
-
-  if (isK8sEnabled === undefined) return CONFIG_PENDING_DEPLOYMENT_FEED;
-  if (!isK8sEnabled) return DISABLED_DEPLOYMENT_FEED;
-  return feed;
 }
 
 // Server ids whose async ("runtime") install failure was already sent to

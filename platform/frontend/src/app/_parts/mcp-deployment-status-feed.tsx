@@ -1,6 +1,9 @@
 "use client";
 
-import { useMcpDeploymentStatuses } from "@/lib/mcp/mcp-server.query";
+import {
+  useMcpDeploymentFeedDriver,
+  useMcpDeploymentStatuses,
+} from "@/lib/mcp/mcp-server.query";
 
 /**
  * Holds the shared MCP deployment-status subscription open for as long as the
@@ -17,6 +20,7 @@ import { useMcpDeploymentStatuses } from "@/lib/mcp/mcp-server.query";
  */
 export function McpDeploymentStatusFeed() {
   useMcpDeploymentStatuses();
+  useMcpDeploymentFeedDriver();
 
   return null;
 }

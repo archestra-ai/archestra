@@ -104,13 +104,19 @@ describe("useMcpDeploymentStatuses", () => {
 
   // The feed reads the installed-server list out of the query cache, so a test
   // that exercises that path has to mount the query some other page owns.
+  // The app shell mounts both: the driver watches the accessible-server list
+  // and re-points the subscription, the reader only reads. They are separate so
+  // a cache write cannot push a store update into another component's render.
   const renderFeedWithServerList = async () => {
-    const { useMcpDeploymentStatuses, useMcpServers } = await import(
-      "./mcp-server.query"
-    );
+    const {
+      useMcpDeploymentFeedDriver,
+      useMcpDeploymentStatuses,
+      useMcpServers,
+    } = await import("./mcp-server.query");
     return renderHook(
       () => {
         useMcpServers();
+        useMcpDeploymentFeedDriver();
         return useMcpDeploymentStatuses();
       },
       { wrapper },

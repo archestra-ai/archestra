@@ -43,6 +43,7 @@ export function PageLayout({
   tabs = [],
   actionButton,
   mobileVisibleCount = 3,
+  maxWidth: maxWidthKey = "wide",
 }: {
   children: React.ReactNode;
   /**
@@ -70,6 +71,12 @@ export function PageLayout({
   description?: React.ReactNode;
   actionButton?: React.ReactNode;
   mobileVisibleCount?: number;
+  /**
+   * The column the header row and the content share. `wide` is the band list
+   * pages fill; `wizard` is the setup wizards' column, for a detail page that
+   * opens into one — the column then stays put between reading and editing.
+   */
+  maxWidth?: keyof typeof MAX_WIDTH_CLASSES;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -86,7 +93,7 @@ export function PageLayout({
   const currentUrl = searchParams.toString()
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
-  const maxWidth = "max-w-[1680px]";
+  const maxWidth = MAX_WIDTH_CLASSES[maxWidthKey];
   const [overflowOpen, setOverflowOpen] = useState(false);
 
   // Split tabs for mobile: visible vs overflow
@@ -254,3 +261,12 @@ export function PageLayout({
     </div>
   );
 }
+
+const MAX_WIDTH_CLASSES = {
+  wide: "max-w-[1680px]",
+  // The wizards (`AgentPageShell`, the MCP server wizard pages) put their
+  // `max-w-5xl` column inside a `px-6` band; this band pads inside its
+  // max-width, so the two paddings are added back for the content edges to
+  // meet.
+  wizard: "max-w-[calc(var(--container-5xl)+3rem)]",
+} as const;

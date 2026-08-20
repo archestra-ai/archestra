@@ -1488,8 +1488,12 @@ describe("AnthropicStreamAdapter carries cache usage to the end of the turn", ()
     return adapter;
   }
 
-  function endEventUsage(endSse: string): unknown {
-    const deltaFrame = endSse
+  // `formatEndSSE` is typed `string | Uint8Array` across the adapter interface
+  // (some providers encode their own bytes), so decode before parsing frames.
+  function endEventUsage(endSse: string | Uint8Array): unknown {
+    const text =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const deltaFrame = text
       .split("\n\n")
       .find((frame) => frame.startsWith("event: message_delta"));
     return JSON.parse(

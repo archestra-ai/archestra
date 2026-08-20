@@ -269,6 +269,12 @@ export interface ClientFamily {
   filter: ClientFilter;
   label: string;
   provider: SupportedProvider;
+  /**
+   * App-served logo path for clients that have their own mark rather than a
+   * vendor's (e.g. Cursor). When set, the UI renders it instead of the
+   * `provider` logo.
+   */
+  icon?: string;
   agentIds: ReadonlyArray<string>;
   isClientAgentId: (externalAgentId: string | null | undefined) => boolean;
 }
@@ -304,9 +310,10 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
   {
     filter: CURSOR_CLIENT_FILTER,
     label: CURSOR_CLIENT_LABEL,
-    // Cursor is not itself a provider; its BYOK requests reach the proxy as
-    // OpenAI traffic, so the OpenAI logo represents it (mirrors Codex).
+    // Cursor is not itself a provider; `provider` is only the logo fallback,
+    // and the dedicated Cursor mark below takes precedence in the UI.
     provider: "openai",
+    icon: "/icons/cursor.png",
     agentIds: CURSOR_CLIENT_AGENT_IDS,
     isClientAgentId: isCursorClientAgentId,
   },
@@ -344,8 +351,10 @@ export const CLIENT_FILTER_OPTIONS: ReadonlyArray<{
   value: ClientFilter;
   label: string;
   provider: SupportedProvider;
-}> = CLIENT_FAMILIES.map(({ filter, label, provider }) => ({
+  icon?: string;
+}> = CLIENT_FAMILIES.map(({ filter, label, provider, icon }) => ({
   value: filter,
   label,
   provider,
+  icon,
 }));

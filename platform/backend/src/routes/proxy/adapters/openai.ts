@@ -1653,7 +1653,7 @@ export const openaiAdapterFactory: LLMProvider<
   ): Promise<OpenAiResponse> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
-      ...request,
+      ...normalizeChatCompletionsQuirks(request),
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
     return openaiClient.chat.completions.create(
@@ -1667,7 +1667,7 @@ export const openaiAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
-      ...request,
+      ...normalizeChatCompletionsQuirks(request),
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
@@ -1822,6 +1822,87 @@ export const openAiEmbeddingsAdapterFactory: OpenAiEmbeddingsProvider =
 // =============================================================================
 // INTERNAL HELPERS
 // =============================================================================
+
+/**
+ * Client request shapes OpenAI's /chat/completions rejects but that known
+ * clients send anyway (their own backends normalize before forwarding, so the
+ * shapes never reach OpenAI on the clients' native paths — the proxy has to do
+ * the same). Both fixes are no-ops for requests that don't carry the quirk.
+ */
+function normalizeChatCompletionsQuirks(request: OpenAiRequest): OpenAiRequest {
+  return normalizeEmptyAssistantContent(
+    normalizeResponsesStyleCustomTools(request),
+  );
+}
+
+/**
+ * Cursor sends assistant tool-call turns with `content: []`; OpenAI rejects
+ * that with "Invalid 'messages[N].content': empty array. Expected an array
+ * with minimum length 1". `null` is the accepted spelling of "no content" on
+ * an assistant message.
+ */
+function normalizeEmptyAssistantContent(request: OpenAiRequest): OpenAiRequest {
+  const needsFix = request.messages.some(
+    (m) =>
+      m.role === "assistant" &&
+      Array.isArray(m.content) &&
+      m.content.length === 0,
+  );
+  if (!needsFix) return request;
+  return {
+    ...request,
+    messages: request.messages.map((m) =>
+      m.role === "assistant" &&
+      Array.isArray(m.content) &&
+      m.content.length === 0
+        ? { ...m, content: null }
+        : m,
+    ),
+  };
+}
+
+/**
+ * Some Responses-API-first clients (Cursor's ApplyPatch tool is the known
+ * case) attach custom tools to /chat/completions requests in the flat
+ * Responses shape — `name`/`format` at the top level with grammar fields
+ * inlined. OpenAI rejects that shape on Chat Completions with
+ * "Missing required parameter: 'tools[N].custom'", so normalize it to the
+ * nested Chat Completions shape before forwarding. Requests without a flat
+ * custom tool pass through untouched.
+ */
+function normalizeResponsesStyleCustomTools(
+  request: OpenAiRequest,
+): OpenAiRequest {
+  const tools = request.tools;
+  if (!tools?.some((t) => t.type === "custom" && !("custom" in t))) {
+    return request;
+  }
+  return {
+    ...request,
+    tools: tools.map((t) => {
+      if (t.type !== "custom" || "custom" in t) return t;
+      return {
+        type: "custom" as const,
+        custom: {
+          name: t.name,
+          ...(t.description !== undefined && { description: t.description }),
+          ...(t.format !== undefined && {
+            format:
+              t.format.type === "grammar"
+                ? {
+                    type: "grammar" as const,
+                    grammar: {
+                      definition: t.format.definition,
+                      syntax: t.format.syntax,
+                    },
+                  }
+                : { type: "text" as const },
+          }),
+        },
+      };
+    }),
+  };
+}
 
 /**
  * Some OpenAI-compatible upstreams (LiteLLM, OpenRouter, misconfigured

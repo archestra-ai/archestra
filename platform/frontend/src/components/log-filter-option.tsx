@@ -1,7 +1,7 @@
 "use client";
 
-import type { InteractionSource, SupportedProvider } from "@archestra/shared";
-import { ProviderIcon } from "@/components/provider-icon";
+import type { ClientFamily, InteractionSource } from "@archestra/shared";
+import { ClientIcon } from "@/components/provider-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -14,17 +14,14 @@ export function SourceFilterOption({ source }: { source: InteractionSource }) {
 }
 
 export function ClientFilterOption({
-  label,
-  provider,
+  client,
 }: {
-  label: string;
-  provider: SupportedProvider;
+  client: Pick<ClientFamily, "label" | "provider" | "icon">;
 }) {
-  // Each client maps to its vendor logo (Claude → Anthropic, Codex → OpenAI).
   return (
     <span className="flex items-center gap-2 min-w-0">
-      <ProviderIcon provider={provider} size={16} />
-      <span className="truncate">{label}</span>
+      <ClientIcon client={client} size={16} />
+      <span className="truncate">{client.label}</span>
     </span>
   );
 }

@@ -199,6 +199,35 @@ export type OpenAiChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -299,6 +328,10 @@ export type OpenAiChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type OpenAiChatCompletionResponseInput = {
@@ -1707,6 +1740,35 @@ export type CerebrasChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -1807,6 +1869,10 @@ export type CerebrasChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type CerebrasChatCompletionResponseInput = {
@@ -2188,6 +2254,35 @@ export type MistralChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -2288,6 +2383,10 @@ export type MistralChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type MistralChatCompletionResponseInput = {
@@ -2549,6 +2648,35 @@ export type PerplexityChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -2649,6 +2777,10 @@ export type PerplexityChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     stream_mode?: 'full' | 'concise';
 };
 
@@ -2911,6 +3043,35 @@ export type GroqChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -3011,6 +3172,10 @@ export type GroqChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type GroqChatCompletionResponseInput = {
@@ -3272,6 +3437,35 @@ export type OpenrouterChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -3372,6 +3566,10 @@ export type OpenrouterChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -3627,6 +3825,35 @@ export type VllmChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -3963,6 +4190,35 @@ export type OllamaChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -4573,6 +4829,35 @@ export type DeepSeekChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -4673,6 +4958,10 @@ export type DeepSeekChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -4935,6 +5224,35 @@ export type ArchestraChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -5035,6 +5353,10 @@ export type ArchestraChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -5342,6 +5664,35 @@ export type MinimaxChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -5705,6 +6056,35 @@ export type XaiChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -5805,6 +6185,10 @@ export type XaiChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type XaiChatCompletionResponseInput = {
@@ -6089,6 +6473,35 @@ export type OpenAiChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -6189,6 +6602,10 @@ export type OpenAiChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type OpenAiChatCompletionResponse = {
@@ -7597,6 +8014,35 @@ export type CerebrasChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -7697,6 +8143,10 @@ export type CerebrasChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type CerebrasChatCompletionResponse = {
@@ -8078,6 +8528,35 @@ export type MistralChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8178,6 +8657,10 @@ export type MistralChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type MistralChatCompletionResponse = {
@@ -8439,6 +8922,35 @@ export type PerplexityChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8539,6 +9051,10 @@ export type PerplexityChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     stream_mode?: 'full' | 'concise';
 };
 
@@ -8801,6 +9317,35 @@ export type GroqChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8901,6 +9446,10 @@ export type GroqChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type GroqChatCompletionResponse = {
@@ -9162,6 +9711,35 @@ export type OpenrouterChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -9262,6 +9840,10 @@ export type OpenrouterChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -9517,6 +10099,35 @@ export type VllmChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -9853,6 +10464,35 @@ export type OllamaChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -10463,6 +11103,35 @@ export type DeepSeekChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -10563,6 +11232,10 @@ export type DeepSeekChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -10825,6 +11498,35 @@ export type ArchestraChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -10925,6 +11627,10 @@ export type ArchestraChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -11232,6 +11938,35 @@ export type MinimaxChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -11595,6 +12330,35 @@ export type XaiChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -11695,6 +12459,10 @@ export type XaiChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type XaiChatCompletionResponse = {
@@ -36165,6 +36933,35 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -36265,6 +37062,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -36614,6 +37415,35 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -36714,6 +37544,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -42345,6 +43179,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -42445,6 +43308,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -42638,6 +43505,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -42738,6 +43634,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -43088,6 +43988,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43188,6 +44117,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -43381,6 +44314,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43481,6 +44443,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -43831,6 +44797,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43931,6 +44926,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -44124,6 +45123,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -44224,6 +45252,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -45264,7 +46296,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'codex' | 'copilot-cli';
+        client?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Filter by session ID
          */
@@ -49035,6 +50067,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49135,6 +50196,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -49328,6 +50393,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49428,6 +50522,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -49778,6 +50876,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49878,6 +51005,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50071,6 +51202,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50171,6 +51331,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50521,6 +51685,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50621,6 +51814,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50814,6 +52011,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50914,6 +52140,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -54891,6 +56121,35 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -54991,6 +56250,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -55340,6 +56603,35 @@ export type KimiChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -55440,6 +56732,10 @@ export type KimiChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -65938,6 +67234,35 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -66038,6 +67363,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -66387,6 +67716,35 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -66487,6 +67845,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -85908,7 +87270,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'codex' | 'copilot-cli';
+        observedByClient?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Hide built-in Archestra tools
          */
@@ -86135,7 +87497,7 @@ export type GetToolObserversResponses = {
             name: string;
             email: string;
         }>;
-        clients: Array<'claude' | 'codex' | 'copilot-cli'>;
+        clients: Array<'claude' | 'codex' | 'copilot-cli' | 'cursor'>;
     };
 };
 

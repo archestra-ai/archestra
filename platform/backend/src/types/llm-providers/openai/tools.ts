@@ -82,6 +82,51 @@ const CustomToolSchema = z
   https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1229-L1236
   `);
 
+const ResponsesStyleCustomToolSchema = z
+  .object({
+    type: z.enum(["custom"]),
+    name: z
+      .string()
+      .describe(
+        "The name of the custom tool, used to identify it in tool calls",
+      ),
+    description: z
+      .string()
+      .optional()
+      .describe(
+        "Optional description of the custom tool, used to provide more context",
+      ),
+    format: z
+      .union([
+        z
+          .object({
+            type: z
+              .enum(["text"])
+              .describe("Unconstrained text format. Always `text`"),
+          })
+          .describe("Unconstrained free-form text"),
+        z.object({
+          type: z.enum(["grammar"]),
+          definition: z.string().describe("The grammar definition"),
+          syntax: z
+            .enum(["lark", "regex"])
+            .describe("The syntax of the grammar definition"),
+        }),
+      ])
+      .optional()
+      .describe(
+        "The input format for the custom tool. Default is unconstrained text.",
+      ),
+  })
+  .describe(`
+  A custom tool in the flat Responses-API shape ('name'/'format' at the top
+  level, grammar fields inlined) rather than Chat Completions' nested 'custom'
+  wrapper. Some clients (e.g. Cursor's ApplyPatch tool) send this shape to
+  /chat/completions and OpenAI accepts it, so the proxy must too.
+
+  https://github.com/openai/openai-node/blob/v6.0.0/src/resources/responses/responses.ts (CustomTool)
+  `);
+
 const AllowedToolsSchema = z
   .object({
     mode: z.enum(["auto", "required"]).describe(`
@@ -127,7 +172,7 @@ const NamedToolChoiceSchema = z
   `);
 
 export const ToolSchema = z
-  .union([FunctionToolSchema, CustomToolSchema])
+  .union([FunctionToolSchema, CustomToolSchema, ResponsesStyleCustomToolSchema])
   .describe(`
   A function tool that can be used to generate a response.
 

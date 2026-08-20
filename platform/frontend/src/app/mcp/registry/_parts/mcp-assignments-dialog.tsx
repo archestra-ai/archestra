@@ -467,7 +467,7 @@ export function McpAssignmentsDialog({
                   emptyMessage="No MCP gateways found."
                   createAction={{
                     label: "Create New MCP Gateway",
-                    href: "/mcp/gateways?create=true",
+                    href: "/mcp/gateways/new",
                   }}
                 />
               </div>
@@ -511,7 +511,7 @@ export function McpAssignmentsDialog({
                   emptyMessage="No agents found."
                   createAction={{
                     label: "Create New Agent",
-                    href: "/agents?create=true",
+                    href: "/agents/new",
                   }}
                 />
               </div>

@@ -89,6 +89,54 @@ const appsTable = softDeletablePgTable(
      * (which controls who can consume the app at all).
      */
     locked: boolean("locked").notNull().default(false),
+    /**
+     * The one authoring session the two flags above do NOT shut out: the chat
+     * conversation (or headless execution) an app was created from while an
+     * organization default — "new apps are locked by default", "new apps are
+     * disabled by default", or both — was what locked or disabled it. Without
+     * it those defaults turn on the very agent that just scaffolded the app:
+     * `locked` refuses its edits and `enabled: false` hides the app from it
+     * entirely, so a build cannot get past its empty shell.
+     *
+     * An opaque per-execution key (`isolationKey ?? conversationId`), never a
+     * conversation foreign key — the same value in UI chat, a generated id in
+     * headless runs. Null for every app born live and unlocked, and for one
+     * created where no session identifies the creator (e.g. an external MCP
+     * client on the gateway), which meets both defaults from birth.
+     *
+     * Cleared the moment anyone restricts the app deliberately (App settings
+     * or `set_app_lock`): a lock or a disable someone asked for holds against
+     * the creating session too. A deliberate *relaxation* keeps it, so
+     * unlocking an app that is still disabled (or enabling one still locked)
+     * does not strand the build halfway.
+     *
+     * The column is still named `lock_grace_session_key`: it was added for the
+     * lock alone, and renaming a live column is not rollout-safe (old pods
+     * would read a column that no longer exists mid-deploy), which the
+     * migration linter rejects. The property carries the accurate name; a
+     * physical rename would have to go add → backfill → drop across releases,
+     * which this value — an opaque, short-lived build key — does not justify.
+     */
+    creationGraceSessionKey: text("lock_grace_session_key"),
+    /**
+     * The LLM session that authored this app — the *build cost* link. Equals the
+     * `interactions.session_id` its authoring turns were recorded under (the
+     * conversation id in UI chat, the execution's session id in a headless run),
+     * so "how much did this app cost to build" is a sum over that session.
+     *
+     * Deliberately the interaction session id and not a `conversations` foreign
+     * key: it has to work for headless authoring too, and the value's whole
+     * purpose is to join to `interactions.session_id`, which is a varchar
+     * carrying either. Null for an app created outside an authoring session (the
+     * Apps page / REST path, an external MCP client), which spent no tokens
+     * being built and correctly reports a zero build cost.
+     *
+     * One session can author several apps. Spend is not divided between them —
+     * the session's cost is reported for each, and readers disclose the sharing
+     * (see `StatisticsModel.getAppStatistics`, which returns how many apps a
+     * build session is shared with).
+     */
+    authoringSessionId: text("authoring_session_id"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -100,6 +148,9 @@ const appsTable = softDeletablePgTable(
     // Backing-server lookups (findByMcpServerId, the catalog-derived access JOINs)
     // filter on this FK, so index it.
     index("apps_mcp_server_id_idx").on(table.mcpServerId),
+    // Build-cost reporting counts how many apps share an authoring session, so
+    // it looks apps up by that session rather than by id.
+    index("apps_authoring_session_id_idx").on(table.authoringSessionId),
     // Display-name uniqueness per author (soft-deleted rows excluded so deleting
     // an app frees its name). Visibility (scope/teams) and environment are owned
     // by the backing internal_mcp_catalog, not the app row.

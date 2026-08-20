@@ -40,6 +40,7 @@ import {
   AppToolModel,
   AppVersionModel,
   EnvironmentModel,
+  EnvironmentResourceDefaultModel,
   InternalMcpCatalogModel,
   McpServerModel,
   OrganizationModel,
@@ -1881,11 +1882,14 @@ describe("org new-app defaults (disabled/locked by default)", () => {
     };
   });
 
-  test("scaffold honors locked-by-default: the app is born locked and the result says so", async () => {
+  test("scaffold honors locked-by-default: with no session behind the call, the app is born locked to everyone and the result says so", async () => {
     await OrganizationModel.patch(organizationId, {
       newAppsLockedByDefault: true,
     });
 
+    // This context carries no conversation and no execution key — an external
+    // MCP client on the gateway. Nothing identifies a creating session, so
+    // there is no one to grace and the lock binds from birth.
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
       { name: "Born Locked" },
@@ -1907,7 +1911,7 @@ describe("org new-app defaults (disabled/locked by default)", () => {
     expect((edit.content[0] as any).text).toContain("locked");
   });
 
-  test("scaffold honors disabled-by-default: the app is born disabled and invisible to chat", async () => {
+  test("scaffold honors disabled-by-default: with no session behind the call, the app is born disabled and invisible to every chat", async () => {
     await OrganizationModel.patch(organizationId, {
       newAppsDisabledByDefault: true,
     });
@@ -1923,7 +1927,8 @@ describe("org new-app defaults (disabled/locked by default)", () => {
     expect((created.content[0] as any).text).toContain("disabled");
 
     // The T-980 contract applies from birth: the disabled app reads as
-    // nonexistent to chat tools.
+    // nonexistent to chat tools. Nothing identifies a creating session here,
+    // so there is no one to grace and the disable binds from the first moment.
     const read = await executeArchestraTool(
       getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
       { appId },
@@ -1947,6 +1952,341 @@ describe("org new-app defaults (disabled/locked by default)", () => {
       "This organization creates new apps",
     );
   });
+});
+
+describe("locked-by-default: the creating session keeps building", () => {
+  let organizationId: string;
+  let buildContext: ArchestraContext;
+  let otherChatContext: ArchestraContext;
+  const buildSession = crypto.randomUUID();
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Grace Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    // Chat carries the conversation as its execution key, so both fields hold
+    // the same value here, exactly as chat-tool-builder passes them.
+    buildContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+      conversationId: buildSession,
+      isolationKey: buildSession,
+    };
+    const otherSession = crypto.randomUUID();
+    otherChatContext = {
+      ...buildContext,
+      conversationId: otherSession,
+      isolationKey: otherSession,
+    };
+    await OrganizationModel.patch(organizationId, {
+      newAppsLockedByDefault: true,
+    });
+  });
+
+  async function scaffold(name: string): Promise<string> {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name },
+      buildContext,
+    );
+    expect(created.isError).toBe(false);
+    return structured(created).id as string;
+  }
+
+  test("the conversation that scaffolded the app can still build it, and is told so", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Shell" },
+      buildContext,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    // The app is genuinely locked — the grace is an exception for one session,
+    // not a quieter setting.
+    expect((await AppModel.findById(appId))?.locked).toBe(true);
+    // ...so the note must not send the model away from a build it can finish.
+    const note = (created.content[0] as any).text as string;
+    expect(note).toContain("locked");
+    expect(note).not.toContain("Do not attempt edits");
+
+    // Every authoring step of the staged flow works, deletion last.
+    const authoring: Array<[string, Record<string, unknown>]> = [
+      [
+        TOOL_REFINE_APP_SHORT_NAME,
+        { appId, spec: { summary: "s", features: [], tools: [] } },
+      ],
+      [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+      [
+        TOOL_EDIT_APP_SHORT_NAME,
+        { appId, baseVersion: 1, replacementHtml: "<h1>built</h1>" },
+      ],
+      [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+    ];
+    for (const [tool, args] of authoring) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(
+          tool as Parameters<typeof getArchestraToolFullName>[0],
+        ),
+        args,
+        buildContext,
+      );
+      expect(result.isError, tool).toBe(false);
+    }
+  });
+
+  test("any other conversation meets the lock from the app's first moment", async () => {
+    const appId = await scaffold("Shell Elsewhere");
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      otherChatContext,
+    );
+    expect(edit.isError).toBe(true);
+    expect((edit.content[0] as any).text).toContain("locked");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+  });
+
+  test("a deliberate lock ends the grace, so the creating conversation is refused too", async () => {
+    const appId = await scaffold("Frozen Mid-Build");
+
+    const locked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: true },
+      buildContext,
+    );
+    expect(locked.isError).toBe(false);
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      buildContext,
+    );
+    expect(edit.isError).toBe(true);
+    expect((edit.content[0] as any).text).toContain("locked");
+  });
+
+  test("unlocking and re-locking leaves no grace behind", async () => {
+    const appId = await scaffold("Round Trip");
+
+    for (const locked of [false, true]) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+        { appId, locked },
+        buildContext,
+      );
+      expect(result.isError).toBe(false);
+    }
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      buildContext,
+    );
+    expect(edit.isError).toBe(true);
+  });
+});
+
+describe("disabled-by-default: the creating session keeps building", () => {
+  let organizationId: string;
+  let buildContext: ArchestraContext;
+  let otherChatContext: ArchestraContext;
+  const buildSession = crypto.randomUUID();
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Disabled Grace Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    buildContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+      conversationId: buildSession,
+      isolationKey: buildSession,
+    };
+    const otherSession = crypto.randomUUID();
+    otherChatContext = {
+      ...buildContext,
+      conversationId: otherSession,
+      isolationKey: otherSession,
+    };
+    await OrganizationModel.patch(organizationId, {
+      newAppsDisabledByDefault: true,
+    });
+  });
+
+  async function scaffold(name: string): Promise<string> {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name },
+      buildContext,
+    );
+    expect(created.isError).toBe(false);
+    return structured(created).id as string;
+  }
+
+  test("the conversation that scaffolded the app can still build it, and is told so", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Shell" },
+      buildContext,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    // The app is genuinely disabled — the grace is an exception for one
+    // session, not a quieter setting.
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+    // ...so the note must keep the model building instead of handing back an
+    // empty shell, while still naming what the user has to do at the end.
+    const note = (created.content[0] as any).text as string;
+    expect(note).toContain("disabled");
+    expect(note).not.toContain("do not try to edit or render it");
+    expect(note).toContain("enable it in App settings");
+
+    // The whole staged authoring flow works, reads included, deletion last.
+    const authoring: Array<[string, Record<string, unknown>]> = [
+      [TOOL_READ_APP_SHORT_NAME, { appId }],
+      [
+        TOOL_REFINE_APP_SHORT_NAME,
+        { appId, spec: { summary: "s", features: [], tools: [] } },
+      ],
+      [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+      [
+        TOOL_EDIT_APP_SHORT_NAME,
+        { appId, baseVersion: 1, replacementHtml: "<h1>built</h1>" },
+      ],
+      [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+    ];
+    for (const [tool, args] of authoring) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(
+          tool as Parameters<typeof getArchestraToolFullName>[0],
+        ),
+        args,
+        buildContext,
+      );
+      expect(result.isError, tool).toBe(false);
+    }
+  });
+
+  test("every other conversation is told the app does not exist", async () => {
+    const appId = await scaffold("Shell Elsewhere");
+
+    const refused: Array<[string, Record<string, unknown>]> = [
+      [TOOL_READ_APP_SHORT_NAME, { appId }],
+      [
+        TOOL_EDIT_APP_SHORT_NAME,
+        { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      ],
+    ];
+    for (const [tool, args] of refused) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(
+          tool as Parameters<typeof getArchestraToolFullName>[0],
+        ),
+        args,
+        otherChatContext,
+      );
+      expect(result.isError, tool).toBe(true);
+      expect((result.content[0] as any).text, tool).toContain("No app found");
+    }
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+  });
+
+  test("the grace does not put the app back in list_apps, for the building conversation either", async () => {
+    const appId = await scaffold("Unlisted While Disabled");
+
+    const listed = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      {},
+      buildContext,
+    );
+    expect(listed.isError).toBe(false);
+    const ids = (structured(listed).apps as Array<{ id: string }>).map(
+      (app) => app.id,
+    );
+    expect(ids).not.toContain(appId);
+  });
+
+  test("a deliberate disable ends the grace, so the creating conversation loses the app", async () => {
+    const appId = await scaffold("Enabled Then Pulled");
+
+    // Enabling is a relaxation: with no lock in play the grace has nothing
+    // left to cover, and the app is plainly visible to everyone who may see it.
+    await AppModel.setEnabled(appId, true);
+    // Disabling it again is the deliberate act T-980 exists for, and it must
+    // hold against the session that created the app too.
+    await AppModel.setEnabled(appId, false);
+
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      buildContext,
+    );
+    expect(read.isError).toBe(true);
+    expect((read.content[0] as any).text).toContain("No app found");
+  });
+
+  // With both defaults on, either restriction alone is enough to shut the
+  // creating session out — so relaxing one must not settle the grace while the
+  // other is still holding the app, or the build dies halfway through.
+  test("unlocking an app that is still disabled keeps the build alive", async () => {
+    const appId = await scaffoldLockedAndDisabled();
+
+    const unlocked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: false },
+      buildContext,
+    );
+    expect(unlocked.isError).toBe(false);
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>built</h1>" },
+      buildContext,
+    );
+    expect(edit.isError).toBe(false);
+  });
+
+  test("enabling an app that is still locked keeps the build alive", async () => {
+    const appId = await scaffoldLockedAndDisabled();
+
+    await AppModel.setEnabled(appId, true);
+    expect((await AppModel.findById(appId))?.locked).toBe(true);
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>built</h1>" },
+      buildContext,
+    );
+    expect(edit.isError).toBe(false);
+
+    // ...and any other conversation still meets the lock the app was born with.
+    const elsewhere = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 2, replacementHtml: "<h1>nope</h1>" },
+      otherChatContext,
+    );
+    expect(elsewhere.isError).toBe(true);
+    expect((elsewhere.content[0] as any).text).toContain("locked");
+  });
+
+  async function scaffoldLockedAndDisabled(): Promise<string> {
+    await OrganizationModel.patch(organizationId, {
+      newAppsLockedByDefault: true,
+    });
+    const appId = await scaffold(
+      `Locked And Disabled ${crypto.randomUUID().slice(0, 8)}`,
+    );
+    const born = await AppModel.findById(appId);
+    expect(born?.locked).toBe(true);
+    expect(born?.enabled).toBe(false);
+    return appId;
+  }
 });
 
 describe("preview_app_tool", () => {
@@ -4186,5 +4526,91 @@ describe("set_app_labels", () => {
       structured(matching).id as string,
     ]);
     expect(apps[0]?.labels).toEqual([{ key: "env", value: "prod" }]);
+  });
+});
+
+describe("scaffold_app environment binding", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Scaffold Env Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function scaffold(name: string) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name },
+      context,
+    );
+  }
+
+  test("an authoring agent with its own environment still wins over the configured default", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const authoring = await EnvironmentModel.create({
+      organizationId,
+      name: "Authoring",
+    });
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "Launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+    const agent = await makeAgent({
+      name: "Bound Agent",
+      organizationId,
+      environmentId: authoring.id,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+
+    const created = await scaffold("Inherited");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBe(authoring.id);
+  });
+
+  test("an authoring agent with no environment falls back to the configured default for apps", async () => {
+    const launch = await EnvironmentModel.create({
+      organizationId,
+      name: "Launch",
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "app",
+      environmentId: launch.id,
+    });
+
+    const created = await scaffold("Configured");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBe(launch.id);
+  });
+
+  test("with no default configured the app still lands in the Default environment", async () => {
+    const created = await scaffold("Plain");
+    expect(created.isError).toBe(false);
+    const app = await AppModel.findById(structured(created).id as string);
+    expect(app?.environmentId).toBeNull();
   });
 });

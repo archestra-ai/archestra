@@ -1,4 +1,7 @@
-import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
+import {
+  getResourceForAgentType,
+  TOOL_LIST_AGENTS_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   assertAgentTeams,
@@ -7,6 +10,7 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -15,6 +19,9 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
+import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
@@ -205,6 +212,28 @@ export const KnowledgeSourceOutputSchema = z.object({
 
 // === Exports ===
 
+/**
+ * Where a record's edit page lives, per family. Every family used to be linked
+ * as `/agents?edit=<id>`: a link only the internal-agent list could resolve, so
+ * an LLM proxy or MCP gateway sent the reader to a page that does not know the
+ * id. Each family now has its own routed edit page.
+ */
+const EDIT_PATH_BUILDERS: Record<
+  "agent" | "llm_proxy" | "mcp_gateway",
+  (id: string) => string
+> = {
+  agent: (id) => `/agents/${id}/edit`,
+  llm_proxy: (id) => `/llm/proxies/${id}/edit`,
+  mcp_gateway: (id) => `/mcp/gateways/${id}/edit`,
+};
+
+function buildEditLink(
+  agentType: "agent" | "llm_proxy" | "mcp_gateway",
+  id: string,
+): string {
+  return `${config.frontendBaseUrl}${EDIT_PATH_BUILDERS[agentType](id)}`;
+}
+
 export async function handleCreateResource<
   TArgs extends {
     name: string;
@@ -294,6 +323,10 @@ export async function handleCreateResource<
       teams,
       labels,
       agentType: targetAgentType,
+      environmentId: await resolveNewAgentEnvironmentId({
+        context,
+        agentType: targetAgentType,
+      }),
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
@@ -336,7 +369,20 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    const created = await AgentModel.create(createParams, context.userId);
+    // Same Advisor default as the REST create path — the rule belongs to the
+    // record, not to the surface that created it. Without an organization in
+    // context there is no Advisor row to resolve, so nothing is seeded.
+    const defaultExcludedSubagentIds = context.organizationId
+      ? await agentSubagentExclusionsService.getCreationDefaultExclusions({
+          organizationId: context.organizationId,
+          agentType: targetAgentType,
+          accessAllSubagents: createParams.accessAllSubagents === true,
+        })
+      : [];
+
+    const created = await AgentModel.create(createParams, context.userId, {
+      defaultExcludedSubagentIds,
+    });
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
@@ -347,7 +393,7 @@ export async function handleCreateResource<
         ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
         : [];
 
-    const editLink = `${config.frontendBaseUrl}/agents?edit=${created.id}`;
+    const editLink = buildEditLink(targetAgentType, created.id);
     const lines = [
       `Successfully created ${toolLabel}.`,
       "",
@@ -545,6 +591,26 @@ export async function handleEditResource<
           teamIds,
           organizationId: context.organizationId,
         });
+        // A static tool assignment pins one installed connection, which stays
+        // assignable only while this record shares the connection's team.
+        // Moving its scope or teams would strip the right to a credential its
+        // tools still point at, so the same guard the REST update path runs
+        // refuses the change here too — before anything is written.
+        await assertNoStaticPinsBrokenByTargetChange({
+          agentId: args.id,
+          currentTarget: {
+            organizationId: existingAgent.organizationId,
+            scope: existingAgent.scope,
+            authorId: existingAgent.authorId,
+            teamIds: existingTeamIds,
+          },
+          nextTarget: {
+            organizationId: existingAgent.organizationId,
+            scope,
+            authorId: existingAgent.authorId,
+            teamIds,
+          },
+        });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
@@ -615,7 +681,7 @@ export async function handleEditResource<
         ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
         : [];
 
-    const editLink = `${config.frontendBaseUrl}/agents?edit=${updated.id}`;
+    const editLink = buildEditLink(expectedType, updated.id);
     const lines = [
       `Successfully updated ${toolLabel}.`,
       "",
@@ -632,6 +698,33 @@ export async function handleEditResource<
   } catch (error) {
     return catchError(error, `editing ${toolLabel}`);
   }
+}
+
+/**
+ * These tools take no environment, so a new agent lands wherever the org says
+ * new agents of its type go (the Default environment until an admin configures
+ * otherwise). A restricted target the caller may not deploy to resolves back to
+ * Default rather than failing the create.
+ */
+async function resolveNewAgentEnvironmentId(params: {
+  context: ArchestraContext;
+  agentType: "agent" | "llm_proxy" | "mcp_gateway";
+}): Promise<string | null> {
+  const { context, agentType } = params;
+  const { userId, organizationId } = context;
+  if (!userId || !organizationId) return null;
+
+  const resource = getResourceForAgentType(agentType);
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource,
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      resource,
+      "deploy-to-restricted",
+    ),
+  });
 }
 
 async function validateKnowledgeAssignments(params: {

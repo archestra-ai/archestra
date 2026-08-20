@@ -32,7 +32,6 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -42,6 +41,7 @@ import {
   useOwnAppSessionRecorder,
 } from "@/components/app-session-recording/use-app-session-recorder";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import {
@@ -57,8 +57,8 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
@@ -157,11 +157,11 @@ import {
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
-import {
-  generateIncognitoKey,
-  isActionAvailableForConversation,
-} from "@/lib/chat/incognito";
 import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
+import {
+  generateLockedChatKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/locked-chat";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -171,6 +171,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
   writePendingThinkingEffort,
@@ -189,11 +190,9 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
-  type LlmProviderApiKey,
   type SupportedProvider,
   useAvailableLlmProviderApiKeys,
   useLlmProviderApiKeys,
@@ -322,9 +321,6 @@ export function ChatPageContent({
   const forkConversationMutation = useForkConversation();
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
-
-  // Dialog management for MCP installation
-  const { isDialogOpened, closeDialog } = useDialogs<"edit-agent">();
 
   const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
@@ -482,21 +478,21 @@ export function ChatPageContent({
     routeConversationId,
   });
 
-  // Whether the NEXT chat created from the new-chat composer is incognito.
+  // Whether the NEXT chat created from the new-chat composer is a locked chat.
   // Only meaningful pre-conversation; reset after a successful create so a
   // later new chat never inherits it silently.
-  const [isIncognitoDraft, setIsIncognitoDraft] = useState(false);
+  const [isLockedChatDraft, setIsLockedChatDraft] = useState(false);
 
-  // `?incognito=1` (command palette entry / Alt+I) arms the composer toggle.
+  // `?locked-chat=1` (command palette entry / Alt+I) arms the composer toggle.
   // One-shot, same posture as user_prompt and skillId: the param is stripped
   // once applied, so a reload can't silently re-arm it and a second Alt+I is a
   // real navigation rather than a no-op push of an identical URL.
-  const urlIncognitoDraft = searchParams.get("incognito") === "1";
+  const urlLockedChatDraft = searchParams.get("lockedChat") === "1";
   useEffect(() => {
-    if (!urlIncognitoDraft) return;
-    setIsIncognitoDraft(true);
-    clearIncognitoQueryParam({ pathname, router, searchParams });
-  }, [urlIncognitoDraft, pathname, router, searchParams]);
+    if (!urlLockedChatDraft) return;
+    setIsLockedChatDraft(true);
+    clearLockedChatQueryParam({ pathname, router, searchParams });
+  }, [urlLockedChatDraft, pathname, router, searchParams]);
 
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
@@ -718,7 +714,7 @@ export function ChatPageContent({
     !!conversationId &&
     !!conversation &&
     conversation.userId === session?.user.id &&
-    // Incognito conversations cannot be shared (the backend rejects it).
+    // Locked chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
   useConversationShare(canManageShare ? conversationId : undefined);
 
@@ -1506,6 +1502,12 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  const { isTransportStalled, isUpstreamIdle } = useStreamStall({
+    status,
+    transportActivitySequence: chatSession?.transportActivitySequence ?? 0,
+    responseProgressSequence: chatSession?.responseProgressSequence ?? 0,
+    messages,
+  });
 
   // `status` here is read from the shared session map, which each
   // ChatSessionHook updates a render behind the real SDK status (via a
@@ -1655,7 +1657,6 @@ export function ChatPageContent({
     chatSession?.isRecovering
       ? undefined
       : chatSession?.error;
-  const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
   const browserToolCallIds = useMemo(
@@ -1712,11 +1713,6 @@ export function ChatPageContent({
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
-
-  // Find the specific internal agent for this conversation (if any)
-  const _conversationInternalAgent = conversationAgentId
-    ? internalAgents.find((a) => a.id === conversationAgentId)
-    : undefined;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -2439,18 +2435,18 @@ export function ChatPageContent({
         return false;
       }
 
-      // Incognito: the conversation DEK is generated here, in the browser,
+      // LockedChat: the conversation DEK is generated here, in the browser,
       // BEFORE the create request. It rides along as a header; the mutation's
       // onSuccess stores it under the fresh conversation id before any
       // navigation or stream start reads it.
-      const incognitoKey = isIncognitoDraft ? generateIncognitoKey() : null;
+      const lockedChatKey = isLockedChatDraft ? generateLockedChatKey() : null;
 
       createConversationMutation.mutate(
-        incognitoKey ? { ...input, incognito: true, incognitoKey } : input,
+        lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
         {
           onSuccess: (newConversation) => {
             if (newConversation) {
-              setIsIncognitoDraft(false);
+              setIsLockedChatDraft(false);
               // A recording started from scratch (before this chat had an id)
               // becomes this conversation's recording now that its id exists,
               // so the timer and buffered capture carry across the transition.
@@ -2474,7 +2470,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
-      isIncognitoDraft,
+      isLockedChatDraft,
       initialThinkingEffort,
       createConversationMutation,
       searchParams,
@@ -2950,7 +2946,7 @@ export function ChatPageContent({
             </ButtonWithTooltip>
           ) : (
             <Button asChild>
-              <Link href="/agents?create=true">
+              <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
               </Link>
@@ -2987,7 +2983,7 @@ export function ChatPageContent({
     );
   }
 
-  // Incognito tombstone: the conversation exists and the viewer may see it,
+  // LockedChat tombstone: the conversation exists and the viewer may see it,
   // but this browser holds no (valid) encryption key, so the server returned
   // the locked view. Deliberately its own branch — this is not a 404, the
   // chat is real but undecryptable here.
@@ -2996,7 +2992,7 @@ export function ChatPageContent({
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="w-full max-w-xl">
           <CardHeader className="justify-items-center text-center gap-3 pt-8">
-            <IncognitoIcon className="mx-auto block size-14" />
+            <LockedChatIcon className="mx-auto block size-14" />
             <CardTitle className="text-xl">
               This chat can&apos;t be unlocked
             </CardTitle>
@@ -3078,15 +3074,7 @@ export function ChatPageContent({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning
-                status={status}
-                transportActivitySequence={
-                  chatSession?.transportActivitySequence ?? 0
-                }
-                responseProgressSequence={
-                  chatSession?.responseProgressSequence ?? 0
-                }
-              />
+              <StreamTimeoutWarning isStalled={isTransportStalled} />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -3176,6 +3164,7 @@ export function ChatPageContent({
                           status={status}
                           isContextCompacting={isContextCompacting}
                           contextCompactionFeedback={manualCompactionFeedback}
+                          isUpstreamIdle={isUpstreamIdle}
                           optimisticToolCalls={optimisticToolCalls}
                           isLoadingConversation={isLoadingConversation}
                           onMessagesUpdate={setMessages}
@@ -3247,7 +3236,7 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          {/* Forking is rejected for incognito chats, so the
+                          {/* Forking is rejected for locked chats, so the
                               affordance is hidden rather than left to fail. */}
                           {isActionAvailableForConversation(
                             conversation,
@@ -3314,6 +3303,7 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
+                            <AgentConnectionNotice agentId={activeAgentId} />
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
@@ -3513,77 +3503,91 @@ export function ChatPageContent({
                                   onKeyAdded={handleFirstKeyAdded}
                                 />
                               ) : (
-                                <ArchestraPromptInput
-                                  onSubmit={handleInitialSubmit}
-                                  toolsUnavailable={initialToolsUnavailable}
-                                  notRecommendedForAgents={
-                                    initialNotRecommended
-                                  }
-                                  status={
-                                    createConversationMutation.isPending
-                                      ? "submitted"
-                                      : "ready"
-                                  }
-                                  selectedModel={initialModel}
-                                  onModelChange={handleInitialModelChange}
-                                  agentId={newChatAgentId}
-                                  currentProvider={initialProvider}
-                                  textareaRef={textareaRef}
-                                  initialApiKeyId={initialApiKeyId}
-                                  onApiKeyChange={setInitialApiKeyId}
-                                  onProviderChange={handleInitialProviderChange}
-                                  allowFileUploads={
-                                    organization?.allowChatFileUploads ?? false
-                                  }
-                                  isModelsLoading={isModelsLoading}
-                                  inputModalities={selectedModelInputModalities}
-                                  agentLlmApiKeyId={
-                                    (
-                                      internalAgents.find(
-                                        (a) => a.id === initialAgentId,
-                                      ) as Record<string, unknown> | undefined
-                                    )?.llmApiKeyId as string | null
-                                  }
-                                  submitDisabled={
-                                    isPlaywrightSetupVisible ||
-                                    isAgentSubscriptionMetadataPending
-                                  }
-                                  subscriptionConnectRequired={
-                                    initialPerUserConnect.needsConnect
-                                  }
-                                  subscriptionProvider={
-                                    initialPerUserConnect.provider
-                                  }
-                                  isPlaywrightSetupVisible={
-                                    isPlaywrightSetupVisible
-                                  }
-                                  selectorAgentId={initialAgentId}
-                                  onAgentChange={handleInitialAgentChange}
-                                  incognito={isIncognitoDraft}
-                                  onIncognitoChange={setIsIncognitoDraft}
-                                  modelSource={initialModelSource}
-                                  onResetModelOverride={
-                                    handleResetModelOverride
-                                  }
-                                  thinkingEffort={initialThinkingEffort}
-                                  onThinkingEffortChange={
-                                    setInitialThinkingEffort
-                                  }
-                                  agentRequiresPerUserConnect={
-                                    isAgentSubscriptionMetadataPending ||
-                                    initialModelSource === "agent" ||
-                                    initialPerUserConnect.needsConnect
-                                  }
-                                  agentModelDisplayName={
-                                    initialPerUserConnect.needsConnect
-                                      ? initialPerUserConnect.modelName
-                                      : undefined
-                                  }
-                                  prefillText={composerPrefill}
-                                  onPrefillApplied={
-                                    handleComposerPrefillApplied
-                                  }
-                                />
+                                <>
+                                  {newChatAgentId && (
+                                    <div className="mb-3">
+                                      <AgentConnectionNotice
+                                        agentId={newChatAgentId}
+                                      />
+                                    </div>
+                                  )}
+                                  <ArchestraPromptInput
+                                    onSubmit={handleInitialSubmit}
+                                    toolsUnavailable={initialToolsUnavailable}
+                                    notRecommendedForAgents={
+                                      initialNotRecommended
+                                    }
+                                    status={
+                                      createConversationMutation.isPending
+                                        ? "submitted"
+                                        : "ready"
+                                    }
+                                    selectedModel={initialModel}
+                                    onModelChange={handleInitialModelChange}
+                                    agentId={newChatAgentId}
+                                    currentProvider={initialProvider}
+                                    textareaRef={textareaRef}
+                                    initialApiKeyId={initialApiKeyId}
+                                    onApiKeyChange={setInitialApiKeyId}
+                                    onProviderChange={
+                                      handleInitialProviderChange
+                                    }
+                                    allowFileUploads={
+                                      organization?.allowChatFileUploads ??
+                                      false
+                                    }
+                                    isModelsLoading={isModelsLoading}
+                                    inputModalities={
+                                      selectedModelInputModalities
+                                    }
+                                    agentLlmApiKeyId={
+                                      (
+                                        internalAgents.find(
+                                          (a) => a.id === initialAgentId,
+                                        ) as Record<string, unknown> | undefined
+                                      )?.llmApiKeyId as string | null
+                                    }
+                                    submitDisabled={
+                                      isPlaywrightSetupVisible ||
+                                      isAgentSubscriptionMetadataPending
+                                    }
+                                    subscriptionConnectRequired={
+                                      initialPerUserConnect.needsConnect
+                                    }
+                                    subscriptionProvider={
+                                      initialPerUserConnect.provider
+                                    }
+                                    isPlaywrightSetupVisible={
+                                      isPlaywrightSetupVisible
+                                    }
+                                    selectorAgentId={initialAgentId}
+                                    onAgentChange={handleInitialAgentChange}
+                                    lockedChat={isLockedChatDraft}
+                                    onLockedChatChange={setIsLockedChatDraft}
+                                    modelSource={initialModelSource}
+                                    onResetModelOverride={
+                                      handleResetModelOverride
+                                    }
+                                    thinkingEffort={initialThinkingEffort}
+                                    onThinkingEffortChange={
+                                      setInitialThinkingEffort
+                                    }
+                                    agentRequiresPerUserConnect={
+                                      isAgentSubscriptionMetadataPending ||
+                                      initialModelSource === "agent" ||
+                                      initialPerUserConnect.needsConnect
+                                    }
+                                    agentModelDisplayName={
+                                      initialPerUserConnect.needsConnect
+                                        ? initialPerUserConnect.modelName
+                                        : undefined
+                                    }
+                                    prefillText={composerPrefill}
+                                    onPrefillApplied={
+                                      handleComposerPrefillApplied
+                                    }
+                                  />
+                                </>
                               )}
                             </div>
                           </ViewTransition>
@@ -3623,21 +3627,6 @@ export function ChatPageContent({
             </div>
           )}
         </div>
-
-        <AgentDialog
-          open={isDialogOpened("edit-agent")}
-          onOpenChange={(open) => {
-            if (!open) closeDialog("edit-agent");
-          }}
-          agent={
-            conversationId && conversation
-              ? _conversationInternalAgent
-              : initialAgentId
-                ? internalAgents.find((a) => a.id === initialAgentId)
-                : undefined
-          }
-          agentType="agent"
-        />
 
         {canManageShare && conversationId && (
           <ShareConversationDialog
@@ -3732,15 +3721,15 @@ function clearUserPromptQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
-// `incognito` arms the composer toggle once (command palette / Alt+I) and is
+// `locked-chat` arms the composer toggle once (command palette / Alt+I) and is
 // then dropped, same one-shot posture as user_prompt and skillId.
-function clearIncognitoQueryParam(params: {
+function clearLockedChatQueryParam(params: {
   pathname: string;
   router: ReturnType<typeof useRouter>;
   searchParams: URLSearchParams;
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
-  nextSearchParams.delete("incognito");
+  nextSearchParams.delete("lockedChat");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

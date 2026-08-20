@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  MESSAGING_CHANNEL_LABELS,
+} from "@archestra/shared";
 import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -63,6 +67,7 @@ export default function EmailPage() {
   const renewMutation = useRenewIncomingEmailSubscription();
   const deleteMutation = useDeleteIncomingEmailSubscription();
   const { email: allStepsCompleted } = useTriggerStatuses();
+  const channelLabel = MESSAGING_CHANNEL_LABELS.email;
 
   const [setupOpen, setSetupOpen] = useState(false);
   const searchParams = useSearchParams();
@@ -126,7 +131,7 @@ export default function EmailPage() {
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={isLoading}
-        providerLabel="Email"
+        providerLabel={channelLabel}
         docsUrl={docsUrl}
       >
         <SetupStep

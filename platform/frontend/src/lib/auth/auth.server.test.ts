@@ -57,6 +57,41 @@ describe("serverHasPermissions", () => {
       }),
     ).resolves.toBe(false);
   });
+
+  // The SDK is configured with `throwOnError: false`, so a lookup that never
+  // reached the backend resolves with an error and no response. Reading that as
+  // "no permissions" renders a 403 for what is really an outage.
+  it("throws instead of denying when the lookup never got a response", async () => {
+    getUserPermissionsMock.mockResolvedValue({
+      error: new TypeError("fetch failed"),
+      response: undefined,
+    });
+
+    await expect(serverHasPermissions({ team: ["read"] })).rejects.toThrow(
+      /Permission lookup failed/,
+    );
+  });
+
+  it("throws instead of denying when the lookup fails server-side", async () => {
+    getUserPermissionsMock.mockResolvedValue({
+      error: { message: "boom" },
+      response: { status: 503 },
+    });
+
+    await expect(serverHasPermissions({ team: ["read"] })).rejects.toThrow(
+      /Permission lookup failed/,
+    );
+  });
+
+  // A 4xx is the backend answering the authorization question, not failing to.
+  it("denies without throwing when the lookup is rejected client-side", async () => {
+    getUserPermissionsMock.mockResolvedValue({
+      error: { message: "forbidden" },
+      response: { status: 403 },
+    });
+
+    await expect(serverHasPermissions({ team: ["read"] })).resolves.toBe(false);
+  });
 });
 
 describe("serverCanAccessPage", () => {

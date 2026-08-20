@@ -29,6 +29,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     environmentId: null,
     passthroughHeaders: null,
     toolExposureMode: "full",
+    missingCredentialBehavior: "allow",
     accessAllTools: false,
     accessAllSubagents: false,
     accessAllSkills: false,

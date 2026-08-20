@@ -6,13 +6,19 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
-import { getApiErrorMessage, handleApiError, throwOnApiError } from "./utils";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  reportApiError,
+  throwOnApiError,
+} from "./utils";
 
 const {
   assignToolToAgent,
   autoConfigureAgentToolPolicies,
   bulkAssignTools,
   bulkUpdateAgentTools,
+  getAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
@@ -20,6 +26,42 @@ const {
   syncAgentDelegations,
   deleteAgentDelegation,
 } = archestraApiSdk;
+
+type AgentAssignedTool =
+  archestraApiTypes.GetAgentToolsResponses["200"][number];
+
+/**
+ * Under `["agents", id, "tools"]`, so `invalidateToolAssignmentQueries` — which
+ * every tool write funnels through — refreshes this read too.
+ */
+function agentToolsQueryKey(agentId: string) {
+  return ["agents", agentId, "tools", "assigned"] as const;
+}
+
+/**
+ * The tools currently assigned to an agent, read loud.
+ *
+ * Deliberately not `fetchAgentMcpTools` from `chat.query.ts`: its
+ * `callApi(..., [])` fallback answers a failed read with an empty array, so a
+ * 403 or an outage is indistinguishable from an agent with no tools. Callers
+ * that decide something on the strength of "this agent has no conflicting
+ * tools" need the failure to reach them, so this one throws.
+ */
+export function useAgentTools(
+  agentId: string | undefined,
+  params?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: agentToolsQueryKey(agentId ?? ""),
+    queryFn: async (): Promise<AgentAssignedTool[]> => {
+      if (!agentId) return [];
+      const { data, error } = await getAgentTools({ path: { agentId } });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: !!agentId && (params?.enabled ?? true),
+  });
+}
 
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
@@ -256,7 +298,9 @@ export function useBulkUpdateAgentTools() {
       const { data, error } = await bulkUpdateAgentTools({
         body: { assignments, removals },
       });
-      throwOnApiError(error);
+      // Rejects with the error the toast is already showing, so a caller that
+      // reports its own orchestration failures does not repeat this one.
+      if (error) throw reportApiError(error);
       if (!data) return null;
       return { ...data, skipInvalidation };
     },

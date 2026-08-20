@@ -60,6 +60,10 @@
   },
   "overrides": [
     {
+      "includes": ["frontend/**/*.ts", "frontend/**/*.tsx"],
+      "plugins": ["./biome-plugins/integration-labels-via-catalog.grit"]
+    },
+    {
       "includes": [
         "**/*.ts",
         "**/*.tsx",

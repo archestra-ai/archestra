@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.3.36" # x-release-please-version
+  imageTag: "1.3.42" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -284,7 +284,7 @@ archestra:
 
     # Image used by the wait-for-postgres init container.
     # Override to pull from a private registry when Docker Hub is inaccessible.
-    busyboxImage: "busybox:1.36"
+    busyboxImage: "docker.io/library/busybox:1.36"
 
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
@@ -292,14 +292,13 @@ archestra:
 
   # Database migration Job.
   #
-  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
-  # schema is applied before web and worker Deployments roll. Disable this if
-  # migrations are applied by an external deployment pipeline.
+  # Runs tracked Drizzle migrations under the platform advisory lock as a
+  # Helm pre-upgrade hook, before web and worker Deployments roll. Disabling it
+  # also disables migrations in web pod startup, for pipelines that apply them
+  # out of band.
   #
-  # Most external Postgres deployments should not need any migrationJob env
-  # settings. Prefer setting postgresql.external_database_url to a complete
-  # connection string; the chart stores it in a Secret and passes it to the
-  # migration Job automatically.
+  # For external Postgres, reference the same existing Secret here and through
+  # archestra.envWithValueFrom. This keeps credentials out of Helm values.
   migrationJob:
     enabled: true
     # Number of retries before the Job is marked failed and aborts the upgrade.
@@ -322,18 +321,18 @@ archestra:
         memory: "512Mi"
       limits:
         memory: "2Gi"
-    # Extra environment variables rendered before the shared platform env. Use
+    # Extra environment variables rendered before the database env. Use
     # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
     # references, such as $(PGPASSWORD), that the hook must expand.
     env: {}
-    # Extra secret-backed environment variables rendered before shared env. This
+    # Extra secret-backed environment variables rendered before database env. This
     # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
     # $(PGPASSWORD):
     #   - name: PGPASSWORD
     #     secretName: my-db-secret
     #     secretKey: password
     envFromSecrets: []
-    # Extra valueFrom environment variables rendered before shared env.
+    # Extra valueFrom environment variables rendered before database env.
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
@@ -450,11 +449,74 @@ archestra:
     # Leave empty for the default (600). Set to 0 to disable the reaper.
     failedPodReapIntervalSeconds: ""
 
+    # BETA: idle hibernation for self-hosted MCP servers (scale-to-zero).
+    # "true" offers the feature on this deployment, "false" keeps it off even
+    # when the ARCHESTRA_BETA master switch is on, and empty falls back to that
+    # master switch. Organizations still opt in under Settings > MCP, behind
+    # the enterprise licence.
+    mcpIdleHibernationEnabled: ""
+
+    # How long (in seconds) an idle MCP server pod sits unused before the
+    # platform scales it to zero, waking it again on the next tool call.
+    # Leave empty for the default (1800). Values are floored at 120 so a
+    # server is never hibernated between two normal consecutive tool calls;
+    # an explicit 0 is the operator's kill switch.
+    mcpIdleHibernationSeconds: ""
+
+    # Keeps every node's image cache warm for the MCP servers idle hibernation
+    # can scale to zero, so a wake is fast and survives a registry outage even
+    # on a node the autoscaler added a minute ago. The platform reconciles a
+    # DaemonSet in the MCP namespace whose init containers pull each image and
+    # exit; the images stay on the node because MCP pods pull IfNotPresent.
+    #
+    # It only runs when idle hibernation itself runs, and pre-pulling is an
+    # optimisation throughout: nothing here can block or fail a hibernate, a
+    # wake, an install or a tool call.
+    mcpImagePrepull:
+      # "false" is the kill switch that stops pre-pulling while leaving
+      # hibernation on — for clusters where the extra per-node pod is
+      # unwelcome, or whose Role cannot be granted DaemonSet permissions.
+      # Empty means pre-pulling follows idle hibernation.
+      enabled: ""
+
+      # PriorityClass for the DaemonSet's pods. Empty uses the namespace
+      # default. Point this at a low or negative-priority class (for example a
+      # cluster's "best-effort" class) so warming a cache can never preempt a
+      # real workload.
+      priorityClassName: ""
+
+      # Image for the DaemonSet's own containers (the noop bootstrap and the
+      # keepalive) — never the MCP server base image, whose contents are an
+      # operator's choice. It must provide a statically linked /bin/busybox:
+      # the platform copies that binary into arbitrary MCP images, which may
+      # use a different libc. Override this with a static private mirror when
+      # Docker Hub is unavailable.
+      bootstrapImage: "docker.io/library/busybox:1.36-musl"
+
+      # Pull secrets in the MCP namespace that can fetch a private bootstrap
+      # image. These are added alongside credentials required by MCP images.
+      bootstrapImagePullSecrets: []
+
+      # Resource requests/limits for the DaemonSet's containers (Kubernetes
+      # quantities, e.g. "16Mi", "10m"). They only run `true` against each
+      # image, so the requests are deliberately tiny — big enough to schedule,
+      # small enough not to distort packing on every node in the cluster.
+      # Leave empty to use the platform defaults shown in the comments.
+      resources:
+        requests:
+          cpu: "" # default: 10m
+          memory: "" # default: 16Mi
+        limits:
+          memory: "" # default: 64Mi
+
     # Kubernetes configuration for MCP Server Runtime
     # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
     kubernetes:
       # Namespace where MCP server pods will be created
       # If not set, defaults to the namespace specified in the helm release
+      # Create this namespace before installing when it differs from the release
+      # namespace. The chart automatically grants its platform ServiceAccount
+      # MCP-manager permissions there.
       namespace: ""
 
       # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
@@ -512,6 +574,9 @@ archestra:
       # RBAC (Role-Based Access Control) configuration
       rbac:
         # Specifies whether RBAC resources should be created
+        # When false, set ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE only if
+        # external RBAC supplies a readable Role with that name in every runtime
+        # namespace and deletes each Role during release uninstall.
         create: true
 
         # Kubernetes namespaces backing deployment environments that the platform
@@ -568,6 +633,15 @@ archestra:
         #       namespace: another-namespace
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
+
+  # Knowledge base configuration
+  knowledgeBase:
+    # Perforce permission sync
+    perforceShim:
+      # Image for the p4 shim pod the backend provisions for Perforce
+      # permission sync. If not set, defaults to
+      # "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<app version>"
+      image: ""
 
   # Background worker configuration
   # Deploys a separate Deployment for processing background jobs from the postgres queue

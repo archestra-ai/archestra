@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,8 +12,8 @@ LLM Proxy is Archestra's security layer that sits between AI agents and LLM prov
 
 ## To use LLM Proxy
 
-1. Go to **LLM Proxies** and create a new LLM proxy
-2. Click the **Connect** icon, choose the LLM provider you are using, and copy the provided URL.
+1. Go to **LLM Proxies** and create a new LLM proxy — the setup wizard asks for its name and visibility, then advanced settings; **Create** opens the new proxy on its **Connect** tab.
+2. On the proxy's **Connect** tab, choose the LLM provider you are using, and copy the provided URL.
 3. Use this URL when calling your LLM provider instead of the provider's original endpoint.
 
 ```mermaid

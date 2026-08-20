@@ -31,6 +31,8 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
+import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
   deleteConnector,
@@ -50,6 +52,7 @@ import {
   UserModel,
 } from "@/models";
 import * as metrics from "@/observability/metrics";
+import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import {
   type AclEntry,
   ConnectorTypeSchema,
@@ -316,7 +319,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     title: "Query Knowledge Sources",
     description:
-      "Query the organization's knowledge sources to retrieve relevant information. Use this tool when the user asks a question you cannot answer from your training data alone, or when they explicitly ask you to search internal documents and data sources. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
+      "Search the organization's indexed knowledge — documents, files, images, photos, and records synced from its connected sources. Use it whenever the user refers to something that may live in this workspace rather than in your training data: a question about internal material, or a request to find, look up, show, open, or describe a document, file, or picture. Prefer searching over answering from memory or replying that you cannot see files or images — this workspace's own content is reachable only through this tool. Pass the user's original query as-is — do not rephrase, summarize, or expand it. The system performs its own query optimization internally.",
     schema: QueryKnowledgeSourcesToolArgsSchema,
     outputSchema: QueryKnowledgeSourcesOutputSchema,
     async handler({ args, context }) {
@@ -689,15 +692,58 @@ async function handleQueryKnowledgeSources(params: {
     // the same flag as the verification pass — disabling the feature must also
     // stop asking the model to quote, not just skip the check. Omitted for an
     // empty result — there is nothing to quote.
+    // How a media chunk's payload leaves this tool depends on who is asking.
+    //
+    // A caller that feeds the result to a model through the chat pipeline gets
+    // the payload as an MCP image part, with `content` keeping only the short
+    // "[image: title (mime)]" descriptor: a 180KB base64 blob is ~45-60k tokens
+    // the model cannot read anyway, and that pipeline bounds, strips and
+    // persists the part properly.
+    //
+    // Everyone else — an external MCP client on the gateway, the app proxy —
+    // gets the chunk exactly as it is stored and as this tool has always
+    // returned it: the `data:<mime>;base64,<payload>` URL inline in
+    // `results[].content`. Those surfaces hand the result straight back to
+    // their caller, so an image part would be a wire-contract change for a
+    // client that never asked for one.
+    const imageParts: Array<{
+      type: "image";
+      data: string;
+      mimeType: string;
+    }> = [];
+    const wireResults = results.map((result) => {
+      if (!result.media) return result;
+      const { media, ...rest } = result;
+      if (!context.deliversMediaAsImageParts) {
+        return { ...rest, content: toMediaDataUrl(media) };
+      }
+      if (
+        imageParts.length < MAX_INLINE_RESULT_IMAGES &&
+        media.data.length <= MAX_INLINE_RESULT_IMAGE_BASE64_CHARS
+      ) {
+        imageParts.push({
+          type: "image",
+          data: media.data,
+          mimeType: media.mimeType,
+        });
+      }
+      return rest;
+    });
+
     const output = {
-      results,
-      totalChunks: results.length,
+      results: wireResults,
+      totalChunks: wireResults.length,
       ...(config.kb.quoteVerificationEnabled &&
-        results.length > 0 && {
-          citationInstruction: QUOTE_CITATION_INSTRUCTION,
+        wireResults.length > 0 && {
+          citationInstruction:
+            imageParts.length > 0
+              ? `${QUOTE_CITATION_INSTRUCTION} ${MEDIA_CITATION_NOTE}`
+              : QUOTE_CITATION_INSTRUCTION,
         }),
     };
-    return structuredSuccessResult(output, JSON.stringify(output));
+    const toolResult = structuredSuccessResult(output, JSON.stringify(output));
+    toolResult.content.push(...imageParts);
+    return toolResult;
   } catch (error) {
     // A diagnosable KB failure (unsupported/unreachable provider, dimension
     // mismatch, unusable response, unresolvable config) maps to its own
@@ -902,6 +948,16 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult(mfilesViolation);
     }
 
+    // Same reason: connector types the organization's admins switched off
+    // must not be creatable through the gateway either.
+    const hiddenTypeViolation = await hiddenKnowledgeConnectorViolation({
+      organizationId: context.organizationId,
+      connectorType: args.connector_type,
+    });
+    if (hiddenTypeViolation) {
+      return errorResult(hiddenTypeViolation);
+    }
+
     // Environment isolation: a connector created through a gateway belongs to the
     // gateway's environment, so the creator can actually use it afterwards.
     const agentEnvironmentId = await AgentModel.findEnvironmentId(
@@ -920,6 +976,9 @@ async function handleCreateKnowledgeConnector(params: {
         environmentId: agentEnvironmentId,
       }),
     );
+    // Same lifecycle rule as the REST create route: a Perforce connector that
+    // syncs permissions gets its shim now, not on its first pass.
+    await reconcileP4ShimForConnector(connector.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
@@ -1150,6 +1209,24 @@ async function handleUpdateKnowledgeConnector(params: {
         args.id,
       );
     }
+    const nextEnabled = updates.enabled ?? existingConnector.enabled;
+    if (
+      existingConnector.visibility === "auto-sync-permissions" &&
+      (updates.config !== undefined ||
+        nextVisibility !== "auto-sync-permissions" ||
+        nextEnabled !== existingConnector.enabled)
+    ) {
+      // Mirrors the REST update route: a pass computed against the settings
+      // this update replaced must not finish against them.
+      await supersedePermissionSyncAfterSettingsChange({
+        connectorId: args.id,
+        visibility: nextVisibility,
+        enabled: nextEnabled,
+      });
+    }
+    // ...and the same shim lifecycle: this row decides whether a Perforce
+    // permission-sync pod exists, whatever wrote it.
+    await reconcileP4ShimForConnector(args.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector updated successfully.\n\n${JSON.stringify(connector, null, 2)}`,
@@ -1512,3 +1589,30 @@ async function findManageableConnector(params: {
   }
   return connector;
 }
+
+/**
+ * A retrieved image cannot be quoted verbatim, so the quote-citation rule needs
+ * an escape hatch or the model refuses to use it.
+ */
+const MEDIA_CITATION_NOTE =
+  "Results whose content reads `[image: ...]` are pictures, delivered as image attachments on this tool result — describe them from what you see and cite them by ref instead of quoting.";
+
+/**
+ * Rebuild the stored data URL for a caller that takes its payloads inline.
+ * `queryService` splits a media chunk into a descriptor plus `media` for the
+ * image-part path; joining them back is exactly the string the chunk holds
+ * (`chunk-and-store.ts` writes `data:<mime>;base64,<data>`).
+ */
+function toMediaDataUrl(media: { mimeType: string; data: string }): string {
+  return `data:${media.mimeType};base64,${media.data}`;
+}
+
+/** At most this many retrieved images ride along as inline image parts. */
+const MAX_INLINE_RESULT_IMAGES = 3;
+
+/**
+ * Skip inlining a single image larger than this (base64 characters, ~5MB of
+ * bytes) — provider image limits sit around there and one oversized attachment
+ * would fail the whole tool result.
+ */
+const MAX_INLINE_RESULT_IMAGE_BASE64_CHARS = 7_000_000;

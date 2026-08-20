@@ -55,6 +55,7 @@ import {
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
+import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -277,6 +278,15 @@ export async function executeA2AMessage(
     );
   }
 
+  // An agent set to block callers who cannot reach its MCP servers means it
+  // everywhere it runs, not only in the chat UI — this path serves ChatOps,
+  // incoming email, scheduled triggers, delegation, and external A2A. Headless
+  // runs carry the "system" sentinel rather than a real user and have no
+  // personal connections to check, so they are left alone.
+  if (userId && userId !== "system") {
+    await assertCallerMayStartTurn({ agentId, userId });
+  }
+
   // The advisor's row is env-less, so without this its spend would escape
   // environment budgets entirely; every other agent bills to its own row's
   // environment as usual.
@@ -444,7 +454,11 @@ export async function executeA2AMessage(
     // inject a small default max (e.g. Anthropic's ~4096) truncated large
     // tool-call payloads.
     const maxOutputTokens = resolveAgentMaxOutputTokens({
-      outputLength: modelRow?.outputLength ?? null,
+      // Resolved, so an admin-set max-output override on a model whose provider
+      // reports no limit is what the turn asks for.
+      outputLength: modelRow
+        ? ModelModel.resolveEffectiveOutputLength(modelRow)
+        : null,
       ceiling: config.chat.maxOutputTokensCeiling,
       rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,

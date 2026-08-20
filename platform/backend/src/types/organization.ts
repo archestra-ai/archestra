@@ -1,11 +1,21 @@
 import {
+  BM25_B_MAX,
+  BM25_B_MIN,
+  BM25_K1_MAX,
+  BM25_K1_MIN,
   EmbeddingDimensionsSchema,
+  KnowledgeConnectorOverridesSchema,
+  MessagingChannelOverridesSchema,
+  ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
+  StoredKnowledgeConnectorOverridesSchema,
+  StoredMessagingChannelOverridesSchema,
+  StoredModelProviderOverridesSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -285,7 +295,9 @@ export const AppearanceSettingsSchema = z.object({
   ogDescription: z.string().nullable(),
   footerText: z.string().nullable(),
   chatLinks: z.array(OrganizationChatLinkSchema).nullable(),
-  onboardingWizard: OnboardingWizardSchema.nullable(),
+  // No onboardingWizard here: this payload is served pre-auth and fetched on
+  // every page load, and wizard configs can embed large images. Its consumers
+  // (chat, the settings editor) read it from the authed /api/organization.
   chatErrorSupportMessage: z.string().nullable(),
   slimChatErrorUi: z.boolean(),
   animateChatPlaceholders: z.boolean(),
@@ -338,6 +350,12 @@ const extendedFields = {
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  // The stored (lenient) shapes: a jsonb value written by an older build must
+  // not 500 the organization read.
+  modelProviderOverrides: StoredModelProviderOverridesSchema.nullable(),
+  messagingChannelOverrides: StoredMessagingChannelOverridesSchema.nullable(),
+  knowledgeConnectorOverrides:
+    StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
@@ -441,6 +459,12 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Enterprise-gated on the route: scaling idle MCP servers to zero replicas.
+  mcpIdleHibernationEnabled: z.boolean().optional(),
+  // SPDX-SnippetEnd
 });
 
 export const UpdateSkillsSettingsSchema = z.object({
@@ -458,7 +482,59 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),
+  ocrChatApiKeyId: z.string().uuid().nullable().optional(),
+  ocrModel: z.string().nullable().optional(),
+  // BM25 keyword-ranker tuning. `null` clears the override back to the
+  // deployment default; bounds are shared with the env parser and the UI.
+  kbBm25K1: z
+    .number()
+    .finite()
+    .min(BM25_K1_MIN)
+    .max(BM25_K1_MAX)
+    .nullable()
+    .optional(),
+  kbBm25B: z
+    .number()
+    .finite()
+    .min(BM25_B_MIN)
+    .max(BM25_B_MAX)
+    .nullable()
+    .optional(),
 });
+
+/**
+ * Where BM25 keyword ranking stands for an organization — shown under
+ * Keyword ranking in Knowledge settings.
+ *
+ * BM25 scores from corpus statistics that the `kb_bm25_stats_refresh` task
+ * rebuilds on a schedule; until a language's statistics exist, keyword search
+ * ranks it with PostgreSQL's built-in `ts_rank`. `status` is that fact for
+ * everything the organization can search; the timestamps say when the
+ * statistics were last rebuilt and when they will be next.
+ */
+export const KeywordRankingStatusSchema = z.object({
+  status: z.enum([
+    // Statistics exist for every language with indexed documents.
+    "ready",
+    // Documents are indexed in a language whose statistics are not built
+    // yet — keyword search ranks it with ts_rank until the next refresh.
+    "pending",
+    // Nothing indexed yet; statistics are built on the first refresh after a
+    // sync indexes documents.
+    "no_documents",
+  ]),
+  lastRefreshedAt: z.string().datetime().nullable(),
+  nextRefreshAt: z.string().datetime().nullable(),
+  refreshing: z.boolean(),
+  // Whether the latest finished rebuild failed; false once a later one
+  // succeeds. Deliberately a flag and not the error text: the rebuild is
+  // deployment-wide, so its message can describe another organization's
+  // corpus, and it is a raw database error. The text stays in the task row
+  // and the logs, where operators look.
+  lastRefreshFailed: z.boolean(),
+});
+
+export type KeywordRankingStatus = z.infer<typeof KeywordRankingStatusSchema>;
 
 export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
@@ -488,9 +564,19 @@ export const UpdateConnectionSettingsSchema = z.object({
     .max(50)
     .nullable()
     .optional(),
+  /**
+   * Retired: the connect page carried its own provider list, which only ever
+   * narrowed what it displayed rather than what could be configured. One
+   * deployment-wide list under LLM settings now answers both.
+   *
+   * Rejected rather than stripped, so a browser tab left open across the
+   * upgrade cannot appear to gate providers and change nothing.
+   */
   connectionShownProviders: z
-    .array(SupportedProvidersSchema)
-    .nullable()
+    .never({
+      error:
+        "connectionShownProviders was retired. Set provider availability under Settings → LLM → Available model providers.",
+    })
     .optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)
@@ -518,6 +604,20 @@ export const UpdateConnectionSettingsSchema = z.object({
         });
       }
     }),
+});
+
+/**
+ * Admin customization of the built-in integration catalogs. Each map is keyed
+ * by the catalog entry's id and only needs entries for the ones the admin
+ * actually changed; `null` clears every override for that catalog. Omitted
+ * fields are left untouched, so the three surfaces can be saved independently.
+ */
+export const UpdateIntegrationSettingsSchema = z.object({
+  modelProviderOverrides: ModelProviderOverridesSchema.nullable().optional(),
+  messagingChannelOverrides:
+    MessagingChannelOverridesSchema.nullable().optional(),
+  knowledgeConnectorOverrides:
+    KnowledgeConnectorOverridesSchema.nullable().optional(),
 });
 
 /**

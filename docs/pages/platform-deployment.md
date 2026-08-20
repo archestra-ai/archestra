@@ -102,7 +102,6 @@ helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --install \
   --namespace archestra \
-  --set archestra.env.HOSTNAME="0.0.0.0" \
   --create-namespace \
   --wait
 ```
@@ -220,7 +219,7 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 
 **Kubernetes Settings**:
 
-- `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace)
+- `archestra.orchestrator.kubernetes.namespace` - Kubernetes namespace where MCP server pods will be created (defaults to Helm release namespace). Create a custom namespace before installing; the chart grants the platform ServiceAccount access to it.
 - `archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster` - Use in-cluster configuration (recommended when running inside K8s)
 - `archestra.orchestrator.kubernetes.clusterDomain` - Kubernetes cluster DNS domain for internal service URL construction (default: cluster.local)
 - `archestra.orchestrator.kubernetes.kubeconfig.enabled` - Enable mounting kubeconfig from a secret
@@ -456,26 +455,37 @@ When the worker is disabled (`archestra.worker.enabled: false`), background jobs
 - `postgresql.external_database_url` - External PostgreSQL connection string (recommended for production)
 - `postgresql.enabled` - Whether to deploy a self-hosted PostgreSQL instance in your Kubernetes cluster (default: true)
 
-For external PostgreSQL (recommended for production):
+For external PostgreSQL, store the complete connection URL in a Kubernetes
+Secret. This keeps credentials out of shell history and Helm release values.
+The example below expects `archestra-database` to contain a `url` key:
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set postgresql.enabled=false \
-  --set postgresql.external_database_url=postgresql://user:password@host:5432/database \
-  --wait
+```yaml
+postgresql:
+  enabled: false
+
+archestra:
+  envWithValueFrom:
+    - name: ARCHESTRA_DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: archestra-database
+          key: url
+  migrationJob:
+    envWithValueFrom:
+      - name: ARCHESTRA_DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: archestra-database
+            key: url
 ```
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
 The bundled PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The bundled instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
 
-During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band.
+During Helm upgrades, the chart runs `node ./scripts/migrate-with-lock.mjs` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band. This also disables migrations during web pod startup.
 
-For external Postgres, the simplest setup is a complete `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
+Alternatively, set `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
 
 If your deployment intentionally keeps the password in a separate Secret and uses `ARCHESTRA_DATABASE_URL=postgresql://user:$(PGPASSWORD)@host:5432/database`, provide `PGPASSWORD` to the migration Job through chart values:
 
@@ -690,6 +700,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
+- **`ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP`** - Runs database migrations before backend startup.
+  - Default: `true`
+  - Set to `false` only when your deployment pipeline applies migrations before rollout.
+
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
   - Range: `1`–`500`
@@ -885,12 +899,13 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
-- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
-  - Default: not set — incognito chats are unavailable. Unsetting it later turns the feature off again.
-  - Escrow is required, not optional: an incognito chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
+- **`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`** - Enables [locked chats](/docs/platform-content-encryption#locked-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
+  - Default: not set — locked chats are unavailable. Unsetting it later turns the feature off again.
+  - Escrow is required, not optional: a locked chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
   - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
   - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
-  - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
+  - This variable was called `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` before the feature was renamed. The old name still works, so you can rename it on your own schedule.
+  - See [Locked Chats](/docs/platform-content-encryption#locked-chats) for setup and the recovery procedure.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1376,6 +1391,37 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `600`
   - Set to `0` to disable.
 
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED`** - Offers idle hibernation on this deployment. Hibernation is a beta feature and ships off by default.
+  - Default: unset (falls back to the `ARCHESTRA_BETA` master switch)
+  - Set to `true` to offer the feature; an explicit `false` keeps it off even with `ARCHESTRA_BETA` on.
+  - Organizations still enable it in **Settings > MCP**; it requires an Enterprise license.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`** - How long an MCP server pod can sit unused before the platform hibernates it, with nonzero values floored at 120 seconds so servers are never hibernated between normal consecutive tool calls.
+  - Default: `1800` (30 minutes)
+  - Sets the idle window only. Enable hibernation in **Settings > MCP**; it requires an Enterprise license.
+  - Set to `0` to disable hibernation platform-wide, regardless of the organization setting.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without calling the container registry.
+  - Default: `true`
+  - Only runs while idle hibernation is enabled; set to `false` to stop pre-pulling and keep hibernation.
+  - The DaemonSet takes a pod slot on every node the MCP servers can be scheduled on.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE`** - Image for the pre-pull DaemonSet's own containers.
+  - Default: `docker.io/library/busybox:1.36-musl`.
+  - The image must provide a statically linked `/bin/busybox`. The DaemonSet copies it into MCP images that may use another libc.
+  - Independent of the MCP server base image on purpose, so a pinned or custom base image cannot break pre-pulling.
+  - Point it at a static private mirror when your cluster cannot pull from Docker Hub.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE`** - Same-namespace Role used to remove runtime-created MCP resources on uninstall.
+  - The chart creates and sets a dedicated Role when it manages orchestrator RBAC.
+  - With external RBAC, use a readable Role with the same name in every runtime namespace.
+  - Delete each external Role during uninstall to remove its runtime resources.
+
+- **`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`** - Names the cluster objects Archestra creates for itself outside the chart, such as the image pre-pull DaemonSet.
+  - Default: injected by the Helm chart. Set it by hand only when you deploy without the chart.
+  - Two releases can then share a namespace without fighting over one object.
+  - When it is unset, those objects are not created at all.
+
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
@@ -1601,7 +1647,7 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge#reranking-configuration) for how to pick the key and model.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Search Ranking Configuration](/docs/platform-knowledge#search-ranking-configuration) for how to pick the key and model.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Max wall-clock time a single connector sync run works before it checkpoints and yields.
   - Default: `3300` (55 minutes)
@@ -1630,6 +1676,26 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_K1`** - Deployment default for the BM25 Term Saturation (`k1`), from `0` to `10`.
+  - Default: `1.2`
+  - Keyword ranking in knowledge search is BM25, computed in plain SQL from statistics tables — no PostgreSQL extension, no extra index, so it runs on managed PostgreSQL such as RDS, Aurora, Neon, and Cloud SQL. This factor is how much repeating a word keeps helping a passage: higher lets repetition keep adding weight, `0` counts a word the same whether it appears once or fifty times. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_B`** - Deployment default for the BM25 Length Normalization (`b`), from `0` to `1`.
+  - Default: `0.75`
+  - How much long passages are held back: `0` means length does not matter, `1` means short, focused passages pull well ahead of long ones that mention the same words. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_RECALL_CAP`** - How many candidate chunks BM25 rescores per query.
+  - Default: `2000`
+  - BM25 ranks, it does not index. The existing full-text index finds the candidates and this caps how many of them get scored. Cost grows roughly in step with the cap. A query matching more chunks than the cap can only reorder what `ts_rank` surfaced first, so raise this if broad queries matter more than latency.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS`** - How often the BM25 corpus statistics are rebuilt.
+  - Default: `3600`
+  - The first rebuild runs right after startup; until it has finished, keyword matches are ranked with PostgreSQL's built-in `ts_rank`. The refresh reads every chunk, so its cost grows with the corpus. It never blocks ingestion. Statistics that lag the corpus shift scores slightly rather than making them wrong, so a long interval is safe on a large deployment.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_TIMEOUT_MS`** - How long one statistics rebuild may run before PostgreSQL cancels it.
+  - Default: `900000` (15 minutes), from `30000` to `21600000`
+  - The rebuild reads the whole corpus on a timer, so it needs far longer than a request. Raise it if a rebuild on a very large corpus is cancelled — a rebuild that never finishes leaves keyword search on `ts_rank` for good, since the next attempt gets no further.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
   - Default: `8000`
   - Tighter than the pool-wide `ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`. A search lane that exceeds it is dropped and the remaining lanes' results are merged. The query fails only when every lane times out. Timed-out lanes are counted in the `rag_search_lane_timeout_total` metric. Set to `0` to inherit the pool-wide timeout.
@@ -1650,6 +1716,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `false`
   - Improves recall for chunks that never name their own subject: a chunk reading "the limit was raised to 5,000" becomes findable by "billing API rate limit". Costs one LLM call per document per sync, billed against the configured reranking model; unchanged documents are skipped, so a steady-state re-sync costs nothing. Requires a reranking model that can generate text — with a dedicated Cohere Rerank model configured it is skipped.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`** - Ceiling on how many textless pages of one PDF the [Document OCR](/docs/platform-knowledge#document-ocr) pass transcribes.
+  - Default: `100`
+  - Each page is one vision-model call billed against the organization's configured OCR model, so this bounds the worst-case cost of a single document. Pages past the cap stay untranscribed and the document is indexed with a partial-extraction warning naming the cap.
+
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
@@ -1661,6 +1731,19 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT`** - Concurrency cap for the runtime-isolated permission-sync worker lane.
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
+
+#### Perforce Permission Sync (p4 Shim)
+
+Permission sync for the [Perforce connector](/docs/platform-knowledge#perforce-helix-core) runs the `p4` CLI in a small in-cluster pod — the p4 shim. It requires the Kubernetes orchestrator. The shim image ships no Perforce software: the `p4` client is proprietary and is never redistributed in Archestra images. The backend downloads the pinned binary when it provisions the pod, verifies its checksum, and pushes it in. Air-gapped installs point the URL variables at an internal mirror and update the checksums to match.
+
+Each connector gets its own shim, so one connector's Perforce credentials never pass through another's pod and its pod can only reach its own server. The shim is created when a connector starts syncing permissions and removed when it stops — deleted, disabled, or switched to another visibility. It runs one replica the whole time, with equal CPU and memory requests and limits, so Kubernetes places it in the Guaranteed quality-of-service class. Editing a connector's server URL, wire address, admin user or credentials replaces the pod and its access token, so nothing from the previous settings survives.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Override for the p4 shim image.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<platform version>`
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64`** - Download URL for the `p4` binary, per architecture.
+  - Default: the Perforce CDN r25.2 builds (`https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4` and `https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4`)
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64`** - Expected SHA-256 of each downloaded binary. A download that does not match is rejected.
+  - Default: the checksums of the r25.2 CDN builds. Update them together with the URL variables.
 
 The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one-google-account) authorizes through a Google OAuth client that belongs to the deployment. Create a **Web application** client in the Google Cloud Console, enable the Google Drive API, and register `<your Archestra URL>/api/connectors/gdrive/oauth/callback` as an authorized redirect URI — the connector form shows the exact string this deployment sends. The service-account modes, domain-wide delegation included, need neither variable.
 

@@ -20,8 +20,10 @@ const SALESFORCE = z.literal("salesforce");
 const WEB_CRAWLER = z.literal("web_crawler");
 const PERFORCE = z.literal("perforce");
 const MFILES = z.literal("mfiles");
+/** Internal: backs uploaded knowledge files. Never user-selectable. */
+const FILE_UPLOAD = z.literal("file_upload");
 
-export const ConnectorTypeSchema = z.union([
+const USER_SELECTABLE_CONNECTOR_TYPES = [
   JIRA,
   CONFLUENCE,
   GITHUB,
@@ -39,6 +41,27 @@ export const ConnectorTypeSchema = z.union([
   WEB_CRAWLER,
   PERFORCE,
   MFILES,
+] as const;
+
+/**
+ * What a user may ask the API to CREATE. `file_upload` is excluded on purpose:
+ * it is an internal connector the knowledge-files page creates implicitly, at
+ * most one per knowledge base, so accepting it from a client would break that
+ * invariant and put an unconfigurable entry in the connector dialog.
+ *
+ * Read schemas use `ConnectorTypeSchema` below, which does include it — an
+ * uploads-backed connector is a real row that has to be listable.
+ */
+export const UserSelectableConnectorTypeSchema = z.union(
+  USER_SELECTABLE_CONNECTOR_TYPES,
+);
+export type UserSelectableConnectorType = z.infer<
+  typeof UserSelectableConnectorTypeSchema
+>;
+
+export const ConnectorTypeSchema = z.union([
+  ...USER_SELECTABLE_CONNECTOR_TYPES,
+  FILE_UPLOAD,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -231,8 +254,17 @@ export const ServiceNowConfigSchema = z.object({
   includeChangeRequests: z.boolean().optional(),
   includeProblems: z.boolean().optional(),
   includeBusinessApps: z.boolean().optional(),
+  includeKnowledgeArticles: z.boolean().optional(),
   states: z.array(z.string()).optional(),
   assignmentGroups: z.array(z.string()).optional(),
+  /**
+   * Auto-sync permissions: per-table extra audience of ServiceNow role names
+   * (e.g. `{ "incident": ["itil"] }`) granted read on every synced record of
+   * that table, rostered from `sys_user_has_role`. Without an entry a table's
+   * records are visible only to their participants (assignment-group members
+   * and the referenced users).
+   */
+  roleAudiences: z.record(z.string(), z.array(z.string())).optional(),
   batchSize: z.number().optional(),
   syncDataForLastMonths: z.number().min(1).max(12).optional(),
 });
@@ -599,6 +631,30 @@ export const PerforceConfigSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * Optional override for the wire-protocol address of the Perforce server
+   * (`[ssl:]host:port`) that permission sync's in-cluster p4 shim dials.
+   *
+   * Normally left unset: `p4 webserver` is served by the p4d process itself,
+   * so the wire address is derived from `serverUrl`'s host at p4d's default
+   * port and then verified by probing it from the pod (both transports — the
+   * `ssl:` prefix is discovered, not configured). Set this only when the REST
+   * endpoint is genuinely not the p4d host, e.g. an ingress fronting the web
+   * server alone. Permission sync additionally needs `adminUsername` and the
+   * admin password in the credential `adminApiKey` field.
+   */
+  p4Port: z
+    .string()
+    .regex(/^(ssl:)?[A-Za-z0-9_.[\]-]+:\d{1,5}$/, {
+      message: 'p4Port must look like "host:1666" or "ssl:host:1666"',
+    })
+    .optional(),
+  /**
+   * Admin-level Perforce user for permission sync. Reading the full
+   * protections table (`p4 protects -a`) requires super access, or admin with
+   * the `dm.protects.allow.admin=1` configurable.
+   */
+  adminUsername: z.string().min(1).max(256).optional(),
 });
 export type PerforceConfig = z.infer<typeof PerforceConfigSchema>;
 
@@ -879,10 +935,53 @@ export type ReadIngestedDocuments = (args: {
   limit: number;
 }) => Promise<{ documents: IngestedDocumentRef[]; nextAfterId: string | null }>;
 
+/**
+ * Identifies the connector a sync is running for. Connectors that provision
+ * their own infrastructure key it off this so one connector's workload — and
+ * credentials — never share a runtime with another's, and so a settings change
+ * can retire that runtime; see the Perforce shim (`k8s/p4-shim-runtime`), the
+ * only current consumer.
+ */
+export interface ConnectorIdentity {
+  /** Scopes the connector's own infrastructure. */
+  connectorId: string;
+  organizationId: string;
+  /** The connector's environment, or null when it uses the default. */
+  environmentId: string | null;
+  secretId: string | null;
+  /**
+   * Version marker for the connector's stored credentials — the secret row's
+   * `updatedAt`, not the connector's. It is the credential half of the
+   * Perforce shim's rotation fingerprint, so a credential change retires the
+   * pod without any secret material reaching a Kubernetes annotation.
+   *
+   * The connector's own `updatedAt` deliberately does NOT appear here: a
+   * permission-sync pass writes that row on every run, so keying rotation off
+   * it would restart the pod on every pass.
+   */
+  credentialVersion: string;
+  /**
+   * The run this work is being done under, when there is one.
+   *
+   * Carried on the identity so a connector that provisions its own runtime
+   * (Perforce) can make that runtime refuse a caller whose run has since been
+   * reclaimed — a worker resuming from a freeze would otherwise rebuild a pod
+   * and drive upstream commands for a pass that ended. Absent for callers that
+   * legitimately hold no run, such as Test Connection.
+   */
+  run?: { runId: string; epoch: number };
+}
+
 /** Shared input for the permission-sync extraction hooks (§1 of the plan). */
 export interface PermissionSyncParams {
   config: Record<string, unknown>;
   credentials: ConnectorCredentials;
+  /**
+   * Optional so the hooks stay callable without it; a connector that needs it
+   * must fail closed when it is absent rather than fall back to a shared or
+   * install-wide resource.
+   */
+  identity?: ConnectorIdentity;
   /**
    * Opaque resume cursor from a prior interrupted run of the same generation,
    * or null on a fresh enumeration. Connectors treat it as their own
@@ -1117,6 +1216,8 @@ export interface Connector {
   testConnection(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    /** See {@link ConnectorTenant}; only connectors with per-tenant infrastructure read it. */
+    identity?: ConnectorIdentity;
   }): Promise<{ success: boolean; error?: string }>;
 
   /** Estimate the total number of items to sync (for progress display). Returns null if unknown. */
@@ -1189,6 +1290,7 @@ export interface Connector {
   probePermissionChanges?(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    identity?: ConnectorIdentity;
     state: PermissionSyncState | null;
   }): Promise<PermissionProbeResult>;
 
@@ -1206,6 +1308,7 @@ export interface Connector {
   refreshContainerAudiences?(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
+    identity?: ConnectorIdentity;
     containerKeys: string[];
     /** Read cached object-version metadata so the source can under-grant across revision races. */
     readIngestedDocuments: ReadIngestedDocuments;

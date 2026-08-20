@@ -587,6 +587,37 @@ export function useUpdateConnectionSettings(
 }
 
 /**
+ * Hide entries of the built-in integration catalogs (model providers,
+ * messaging channels, knowledge connectors) or override how they are labelled.
+ */
+export function useUpdateIntegrationSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateIntegrationSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateIntegrationSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update the org-wide default environment (the implicit "Default" target that
  * catalog items use when no environment is assigned). Unlike real environments,
  * the default has no slug, so both its name and namespace are freely editable.
@@ -775,6 +806,61 @@ export function useTestRerankerConnection() {
       params: NonNullable<archestraApiTypes.TestRerankerConnectionData["body"]>,
     ) => {
       const { data, error } = await archestraApiSdk.testRerankerConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
+      }
+
+      return data ?? { success: false, error: "No response" };
+    },
+  });
+}
+
+/**
+ * Where BM25 keyword ranking stands (statistics coverage and the refresh
+ * task's schedule), for the status line under Keyword ranking in Knowledge
+ * settings. Polls only while the answer is about to change — a refresh in
+ * flight, or statistics still missing — and rests once ranking is ready.
+ */
+export function useKeywordRankingStatus() {
+  return useQuery({
+    queryKey: [...organizationKeys.all, "keyword-ranking-status"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getKeywordRankingStatus();
+      // The page renders its own quiet omission for this passive status line;
+      // a toast per failed poll would outweigh the information.
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    // Fast while the answer is about to change, slow but never off once it
+    // settles: "ready" is not terminal — a sync that indexes a new language
+    // drops ranking back to the fallback, and a page left open would otherwise
+    // keep claiming Ready.
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      if (!status) return false;
+      return status.refreshing ||
+        status.status === "pending" ||
+        status.lastRefreshFailed
+        ? 30_000
+        : 300_000;
+    },
+  });
+}
+
+/**
+ * Test an OCR pair by having the backend send a synthetic PDF page to the
+ * model. Same contract as the embedding/reranker tests.
+ */
+export function useTestOcrConnection() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.TestOcrConnectionData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.testOcrConnection({
         body: params,
       });
 

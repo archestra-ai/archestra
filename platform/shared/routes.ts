@@ -2,6 +2,7 @@ export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
+  GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
@@ -90,6 +91,7 @@ export const RouteId = {
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
+  GetMcpServerAutoModeAgents: "getMcpServerAutoModeAgents",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
   InspectMcpServer: "inspectMcpServer",
@@ -98,6 +100,7 @@ export const RouteId = {
   RestoreMcpServer: "restoreMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
+  HardResetMcpServer: "hardResetMcpServer",
   ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   // MCP Gateway Routes
@@ -511,12 +514,16 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
+  // Integration catalog customization (organization-level)
+  UpdateIntegrationSettings: "updateIntegrationSettings",
+
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
   CreateEnvironment: "createEnvironment",
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
   GetK8sCapabilities: "getK8sCapabilities",
 
   // GitHub App Configuration Routes
@@ -537,6 +544,8 @@ export const RouteId = {
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
   TestRerankerConnection: "testRerankerConnection",
+  TestOcrConnection: "testOcrConnection",
+  GetKeywordRankingStatus: "getKeywordRankingStatus",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -553,6 +562,7 @@ export const RouteId = {
 
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
+  UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
   GetMemberDefaultModel: "getMemberDefaultModel",
   UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
@@ -575,6 +585,8 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetUserStatistics: "getUserStatistics",
+  GetAppStatistics: "getAppStatistics",
+  GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 
@@ -656,6 +668,17 @@ export const RouteId = {
   GetConnectorRun: "getConnectorRun",
 
   // Knowledge File Routes
+  GetKnowledgeFiles: "getKnowledgeFiles",
+  UploadKnowledgeFile: "uploadKnowledgeFile",
+  GetKnowledgeFileContent: "getKnowledgeFileContent",
+  DeleteKnowledgeFile: "deleteKnowledgeFile",
+  UpdateKnowledgeFile: "updateKnowledgeFile",
+  IndexKnowledgeFiles: "indexKnowledgeFiles",
+  GetKnowledgeDirectories: "getKnowledgeDirectories",
+  CreateKnowledgeDirectory: "createKnowledgeDirectory",
+  UpdateKnowledgeDirectory: "updateKnowledgeDirectory",
+  DeleteKnowledgeDirectory: "deleteKnowledgeDirectory",
+  PromoteAttachmentToKnowledgeFile: "promoteAttachmentToKnowledgeFile",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",

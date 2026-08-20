@@ -15,6 +15,18 @@ export class McpRegistryPage {
   }
 
   async goto() {
+    // The registry opens in its table view now; these specs are written
+    // against the cards, so the page carries the preference a person who
+    // picked that view would have. The one spec that wants the table clicks
+    // the toggle itself.
+    await this.page.addInitScript(() => {
+      try {
+        window.localStorage.setItem("archestra-mcp-registry-view", "cards");
+      } catch {
+        // Storage can be unavailable; the spec then fails where it looks
+        // for a card rather than somewhere confusing.
+      }
+    });
     await this.page.goto("/mcp/registry");
   }
 

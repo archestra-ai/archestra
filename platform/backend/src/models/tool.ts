@@ -59,6 +59,7 @@ import {
 } from "@/services/environments/environment-isolation";
 import type {
   Agent,
+  AgentScope,
   AssignedTool,
   ExtendedTool,
   InsertTool,
@@ -242,6 +243,38 @@ function toolInstallNotUninstalled(agentTools = schema.agentToolsTable): SQL {
           and(
             eq(siblingInstall.catalogId, schema.toolsTable.catalogId),
             notDeleted(siblingInstall),
+          ),
+        ),
+    ),
+  ) as SQL;
+}
+
+/**
+ * Excludes a delegation tool whose target agent has been (soft-)deleted.
+ *
+ * Deleting an agent is a soft delete, so the `delegate_to_agent_id` FK's
+ * `on delete cascade` never fires and the `agent__<name>` tool outlives the
+ * agent it delegates to. Nothing can call it — the gateway resolves delegation
+ * targets through the same `notDeleted` filter (see
+ * {@link ToolModel.getDelegationToolsForAgent}) — so listing it only offers
+ * policy rows for an agent that no longer exists.
+ *
+ * Filtering here rather than deleting the row on agent delete keeps the tool
+ * (and its policies) intact for {@link AgentModel.restore}.
+ *
+ * Correlates on `tools`, so every caller must have it in its FROM.
+ */
+function delegationTargetNotDeleted(): SQL {
+  return or(
+    isNull(schema.toolsTable.delegateToAgentId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, schema.toolsTable.delegateToAgentId),
+            notDeleted(schema.agentsTable),
           ),
         ),
     ),
@@ -3562,7 +3595,8 @@ class ToolModel {
   /**
    * Find all tools with their profile assignments.
    * Returns one entry per tool (grouped by tool), with all assignments embedded.
-   * Only returns tools that have at least one assignment.
+   * Tools with no assignment are included — proxy-observed tools never have one
+   * (they are discovered from traffic, not assigned) and still need a policy row.
    */
   static async findAllWithAssignments(params: {
     pagination?: { limit?: number; offset?: number };
@@ -3595,7 +3629,11 @@ class ToolModel {
       );
     }
 
-    // Filter by origin ("llm-proxy", "agent", or a catalogId)
+    // A deleted agent leaves its `agent__<name>` delegation tool behind; those
+    // rows are ghosts and must not be offered for policy configuration.
+    toolWhereConditions.push(delegationTargetNotDeleted());
+
+    // Filter by origin ("llm-proxy", "agent", "app", or a catalogId)
     if (filters?.origin) {
       if (filters.origin === "llm-proxy") {
         // LLM Proxy tools: shared proxy tools with agentId=NULL, catalogId=NULL, no delegation
@@ -3606,6 +3644,26 @@ class ToolModel {
         // Agent delegation tools have a non-null delegateToAgentId
         toolWhereConditions.push(
           isNotNull(schema.toolsTable.delegateToAgentId),
+        );
+      } else if (filters.origin === "app") {
+        // App launch tools: catalog-backed like any MCP tool, but their catalog
+        // is an app backing (serverType "app"), so they group under one source
+        // rather than one entry per app.
+        toolWhereConditions.push(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.internalMcpCatalogTable)
+              .where(
+                and(
+                  eq(
+                    schema.internalMcpCatalogTable.id,
+                    schema.toolsTable.catalogId,
+                  ),
+                  eq(schema.internalMcpCatalogTable.serverType, "app"),
+                ),
+              ),
+          ),
         );
       } else {
         // MCP tools have a catalogId
@@ -3716,10 +3774,27 @@ class ToolModel {
         )
       : eq(schema.agentToolsTable.toolId, schema.toolsTable.id);
 
+    // An agent_tools row survives its agent's soft delete, so counting the raw
+    // rows reports assignments the embedded `assignments` array (which inner-
+    // joins live agents) never lists — a row reading "1 assignment" that expands
+    // to "Not assigned to agent or MCP gateway". Count only live agents so both
+    // agree.
+    const assignmentToLiveAgent = exists(
+      db
+        .select({ one: sql`1` })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+            notDeleted(schema.agentsTable),
+          ),
+        ),
+    );
+
     // Count subquery for assignment count (with access control)
     const assignmentCountSubquery = sql<number>`(
       SELECT COUNT(*) FROM ${schema.agentToolsTable}
-      WHERE ${assignmentConditions}
+      WHERE ${and(assignmentConditions, assignmentToLiveAgent)}
     )`;
 
     // Determine the ORDER BY clause based on sorting params
@@ -3743,6 +3818,17 @@ class ToolModel {
         break;
     }
 
+    // A delegation tool is named after its target agent, so personal agents —
+    // one "My Assistant" per member — mint identically named tools. Carry the
+    // target's identity so the listing can tell those rows apart. Both joins are
+    // many-to-one and LEFT, so they add no rows and drop none: most tools have
+    // no delegation target, and an agent whose author was deleted has no owner.
+    const delegateAgentAlias = alias(schema.agentsTable, "delegateAgent");
+    const delegateAgentOwnerAlias = alias(
+      schema.usersTable,
+      "delegateAgentOwner",
+    );
+
     // Query for tools that have at least one assignment
     // Secondary sort on id ensures deterministic ordering when primary sort values are equal
     // (e.g. bulk-inserted MCP tools share the same createdAt timestamp)
@@ -3762,8 +3848,20 @@ class ToolModel {
         policiesAutoConfiguredModel:
           schema.toolsTable.policiesAutoConfiguredModel,
         assignmentCount: assignmentCountSubquery,
+        delegateToAgentId: delegateAgentAlias.id,
+        delegateToAgentName: delegateAgentAlias.name,
+        delegateToAgentScope: delegateAgentAlias.scope,
+        delegateToAgentOwnerEmail: delegateAgentOwnerAlias.email,
       })
       .from(schema.toolsTable)
+      .leftJoin(
+        delegateAgentAlias,
+        eq(delegateAgentAlias.id, schema.toolsTable.delegateToAgentId),
+      )
+      .leftJoin(
+        delegateAgentOwnerAlias,
+        eq(delegateAgentOwnerAlias.id, delegateAgentAlias.authorId),
+      )
       .where(toolWhereClause)
       .orderBy(orderByClause, asc(schema.toolsTable.id))
       .limit(pagination.limit ?? 20)
@@ -3907,6 +4005,14 @@ class ToolModel {
         (tool.policiesAutoConfiguredModel as string | null) ?? null,
       assignmentCount: Number(tool.assignmentCount),
       assignments: assignmentsByToolId.get(tool.id as string) || [],
+      delegateToAgent: tool.delegateToAgentId
+        ? {
+            id: tool.delegateToAgentId,
+            name: tool.delegateToAgentName as string,
+            scope: tool.delegateToAgentScope as AgentScope,
+            ownerEmail: tool.delegateToAgentOwnerEmail,
+          }
+        : null,
     }));
 
     return createPaginatedResult(result, Number(total), {

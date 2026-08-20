@@ -7,9 +7,15 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import { isIncognitoChatEnabled } from "@/content-encryption/incognito";
+import { isLockedChatEnabled } from "@/content-encryption/locked-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
+// SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
   isGoogleDriveOAuthConfigured,
@@ -68,6 +74,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             features: z.strictObject({
               betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
+              // SPDX-SnippetBegin
+              // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+              // Deployment-level gate for MCP idle hibernation (the beta flag
+              // AND the operator kill switch); the licence and the
+              // organization toggle sit behind it.
+              mcpIdleHibernationBetaEnabled: z.boolean(),
+              // SPDX-SnippetEnd
               sandbox: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -101,13 +115,20 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
-              chatIncognitoEnabled: z.boolean(),
+              lockedChatEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
               kbAutoSyncPermissionsEnabled: z.boolean(),
               kbMfilesConnectorEnabled: z.boolean(),
               kbMfilesOauthEnabled: z.boolean(),
+              /**
+               * The BM25 tuning constants an organization inherits until it
+               * sets its own in Knowledge settings; the settings tab shows them
+               * as the effective values wherever the organization has not.
+               */
+              kbBm25DefaultK1: z.number(),
+              kbBm25DefaultB: z.number(),
               /**
                * Individual ("connect my own Drive") auth for the Google Drive
                * knowledge connector. `redirectUri` is the exact string that
@@ -175,6 +196,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         features: {
           betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          // The whole deployment-level gate, not the beta flag alone: an
+          // operator's hard kill switch must take the settings toggle and the
+          // per-server control with it, or the UI renders an operational
+          // feature nothing behind it will ever run.
+          mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+          // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:
@@ -198,12 +228,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
-          chatIncognitoEnabled: isIncognitoChatEnabled(),
+          lockedChatEnabled: isLockedChatEnabled(),
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
           kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
+          kbBm25DefaultK1: config.kb.bm25K1,
+          kbBm25DefaultB: config.kb.bm25B,
           kbGoogleDriveOAuth: {
             configured: isGoogleDriveOAuthConfigured(),
             redirectUri: getGoogleDriveOAuthRedirectUri(),

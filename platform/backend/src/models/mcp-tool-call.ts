@@ -24,12 +24,12 @@ import {
   encryptMcpToolCallContent,
   readMcpToolCallRow,
 } from "@/content-encryption/audit-rows";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import {
   isContentDecryptionAvailable,
   isContentEncryptionEnabled,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 } from "@/content-encryption/index.ee";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -64,14 +64,14 @@ function buildMcpToolCallSearchCondition(search: string) {
 
 class McpToolCallModel {
   /**
-   * @param auditContext when present, this tool call belongs to an incognito
+   * @param auditContext when present, this tool call belongs to a locked-chat
    * conversation: `toolCall`/`toolResult` are encrypted under that
    * conversation's browser-held key and the row is stamped with the
    * discriminator, instead of the server key (or plaintext).
    */
   static async create(
     data: InsertMcpToolCall,
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
   ) {
     const audit = auditContext ?? null;
     const [mcpToolCall] = await db
@@ -434,12 +434,12 @@ class McpToolCallModel {
         SELECT id, created_at::text AS created_at_text, tool_result
         FROM ${schema.mcpToolCallsTable}
         WHERE method = 'tools/call' AND tool_result IS NOT NULL
-          -- Incognito rows are keyed to a browser this process cannot reach,
+          -- LockedChat rows are keyed to a browser this process cannot reach,
           -- so their result is unreadable here. Excluded in SQL rather than
           -- skipped in JS: the locked sentinel has no top-level isError, so
           -- an encrypted FAILURE would otherwise be counted as the first
           -- success and mis-fire onboarding.
-          AND incognito_conversation_id IS NULL
+          AND locked_chat_conversation_id IS NULL
         ${cursorClause}
         ORDER BY created_at ASC, id ASC
         LIMIT ${batchSize}
@@ -520,11 +520,11 @@ class McpToolCallModel {
           eq(schema.mcpToolCallsTable.method, "tools/call"),
           sql`${schema.mcpToolCallsTable.toolResult} IS NOT NULL`,
           // Same exclusion as the decrypting branch, and it matters MORE here:
-          // this path runs when at-rest encryption is off, where incognito
+          // this path runs when at-rest encryption is off, where locked-chat
           // rows still exist, and it reads `isError` straight out of JSON. A
           // DEK envelope has no such key, so an encrypted failure would read
           // as a success.
-          isNull(schema.mcpToolCallsTable.incognitoConversationId),
+          isNull(schema.mcpToolCallsTable.lockedChatConversationId),
           sql`(${schema.mcpToolCallsTable.toolResult} ->> 'isError') IS DISTINCT FROM 'true'`,
         ),
       )

@@ -377,11 +377,11 @@ const AgentHooksEditorContent = forwardRef<
   };
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold">Hooks ({rows.length})</h3>
+            <h3 className="text-base font-semibold">Hooks ({rows.length})</h3>
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
               Beta
             </Badge>

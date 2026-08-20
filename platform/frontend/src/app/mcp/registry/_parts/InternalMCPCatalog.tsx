@@ -51,8 +51,15 @@ import {
   useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
+import { needsAttention } from "@/lib/mcp/mcp-server-issues";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  MCP_REGISTRY_ATTENTION_TAB,
+  MCP_REGISTRY_TAB_PARAM,
+  useSetMcpRegistryAttentionCount,
+} from "../layout";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import {
   LocalServerInstallDialog,
@@ -65,10 +72,12 @@ import {
   McpServerCard,
 } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
+import { RegistryAttentionList } from "./registry-attention-list";
 import {
   emptyRegistryFilters,
   type FilterGroup,
   type FilterOption,
+  NEEDS_ATTENTION_STATUS_VALUE,
   RegistryFilterChips,
   RegistryFilterDropdown,
   type RegistryFilters,
@@ -136,8 +145,11 @@ export function InternalMCPCatalog({
   const byosEnabled = Boolean(useFeature("byosEnabled"));
 
   const [sort, setSort] = useState<SortKey>("name-asc");
+  // The table is the registry's default view: it is the one that reads a
+  // long server list fastest and opens each server's page on its row.
   const [viewMode, setViewMode] = useListViewMode(
     "archestra-mcp-registry-view",
+    "table",
   );
   const [filters, setFilters] = useState<RegistryFilters>(emptyRegistryFilters);
   const toggleFilter = useCallback((group: FilterGroup, value: string) => {
@@ -795,12 +807,27 @@ export function InternalMCPCatalog({
     }
     return [...set].sort().map((value) => ({ value, label: value }));
   }, [catalogItems]);
+  // Outstanding issues per catalog item (failed to start, not running,
+  // re-authentication, reinstall, image approval), from the same signals the
+  // cards render — feeds the Needs-attention tab, its count, the Status
+  // filter and the table Status column.
+  const { issuesByCatalog, summary: issueSummary } =
+    useMcpServerIssues(deploymentStatuses);
+  const setAttentionCount = useSetMcpRegistryAttentionCount();
+  useEffect(() => {
+    setAttentionCount(issueSummary.actionableServerCount);
+    return () => setAttentionCount(0);
+  }, [issueSummary.actionableServerCount, setAttentionCount]);
+  const isAttentionTab =
+    searchParams.get(MCP_REGISTRY_TAB_PARAM) === MCP_REGISTRY_ATTENTION_TAB;
   const matchesAdvancedFilters = (item: CatalogItem) => {
     if (filters.status.size > 0) {
       const installed = connectedCatalogIds.has(item.id);
       const ok =
         (installed && filters.status.has("installed")) ||
-        (!installed && filters.status.has("not-installed"));
+        (!installed && filters.status.has("not-installed")) ||
+        (filters.status.has(NEEDS_ATTENTION_STATUS_VALUE) &&
+          needsAttention(issuesByCatalog.get(item.id)));
       if (!ok) return false;
     }
     if (filters.environment.size > 0) {
@@ -921,190 +948,219 @@ export function InternalMCPCatalog({
     searchQueryFromUrl.trim() || hasLabelFilters,
   );
 
+  const registryItems = (catalogItems ?? []).filter(
+    (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <SearchInput
-          objectNamePlural="MCP servers"
-          searchFields={["name"]}
-          value={searchQueryFromUrl}
-          onSearchChange={handleSearchChange}
-          syncQueryParams={false}
-          debounceMs={300}
-          inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+      {isAttentionTab ? (
+        <RegistryAttentionList
+          items={registryItems}
+          installedServers={installedServers ?? []}
+          issuesByCatalog={issuesByCatalog}
+          summary={issueSummary}
+          totalServerCount={registryItems.length}
+          onReinstall={handleReinstall}
         />
-        <McpCatalogLabelFilter />
-        <RegistryFilterDropdown
-          label="Status"
-          options={STATUS_OPTIONS}
-          selected={filters.status}
-          onToggle={(value) => toggleFilter("status", value)}
-        />
-        {environmentOptions.length > 0 && (
-          <RegistryFilterDropdown
-            label="Environment"
-            options={environmentOptions}
-            selected={filters.environment}
-            onToggle={(value) => toggleFilter("environment", value)}
-          />
-        )}
-        {authorOptions.length > 0 && (
-          <RegistryFilterDropdown
-            label="Author"
-            options={authorOptions}
-            selected={filters.author}
-            onToggle={(value) => toggleFilter("author", value)}
-          />
-        )}
-        <RegistrySortMenu value={sort} onChange={setSort} />
-        <ListViewToggle value={viewMode} onChange={setViewMode} />
-      </div>
-      {hasLabelFilters && (
-        <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-      )}
-      <RegistryFilterChips
-        selected={filters}
-        onRemove={removeFilter}
-        onClearAll={clearAdvancedFilters}
-      />
-      <div className="space-y-6">
-        {personalItems.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Personal
-            </h3>
-            {viewMode === "table" ? (
-              <McpServerTable
-                items={personalItems}
-                getServerInfo={getInstalledServerInfo}
-                envLabelByCatalog={envLabelByCatalog}
-                installingItemId={installingItemId}
-                onInstall={handleTableInstall}
-                onReinstall={handleReinstall}
-                onCancelInstallation={install.cancelInstallation}
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              objectNamePlural="MCP servers"
+              searchFields={["name"]}
+              value={searchQueryFromUrl}
+              onSearchChange={handleSearchChange}
+              syncQueryParams={false}
+              debounceMs={300}
+              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+            />
+            <McpCatalogLabelFilter />
+            <RegistryFilterDropdown
+              label="Status"
+              options={STATUS_OPTIONS}
+              selected={filters.status}
+              onToggle={(value) => toggleFilter("status", value)}
+            />
+            {environmentOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Environment"
+                options={environmentOptions}
+                selected={filters.environment}
+                onToggle={(value) => toggleFilter("environment", value)}
               />
-            ) : (
-              <div className={CARD_GRID_CLASS}>
-                {personalItems.map((item) => {
-                  const serverInfo = getInstalledServerInfo(item);
-                  return (
-                    <McpServerCard
-                      variant={
-                        item.serverType === "builtin"
-                          ? "builtin"
-                          : item.serverType === "remote"
-                            ? "remote"
-                            : "local"
-                      }
-                      key={item.id}
-                      item={item}
-                      installedServer={serverInfo.installedServer}
-                      installingItemId={installingItemId}
-                      installationStatus={
-                        serverInfo.installedServer?.localInstallationStatus ||
-                        undefined
-                      }
-                      deploymentStatuses={deploymentStatuses}
-                      onInstallRemoteServer={() => install.installRemote(item)}
-                      onInstallLocalServer={() =>
-                        isPlaywrightCatalogItem(item.id)
-                          ? install.installPlaywright(item)
-                          : install.installLocal(item)
-                      }
-                      onReinstall={(flagged, options) =>
-                        handleReinstall(item, flagged, options)
-                      }
-                      onCancelInstallation={install.cancelInstallation}
-                      isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                    />
-                  );
-                })}
-              </div>
             )}
+            {authorOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Author"
+                options={authorOptions}
+                selected={filters.author}
+                onToggle={(value) => toggleFilter("author", value)}
+              />
+            )}
+            <RegistrySortMenu value={sort} onChange={setSort} />
+            <ListViewToggle
+              value={viewMode}
+              onChange={setViewMode}
+              order={["table", "cards"]}
+            />
           </div>
-        )}
-
-        {sharedItems.length > 0 ? (
-          <div className="space-y-3">
+          {hasLabelFilters && (
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          )}
+          <RegistryFilterChips
+            selected={filters}
+            onRemove={removeFilter}
+            onClearAll={clearAdvancedFilters}
+          />
+          <div className="space-y-6">
             {personalItems.length > 0 && (
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Shared
-              </h3>
-            )}
-            {viewMode === "table" ? (
-              <McpServerTable
-                items={sharedItems}
-                getServerInfo={getInstalledServerInfo}
-                envLabelByCatalog={envLabelByCatalog}
-                installingItemId={installingItemId}
-                onInstall={handleTableInstall}
-                onReinstall={handleReinstall}
-                onCancelInstallation={install.cancelInstallation}
-              />
-            ) : (
-              <div className={CARD_GRID_CLASS}>
-                {sharedItems.map((item) => {
-                  const serverInfo = getInstalledServerInfo(item);
-                  return (
-                    <McpServerCard
-                      variant={
-                        item.serverType === "builtin"
-                          ? "builtin"
-                          : item.serverType === "remote"
-                            ? "remote"
-                            : "local"
-                      }
-                      key={item.id}
-                      item={item}
-                      installedServer={serverInfo.installedServer}
-                      installingItemId={installingItemId}
-                      installationStatus={
-                        serverInfo.installedServer?.localInstallationStatus ||
-                        undefined
-                      }
-                      deploymentStatuses={deploymentStatuses}
-                      onInstallRemoteServer={() => install.installRemote(item)}
-                      onInstallLocalServer={() =>
-                        isPlaywrightCatalogItem(item.id)
-                          ? install.installPlaywright(item)
-                          : install.installLocal(item)
-                      }
-                      onReinstall={(flagged, options) =>
-                        handleReinstall(item, flagged, options)
-                      }
-                      onCancelInstallation={install.cancelInstallation}
-                      isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                    />
-                  );
-                })}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                  Personal
+                </h3>
+                {viewMode === "table" ? (
+                  <McpServerTable
+                    items={personalItems}
+                    getServerInfo={getInstalledServerInfo}
+                    envLabelByCatalog={envLabelByCatalog}
+                    issuesByCatalog={issuesByCatalog}
+                    installingItemId={installingItemId}
+                    onInstall={handleTableInstall}
+                    onReinstall={handleReinstall}
+                    onCancelInstallation={install.cancelInstallation}
+                  />
+                ) : (
+                  <div className={CARD_GRID_CLASS}>
+                    {personalItems.map((item) => {
+                      const serverInfo = getInstalledServerInfo(item);
+                      return (
+                        <McpServerCard
+                          variant={
+                            item.serverType === "builtin"
+                              ? "builtin"
+                              : item.serverType === "remote"
+                                ? "remote"
+                                : "local"
+                          }
+                          key={item.id}
+                          item={item}
+                          installedServer={serverInfo.installedServer}
+                          installingItemId={installingItemId}
+                          installationStatus={
+                            serverInfo.installedServer
+                              ?.localInstallationStatus || undefined
+                          }
+                          deploymentStatuses={deploymentStatuses}
+                          onInstallRemoteServer={() =>
+                            install.installRemote(item)
+                          }
+                          onInstallLocalServer={() =>
+                            isPlaywrightCatalogItem(item.id)
+                              ? install.installPlaywright(item)
+                              : install.installLocal(item)
+                          }
+                          onReinstall={(flagged, options) =>
+                            handleReinstall(item, flagged, options)
+                          }
+                          onCancelInstallation={install.cancelInstallation}
+                          isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
+
+            {sharedItems.length > 0 ? (
+              <div className="space-y-3">
+                {personalItems.length > 0 && (
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Shared
+                  </h3>
+                )}
+                {viewMode === "table" ? (
+                  <McpServerTable
+                    items={sharedItems}
+                    getServerInfo={getInstalledServerInfo}
+                    envLabelByCatalog={envLabelByCatalog}
+                    issuesByCatalog={issuesByCatalog}
+                    installingItemId={installingItemId}
+                    onInstall={handleTableInstall}
+                    onReinstall={handleReinstall}
+                    onCancelInstallation={install.cancelInstallation}
+                  />
+                ) : (
+                  <div className={CARD_GRID_CLASS}>
+                    {sharedItems.map((item) => {
+                      const serverInfo = getInstalledServerInfo(item);
+                      return (
+                        <McpServerCard
+                          variant={
+                            item.serverType === "builtin"
+                              ? "builtin"
+                              : item.serverType === "remote"
+                                ? "remote"
+                                : "local"
+                          }
+                          key={item.id}
+                          item={item}
+                          installedServer={serverInfo.installedServer}
+                          installingItemId={installingItemId}
+                          installationStatus={
+                            serverInfo.installedServer
+                              ?.localInstallationStatus || undefined
+                          }
+                          deploymentStatuses={deploymentStatuses}
+                          onInstallRemoteServer={() =>
+                            install.installRemote(item)
+                          }
+                          onInstallLocalServer={() =>
+                            isPlaywrightCatalogItem(item.id)
+                              ? install.installPlaywright(item)
+                              : install.installLocal(item)
+                          }
+                          onReinstall={(flagged, options) =>
+                            handleReinstall(item, flagged, options)
+                          }
+                          onCancelInstallation={install.cancelInstallation}
+                          isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              personalItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  {hasActiveFilters ? (
+                    <>
+                      <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+                      <p className="text-muted-foreground">
+                        No MCP servers match your filters. Try adjusting your
+                        search.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={handleClearFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No MCP servers found.
+                    </p>
+                  )}
+                </div>
+              )
+            )}
           </div>
-        ) : (
-          personalItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              {hasActiveFilters ? (
-                <>
-                  <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    No MCP servers match your filters. Try adjusting your
-                    search.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={handleClearFilters}
-                  >
-                    Clear filters
-                  </Button>
-                </>
-              ) : (
-                <p className="text-muted-foreground">No MCP servers found.</p>
-              )}
-            </div>
-          )
-        )}
-      </div>
+        </>
+      )}
 
       {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
       {install.dialogs}

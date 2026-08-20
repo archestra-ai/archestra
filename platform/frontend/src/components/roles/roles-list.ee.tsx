@@ -365,8 +365,11 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* `flex-1` alone lays out from a zero basis, so the search box kept
+              sharing the row with the action however little room was left. The
+              min-width is what makes the row break instead. */}
+          <div className="flex-1 min-w-[220px]">
             <SearchInput
               objectNamePlural="roles"
               searchFields={["name"]}

@@ -1,0 +1,34 @@
+// Project-specific Biome (GritQL) lint plugin — white-labelling regression guard.
+//
+// Admins can rename model providers through the "Page settings" dialog, and the
+// resolution lives in exactly one place per side: `shared/integration-overrides.ts`
+// for the rules, and `useModelProviderCatalog` in
+// `frontend/src/lib/integration-overrides.ts` for consumption.
+//
+// Only providers. Messaging channels and knowledge connectors are toggle-only —
+// each names a single external service, so there is no organization-specific
+// name to respect and indexing their label maps is correct.
+//
+// The failure mode this guards is drift, not a bug in that code: reading a
+// built-in name map directly renders the shipped name, silently ignoring the
+// organization's own. That reads correct in review and only shows up for
+// deployments that actually renamed something.
+//
+// So: indexing the built-in label maps is flagged. Use the catalog hook's
+// `label(id)` instead — it falls back to the built-in name when no override is
+// set, so the shipped behaviour is unchanged.
+//
+// Legitimate non-label uses are NOT flagged, because they do not index:
+//   - `Object.keys(providerDisplayNames)` to enumerate ids
+//   - `providerDisplayNames` passed as the fallback inside the catalog itself
+// Plugin diagnostics are not suppressible via `biome-ignore`; when a site truly
+// must show the shipped name (naming a vendor's own console, say), read it via
+// a local alias or a comment-documented constant instead.
+language js
+
+`providerDisplayNames[$id]` where {
+  register_diagnostic(
+    span = $id,
+    message = "Use the organization's own name for the provider: `useModelProviderCatalog().label(id)`. Indexing providerDisplayNames renders the shipped name and ignores an admin's rename."
+  )
+}

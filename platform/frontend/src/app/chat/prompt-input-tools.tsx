@@ -3,7 +3,6 @@
 import {
   type ContextWindowBreakdown,
   E2eTestId,
-  providerDisplayNames,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
@@ -22,9 +21,9 @@ import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-reco
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
@@ -41,14 +40,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  INCOGNITO_DRAFT_SHORTCUT_EVENT,
-  SHORTCUT_NEW_INCOGNITO_CHAT,
+  LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
+  SHORTCUT_NEW_LOCKED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -68,20 +68,20 @@ export interface ChatPromptInputToolsProps {
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /**
-   * Grey out the attachment button (incognito conversations: attachment bytes
+   * Grey out the attachment button (locked chats: attachment bytes
    * are stored unencrypted server-side, so the backend rejects them).
    */
-  attachmentsDisabledByIncognito?: boolean;
+  attachmentsDisabledByLockedChat?: boolean;
   /**
-   * Whether the next chat will be created incognito. New-chat composer only —
+   * Whether the next chat will be created locked-chat. New-chat composer only —
    * the toggle renders only while there is no conversation yet.
    */
-  incognito?: boolean;
+  lockedChat?: boolean;
   /**
    * Provided only by the new-chat composer; together with the
-   * `chatIncognitoEnabled` feature flag it enables the incognito toggle.
+   * `lockedChatEnabled` feature flag it enables the locked-chat toggle.
    */
-  onIncognitoChange?: (incognito: boolean) => void;
+  onLockedChatChange?: (lockedChat: boolean) => void;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -172,9 +172,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
-  attachmentsDisabledByIncognito = false,
-  incognito = false,
-  onIncognitoChange,
+  attachmentsDisabledByLockedChat = false,
+  lockedChat = false,
+  onLockedChatChange,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -204,6 +204,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
+  const providerCatalog = useModelProviderCatalog();
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -220,7 +221,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].connect.signInTitle
     : `Sign in with ${
         providerToConnect
-          ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
+          ? providerCatalog.label(providerToConnect)
           : "subscription"
       }`;
 
@@ -249,41 +250,41 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     agentSettings: ["update"],
   });
 
-  // Incognito toggle: only on the new-chat composer (no conversation yet —
+  // LockedChat toggle: only on the new-chat composer (no conversation yet —
   // the same gate InitialAgentSelector uses via its callback prop) and only
-  // when the instance has incognito chats enabled.
-  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  // when the instance has locked chats enabled.
+  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
   const { altKey } = usePlatform();
-  const showIncognitoToggle =
-    incognitoEnabled && !conversationId && !!onIncognitoChange;
+  const showLockedChatToggle =
+    lockedChatEnabled && !conversationId && !!onLockedChatChange;
 
-  const toggleIncognito = useCallback(() => {
+  const toggleLockedChat = useCallback(() => {
     // Files staged before the toggle would ride the first message of a chat
     // that rejects attachments — drop them now (the attach button greys out
     // while the toggle is on).
-    if (!incognito) {
+    if (!lockedChat) {
       attachments.clear();
     }
-    onIncognitoChange?.(!incognito);
-  }, [incognito, onIncognitoChange, attachments]);
+    onLockedChatChange?.(!lockedChat);
+  }, [lockedChat, onLockedChatChange, attachments]);
 
   // While the toggle is on screen, Alt+I toggles the draft in place: the
   // global shortcut dispatches this cancelable event before navigating and
   // claiming it (preventDefault) suppresses the navigation — see
   // useConversationSearch.
   useEffect(() => {
-    if (!showIncognitoToggle) return;
+    if (!showLockedChatToggle) return;
     const handleShortcut = (event: Event) => {
       event.preventDefault();
-      toggleIncognito();
+      toggleLockedChat();
     };
-    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, handleShortcut);
+    window.addEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, handleShortcut);
     return () =>
       window.removeEventListener(
-        INCOGNITO_DRAFT_SHORTCUT_EVENT,
+        LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
         handleShortcut,
       );
-  }, [showIncognitoToggle, toggleIncognito]);
+  }, [showLockedChatToggle, toggleLockedChat]);
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -517,11 +518,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
-      {/* File attachment button - always visible. Incognito greys it out
+      {/* File attachment button - always visible. LockedChat greys it out
           (the backend rejects attachments there because their bytes are
           stored unencrypted); the org-level toggle greys it out with a
           settings pointer. */}
-      {attachmentsDisabledByIncognito ? (
+      {attachmentsDisabledByLockedChat ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <span
@@ -591,32 +592,32 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
-      {/* Incognito toggle — placed with the always-visible controls (next to
+      {/* LockedChat toggle — placed with the always-visible controls (next to
           the attachment button) so it renders in both the wide and the
           collapsed (narrow) toolbar without duplication. */}
-      {showIncognitoToggle && (
+      {showLockedChatToggle && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              aria-pressed={incognito}
+              aria-pressed={lockedChat}
               aria-label="Locked chat"
               className={cn(
                 "h-8 px-2",
-                incognito &&
+                lockedChat &&
                   "bg-accent text-accent-foreground hover:bg-accent/80",
               )}
-              onClick={toggleIncognito}
+              onClick={toggleLockedChat}
             >
-              <IncognitoIcon className="size-4" />
+              <LockedChatIcon className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span className="flex items-center gap-1.5">
               Locked chat <Kbd>{altKey}</Kbd>
-              <Kbd>{SHORTCUT_NEW_INCOGNITO_CHAT.label}</Kbd>
+              <Kbd>{SHORTCUT_NEW_LOCKED_CHAT.label}</Kbd>
             </span>
           </TooltipContent>
         </Tooltip>
@@ -660,7 +661,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <ModelSelectorLogo provider={logoProvider} className="size-4" />
             </Button>
           ) : (
-            <div className="flex items-center h-8 rounded-full bg-muted/50 overflow-hidden">
+            /* Same radius as the controls it clips: they are full-height and
+               sit flush against the group's end caps, so a wider group radius
+               rounds their outer corners while the inner ones keep the button
+               radius — a lopsided hover shape (T-1088). */
+            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden">
               {(conversationId || onApiKeyChange) && (
                 <LlmProviderApiKeySelector
                   conversationId={conversationId}

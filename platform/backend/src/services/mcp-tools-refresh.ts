@@ -1,4 +1,9 @@
 import config from "@/config";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+// SPDX-SnippetEnd
 import logger from "@/logging";
 import { McpServerModel } from "@/models";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
@@ -60,8 +65,28 @@ class McpToolsRefreshManager {
     try {
       const servers = await McpServerModel.findOnePerCatalogForToolsRefresh();
       for (const server of servers) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Background re-discovery must never wake (or keep awake) an idle
+        // deployment; it re-syncs on a later sweep once demand wakes it.
+        if (McpServerRuntimeManager.isDeploymentDormant(server.id)) {
+          logger.debug(
+            { serverId: server.id, serverName: server.name },
+            "Skipping dormant MCP server in periodic tools refresh",
+          );
+          continue;
+        }
+        // SPDX-SnippetEnd
         try {
-          const result = await reloadToolsForServer(server);
+          const result = await reloadToolsForServer(
+            server,
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            { wake: false },
+            // SPDX-SnippetEnd
+          );
           if (result.created || result.updated || result.deleted) {
             logger.info(
               { serverId: server.id, serverName: server.name, ...result },

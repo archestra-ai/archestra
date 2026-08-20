@@ -9,3 +9,8 @@ import { vi } from "vitest";
 export const hasPermission = vi.fn();
 export const userHasPermission = vi.fn();
 export const getPermissionsForUserContext = vi.fn();
+
+// Real (pure) implementation: behavior-relevant predicate, not an auth boundary.
+// Kept in sync with `isServiceAccountUserId` in ../utils.ts.
+export const isServiceAccountUserId = (userId: string): boolean =>
+  userId.startsWith("service-account:");

@@ -5,9 +5,10 @@
  */
 export const EMBEDDING_VALIDATION_FAILED_CODE = "embedding_validation_failed";
 export const RERANKER_VALIDATION_FAILED_CODE = "reranker_validation_failed";
+export const OCR_VALIDATION_FAILED_CODE = "ocr_validation_failed";
 
 export interface KnowledgeSettingsFieldError {
-  field: "embedding" | "reranker";
+  field: "embedding" | "reranker" | "ocr";
   message: string;
 }
 
@@ -31,6 +32,9 @@ export function knowledgeSettingsFieldError(
   if (code === RERANKER_VALIDATION_FAILED_CODE) {
     return { field: "reranker", message };
   }
+  if (code === OCR_VALIDATION_FAILED_CODE) {
+    return { field: "ocr", message };
+  }
   return null;
 }
 
@@ -44,25 +48,29 @@ export interface SectionStatus {
 
 /**
  * Derive each section's connection status from a save's outcome. Save validates
- * the embedding first, then the reranker, so an embedding failure means the
- * reranker was never reached, and a reranker failure means the embedding passed.
- * A non-field error (e.g. a 500) leaves both untested.
+ * the embedding first, then the reranker, then OCR — so a failure on one field
+ * means every earlier field passed and every later field was never reached.
+ * A non-field error (e.g. a 500) leaves all sections untested.
  */
 export function saveResultStatuses(params: {
   error: unknown;
   embeddingConfigured: boolean;
   rerankerConfigured: boolean;
-}): { embedding: SectionStatus; reranker: SectionStatus } {
-  const { error, embeddingConfigured, rerankerConfigured } = params;
+  ocrConfigured: boolean;
+}): { embedding: SectionStatus; reranker: SectionStatus; ocr: SectionStatus } {
+  const { error, embeddingConfigured, rerankerConfigured, ocrConfigured } =
+    params;
   const connectedIfConfigured = (configured: boolean): SectionStatus => ({
     status: configured ? "connected" : "untested",
     error: null,
   });
+  const untested: SectionStatus = { status: "untested", error: null };
 
   if (!error) {
     return {
       embedding: connectedIfConfigured(embeddingConfigured),
       reranker: connectedIfConfigured(rerankerConfigured),
+      ocr: connectedIfConfigured(ocrConfigured),
     };
   }
 
@@ -70,17 +78,23 @@ export function saveResultStatuses(params: {
   if (fieldError?.field === "embedding") {
     return {
       embedding: { status: "failed", error: fieldError.message },
-      reranker: { status: "untested", error: null },
+      reranker: untested,
+      ocr: untested,
     };
   }
   if (fieldError?.field === "reranker") {
     return {
       embedding: connectedIfConfigured(embeddingConfigured),
       reranker: { status: "failed", error: fieldError.message },
+      ocr: untested,
     };
   }
-  return {
-    embedding: { status: "untested", error: null },
-    reranker: { status: "untested", error: null },
-  };
+  if (fieldError?.field === "ocr") {
+    return {
+      embedding: connectedIfConfigured(embeddingConfigured),
+      reranker: connectedIfConfigured(rerankerConfigured),
+      ocr: { status: "failed", error: fieldError.message },
+    };
+  }
+  return { embedding: untested, reranker: untested, ocr: untested };
 }

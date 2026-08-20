@@ -43,6 +43,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
+export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as GithubPatModel } from "./github-pat";
@@ -53,9 +54,11 @@ export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbContainerAclModel } from "./kb-container-acl";
+export { default as KbDirectoryModel } from "./kb-directory";
 export { default as KbDocumentModel } from "./kb-document";
 export { default as KbExternalGroupModel } from "./kb-external-group";
 export { default as KbExternalUserGroupModel } from "./kb-external-user-group";
+export { default as KbFileModel } from "./kb-file";
 export { default as KbMemberOverrideModel } from "./kb-member-override";
 export { default as KnowledgeBaseModel } from "./knowledge-base";
 export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connector";
@@ -68,6 +71,11 @@ export {
   selectionKey,
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export type { ClusterLeaseGuard } from "./mcp-deployment-lease";
+export {
+  ClusterLeaseHeldError,
+  default as McpDeploymentLeaseModel,
+} from "./mcp-deployment-lease";
 export { default as McpGatewayTaskModel } from "./mcp-gateway-task";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpOauthClientModel } from "./mcp-oauth-client";

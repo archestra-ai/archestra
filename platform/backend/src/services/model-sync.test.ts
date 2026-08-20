@@ -1,4 +1,6 @@
 import {
+  type ModelInputModality,
+  type ModelOutputModality,
   OPENROUTER_FREE_MODEL_ID,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -468,6 +470,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -479,6 +482,40 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("normalizes KB-supported Cohere embedding models to the KB client's modality support", () => {
+    const base = {
+      description: null,
+      contextLength: null,
+      outputLength: null,
+      inputModalities: ["text"] as ModelInputModality[],
+      outputModalities: ["text"] as ModelOutputModality[],
+      supportsToolCalling: true,
+      supportsReasoningEffort: null,
+      supportedEndpoints: null,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      cacheReadPricePerToken: null,
+      cacheWritePricePerToken: null,
+    };
+    const v4 = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      capabilities: base,
+    });
+    expect(v4.inputModalities).toEqual(["text", "image"]);
+    expect(v4.outputModalities).toEqual([]);
+    expect(v4.supportsToolCalling).toBe(false);
+
+    // A Cohere model outside the KB table keeps whatever the registries say.
+    const unknown = resolveModelCapabilities({
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      capabilities: base,
+    });
+    expect(unknown.inputModalities).toEqual(["text"]);
+    expect(unknown.outputModalities).toEqual(["text"]);
   });
 
   test("normalizes KB-supported Bedrock embedding models to the KB client's modality support", () => {
@@ -494,6 +531,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -517,6 +555,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: null,
         supportsToolCalling: null,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -668,6 +707,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
@@ -690,6 +730,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportsReasoningEffort: null,
         supportedEndpoints: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
@@ -1182,6 +1223,70 @@ describe("ModelSyncService", () => {
     expect(model.supportsToolCalling).toBe(false);
     expect(model.embeddingDimensions).toBe(1536);
     expect(model.promptPricePerToken).toBe("2e-8");
+  });
+
+  test("describes a vLLM model's reasoning from the registry entry for those weights", () => {
+    // A self-hosted server publishes no capabilities, and the id is a
+    // HuggingFace path rather than a registry key — the trailing segment is
+    // what bridges the two.
+    const [model] = buildModelsToUpsert({
+      provider: "vllm",
+      models: [{ id: "Qwen/Qwen3.8-27B" }],
+      modelsDevData: {
+        // A reseller, deliberately: no first-party entry exists for this model,
+        // which is the ordinary case for open weights.
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            "qwen/qwen3.8-27b": {
+              id: "qwen/qwen3.8-27b",
+              name: "Qwen3.8 27B",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(true);
+    // The deployment's own price stays out: the operator serves this model.
+    expect(model.promptPricePerToken).toBeNull();
+  });
+
+  test("lets the Ollama server outrank the registry on whether a model thinks", () => {
+    // The registry describes the weights; /api/show answers for the build this
+    // server will actually run.
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "qwen3",
+          capabilities: { supportsReasoningEffort: false },
+        },
+      ],
+      modelsDevData: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          models: {
+            qwen3: {
+              id: "qwen3",
+              name: "Qwen3",
+              reasoning: true,
+              tool_call: true,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.1, output: 0.4 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.supportsReasoningEffort).toBe(false);
   });
 
   test("persists fetched default parameters", () => {

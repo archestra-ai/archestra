@@ -70,6 +70,33 @@ describe("UserTokenModel", () => {
         .where(eq(schema.secretsTable.name, secretName));
       expect(secrets).toHaveLength(1);
     });
+
+    test("failed insert (no users row for userId) rethrows and cleans up its secret", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      // Synthetic principals (e.g. service-account callers) have no users row,
+      // so the insert fails on the user_id foreign key.
+      const syntheticUserId = `service-account:${crypto.randomUUID()}`;
+
+      // Drizzle wraps the pg error ("Failed query: ...") with the foreign-key
+      // detail on `cause`.
+      await expect(
+        UserTokenModel.create(syntheticUserId, org.id),
+      ).rejects.toSatisfy((error: unknown) =>
+        String((error as Error).cause ?? error).includes(
+          "violates foreign key constraint",
+        ),
+      );
+
+      // the failed create must not leak the secret it minted before the insert.
+      const secretName = `user-token-${syntheticUserId}-${org.id}`;
+      const secrets = await db
+        .select()
+        .from(schema.secretsTable)
+        .where(eq(schema.secretsTable.name, secretName));
+      expect(secrets).toHaveLength(0);
+    });
   });
 
   describe("findById", () => {

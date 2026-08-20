@@ -3,7 +3,7 @@ import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 
 /**
  * Context for the Archestra MCP server
@@ -109,17 +109,31 @@ export interface ArchestraContext {
    */
   approvalRequiredPoliciesHandled?: boolean;
   /**
-   * Incognito conversation: any real tool dispatch made on behalf of this call
+   * Locked chat: any real tool dispatch made on behalf of this call
    * (e.g. `run_tool` reaching mcpClient) must not persist its content in the
    * clear.
    */
   suppressContentLogging?: boolean;
   /**
    * The conversation key for that dispatch, when one is available. Present, the
-   * dispatched row is encrypted under it like any other incognito audit row;
+   * dispatched row is encrypted under it like any other locked-chat audit row;
    * absent, `suppressContentLogging` alone makes it fall back to redaction.
-   * Without this a dispatched call is the one incognito tool call that loses
+   * Without this a dispatched call is the one locked-chat tool call that loses
    * its content permanently.
    */
-  incognitoAudit?: IncognitoAuditContext | null;
+  lockedChatAudit?: LockedChatAuditContext | null;
+  /**
+   * The caller feeds this tool result to a model through the chat tool
+   * pipeline, which bounds, strips and persists inline images
+   * (`chat-tool-builder.ts` for the model-bound copy,
+   * `strip-images-from-messages.ts` for the persisted one).
+   *
+   * Only such a caller may be handed binary payloads as MCP image parts. Raw
+   * MCP/API surfaces — the gateway serving an external client, the app proxy —
+   * hand a tool result back verbatim with none of that machinery, so for them a
+   * payload must stay where it has always been: inside the JSON, as the data
+   * URL the chunk is stored as. Optional and read as false when absent, so a
+   * new call site is image-free until it opts in deliberately.
+   */
+  deliversMediaAsImageParts?: boolean;
 }

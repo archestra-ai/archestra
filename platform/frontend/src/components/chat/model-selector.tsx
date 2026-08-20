@@ -6,7 +6,6 @@ import {
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
-  providerDisplayNames,
   requiresPerplexityAgentApi,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -16,7 +15,6 @@ import {
   DollarSign,
   FileText,
   ImageIcon,
-  Layers,
   Loader2,
   Mic,
   Settings2,
@@ -41,11 +39,12 @@ import {
   ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
-  NoToolsBadge,
-  NotRecommendedForAgentsBadge,
   OldModelBadge,
-  UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
+import {
+  ModelCapabilityBadges,
+  ModelContextLengthIndicator,
+} from "@/components/model-capability-indicators";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -57,14 +56,11 @@ import {
 } from "@/components/ui/tooltip";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
-import {
-  type LlmModel,
-  type ModelCapabilities,
-  useLlmModelsByProvider,
-} from "@/lib/llm-models.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerToLogoProvider } from "@/lib/provider-logos";
-import { cn, formatContextLength } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
 type FilterableModality = Exclude<ModelInputModality, "text">;
@@ -97,6 +93,12 @@ interface ModelSelectorProps {
   onModelChange: (model: string) => void;
   /** Whether the selector should be disabled */
   disabled?: boolean;
+  /**
+   * What the trigger says while no model is selected. The default names the
+   * runtime's own fallback; a host that knows what will actually answer (the
+   * organization's default model) passes that instead.
+   */
+  placeholder?: string;
   /** Callback when the selector opens or closes */
   onOpenChange?: (open: boolean) => void;
   /** Optional callback to clear selection - shows X button inside the trigger when provided and a model is selected */
@@ -171,17 +173,20 @@ type ProviderModelSection = {
  * strings that name these transports everywhere else.
  */
 const PROVIDER_MODEL_SECTIONERS: Partial<
-  Record<SupportedProvider, (models: LlmModel[]) => ProviderModelSection[]>
+  Record<
+    SupportedProvider,
+    (models: LlmModel[], providerLabel: string) => ProviderModelSection[]
+  >
 > = {
-  perplexity: (models) => [
+  perplexity: (models, providerLabel) => [
     {
       key: "perplexity:chatCompletions",
-      heading: `${providerDisplayNames.perplexity} — Chat Completions`,
+      heading: `${providerLabel} — Chat Completions`,
       models: models.filter((model) => !requiresPerplexityAgentApi(model.id)),
     },
     {
       key: "perplexity:responses",
-      heading: `${providerDisplayNames.perplexity} — Agent API`,
+      heading: `${providerLabel} — Agent API`,
       models: models.filter((model) => requiresPerplexityAgentApi(model.id)),
     },
   ],
@@ -190,141 +195,14 @@ const PROVIDER_MODEL_SECTIONERS: Partial<
 function providerModelSections(
   provider: SupportedProvider,
   models: LlmModel[],
+  /** What this organization calls the provider (see integration overrides). */
+  providerLabel: string,
 ): ProviderModelSection[] {
-  const sections = PROVIDER_MODEL_SECTIONERS[provider]?.(models) ?? [
-    { key: provider, heading: providerDisplayNames[provider], models },
-  ];
+  const sections = PROVIDER_MODEL_SECTIONERS[provider]?.(
+    models,
+    providerLabel,
+  ) ?? [{ key: provider, heading: providerLabel, models }];
   return sections.filter((section) => section.models.length > 0);
-}
-
-/**
- * Capability icon component - matches Vercel AI Elements style.
- * Small, compact icons that show model capabilities.
- */
-function CapabilityIcon({
-  icon: Icon,
-  label,
-  className,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex items-center justify-center size-4 rounded-sm bg-muted/50",
-            className,
-          )}
-        >
-          <Icon className="size-2.5 text-muted-foreground" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/**
- * Displays capability icons for a model in a compact row.
- * Style inspired by Vercel AI Elements model selector.
- */
-function ModelCapabilityBadges({
-  capabilities,
-}: {
-  capabilities?: ModelCapabilities;
-}) {
-  const hasVision = capabilities?.inputModalities?.includes("image");
-  const hasAudio = capabilities?.inputModalities?.includes("audio");
-  const hasVideo = capabilities?.inputModalities?.includes("video");
-  const hasPdf = capabilities?.inputModalities?.includes("pdf");
-  const hasToolCalling = capabilities?.supportsToolCalling;
-
-  // An explicit false, as opposed to null/undefined ("unknown"): the model is
-  // known to take no tools, which gets its own marker below.
-  const lacksToolCalling = capabilities?.supportsToolCalling === false;
-
-  // Derived by the sync, independently of the capability fields, so it is
-  // usually the only marker an Ollama row carries: those models sync with an
-  // inferred "text" modality and no tool-calling verdict (models.dev lists no
-  // Ollama entry to supply one), which without this would render nothing.
-  // Strictly `=== false` — `true` is the column default and says nothing. The
-  // verdict is not itself capability data, so a row carrying only one still
-  // falls to the unknown badge below.
-  const notRecommended = capabilities?.recommendedForAgents === false;
-
-  const hasAnyCapability =
-    hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
-
-  // "Unknown" strictly means no capability data was recorded. An explicit
-  // `supportsToolCalling: false` or a recorded modality list is known data —
-  // a text-only, tool-less model (e.g. the Perplexity sonar family) is marked
-  // as such rather than claiming ignorance.
-  const hasCapabilityData =
-    capabilities != null &&
-    (capabilities.inputModalities != null ||
-      capabilities.supportsToolCalling != null);
-  if (!hasCapabilityData) {
-    return <UnknownCapabilitiesBadge />;
-  }
-  if (!hasAnyCapability && !lacksToolCalling && !notRecommended) {
-    return null;
-  }
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex items-center gap-0.5">
-        {hasVision && (
-          <CapabilityIcon icon={ImageIcon} label="Supports vision (images)" />
-        )}
-        {hasAudio && <CapabilityIcon icon={Mic} label="Supports audio input" />}
-        {hasVideo && (
-          <CapabilityIcon icon={Video} label="Supports video input" />
-        )}
-        {hasPdf && (
-          <CapabilityIcon icon={FileText} label="Supports PDF input" />
-        )}
-        {notRecommended && <NotRecommendedForAgentsBadge />}
-        {lacksToolCalling && <NoToolsBadge />}
-        {hasToolCalling && (
-          <CapabilityIcon icon={Settings2} label="Supports tool calling" />
-        )}
-      </div>
-    </TooltipProvider>
-  );
-}
-
-/**
- * Displays the context window size with a tooltip.
- */
-function ContextLengthIndicator({
-  contextLength,
-}: {
-  contextLength: number | null | undefined;
-}) {
-  if (!contextLength) {
-    return null;
-  }
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground font-mono">
-            <Layers className="size-3" />
-            {formatContextLength(contextLength)}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {contextLength.toLocaleString()} token context window
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 }
 
 /**
@@ -587,6 +465,7 @@ export const ModelSelector = memo(function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
+  placeholder,
   onOpenChange: onOpenChangeProp,
   onClear,
   variant = "default",
@@ -761,7 +640,7 @@ export const ModelSelector = memo(function ModelSelector({
                 </span>
               ) : (
                 <span className="text-muted-foreground">
-                  Best available model
+                  {placeholder ?? "Best available model"}
                 </span>
               )}
             </Button>
@@ -847,6 +726,7 @@ function ModelSelectorDialogBody({
   onClose: () => void;
 }) {
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
+  const providerCatalog = useModelProviderCatalog();
 
   // Calculate which modalities are available across all models
   const availableModalities = useMemo(() => {
@@ -956,6 +836,7 @@ function ModelSelectorDialogBody({
           providerModelSections(
             provider,
             sortedModelsByProvider[provider] ?? [],
+            providerCatalog.label(provider),
           ).map((section) => (
             <ModelSelectorGroup key={section.key} heading={section.heading}>
               {section.models.map((model) => {
@@ -996,7 +877,7 @@ function ModelSelectorDialogBody({
                       <ModelCapabilityBadges
                         capabilities={model.capabilities}
                       />
-                      <ContextLengthIndicator
+                      <ModelContextLengthIndicator
                         contextLength={model.capabilities?.contextLength}
                       />
                       <PricingIndicator

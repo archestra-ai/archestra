@@ -1,8 +1,17 @@
 import config from "@/config";
+import { COHERE_EMBEDDING_MODELS } from "@/knowledge-base/embedding-clients/cohere-models";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 
+/**
+ * Cohere's `/v2/models` lists chat and embed models alike (each with its
+ * `endpoints`). Chat/generate models are surfaced as-is. Embed models come
+ * from the KB's static capability table instead: the listing reports neither
+ * dimensions nor modalities, so only models the Cohere embedding client can
+ * drive are offered, tagged with their dimension — and they are offered even
+ * when the listing omits them, so a key scoped to embeddings still sees them.
+ */
 export async function fetchCohereModels(
   apiKey: string,
   baseUrlOverride?: string | null,
@@ -22,7 +31,7 @@ export async function fetchCohereModels(
     extraHeaders,
   });
 
-  return data.models
+  const chatModels: ModelInfo[] = data.models
     .filter((model) => {
       const endpoints = model.endpoints || [];
       return endpoints.includes("chat") || endpoints.includes("generate");
@@ -39,4 +48,21 @@ export async function fetchCohereModels(
       if (b.id === preferredModel) return 1;
       return a.id.localeCompare(b.id);
     });
+
+  // The listing only contributes `created_at`; the table decides what is
+  // offered and at which dimension.
+  const listedEmbedCreatedAt = new Map(
+    data.models
+      .filter((model) => (model.endpoints || []).includes("embed"))
+      .map((model) => [model.name, model.created_at] as const),
+  );
+  const embeddingModels: ModelInfo[] = COHERE_EMBEDDING_MODELS.map((entry) => ({
+    id: entry.modelId,
+    displayName: entry.displayName,
+    provider: "cohere" as const,
+    createdAt: listedEmbedCreatedAt.get(entry.modelId),
+    capabilities: { embeddingDimensions: entry.dimensions },
+  }));
+
+  return [...chatModels, ...embeddingModels];
 }

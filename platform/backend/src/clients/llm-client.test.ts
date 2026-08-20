@@ -1,4 +1,5 @@
 import {
+  APP_ID_HEADER,
   CHAT_API_KEY_ID_HEADER,
   CHATGPT_SUBSCRIPTION_LABEL,
   DELEGATION_BILLING_ENVIRONMENT_HEADER,
@@ -218,6 +219,46 @@ describe("createDirectLLMModel", () => {
     // strict openai provider ("openai.chat") drops it in both directions,
     // while the openai-compatible provider round-trips it.
     expect((model as { provider: string }).provider).toBe("vllm.chat");
+  });
+
+  it("sends the json_schema response_format for vLLM structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      }),
+    );
+
+    const model = createDirectLLMModel({
+      provider: "vllm",
+      apiKey: undefined,
+      modelName: "qwen3-27b",
+      baseUrl: "http://localhost:8000/v1",
+    });
+
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // vLLM compiles a json_schema response_format into a decoding grammar. A
+    // schema-less `json_object` carries nothing to the model, and generateObject
+    // never puts the schema in the prompt — so the reranker's reasoning models
+    // answered with prose and fenced JSON that no parser accepts.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
   it("rejects vllm models without a base URL", () => {
@@ -1357,6 +1398,41 @@ describe("createLLMModel", () => {
       headers?: Record<string, string>;
     };
     expect(headers?.[DELEGATION_BILLING_ENVIRONMENT_HEADER]).toBeUndefined();
+  });
+
+  test("sets the app attribution header only when an app is provided", () => {
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      appId: "11111111-1111-4111-8111-111111111111",
+    });
+
+    expect(mockCreateAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [APP_ID_HEADER]: "11111111-1111-4111-8111-111111111111",
+        }),
+      }),
+    );
+
+    mockCreateAnthropic.mockClear();
+
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      appId: null,
+    });
+
+    const { headers } = mockCreateAnthropic.mock.calls[0][0] as {
+      headers?: Record<string, string>;
+    };
+    expect(headers?.[APP_ID_HEADER]).toBeUndefined();
   });
 
   for (const provider of ["ollama", "ollama-native", "vllm"] as const) {

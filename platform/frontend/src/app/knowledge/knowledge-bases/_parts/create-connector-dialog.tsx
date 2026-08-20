@@ -41,13 +41,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
-import { useFeature } from "@/lib/config/config.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
+import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
   useCreateConnector,
   useStartGoogleDriveOAuth,
 } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
+  AutoSyncCredentialRequirement,
+  autoSyncRequirementSlot,
   CONNECTOR_OPTIONS,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
@@ -60,10 +65,10 @@ import {
   getConnectorTypeLabel,
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
-  getPermissionSyncCredentialNote,
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -109,10 +114,39 @@ export function CreateConnectorDialog({
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
   const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
+  const connectorCatalog = useKnowledgeConnectorCatalog();
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Auto-sync permissions is the preferred visibility: whenever the feature
+  // is enabled, the chosen type supports it, and this user may select it, a
+  // NEW connector defaults to it (any type in the allowlist, current or
+  // future). The user can still switch to Organization or Teams.
+  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
+  const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
+  const { data: hasAutoSyncCreate } = useHasPermissions({
+    knowledgeSourceAutoSync: ["create"],
+  });
+  const defaultVisibilityFor = (type: ConnectorType): ConnectorVisibility =>
+    autoSyncBeta &&
+    knowledgeBaseEnterprise &&
+    hasAutoSyncCreate &&
+    connectorSupportsAutoSync(type, orchestratorK8sRuntime)
+      ? "auto-sync-permissions"
+      : "org-wide";
+  // SPDX-SnippetEnd
+  // Connector types the organization's admins turned off are never offered —
+  // the create API refuses them too.
   const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
     (option) =>
       (option.type !== "mfiles" || mfilesEnabled) &&
-      option.label.toLowerCase().includes(search.toLowerCase()),
+      !connectorCatalog.isHidden(option.type) &&
+      getConnectorTypeLabel(option.type)
+        .toLowerCase()
+        .includes(search.toLowerCase()),
   );
 
   const form = useForm<CreateConnectorFormValues>({
@@ -132,18 +166,21 @@ export function CreateConnectorDialog({
   });
 
   const connectorType = form.watch("connectorType");
+  // A brand-new connector starts in the org's configured landing environment
+  // for knowledge connectors.
+  useDefaultEnvironmentSeed({
+    resource: "knowledgeSource",
+    enabled: open,
+    apply: (environmentId) => form.setValue("environmentId", environmentId),
+  });
 
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
-    // Reset an auto-sync selection when switching to a type that can't support it.
-    if (
-      visibility === "auto-sync-permissions" &&
-      !connectorSupportsAutoSync(type)
-    ) {
-      setVisibility("org-wide");
-    }
+    // Picking a type re-establishes that type's default visibility (which
+    // also clears an auto-sync selection a new type can't support).
+    setVisibility(defaultVisibilityFor(type));
     setStep("configure");
   };
 
@@ -241,6 +278,30 @@ export function CreateConnectorDialog({
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
     : null;
+  // Only the auto-sync visibility mirrors the source's access control, so the
+  // upstream-permission requirement is noise on any other visibility.
+  const autoSyncRequirement =
+    visibility === "auto-sync-permissions" ? (
+      <AutoSyncCredentialRequirement type={connectorType} />
+    ) : undefined;
+  // Sources whose credential is minted inside the customer's own workspace
+  // link to that workspace, taken from the URL field above.
+  const connectorInstanceUrl = form.watch("config.outlineUrl") as
+    | string
+    | undefined;
+  const requirementSlot = autoSyncRequirementSlot({
+    type: connectorType,
+    authMethod,
+    authMode,
+  });
+  const credentialRequirement =
+    requirementSlot === "credential" ? autoSyncRequirement : undefined;
+  const connectorFieldsRequirement =
+    requirementSlot === "connector-fields" ? autoSyncRequirement : undefined;
+  const permissionSyncRequirement =
+    requirementSlot === "permission-sync-fields"
+      ? autoSyncRequirement
+      : undefined;
   const {
     apiTokenHelpText,
     apiTokenLabel,
@@ -253,9 +314,9 @@ export function CreateConnectorDialog({
     mode: "create",
     authMethod,
     authMode,
+    autoSyncRequirementShown: Boolean(credentialRequirement),
+    instanceUrl: connectorInstanceUrl,
   });
-  const permissionSyncCredentialNote =
-    getPermissionSyncCredentialNote(connectorType);
 
   useLayoutEffect(() => {
     if (open && step === "select") {
@@ -315,7 +376,9 @@ export function CreateConnectorDialog({
                         />
                       </div>
                       <div>
-                        <div className="font-medium">{option.label}</div>
+                        <div className="font-medium">
+                          {getConnectorTypeLabel(option.type)}
+                        </div>
                         <div className="mt-1 text-xs text-muted-foreground">
                           {option.description}
                         </div>
@@ -435,7 +498,10 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
-                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  supportsAutoSync={connectorSupportsAutoSync(
+                    connectorType,
+                    orchestratorK8sRuntime,
+                  )}
                   autoSyncPermissionAction="create"
                 />
 
@@ -477,6 +543,7 @@ export function CreateConnectorDialog({
                   form={form}
                   mode="create"
                   emailRequired={emailRequired}
+                  autoSyncRequirement={connectorFieldsRequirement}
                 />
 
                 {Boolean(apiTokenLabel) && (
@@ -501,13 +568,14 @@ export function CreateConnectorDialog({
                             />
                           )}
                         </FormControl>
-                        {apiTokenHelpText}
-                        {visibility === "auto-sync-permissions" &&
-                          permissionSyncCredentialNote && (
-                            <FormDescription>
-                              {permissionSyncCredentialNote}
-                            </FormDescription>
-                          )}
+                        {(apiTokenHelpText || credentialRequirement) && (
+                          <FormDescription>
+                            {apiTokenHelpText ? (
+                              <span>{apiTokenHelpText}</span>
+                            ) : null}{" "}
+                            {credentialRequirement}
+                          </FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -536,6 +604,15 @@ export function CreateConnectorDialog({
                           <FormMessage />
                         </FormItem>
                       )}
+                    />
+                  )}
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "perforce" && (
+                    <PerforcePermissionSyncFields
+                      form={form}
+                      mode="create"
+                      adminCredentialDescription={permissionSyncRequirement}
                     />
                   )}
 

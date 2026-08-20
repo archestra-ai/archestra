@@ -50,10 +50,12 @@ describe("saveResultStatuses", () => {
         error: null,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "connected", error: null },
       reranker: { status: "connected", error: null },
+      ocr: { status: "untested", error: null },
     });
   });
 
@@ -62,6 +64,7 @@ describe("saveResultStatuses", () => {
       error: null,
       embeddingConfigured: true,
       rerankerConfigured: false,
+      ocrConfigured: false,
     });
     expect(result.reranker.status).toBe("untested");
   });
@@ -72,10 +75,12 @@ describe("saveResultStatuses", () => {
         error: embeddingError,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "failed", error: "bad embed" },
       reranker: { status: "untested", error: null },
+      ocr: { status: "untested", error: null },
     });
   });
 
@@ -85,10 +90,12 @@ describe("saveResultStatuses", () => {
         error: rerankerError,
         embeddingConfigured: true,
         rerankerConfigured: true,
+        ocrConfigured: false,
       }),
     ).toEqual({
       embedding: { status: "connected", error: null },
       reranker: { status: "failed", error: "bad rerank" },
+      ocr: { status: "untested", error: null },
     });
   });
 
@@ -97,6 +104,7 @@ describe("saveResultStatuses", () => {
       error: new Error("500"),
       embeddingConfigured: true,
       rerankerConfigured: true,
+      ocrConfigured: false,
     });
     expect(result.embedding.status).toBe("untested");
     expect(result.reranker.status).toBe("untested");

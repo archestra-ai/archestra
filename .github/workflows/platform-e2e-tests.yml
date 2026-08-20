@@ -4,6 +4,10 @@ name: Platform E2E Tests
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
 #
+# MCP idle-hibernation smoke coverage runs in the merge queue with real idle
+# windows excluded. Nightly, workflow_dispatch, and the separate
+# "run-e2e-hibernation" label run the complete serial project.
+#
 # Three test environments:
 #   - Lite: the platform as one quickstart-mode container plus WireMock and
 #     Keycloak sidecars (scripts/e2e-lite.sh — the same harness devs run
@@ -63,7 +67,10 @@ jobs:
   platform-e2e-build-placeholder:
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
+    # Excludes EVERY e2e-triggering label: a label event that starts the real
+    # build must not also run this placeholder under the same check names (the
+    # duplicate-name masking hazard the NOTE above forbids re-adding).
+    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +86,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -150,8 +157,8 @@ jobs:
       # image is a deterministic function of the ./platform build context (base
       # images are digest-pinned in the Dockerfile and no build arg varies here),
       # so a matching git tree OID guarantees byte-identical build inputs. On a
-      # hit we do a registry-side manifest copy to the commit-SHA tag, so the
-      # test jobs' existing `:${sha}` pull contract is unchanged and no rebuild runs.
+      # hit we do a registry-side manifest copy to the commit-SHA e2e tag, so the
+      # test jobs' existing `:${sha}-e2e` pull contract is unchanged and no rebuild runs.
       # Registry path only: fork PRs have no OIDC/registry access and fall through
       # to the artifact build below.
       - name: Resolve platform image reuse
@@ -173,7 +180,18 @@ jobs:
           TREE_HASH=$(git ls-tree "HEAD:platform" | grep -v $'\te2e-tests$' | git hash-object --stdin)
           TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
           SLIM_TREE_TAG="${TREE_TAG}-slim"
-          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          # `-e2e` suffix, NOT the bare `:${sha}` tag: the staging deploy
+          # (on-commits-to-main -> deploy-dev-platform-images) publishes its
+          # image — built with `--build-arg VERSION=${sha}`, which bakes
+          # ARCHESTRA_VERSION and the Next.js deploymentId — under the bare
+          # commit-SHA tag, and the cluster pulls that tag by name. The e2e
+          # build omits the VERSION arg (deliberately, so the tree-hash reuse
+          # above stays deterministic), so writing it to the bare tag would
+          # clobber the deployed image with a `VERSION=dev` variant. The
+          # nightly scheduled run does exactly that for main's HEAD — hours
+          # after that commit was deployed — and any staging pod churn then
+          # pulls the dev-versioned image.
+          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}-e2e"
           SLIM_SHA_TAG="${SHA_TAG}-slim"
           echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "slim_tree_tag=${SLIM_TREE_TAG}" >> "${GITHUB_OUTPUT}"
@@ -212,11 +230,13 @@ jobs:
           # (A tree-tag REUSED image keeps whatever compression it was built with;
           # only fresh builds are guaranteed zstd.)
           outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
-          # Publish under both the commit SHA (what the shards pull) and the
-          # tree-OID tag, so a later run of the same ./platform tree reuses this
-          # image instead of rebuilding.
+          # Publish under both the commit-SHA e2e tag (what the shards pull;
+          # `-e2e` suffixed so it can never clobber the bare `:${sha}` tag the
+          # staging deploy publishes and the cluster pulls — see the reuse step
+          # above) and the tree-OID tag, so a later run of the same ./platform
+          # tree reuses this image instead of rebuilding.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
             ${{ steps.platform-reuse.outputs.tree_tag }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release
@@ -241,10 +261,10 @@ jobs:
           context: ${{ matrix.context }}
           push: "true"
           target: unified-slim
-          # Same dual-tag scheme as the full image: the SHA tag the K8s job
-          # pull, plus the tree-OID tag the reuse step checks.
+          # Same dual-tag scheme as the full image: the SHA e2e tag the K8s job
+          # pulls, plus the tree-OID tag the reuse step checks.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -343,7 +363,7 @@ jobs:
   platform-e2e-cancel-on-build-failure:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
-    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -380,13 +400,14 @@ jobs:
     # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
-    # Worst case = the 25-min image-poll ceiling (cold build, see
-    # image-pull-timeout-seconds below) plus setup and the ~4 min of tests;
-    # 40 caps a hung run instead of letting it burn a runner for the GitHub
-    # default.
-    timeout-minutes: 40
+    # Three budgets, matched to which legs run. The ordinary K8s leg fits inside
+    # 60 minutes. Merge queue adds a 90-minute hibernation leg after the 25-minute
+    # image-poll ceiling and 20-minute K8s leg, so it needs 150. Nightly,
+    # dispatch, and the explicit hibernation label allow that leg 120 minutes
+    # and need 175. Each budget leaves room for setup and artifact uploads.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') && 175 || github.event_name == 'merge_group' && 150 || 60 }}
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -447,7 +468,7 @@ jobs:
           # Trusted runs pull the -slim variant (no ~352MB dagger-engine.tar —
           # only the quickstart job consumes it); fork PRs load the full image from the
           # build artifact since only one variant travels as an artifact.
-          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
           # Trusted runs: the Kind node pulls the (public) registry image
           # itself when the pod schedules — no host pull, no ~77s kind-load.
@@ -479,11 +500,38 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
+      # Serial because these specs share the organization toggle and cluster.
+      # Merge queue excludes @slow-window tests but still gates real-cluster
+      # wake/reset/topology behavior. Scheduled and explicit runs include all
+      # idle-window coverage.
+      - name: Run hibernation E2E tests
+        id: e2e-hibernation
+        if: ${{ github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: api-k8s-hibernation
+          extra_args: ${{ github.event_name == 'merge_group' && '--workers=1 --grep-invert=@slow-window' || '--workers=1' }}
+          timeout: ${{ github.event_name == 'merge_group' && '90' || '120' }}
+          # Its own directory, so this leg neither overwrites the run above nor
+          # depends on the host runner deleting the root-owned files the
+          # container leaves behind.
+          blob_report_dir: blob-report-hibernation
+
+      - name: Upload hibernation blob report
+        if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-k8s-hibernation
+          path: platform/e2e-tests/blob-report-hibernation/
+          if-no-files-found: error
+          retention-days: 1
+
       # always() so this still runs when a failing setup step aborts the job
       # (a plain outcome check is implicitly ANDed with success() and gets
       # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true' || steps.e2e-hibernation.outcome == 'failure' || steps.e2e-hibernation.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -546,9 +594,15 @@ jobs:
       # the job anyway.
 
       - name: Fail if K8s-bound E2E tests failed
-        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        if: ${{ always() && (steps.e2e.outcome == 'failure' || steps.e2e-hibernation.outcome == 'failure') }}
+        # Which leg failed goes through the environment rather than straight
+        # into the shell: an expression expanded into a run block is a template
+        # injection, and the static-analysis gate rejects it.
+        env:
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+          E2E_HIBERNATION_OUTCOME: ${{ steps.e2e-hibernation.outcome }}
         run: |
-          echo "The K8s-bound E2E run failed."
+          echo "The K8s-bound E2E run failed (api-k8s: ${E2E_OUTCOME}, hibernation: ${E2E_HIBERNATION_OUTCOME})."
           exit 1
 
   # NOTE: there is deliberately no separate fan-in job for the test legs. Their
@@ -567,7 +621,7 @@ jobs:
   platform-e2e-lite-tests:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -630,7 +684,7 @@ jobs:
         uses: ./.github/actions/load-platform-image
         with:
           source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Start lite e2e stack
         env:
@@ -707,7 +761,7 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -734,7 +788,7 @@ jobs:
         uses: ./.github/actions/load-platform-image
         with:
           source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -1071,7 +1125,7 @@ jobs:
     # `!cancelled()` (not `always()`) so a cancelled upstream still cancels the
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
@@ -1086,12 +1140,15 @@ jobs:
           K8S_RESULT: ${{ needs.platform-e2e-k8s-tests.result }}
           LITE_RESULT: ${{ needs.platform-e2e-lite-tests.result }}
           QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           failed=0
           for pair in "k8s:$K8S_RESULT" "lite:$LITE_RESULT" "quickstart:$QUICKSTART_RESULT"; do
             name="${pair%%:*}"; result="${pair##*:}"
             echo "$name: $result"
-            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            if [ "$EVENT_NAME" = "merge_group" ] && [ "$result" != "success" ]; then
+              failed=1
+            elif [ "$EVENT_NAME" != "merge_group" ] && [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               failed=1
             fi
           done
@@ -1114,7 +1171,7 @@ jobs:
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1167,4 +1224,3 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
-

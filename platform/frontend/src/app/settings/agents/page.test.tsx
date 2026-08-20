@@ -145,6 +145,7 @@ import {
   useAppearanceSettings,
   useOrganization,
   useUpdateAgentSettings,
+  useUpdateIntegrationSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 
@@ -163,6 +164,10 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdateIntegrationSettings>);
   vi.clearAllMocks();
   mockOrganization = {
     defaultModelId: "gemini-2.5-pro",

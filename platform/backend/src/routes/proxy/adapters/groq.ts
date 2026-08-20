@@ -26,6 +26,7 @@ import type {
   LLMRequestAdapter,
   LLMResponseAdapter,
   LLMStreamAdapter,
+  StreamAccumulatorState,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -137,6 +138,11 @@ class GroqResponseAdapter implements LLMResponseAdapter<GroqResponse> {
   toRefusalResponse(refusalMessage: string, contentMessage: string) {
     return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
   }
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ) {
+    return this.delegate.withRewrittenToolCalls(toolCalls);
+  }
 }
 
 class GroqStreamAdapter
@@ -167,6 +173,9 @@ class GroqStreamAdapter
   }
   formatCompleteTextSSE(text: string) {
     return this.delegate.formatCompleteTextSSE(text);
+  }
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]) {
+    return this.delegate.formatToolCallsSSE(toolCalls);
   }
   formatEndSSE() {
     return this.delegate.formatEndSSE();

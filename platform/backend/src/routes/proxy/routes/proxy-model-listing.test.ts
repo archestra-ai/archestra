@@ -39,6 +39,10 @@ import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import anthropicProxyRoutes from "./anthropic";
 import githubCopilotProxyRoutes from "./github-copilot";
 import openAiProxyRoutes from "./openai";
+import {
+  AnthropicModelsListResponseSchema,
+  toAnthropicModelsList,
+} from "./proxy-model-listing";
 
 async function buildApp(
   plugin:
@@ -336,6 +340,75 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     ).toBe("Claude Opus 5 (1M context)");
   });
 
+  test("anthropic: an admin-set window decides the [1m] sibling", async () => {
+    // Both directions of the override: a model the catalog under-reports gains
+    // the sibling, and one an admin pinned below 1M loses it.
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-5",
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      inputModalities: null,
+      outputModalities: null,
+      contextLength: 1_000_000,
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-haiku-4-5",
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+      inputModalities: null,
+      outputModalities: null,
+      contextLength: 200_000,
+      lastSyncedAt: new Date(),
+    });
+    const opus = await ModelModel.findByProviderAndModelId(
+      "anthropic",
+      "claude-opus-5",
+    );
+    const haiku = await ModelModel.findByProviderAndModelId(
+      "anthropic",
+      "claude-haiku-4-5",
+    );
+    // Asserted rather than defaulted: an update against a missing id is a
+    // no-op, which would leave the synced windows in place and pass.
+    expect(opus).not.toBeNull();
+    expect(haiku).not.toBeNull();
+    await ModelModel.update(opus?.id ?? "", { customContextLength: 200_000 });
+    await ModelModel.update(haiku?.id ?? "", {
+      customContextLength: 1_000_000,
+    });
+
+    vi.mocked(fetchAnthropicModels).mockResolvedValue([
+      {
+        id: "claude-opus-5",
+        displayName: "Claude Opus 5",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "claude-haiku-4-5",
+        displayName: "Claude Haiku 4.5",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const app = await buildApp(anthropicProxyRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      headers: { "x-api-key": "sk-ant-raw" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { data: Array<{ id: string }> };
+    expect(body.data.map((model) => model.id)).toEqual([
+      "claude-opus-5",
+      "claude-haiku-4-5",
+      "claude-haiku-4-5[1m]",
+    ]);
+  });
+
   test("anthropic: does not duplicate a variant id the upstream already lists", async () => {
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-5",
@@ -522,5 +595,24 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     expect(response.statusCode).toBe(401);
     expect(fetchOpenAiModels).not.toHaveBeenCalled();
+  });
+});
+
+describe("toAnthropicModelsList display_name fallback", () => {
+  test("falls back to the model id when displayName is missing at runtime", () => {
+    // Rows built from a non-Anthropic-shaped upstream listing (base-URL
+    // override) can lack display_name; one bare row used to fail the whole
+    // response against AnthropicModelsListResponseSchema as a 500.
+    const models = [
+      { id: "claude-sonnet-5", provider: "anthropic" },
+      { id: "custom-model", displayName: "Custom", provider: "anthropic" },
+    ] as unknown as Parameters<typeof toAnthropicModelsList>[0];
+
+    const listed = toAnthropicModelsList(models);
+    expect(listed.data.map((m) => m.display_name)).toEqual([
+      "claude-sonnet-5",
+      "Custom",
+    ]);
+    expect(() => AnthropicModelsListResponseSchema.parse(listed)).not.toThrow();
   });
 });

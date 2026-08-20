@@ -1,6 +1,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  builtInProviderLabel,
   credentialRequiresPerUserScope,
+  integrationLabel,
   isCredentialLevelSubscriptionProvider,
   isProviderApiKeyOptional,
   isSubscriptionCredential,
@@ -40,6 +42,7 @@ import {
   isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
+import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
@@ -65,8 +68,17 @@ async function testApiKeyOrThrow(params: {
   extraHeaders?: Record<string, string> | null;
   /** Existing key row the credential belongs to, when re-testing a stored key. */
   providerApiKeyId?: string;
+  /** Resolves the organization's own name for the provider, on failure only. */
+  organizationId: string;
 }): Promise<void> {
-  const { provider, apiKey, baseUrl, extraHeaders, providerApiKeyId } = params;
+  const {
+    provider,
+    apiKey,
+    baseUrl,
+    extraHeaders,
+    providerApiKeyId,
+    organizationId,
+  } = params;
   try {
     await testProviderApiKey({
       provider,
@@ -76,19 +88,30 @@ async function testApiKeyOrThrow(params: {
       providerApiKeyId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    // The model fetchers name the provider as it ships ("Failed to fetch
+    // OpenAI models: 401") — right for the log they also write, wrong for a
+    // user in an organization that renamed it. Drop their noun here and let
+    // this message carry exactly one name: the organization's own.
+    //
+    // Classification stays on the raw text: it keys off the fetchers' own
+    // `: <status>` ending, which the rewrite deliberately removes.
+    const message = stripFetcherProviderNoun(rawMessage);
     // Name the URL actually tested: a base-URL override (user- or
     // env-configured, e.g. the e2e WireMock) silently redirects validation
     // away from the real provider, and the message is the only place that
     // misconfiguration can surface.
     const testedUrl = effectiveBaseUrlForHint(provider, baseUrl);
-    const providerName = providerDisplayNames[provider];
+    const providerName = await resolveProviderLabel({
+      organizationId,
+      provider,
+    });
     const providerLabel = testedUrl
       ? `${providerName} (${testedUrl})`
       : providerName;
     // A connection failure means the key was never checked — surface it as a
     // network problem, not a credentials problem.
-    if (isConnectionFailureMessage(message)) {
+    if (isConnectionFailureMessage(rawMessage)) {
       const hint = dockerLocalhostConnectionHint({
         baseUrl: testedUrl,
         errorMessage: message,
@@ -98,7 +121,7 @@ async function testApiKeyOrThrow(params: {
         `Could not reach ${providerLabel} to validate the API key: ${message}. Check the server's outbound network connectivity.${hint ? ` ${hint}` : ""}`,
       );
     }
-    const providerSideSuffix = providerSideErrorSuffix(message);
+    const providerSideSuffix = providerSideErrorSuffix(rawMessage);
     if (providerSideSuffix) {
       throw new ApiError(
         400,
@@ -107,6 +130,33 @@ async function testApiKeyOrThrow(params: {
     }
     throw new ApiError(400, `Invalid API key: ${message}`);
   }
+}
+
+/**
+ * The organization's own name for a provider, for a message a user reads.
+ * Resolved lazily on the failure path, so the happy path pays nothing.
+ */
+async function resolveProviderLabel(params: {
+  organizationId: string;
+  provider: SupportedProvider;
+}): Promise<string> {
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  return integrationLabel(
+    modelProviderOverrides,
+    params.provider,
+    builtInProviderLabel(params.provider),
+  );
+}
+
+/**
+ * Drops the provider noun the model fetchers put in their message, leaving the
+ * status behind: `Failed to fetch OpenAI models: 401` → `HTTP 401`. The
+ * fetchers share that string with the log line they write, where the shipped
+ * name is the right one; only the user-facing copy needs it gone.
+ */
+function stripFetcherProviderNoun(message: string): string {
+  return message.replace(/^Failed to fetch .*?: (\d{3})$/, "HTTP $1");
 }
 
 /**
@@ -393,6 +443,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user, headers }, reply) => {
       // Prevent creating Gemini API keys when Vertex AI is enabled
       validateProviderAllowed(body.provider);
+      // …and providers the organization's admins switched off entirely.
+      await assertModelProviderAllowed({
+        organizationId,
+        provider: body.provider,
+      });
 
       // Validate scope/teamId combination and authorization
       await validateScopeAndAuthorization({
@@ -445,6 +500,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
         actualApiKeyValue = encodeBedrockSigV4Marker(sigV4);
         await testApiKeyOrThrow({
+          organizationId,
           provider: body.provider,
           apiKey: actualApiKeyValue,
           baseUrl: runtimeTestBaseUrl,
@@ -480,6 +536,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         // then test the API key
         await testApiKeyOrThrow({
+          organizationId,
           provider: body.provider,
           apiKey: actualApiKeyValue,
           baseUrl: runtimeTestBaseUrl,
@@ -499,6 +556,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
         await testApiKeyOrThrow({
+          organizationId,
           provider: body.provider,
           apiKey: actualApiKeyValue,
           baseUrl: runtimeTestBaseUrl,
@@ -546,6 +604,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Keyless Anthropic key backed by Workload Identity Federation —
         // exercises the token exchange and model listing end to end.
         await testApiKeyOrThrow({
+          organizationId,
           provider: body.provider,
           apiKey: "",
           baseUrl: runtimeTestBaseUrl,
@@ -816,6 +875,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
+      // A key for a provider the admins switched off is frozen: it can be
+      // deleted, but not renamed, rescoped, or rotated back into service.
+      await assertModelProviderAllowed({
+        organizationId,
+        provider: apiKeyFromDB.provider,
+      });
+
       // If scope is changing, validate the new scope
       const newScope = body.scope ?? apiKeyFromDB.scope;
       const newTeamId =
@@ -928,6 +994,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? body.extraHeaders
             : apiKeyFromDB.extraHeaders;
         await testApiKeyOrThrow({
+          organizationId,
           provider: apiKeyFromDB.provider,
           apiKey: testValue,
           baseUrl: testBaseUrl,
@@ -989,6 +1056,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // subscription refresh token is persisted back to this key instead
           // of discarded (which would leave the stored token dead).
           await testApiKeyOrThrow({
+            organizationId,
             provider: apiKeyFromDB.provider,
             apiKey: apiKeyValue,
             baseUrl: testBaseUrl,
@@ -1010,6 +1078,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           // Keyless Anthropic WIF key — re-test with the updated runtime settings.
           await testApiKeyOrThrow({
+            organizationId,
             provider: apiKeyFromDB.provider,
             apiKey: "",
             baseUrl: testBaseUrl,
@@ -1194,6 +1263,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate by redeeming. The manager stashes any rotation so the
       // persisted credential carries the newest refresh token.
       await testApiKeyOrThrow({
+        organizationId,
         provider: keyRow.provider,
         apiKey: body.apiKey,
         baseUrl: resolveRuntimeTestBaseUrl({ body: {}, apiKey: keyRow }),
@@ -1262,6 +1332,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const usages: string[] = [];
         if (org.embeddingChatApiKeyId === params.id) usages.push("embedding");
         if (org.rerankerChatApiKeyId === params.id) usages.push("reranking");
+        if (org.ocrChatApiKeyId === params.id) usages.push("OCR");
         if (usages.length > 0) {
           throw new ApiError(
             400,

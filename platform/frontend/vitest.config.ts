@@ -1,6 +1,7 @@
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
+import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
 
@@ -29,6 +30,7 @@ export default defineConfig({
     },
   },
   test: {
+    ...vitestLogPolicy,
     globals: true,
     include: ["./src/**/*.test.{ts,tsx}"],
     environment: "jsdom",

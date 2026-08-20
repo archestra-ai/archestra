@@ -1,7 +1,6 @@
 "use client";
 
 import type { OrganizationTheme } from "@archestra/shared";
-import { Check } from "lucide-react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
@@ -62,14 +61,18 @@ function ThemeOption({
   onClick,
   disabled,
 }: ThemeOptionProps) {
+  // Selection is the filled variant plus `aria-pressed`, deliberately without a
+  // corner check: an icon positioned over a centered, full-width label lands on
+  // the glyphs of any name wide enough to reach the tile edge, and the widest
+  // name — "Caffeine (Default)" — is also the default selection.
   return (
     <Button
       variant={isSelected ? "default" : "outline"}
-      className="h-auto p-3 flex-col items-center gap-2 relative w-full"
+      className="h-auto p-3 flex-col items-center gap-2 w-full"
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={isSelected}
     >
-      {isSelected && <Check className="h-4 w-4 absolute top-2 right-2" />}
       <span className="text-sm font-medium text-center w-full">
         {theme.name}
       </span>

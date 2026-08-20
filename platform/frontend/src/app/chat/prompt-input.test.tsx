@@ -2,7 +2,7 @@ import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
+import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
@@ -25,7 +25,7 @@ const {
   mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: {
     chatSecretScanEnabled: false,
-    chatIncognitoEnabled: false,
+    lockedChatEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
     apiBodyLimitBytes: undefined as number | undefined,
     sandboxArtifactBytesLimit: undefined as number | undefined,
@@ -34,9 +34,9 @@ const {
     agent: null as { sandboxAvailable: boolean } | null,
   },
   // What useConversation resolves to — lets tests exercise an existing
-  // incognito conversation (vs the new-chat toggle).
+  // locked chat (vs the new-chat toggle).
   mockConversationState: {
-    conversation: null as { incognito?: boolean } | null,
+    conversation: null as { lockedChat?: boolean } | null,
   },
   // The upload policy the composer hands to the file picker: the byte cap it
   // enforces and the per-file check it runs. Captured so tests can exercise
@@ -201,11 +201,18 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   PromptInputSubmit: ({
     status,
     disabled,
+    onClick,
   }: {
     status?: string;
     disabled?: boolean;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
   }) => (
-    <button data-testid="prompt-submit" type="submit" disabled={disabled}>
+    <button
+      data-testid="prompt-submit"
+      type="submit"
+      disabled={disabled}
+      onClick={onClick}
+    >
       Submit {status ?? "unset"}
     </button>
   ),
@@ -236,7 +243,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       setInput: mockTextInputSetInput,
       clear: mockTextInputClear,
     },
-    attachments: { files: [] },
+    attachments: { files: mockControllerState.files },
   }),
   usePromptInputAttachments: () => ({
     openFileDialog: vi.fn(),
@@ -359,8 +366,8 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
       }
-      if (flag === "chatIncognitoEnabled") {
-        return mockFeatureState.chatIncognitoEnabled;
+      if (flag === "lockedChatEnabled") {
+        return mockFeatureState.lockedChatEnabled;
       }
       if (flag === "chatAttachmentStorageBytesLimit") {
         return mockFeatureState.chatAttachmentStorageBytesLimit;
@@ -389,7 +396,7 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
-    mockFeatureState.chatIncognitoEnabled = false;
+    mockFeatureState.lockedChatEnabled = false;
     mockProfileState.agent = null;
     mockToolbarState.isNarrow = false;
     mockConversationState.conversation = null;
@@ -842,19 +849,19 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
-  describe("incognito composer", () => {
+  describe("locked-chat composer", () => {
     it("greys out (not hides) the attach button and shows the explainer drawer while the new-chat toggle is on", () => {
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          incognito
-          onIncognitoChange={vi.fn()}
+          lockedChat
+          onLockedChatChange={vi.fn()}
         />,
       );
 
       // The drawer carries the copy that used to live in the toggle tooltip.
-      const notice = screen.getByTestId(E2eTestId.ChatIncognitoNotice);
+      const notice = screen.getByTestId(E2eTestId.LockedChatNotice);
       expect(notice).toHaveTextContent(
         /Locked chat — encrypted with a key that stays in this browser/,
       );
@@ -878,26 +885,26 @@ describe("ArchestraPromptInput", () => {
       ).toBe(true);
     });
 
-    it("renders no drawer and a normal attach button when incognito is off", () => {
+    it("renders no drawer and a normal attach button when locked chat is off", () => {
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          incognito={false}
-          onIncognitoChange={vi.fn()}
+          lockedChat={false}
+          onLockedChatChange={vi.fn()}
         />,
       );
 
       expect(
-        screen.queryByTestId(E2eTestId.ChatIncognitoNotice),
+        screen.queryByTestId(E2eTestId.LockedChatNotice),
       ).not.toBeInTheDocument();
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
     });
 
-    it("keeps the drawer and greyed-out attach button on an existing incognito conversation", () => {
-      mockConversationState.conversation = { incognito: true };
+    it("keeps the drawer and greyed-out attach button on an existing locked chat", () => {
+      mockConversationState.conversation = { lockedChat: true };
 
       render(
         <ArchestraPromptInput
@@ -908,7 +915,7 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(
-        screen.getByTestId(E2eTestId.ChatIncognitoNotice),
+        screen.getByTestId(E2eTestId.LockedChatNotice),
       ).toBeInTheDocument();
       expect(
         screen.getByTestId(E2eTestId.ChatDisabledFileUploadButton),
@@ -918,21 +925,21 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("toggles incognito from the composer button, whose tooltip is just the name", () => {
-      mockFeatureState.chatIncognitoEnabled = true;
-      const onIncognitoChange = vi.fn();
+    it("toggles locked chat from the composer button, whose tooltip is just the name", () => {
+      mockFeatureState.lockedChatEnabled = true;
+      const onLockedChatChange = vi.fn();
 
       render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          incognito={false}
-          onIncognitoChange={onIncognitoChange}
+          lockedChat={false}
+          onLockedChatChange={onLockedChatChange}
         />,
       );
 
       fireEvent.click(screen.getByRole("button", { name: "Locked chat" }));
-      expect(onIncognitoChange).toHaveBeenCalledWith(true);
+      expect(onLockedChatChange).toHaveBeenCalledWith(true);
 
       // The long explanation moved to the drawer; the hover stays succinct —
       // just the name plus the global shortcut.
@@ -946,20 +953,20 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("claims the Alt+I handshake event and toggles the draft off and back on", () => {
-      mockFeatureState.chatIncognitoEnabled = true;
-      const onIncognitoChange = vi.fn();
+      mockFeatureState.lockedChatEnabled = true;
+      const onLockedChatChange = vi.fn();
 
       const { rerender } = render(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          incognito
-          onIncognitoChange={onIncognitoChange}
+          lockedChat
+          onLockedChatChange={onLockedChatChange}
         />,
       );
 
       // Armed draft + shortcut: claimed (no navigation) and toggled off.
-      const disarm = new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, {
+      const disarm = new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, {
         cancelable: true,
       });
       let unclaimed: boolean | undefined;
@@ -967,48 +974,48 @@ describe("ArchestraPromptInput", () => {
         unclaimed = window.dispatchEvent(disarm);
       });
       expect(unclaimed).toBe(false);
-      expect(onIncognitoChange).toHaveBeenLastCalledWith(false);
+      expect(onLockedChatChange).toHaveBeenLastCalledWith(false);
 
       // Shortcut again on the disarmed composer: toggled back on.
       rerender(
         <ArchestraPromptInput
           {...defaultProps}
           allowFileUploads={true}
-          incognito={false}
-          onIncognitoChange={onIncognitoChange}
+          lockedChat={false}
+          onLockedChatChange={onLockedChatChange}
         />,
       );
       act(() => {
         window.dispatchEvent(
-          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+          new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
         );
       });
-      expect(onIncognitoChange).toHaveBeenLastCalledWith(true);
+      expect(onLockedChatChange).toHaveBeenLastCalledWith(true);
     });
 
     it("leaves the handshake event unclaimed while chatting in a conversation", () => {
-      mockFeatureState.chatIncognitoEnabled = true;
-      const onIncognitoChange = vi.fn();
+      mockFeatureState.lockedChatEnabled = true;
+      const onLockedChatChange = vi.fn();
 
       render(
         <ArchestraPromptInput
           {...defaultProps}
           conversationId="conversation-1"
           allowFileUploads={true}
-          onIncognitoChange={onIncognitoChange}
+          onLockedChatChange={onLockedChatChange}
         />,
       );
 
       let unclaimed: boolean | undefined;
       act(() => {
         unclaimed = window.dispatchEvent(
-          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+          new Event(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
         );
       });
 
       // Unclaimed → the global handler proceeds to navigate to a fresh draft.
       expect(unclaimed).toBe(true);
-      expect(onIncognitoChange).not.toHaveBeenCalled();
+      expect(onLockedChatChange).not.toHaveBeenCalled();
     });
   });
 
@@ -1522,6 +1529,103 @@ describe("ArchestraPromptInput", () => {
       });
 
       expect(onStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("queue affordance on the submit button", () => {
+    // The composer's Send/Stop face is the only thing announcing what Enter
+    // will do mid-stream: with a queueable draft the submit stays an ordinary
+    // Send button (status "ready") instead of turning into Stop.
+    const getSubmitButton = () =>
+      screen.getByTestId("prompt-submit") as HTMLButtonElement;
+
+    it("keeps the Send face while a response streams and the composer holds a queueable draft", () => {
+      mockControllerState.value = "follow-up";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+          conversationId="conv-queue-face"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit ready");
+      // ...and with it the ordinary Send tooltip, not the Stop one.
+      expect(screen.getByText(/^Send$/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Stop$/)).not.toBeInTheDocument();
+    });
+
+    it("clicking the Send face queues instead of stopping", () => {
+      const onStop = vi.fn();
+      const onSubmit = vi.fn();
+      mockControllerState.value = "follow-up";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-queue-click"
+        />,
+      );
+
+      fireEvent.click(getSubmitButton());
+
+      expect(onStop).not.toHaveBeenCalled();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the Stop face while streaming with an empty composer", () => {
+      const onStop = vi.fn();
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-stop-face"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
+      expect(screen.getByText(/^Stop$/)).toBeInTheDocument();
+
+      fireEvent.click(getSubmitButton());
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the Stop face when attachments are staged, since they cannot be queued", () => {
+      mockControllerState.value = "follow-up";
+      mockControllerState.files = [{ url: "blob:attachment" }];
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+          conversationId="conv-queue-attachments"
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
+    });
+
+    it("keeps the Stop face on the new-chat composer, which has no conversation to queue into", () => {
+      mockControllerState.value = "first message";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={vi.fn()}
+        />,
+      );
+
+      expect(getSubmitButton()).toHaveTextContent("Submit streaming");
     });
   });
 

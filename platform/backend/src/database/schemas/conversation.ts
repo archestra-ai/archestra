@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConversationOrigin,
-  IncognitoEscrowBlob,
+  LockedChatEscrowBlob,
 } from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -107,16 +107,16 @@ const conversationsTable = softDeletablePgTable(
       .notNull()
       .default(false),
     /**
-     * Incognito conversations: message content is encrypted under a
+     * Locked chats: message content is encrypted under a
      * browser-held per-conversation key the server never persists.
-     * `incognitoDekFingerprint` rejects wrong keys up front;
-     * `incognitoEscrow` is the enterprise escrow record (RSA-wrapped key or
-     * Vault reference — see content-encryption/incognito-escrow.ts), null
+     * `lockedChatDekFingerprint` rejects wrong keys up front;
+     * `lockedChatEscrow` is the enterprise escrow record (RSA-wrapped key or
+     * Vault reference — see content-encryption/locked-chat-escrow.ts), null
      * when escrow is not configured.
      */
-    incognito: boolean("incognito").notNull().default(false),
-    incognitoDekFingerprint: text("incognito_dek_fingerprint"),
-    incognitoEscrow: jsonb("incognito_escrow").$type<IncognitoEscrowBlob>(),
+    lockedChat: boolean("locked_chat").notNull().default(false),
+    lockedChatDekFingerprint: text("locked_chat_dek_fingerprint"),
+    lockedChatEscrow: jsonb("locked_chat_escrow").$type<LockedChatEscrowBlob>(),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

@@ -395,6 +395,31 @@ class OllamaNativeResponseAdapter
     return [this.response.done_reason ?? "stop"];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): NativeResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    const existing = this.response.message.tool_calls;
+    if (!existing) return this.response;
+    const tool_calls = existing.map((toolCall, index) => {
+      const rewritten = toolCalls[index];
+      if (!rewritten) return toolCall;
+      return {
+        ...toolCall,
+        function: {
+          ...toolCall.function,
+          name: rewritten.name,
+          arguments: parseArgs(rewritten.arguments),
+        },
+      };
+    });
+    return {
+      ...this.response,
+      message: { ...this.response.message, tool_calls },
+    };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -566,6 +591,30 @@ class OllamaNativeStreamAdapter
 
   getRawToolCallEvents(): string[] {
     return this.rawToolCallLines;
+  }
+
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // Ollama delivers tool calls whole on one line; mirror that. `done` stays
+    // false and the counters are omitted, exactly as the buffered replay does,
+    // because formatEndSSE emits the terminating frame.
+    return [
+      ndjsonLine({
+        model: this.state.model,
+        created_at: this.createdAt,
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: toolCalls.map((toolCall) => ({
+            id: toolCall.id || undefined,
+            function: {
+              name: toolCall.name,
+              arguments: parseArgs(toolCall.arguments),
+            },
+          })),
+        },
+        done: false,
+      }),
+    ];
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1017,3 +1066,17 @@ function toToolArgsObject(
 
 /** Key holding tool-call argument text that could not be read as an object. */
 const UNPARSED_TOOL_ARGS_KEY = "__archestra_unparsed_arguments";
+
+/** Rewritten arguments arrive as the JSON string the model emitted; this wire
+ * shape carries them as an object. A repaired call always parses (the planner
+ * refuses to rewrite otherwise), so the fallback is defensive only. */
+function parseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}

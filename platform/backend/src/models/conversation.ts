@@ -36,7 +36,7 @@ import ProjectShareModel from "./project-share";
 class ConversationModel {
   /**
    * `id` may be supplied by the caller when row fields must be derived from
-   * it before insert (incognito key fingerprints are bound to the id).
+   * it before insert (locked-chat key fingerprints are bound to the id).
    */
   static async create(
     data: InsertConversation & { id?: string },
@@ -63,6 +63,14 @@ class ConversationModel {
    * Prevents unbounded result sets for common search terms.
    */
   private static readonly SEARCH_RESULT_LIMIT = 50;
+
+  /**
+   * Maximum number of conversations the non-search listing returns. The
+   * sidebar refetches this list on every focus/navigation, and without a
+   * bound it re-downloads a heavy chat user's entire lifetime history each
+   * time. Older conversations stay reachable through search and direct links.
+   */
+  private static readonly LIST_RESULT_LIMIT = 250;
 
   /**
    * Maximum number of messages to load per conversation for preview snippets.
@@ -164,10 +172,12 @@ class ConversationModel {
           },
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
+          // No systemPrompt here: list rows only need identity/config refs,
+          // and a roster of custom agents can carry very large prompts.
+          // findById selects it for the flows that need it (e.g. compaction).
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
-            systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
@@ -245,11 +255,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        // Incognito rows are encrypted under a browser-held key the server
+        // LockedChat rows are encrypted under a browser-held key the server
         // does not have: skip them entirely so the list carries no message
         // content (not even ciphertext) and the server-key decrypt is never
         // attempted (it would throw on the foreign envelope).
-        if (row.conversation.incognito) {
+        if (row.conversation.lockedChat) {
           continue;
         }
         if (row?.message) {
@@ -286,10 +296,12 @@ class ConversationModel {
           },
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
+          // No systemPrompt here: list rows only need identity/config refs,
+          // and a roster of custom agents can carry very large prompts.
+          // findById selects it for the flows that need it (e.g. compaction).
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
-            systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
@@ -313,7 +325,8 @@ class ConversationModel {
           eq(schema.conversationsTable.projectId, schema.projectsTable.id),
         )
         .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.lastMessageAt));
+        .orderBy(desc(schema.conversationsTable.lastMessageAt))
+        .limit(ConversationModel.LIST_RESULT_LIMIT);
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
@@ -426,10 +439,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // Incognito rows are ciphertext under a browser-held key: the route
+      // LockedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.incognito) {
+      if (firstRow.conversation.lockedChat) {
         break;
       }
       if (row.message) {
@@ -454,40 +467,40 @@ class ConversationModel {
   }
 
   /**
-   * Incognito key bookkeeping for a conversation the caller has already
+   * LockedChat key bookkeeping for a conversation the caller has already
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
    * deliberately absent from API response shapes).
    *
    * `hasEscrow` gates whether this conversation's audit trail may be encrypted
    * rather than redacted. It is exact: the wrapped key lives on the row.
    */
-  static async getIncognitoKeyInfo(id: string): Promise<{
+  static async getLockedChatKeyInfo(id: string): Promise<{
     id: string;
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
         id: schema.conversationsTable.id,
-        incognito: schema.conversationsTable.incognito,
-        incognitoDekFingerprint:
-          schema.conversationsTable.incognitoDekFingerprint,
-        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+        lockedChat: schema.conversationsTable.lockedChat,
+        lockedChatDekFingerprint:
+          schema.conversationsTable.lockedChatDekFingerprint,
+        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
     if (!row) return null;
     return {
       id: row.id,
-      incognito: row.incognito,
-      incognitoDekFingerprint: row.incognitoDekFingerprint,
-      hasEscrow: row.incognitoEscrow !== null,
+      lockedChat: row.lockedChat,
+      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
+      hasEscrow: row.lockedChatEscrow !== null,
     };
   }
 
   /**
-   * Incognito bookkeeping for a conversation, scoped to its owner. Used by the
+   * LockedChat bookkeeping for a conversation, scoped to its owner. Used by the
    * LLM proxy to decide how a chat-loopback session's audit content must be
    * stored; the owner check keeps a spoofed session id from suppressing (or
    * re-keying) someone else's audit trail.
@@ -496,20 +509,20 @@ class ConversationModel {
    * `userId`. `hasEscrow` is exact: the wrapped key lives on the row, so its
    * presence is read directly rather than inferred.
    */
-  static async getIncognitoAuditInfoOwnedBy(params: {
+  static async getLockedChatAuditInfoOwnedBy(params: {
     id: string;
     userId: string;
   }): Promise<{
-    incognito: boolean;
-    incognitoDekFingerprint: string | null;
+    lockedChat: boolean;
+    lockedChatDekFingerprint: string | null;
     hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
-        incognito: schema.conversationsTable.incognito,
-        incognitoDekFingerprint:
-          schema.conversationsTable.incognitoDekFingerprint,
-        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+        lockedChat: schema.conversationsTable.lockedChat,
+        lockedChatDekFingerprint:
+          schema.conversationsTable.lockedChatDekFingerprint,
+        lockedChatEscrow: schema.conversationsTable.lockedChatEscrow,
       })
       .from(schema.conversationsTable)
       .where(
@@ -522,9 +535,9 @@ class ConversationModel {
       .limit(1);
     if (!row) return null;
     return {
-      incognito: row.incognito,
-      incognitoDekFingerprint: row.incognitoDekFingerprint,
-      hasEscrow: row.incognitoEscrow !== null,
+      lockedChat: row.lockedChat,
+      lockedChatDekFingerprint: row.lockedChatDekFingerprint,
+      hasEscrow: row.lockedChatEscrow !== null,
     };
   }
 
@@ -726,10 +739,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      // Incognito rows are ciphertext under a browser-held key: the route
+      // LockedChat rows are ciphertext under a browser-held key: the route
       // layer decrypts them (or returns the locked shape) — never attempt the
       // server-key decrypt here.
-      if (firstRow.conversation.incognito) {
+      if (firstRow.conversation.lockedChat) {
         break;
       }
       if (row.message) {
@@ -1201,7 +1214,7 @@ function isConversationUnread(conversation: {
 
 /**
  * Assemble the API-facing message list from already-decrypted message rows.
- * Used by the incognito GET path, which loads and decrypts rows itself (the
+ * Used by the locked-chat GET path, which loads and decrypts rows itself (the
  * model cannot: the key only exists on the request). Applies the same
  * filtering/metadata rules as the standard conversation reads above.
  */
@@ -1271,7 +1284,8 @@ function addMessagePersistenceMetadata(message: {
 type JoinedConversationAgent = {
   id: string | null;
   name: string | null;
-  systemPrompt: string | null;
+  /** Absent on list reads; only detail reads select the prompt. */
+  systemPrompt?: string | null;
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
   toolExposureMode: ToolExposureMode | null;
   llmApiKeyId: string | null;
@@ -1307,7 +1321,11 @@ function withVisibleAgent(
     agent: {
       id: agent.id,
       name: agent.name ?? "",
-      systemPrompt: agent.systemPrompt,
+      // Only present when the read selected it (detail reads); list reads
+      // deliberately leave the prompt out of the payload.
+      ...(agent.systemPrompt !== undefined && {
+        systemPrompt: agent.systemPrompt,
+      }),
       agentType: agent.agentType ?? "agent",
       toolExposureMode: agent.toolExposureMode ?? "full",
       llmApiKeyId: agent.llmApiKeyId,

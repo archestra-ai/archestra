@@ -72,6 +72,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
   useDeleteLlmProviderApiKey,
@@ -169,6 +170,26 @@ export default function ApiKeysPage() {
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
+  const providerCatalog = useModelProviderCatalog();
+  const providerSettingsItems = useMemo(
+    () =>
+      Object.entries(PROVIDER_CONFIG)
+        .map(([provider, config]) => ({
+          id: provider as LlmProviderApiKeyResponse["provider"],
+          label: config.name,
+          icon: (
+            <Image
+              src={config.icon}
+              alt=""
+              width={18}
+              height={18}
+              className="rounded dark:invert"
+            />
+          ),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [],
+  );
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
@@ -362,13 +383,15 @@ export default function ApiKeysPage() {
   );
 
   const addApiKeyButton = (
-    <Button
-      onClick={() => setIsCreateDialogOpen(true)}
-      data-testid={E2eTestId.AddChatApiKeyButton}
-    >
-      <Plus className="h-4 w-4" />
-      Add API Key
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        onClick={() => setIsCreateDialogOpen(true)}
+        data-testid={E2eTestId.AddChatApiKeyButton}
+      >
+        <Plus className="h-4 w-4" />
+        <span>Add API Key</span>
+      </Button>
+    </div>
   );
 
   const apiKeys = queriedApiKeys;
@@ -403,11 +426,16 @@ export default function ApiKeysPage() {
     const normalizedSearch = search.toLowerCase();
 
     return [
+      // "Connect subscription" rows are offers, not existing credentials, so a
+      // provider the admins turned off drops out of the list entirely. Keys
+      // that already exist stay listed (flagged in the Provider column) so an
+      // admin can still see and delete them.
       ...subscriptions.filter(
         ({ name, provider, credential }) =>
+          !providerCatalog.isHidden(provider) &&
           (providerFilter === "all" || providerFilter === provider) &&
           (!normalizedSearch ||
-            `${name} ${PROVIDER_CONFIG[provider].name} ${credential?.name ?? ""}`
+            `${name} ${providerCatalog.label(provider)} ${credential?.name ?? ""}`
               .toLowerCase()
               .includes(normalizedSearch)),
       ),
@@ -415,7 +443,7 @@ export default function ApiKeysPage() {
         .filter(({ id }) => !connectedIds.has(id))
         .map((credential) => ({ kind: "credential" as const, ...credential })),
     ];
-  }, [allApiKeys, queriedApiKeys, providerFilter, search]);
+  }, [allApiKeys, queriedApiKeys, providerFilter, search, providerCatalog]);
 
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -425,16 +453,13 @@ export default function ApiKeysPage() {
         seen.add(apiKey.provider);
         return true;
       })
-      .map((apiKey) => {
-        const config = PROVIDER_CONFIG[apiKey.provider];
-        return {
-          value: apiKey.provider,
-          icon: config.icon,
-          name: config.name,
-        };
-      })
+      .map((apiKey) => ({
+        value: apiKey.provider,
+        icon: PROVIDER_CONFIG[apiKey.provider].icon,
+        name: providerCatalog.label(apiKey.provider),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allApiKeys]);
+  }, [allApiKeys, providerCatalog]);
 
   const columns: ColumnDef<ModelProviderRow>[] = useMemo(
     () => [
@@ -468,17 +493,21 @@ export default function ApiKeysPage() {
         size: 220,
         minSize: 180,
         cell: ({ row }) => {
-          const config = PROVIDER_CONFIG[row.original.provider];
+          const provider = row.original.provider;
+          const label = providerCatalog.label(provider);
           return (
             <div className="flex min-w-0 items-center gap-2">
               <Image
-                src={config.icon}
-                alt={config.name}
+                src={PROVIDER_CONFIG[provider].icon}
+                alt={label}
                 width={20}
                 height={20}
                 className="rounded dark:invert"
               />
-              <span className="truncate">{config.name}</span>
+              <span className="truncate">{label}</span>
+              {providerCatalog.isHidden(provider) && (
+                <InlineTag className="shrink-0">Turned off</InlineTag>
+              )}
             </div>
           );
         },
@@ -694,6 +723,7 @@ export default function ApiKeysPage() {
       azureOpenAiEntraIdEnabled,
       anthropicWifEnabled,
       currentUserId,
+      providerCatalog,
     ],
   );
 

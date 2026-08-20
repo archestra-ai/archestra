@@ -41,7 +41,14 @@ Combined, these endpoints expose metrics including:
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
 - `mcp_tool_call_duration_seconds` - MCP tool call execution duration by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status
-- `mcp_server_deployment_status` - Current deployment state of self-hosted MCP servers by server_name and state (not_created/pending/running/failed/succeeded). Value is 1 for the active state. Use `count(mcp_server_deployment_status{state="running"} == 1)` to count running deployments.
+- `mcp_server_deployment_status` - Current deployment state of self-hosted MCP servers by server_name and state (not_created/pending/running/failed/succeeded/hibernated/waking). Value is 1 for the active state. Use `count(mcp_server_deployment_status{state="running"} == 1)` to count running deployments, or `count(mcp_server_deployment_status{state="hibernated"} == 1)` to count servers idle hibernation has scaled to zero.
+
+### Skill Metrics
+
+- `skill_activations_total` - Total [Agent Skill](platform-agent-skills) activations by activation_type (`slash_command`, `load_skill`, `delegation`)
+- `skill_context_tokens_total` - Tokens skill activation blocks added to model context, by activation_type. Counts measured activations only; compare with `skill_activations_total` for coverage.
+
+> **Note:** There is no per-skill metric label — skill names are user-created and unbounded, so a label would explode series cardinality. For per-skill detail, use the [per-skill statistics](platform-costs-and-limits#per-skill-cost) API. Per-app runtime LLM spend is already separable in `llm_cost_total` and `llm_tokens_total` via `source="app:llm_complete"`; per-app figures come from the [per-app statistics](platform-costs-and-limits#per-app-cost) API.
 
 ### RAG & Knowledge Base Metrics
 

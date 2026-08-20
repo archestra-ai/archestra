@@ -1,10 +1,10 @@
 import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
-import {
-  decryptIncognitoMessageRow,
-  encryptIncognitoMessageContent,
-} from "@/content-encryption/incognito";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
+import {
+  decryptLockedChatMessageRow,
+  encryptLockedChatMessageContent,
+} from "@/content-encryption/locked-chat";
 import {
   decryptMessageRow,
   encryptMessageContent,
@@ -25,7 +25,7 @@ type DbExecutor =
   | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Encrypt content under the incognito conversation key when one is in play,
+ * Encrypt content under the locked chat key when one is in play,
  * otherwise under the at-rest layer (which passes through when disabled).
  */
 function encryptContent(
@@ -33,7 +33,7 @@ function encryptContent(
   key: ConversationContentKey | null | undefined,
 ): unknown {
   return key
-    ? encryptIncognitoMessageContent(content, key)
+    ? encryptLockedChatMessageContent(content, key)
     : encryptMessageContent(content);
 }
 
@@ -42,7 +42,7 @@ function decryptRow<T extends object>(
   row: T,
   key: ConversationContentKey | null | undefined,
 ): T {
-  return key ? decryptIncognitoMessageRow(row, key) : decryptMessageRow(row);
+  return key ? decryptLockedChatMessageRow(row, key) : decryptMessageRow(row);
 }
 
 class MessageModel {

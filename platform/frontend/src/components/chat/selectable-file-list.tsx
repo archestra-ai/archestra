@@ -1,6 +1,12 @@
 "use client";
 
-import { Download, ListChecks, MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  BookPlus,
+  Download,
+  ListChecks,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   type FileListItem,
@@ -43,6 +49,8 @@ export function SelectableFileList<T extends FileListItem>({
   selectedId,
   onOpen,
   onRequestDelete,
+  onRequestSaveToKnowledge,
+  canSaveToKnowledge,
   renderItemActions,
 }: {
   sections: { title?: string; description?: string; items: T[] }[];
@@ -56,6 +64,14 @@ export function SelectableFileList<T extends FileListItem>({
     items: T[],
     onComplete?: (failedIds: string[]) => void,
   ) => void;
+  /**
+   * Copy files into the knowledge repository. Receives only the items that
+   * pass `canSaveToKnowledge`, so a mixed selection saves the ones it can
+   * rather than refusing the lot. Omit to hide the action entirely.
+   */
+  onRequestSaveToKnowledge?: (items: T[]) => void;
+  /** Which rows the above applies to; everything qualifies when omitted. */
+  canSaveToKnowledge?: (item: T) => boolean;
   /** Custom trailing actions for a row (e.g. the artifact's copy/PDF). */
   renderItemActions?: (item: T) => ReactNode;
 }) {
@@ -66,6 +82,11 @@ export function SelectableFileList<T extends FileListItem>({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedItems = managed.filter((f) => selectedIds.has(f.id));
+  // A selection can mix attachments with already-persisted outputs; the action
+  // applies to the attachments in it rather than being refused outright.
+  const savableSelection = canSaveToKnowledge
+    ? selectedItems.filter(canSaveToKnowledge)
+    : selectedItems;
   const { allChecked, someChecked } = selectionCheckState(
     selectedItems.length,
     managedCount,
@@ -113,6 +134,12 @@ export function SelectableFileList<T extends FileListItem>({
         item={item}
         onSelect={() => enterSelectionWith(item.id)}
         onDelete={() => onRequestDelete([item as T])}
+        onSaveToKnowledge={
+          onRequestSaveToKnowledge &&
+          (!canSaveToKnowledge || canSaveToKnowledge(item as T))
+            ? () => onRequestSaveToKnowledge([item as T])
+            : undefined
+        }
       />
     );
   };
@@ -195,6 +222,23 @@ export function SelectableFileList<T extends FileListItem>({
               <Download className="h-4 w-4" />
               Download
             </Button>
+            {onRequestSaveToKnowledge && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                disabled={savableSelection.length === 0}
+                title={
+                  savableSelection.length === 0
+                    ? "Only chat attachments can be saved; everything else here is already persisted."
+                    : undefined
+                }
+                onClick={() => onRequestSaveToKnowledge(savableSelection)}
+              >
+                <BookPlus className="h-4 w-4" />
+                Save to knowledge
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -228,10 +272,13 @@ function FileRowMenu({
   item,
   onSelect,
   onDelete,
+  onSaveToKnowledge,
 }: {
   item: FileListItem;
   onSelect: () => void;
   onDelete: () => void;
+  /** Omitted for rows that are already persisted outside this conversation. */
+  onSaveToKnowledge?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -252,6 +299,17 @@ function FileRowMenu({
               <Download className="h-4 w-4" />
               Download
             </a>
+          </DropdownMenuItem>
+        )}
+        {onSaveToKnowledge && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onSaveToKnowledge();
+            }}
+          >
+            <BookPlus className="h-4 w-4" />
+            Save to knowledge
           </DropdownMenuItem>
         )}
         <DropdownMenuItem

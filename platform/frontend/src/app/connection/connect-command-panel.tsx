@@ -2,7 +2,6 @@
 
 import {
   DEFAULT_MODELS,
-  providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -46,6 +45,7 @@ import {
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
@@ -162,6 +162,9 @@ export function ConnectCommandPanel({
 }: ConnectCommandPanelProps) {
   const { eligible: skillsEligible, skills: allSkills } =
     useConnectSkills(llmProxyId);
+  // Providers are named the way this organization names them, so a renamed
+  // provider reads the same here as in the model-provider settings.
+  const providerCatalog = useModelProviderCatalog();
   // The skill picker labels each row's owner, so it needs the viewer's id.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -492,7 +495,9 @@ export function ConnectCommandPanel({
   // routes through the proxy (e.g. Claude Code → Anthropic/Bedrock), not from
   // any provider key you happen to have. Naming them keeps "no key" from
   // reading as "you have no keys at all".
-  const supportedNames = supportedProviders.map((p) => providerDisplayNames[p]);
+  const supportedNames = supportedProviders.map((p) =>
+    providerCatalog.label(p),
+  );
   const noVirtualKeyReason =
     supportedNames.length === 0
       ? "None of this client's providers has a key to mint a virtual key from."
@@ -506,7 +511,7 @@ export function ConnectCommandPanel({
   const soleProvider =
     supportedProviders.length === 1 ? supportedProviders[0] : null;
   const addKeyPhrase = soleProvider
-    ? `${indefiniteArticle(providerDisplayNames[soleProvider])} ${providerDisplayNames[soleProvider]} key`
+    ? `${indefiniteArticle(providerCatalog.label(soleProvider))} ${providerCatalog.label(soleProvider)} key`
     : "a provider key";
   const providerKeyDialogDescription =
     supportedNames.length === 0
@@ -578,7 +583,7 @@ export function ConnectCommandPanel({
               )
             ) : providerIsPerUser && provider ? (
               <span>
-                {`${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`}
+                {`${providerCatalog.label(provider)} runs through a personal virtual key — connect your own account below.`}
               </span>
             ) : providers.length === 0 ? (
               canCreateProviderKey ? (
@@ -640,7 +645,7 @@ export function ConnectCommandPanel({
         </EditorField>
         <p className="text-xs text-muted-foreground">
           Applied as COPILOT_MODEL by the setup script — pick a model your{" "}
-          {providerDisplayNames[provider]} access serves.
+          {providerCatalog.label(provider)} access serves.
         </p>
       </div>
     ) : null;
@@ -754,7 +759,7 @@ export function ConnectCommandPanel({
                 <>
                   Route{" "}
                   <span className="font-medium text-foreground">
-                    {providerDisplayNames[provider]}
+                    {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
                   <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>{" "}
@@ -767,7 +772,7 @@ export function ConnectCommandPanel({
                 <>
                   Passthrough to{" "}
                   <span className="font-medium text-foreground">
-                    {providerDisplayNames[provider]}
+                    {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
                   <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>{" "}
@@ -876,19 +881,19 @@ export function ConnectCommandPanel({
                         : "border-transparent text-[#9ca3af] hover:text-white",
                     )}
                   >
-                    {providerDisplayNames[p]}
+                    {providerCatalog.label(p)}
                   </button>
                 ))}
               </div>
             )}
             {needsPerUserConnect && provider ? (
               <PerUserConnectGate
-                providerLabel={providerDisplayNames[provider]}
+                providerLabel={providerCatalog.label(provider)}
                 pending={createPerUserKey.isPending}
                 onToken={async (token) => {
                   try {
                     await createPerUserKey.mutateAsync({
-                      name: providerDisplayNames[provider],
+                      name: providerCatalog.label(provider),
                       provider,
                       apiKey: token,
                       scope: "personal",

@@ -3,15 +3,15 @@
 import {
   type archestraApiTypes,
   DynamicInteraction,
-  isIncognitoUnavailableContent,
+  isLockedChatUnavailableContent,
 } from "@archestra/shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
-import { IncognitoContentUnavailable } from "@/components/incognito-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
+import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useProfiles } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
 
@@ -34,7 +35,6 @@ export function ChatPage({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -53,7 +53,6 @@ function LogDetail({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -66,6 +65,8 @@ function LogDetail({
     interactionId: id,
     initialData: initialData?.interaction,
   });
+
+  const { data: agents } = useProfiles();
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -87,9 +88,7 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents?.find(
-    (a) => a.id === interaction.profileId,
-  );
+  const agent = agents?.find((a) => a.id === interaction.profileId);
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();
@@ -319,8 +318,8 @@ function LogDetail({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                {isIncognitoUnavailableContent(dynamicInteraction.request) ? (
-                  <IncognitoContentUnavailable
+                {isLockedChatUnavailableContent(dynamicInteraction.request) ? (
+                  <LockedChatContentUnavailable
                     value={dynamicInteraction.request}
                   />
                 ) : (
@@ -340,10 +339,10 @@ function LogDetail({
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
-                  {isIncognitoUnavailableContent(
+                  {isLockedChatUnavailableContent(
                     dynamicInteraction.processedRequest,
                   ) ? (
-                    <IncognitoContentUnavailable
+                    <LockedChatContentUnavailable
                       value={dynamicInteraction.processedRequest}
                     />
                   ) : (
@@ -367,8 +366,8 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                {isIncognitoUnavailableContent(dynamicInteraction.response) ? (
-                  <IncognitoContentUnavailable
+                {isLockedChatUnavailableContent(dynamicInteraction.response) ? (
+                  <LockedChatContentUnavailable
                     value={dynamicInteraction.response}
                   />
                 ) : (

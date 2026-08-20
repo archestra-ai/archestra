@@ -40,7 +40,11 @@ export async function fetchAnthropicModels(
 
   return data.data.map((model) => ({
     id: model.id,
-    displayName: model.display_name,
+    // Fall back to the id: with a base-URL override the upstream may be an
+    // OpenAI-compatible or otherwise non-Anthropic-shaped server whose model
+    // rows carry no display_name — leaving it undefined made the proxy's
+    // /v1/models response fail its own schema (a 500 for every listing).
+    displayName: model.display_name ?? model.id,
     provider: "anthropic",
     createdAt: model.created_at,
   }));

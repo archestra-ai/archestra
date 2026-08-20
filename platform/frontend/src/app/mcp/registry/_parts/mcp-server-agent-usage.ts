@@ -17,31 +17,30 @@ export type AgentUsage = ApiAgentUsage & { access: AgentUsageAccess };
  * Collapse every install of one catalog item into the distinct set of agents
  * that can reach it.
  *
+ * `autoModeAgents` is the org-wide roster from `useAutoModeAgents` (implicit
+ * access to all tools reaches every server), fetched once instead of being
+ * embedded on every server row.
+ *
  * Two things are deduped. Installs: the same agent can be assigned tools from
- * several installs of the catalog, and the auto-mode set is org-wide so it
- * rides on every install identically. Sections: an auto-mode agent may also
+ * several installs of the catalog. Sections: an auto-mode agent may also
  * carry an explicit assignment (a legacy pin, or "auto except some"), which
  * would list it twice — the explicit assignment is the more specific fact, so
  * it wins and the agent drops out of the auto-mode list.
  */
-export function deriveAgentUsage(
-  serversForCatalog: Array<
-    Pick<McpServerFromApi, "assignedAgents" | "autoModeAgents">
-  >,
-): {
+export function deriveAgentUsage(params: {
+  serversForCatalog: Array<Pick<McpServerFromApi, "assignedAgents">>;
+  autoModeAgents: ApiAgentUsage[] | undefined;
+}): {
   assigned: AgentUsage[];
   autoOnly: AgentUsage[];
   all: AgentUsage[];
   total: number;
 } {
   const assigned = dedupeById(
-    serversForCatalog.flatMap((server) => server.assignedAgents ?? []),
+    params.serversForCatalog.flatMap((server) => server.assignedAgents ?? []),
     "assigned",
   );
-  const autoMode = dedupeById(
-    serversForCatalog.flatMap((server) => server.autoModeAgents ?? []),
-    "auto",
-  );
+  const autoMode = dedupeById(params.autoModeAgents ?? [], "auto");
 
   const assignedIds = new Set(assigned.map((agent) => agent.id));
   const autoOnly = autoMode.filter((agent) => !assignedIds.has(agent.id));
@@ -55,18 +54,10 @@ export function deriveAgentUsage(
 }
 
 /**
- * Personal agents are auto-seeded one per member, so every member's copy
- * carries the same name — a list of them reads as repeated "My Assistant" /
- * "My Gateway" rows. Attribute those to their owner; agents with a name their
- * author chose need no qualifier.
+ * Re-exported for this route's existing callers. It moved to `@/lib` once the
+ * guardrails table needed the same owner qualifier for delegation tools.
  */
-export function agentOwnerLabel(agent: {
-  scope: string;
-  ownerEmail: string | null;
-}): string | null {
-  if (agent.scope !== "personal") return null;
-  return agent.ownerEmail;
-}
+export { agentOwnerLabel } from "@/lib/agent-owner-label";
 
 /** Human-readable kind, for the usage table's Type column. */
 export function agentTypeLabel(agentType: string): string {

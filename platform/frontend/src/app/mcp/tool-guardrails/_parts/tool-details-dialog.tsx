@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  AGENT_TOOL_PREFIX,
-  isAgentTool,
-  parseFullToolName,
-} from "@archestra/shared";
+import { parseFullToolName } from "@archestra/shared";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronDown,
@@ -37,8 +33,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { ToolWithAssignmentsData } from "@/lib/tools/tool.query";
-import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
 import { formatDate } from "@/lib/utils";
+import {
+  APP_TOOL_SOURCE_DESCRIPTION,
+  APP_TOOL_SOURCE_LABEL,
+  getToolSource,
+  MCP_TOOL_SOURCE_LABEL,
+} from "./assigned-tools-table.utils";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
@@ -54,7 +55,11 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
+  // App backings are catalogs too, so an app launch tool's origin only resolves
+  // when they are included (see the table's source column).
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+    includeApps: true,
+  });
   const [assignmentsOpen, setAssignmentsOpen] = useState(true);
 
   if (!tool) return null;
@@ -65,9 +70,7 @@ export function ToolDetailsDialog({
     ? parseFullToolName(tool.name).toolName || tool.name
     : tool.name;
 
-  const catalogItem = internalMcpCatalogItems?.find(
-    (item) => item.id === tool.catalogId,
-  );
+  const source = getToolSource(tool, internalMcpCatalogItems);
 
   // Check if this is a built-in Archestra tool (no credentials required)
   // Helper to get credential display text
@@ -124,6 +127,17 @@ export function ToolDetailsDialog({
                   {displayName}
                 </DialogTitle>
               )}
+              {/*
+                Delegation tools are named after their target agent, so the
+                personal agents seeded one per member all open a dialog titled
+                `agent__my_assistant` and described "Delegate task to agent: My
+                Assistant". The owner is what says which one this is.
+              */}
+              {source.kind === "agent" && source.ownerEmail && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {source.ownerEmail}
+                </p>
+              )}
               {tool.description && (
                 <TruncatedText
                   message={tool.description}
@@ -138,20 +152,42 @@ export function ToolDetailsDialog({
                   Origin
                 </div>
                 <div className="mt-0.5">
-                  {isMcpToolByProperties(tool) ? (
+                  {source.kind === "app" ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="default"
+                            className="bg-sky-600 text-white"
+                          >
+                            {APP_TOOL_SOURCE_LABEL}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            {source.appName
+                              ? `${APP_TOOL_SOURCE_DESCRIPTION} (${source.appName})`
+                              : APP_TOOL_SOURCE_DESCRIPTION}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : source.kind === "mcp" ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Badge variant="default" className="bg-indigo-500">
-                            MCP Server
+                            {MCP_TOOL_SOURCE_LABEL}
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{catalogItem?.name || "MCP Server"}</p>
+                          <p>
+                            {source.catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL}
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-                  ) : isAgentTool(tool.name) ? (
+                  ) : source.kind === "agent" ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -164,11 +200,8 @@ export function ToolDetailsDialog({
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>
-                            Delegates to{" "}
-                            {tool.name
-                              .slice(AGENT_TOOL_PREFIX.length)
-                              .replaceAll("_", " ")}{" "}
-                            agent
+                            Delegates to {source.agentName} agent
+                            {source.ownerEmail ? ` (${source.ownerEmail})` : ""}
                           </p>
                         </TooltipContent>
                       </Tooltip>

@@ -621,6 +621,10 @@ const CONFIGURATION_FIELDS: {
     identity: (s) => s.llmApiKey?.id ?? null,
   },
   { label: "Tool exposure", render: (s) => s.toolExposureMode },
+  {
+    label: "Missing tool connection",
+    render: (s) => s.missingCredentialBehavior,
+  },
   { label: "Access all tools", render: (s) => renderBoolean(s.accessAllTools) },
   {
     label: "Access all subagents",

@@ -325,6 +325,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Knowledge
   knowledgeSource: ["read", "query"],
   knowledgeSourceAutoSync: [],
+  // Members can see analyses and their results, but dispatching a run
+  // spends LLM budget across a whole grid, so running is an editor action.
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -725,6 +727,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
   [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
@@ -923,6 +926,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },
+  [RouteId.GetMcpServerAutoModeAgents]: {
+    mcpServerInstallation: ["read"],
+  },
   [RouteId.GetMcpServer]: {
     mcpServerInstallation: ["read"],
   },
@@ -960,6 +966,15 @@ export const requiredEndpointPermissionsMap: Partial<
     // admin for org), so a member can reinstall their OWN connection and nothing
     // more. Requiring :update here locked owners out of reinstalling their own.
     mcpServerInstallation: ["create"],
+  },
+  [RouteId.HardResetMcpServer]: {
+    // The recovery escape hatch for a wedged deployment: it destroys and
+    // recreates the pod for EVERY install sharing it, so it is gated on the
+    // org-wide :admin capability rather than the per-connection scope rules
+    // the other lifecycle routes use. A connection's own owner must not be
+    // able to reset a shared multitenant deployment out from under the other
+    // installs on it.
+    mcpServerInstallation: ["admin"],
   },
   [RouteId.ReloadMcpServerTools]: {
     // Reloading tools is a strict subset of reinstalling (tool re-sync with no
@@ -1381,6 +1396,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
+  [RouteId.UpdateIntegrationSettings]: {
+    organizationSettings: ["update"],
+  },
   // Listing environments is available to any authenticated user (read is ungated).
   [RouteId.ListEnvironments]: {
     environment: ["read"],
@@ -1395,6 +1413,9 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["delete"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
+    environment: ["update"],
+  },
+  [RouteId.UpdateEnvironmentResourceDefaults]: {
     environment: ["update"],
   },
   [RouteId.GetK8sCapabilities]: {
@@ -1440,6 +1461,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.TestRerankerConnection]: {
     knowledgeSettings: ["update"],
+  },
+  [RouteId.TestOcrConnection]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.GetKeywordRankingStatus]: {
+    knowledgeSettings: ["read"],
   },
 
   /**
@@ -1528,6 +1555,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
+  [RouteId.UpdateMemberDefaultAgent]: {},
   [RouteId.GetMemberDefaultModel]: {},
   [RouteId.UpdateMemberDefaultModel]: {},
 
@@ -1549,6 +1577,17 @@ export const requiredEndpointPermissionsMap: Partial<
   // rather than the whole org (see the GetUserStatistics handler).
   [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
+  },
+  // Per-app and per-skill cost additionally narrow to what the caller can see:
+  // the routes resolve the same visibility the Apps page and the skills list use,
+  // so cost reporting never lists an app or skill the caller has no access to.
+  [RouteId.GetAppStatistics]: {
+    llmCost: ["read"],
+    app: ["read"],
+  },
+  [RouteId.GetSkillStatistics]: {
+    llmCost: ["read"],
+    skill: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
@@ -1898,6 +1937,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
+
+  // Knowledge files. Reads are `knowledgeSource:read` like every other
+  // knowledge surface; indexing a file into a base changes what agents can
+  // retrieve, so it is an `update` rather than a read.
+  [RouteId.GetKnowledgeFiles]: { knowledgeSource: ["read"] },
+  [RouteId.GetKnowledgeFileContent]: { knowledgeSource: ["read"] },
+  [RouteId.GetKnowledgeDirectories]: { knowledgeSource: ["read"] },
+  [RouteId.UploadKnowledgeFile]: { knowledgeSource: ["create"] },
+  [RouteId.PromoteAttachmentToKnowledgeFile]: { knowledgeSource: ["create"] },
+  [RouteId.CreateKnowledgeDirectory]: { knowledgeSource: ["create"] },
+  [RouteId.IndexKnowledgeFiles]: { knowledgeSource: ["update"] },
+  [RouteId.UpdateKnowledgeFile]: { knowledgeSource: ["update"] },
+  [RouteId.UpdateKnowledgeDirectory]: { knowledgeSource: ["update"] },
+  [RouteId.DeleteKnowledgeFile]: { knowledgeSource: ["delete"] },
+  [RouteId.DeleteKnowledgeDirectory]: { knowledgeSource: ["delete"] },
 };
 
 /**
@@ -1941,8 +1995,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/projects": { project: ["read"] },
   "/projects/[id]": { project: ["read"] },
 
+  // Knowledge files
+  "/knowledge/files": { knowledgeSource: ["read"] },
+
   // Agents
   "/agents": { agent: ["read"] },
+  "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
@@ -1959,6 +2017,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/proxies/new": { llmProxy: ["create"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
@@ -1968,6 +2027,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/gateways/new": { mcpGateway: ["create"] },
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
@@ -1987,6 +2047,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/mcp": { mcpSettings: ["read"] },
   "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/apps": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
@@ -1998,6 +2059,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
+  "/settings/connection": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

@@ -1,3 +1,4 @@
+import type { McpDeploymentState } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { Watch } from "@kubernetes/client-node";
 import config from "@/config";
@@ -5,31 +6,83 @@ import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
+  isK8sNotFoundError,
   loadKubeConfig,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  MCP_HIBERNATED_ANNOTATION,
+  // SPDX-SnippetEnd
   namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
+  type ClusterLeaseGuard,
+  ClusterLeaseHeldError,
   EnvironmentModel,
   InternalMcpCatalogModel,
+  McpDeploymentLeaseModel,
   McpHttpSessionModel,
   McpServerModel,
   OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import type {
   EffectiveNetworkPolicy,
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import {
+  MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+  MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+} from "./deployment-transition";
 import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
+import {
+  createHardResetStatusMarker,
+  HARD_RESET_STATUS_MARKER_PREFIX,
+  markHardResetTeardownComplete,
+  parseHardResetStatusMarker,
+  writeHardResetStatuses,
+} from "./hard-reset-status";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  FOREIGN_RESUME_COOLDOWN_MAX_EXPONENT,
+  FOREIGN_RESUME_LIMIT,
+  type HibernationRuntimeHost,
+  idleHibernationWindowSeconds,
+  isIdleHibernationOffered,
+  McpServerWakeError,
+  McpServerWakePendingError,
+  SWEEP_DEADLINE_MS,
+  sweepIdleDeployments,
+  wakeDeployment,
+  wakeResponseBudgetMs,
+  withDeadline,
+  // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+} from "./hibernation.ee";
+// SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { McpImagePrepuller } from "./image-prepuller.ee";
+// SPDX-SnippetEnd
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
 } from "./k8s-deployment";
+import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type {
   AvailableTool,
   K8sRuntimeStatus,
@@ -50,6 +103,117 @@ type DockerRegistrySecretSummary = {
 };
 
 /**
+ * What a hard reset actually did, reported back to the administrator who asked
+ * for it. Structured rather than a success flag because the interesting part is
+ * the detail: whether the old pod had to be force-killed (the deployment was
+ * genuinely wedged, not merely slow), which sibling installs were swept up with
+ * it, and which deployment was rebuilt.
+ */
+type McpServerHardResetResult = {
+  mcpServerId: string;
+  /** `namespace/name` of the Deployment that was destroyed and rebuilt. */
+  physicalDeployment: string;
+  /**
+   * Every install whose derived runtime state was erased: the caller's, plus
+   * every sibling sharing the physical deployment on a multitenant catalog.
+   */
+  resetServerIds: string[];
+  teardown:
+    | { outcome: "terminated" }
+    | { outcome: "force-killed"; pods: string[] }
+    | { outcome: "unverified"; reason: string };
+  recreated:
+    | false
+    | { target: "shared-catalog-deployment"; catalogId: string }
+    | { target: "install-deployment" };
+  /**
+   * Whether the rebuilt deployment is actually serving. Distinct from
+   * `recreated`, which only says which Deployment was rebuilt: a recovery
+   * action that reported success the moment a Deployment object existed would
+   * call a crashlooping rebuild a recovery, and erase the very error the
+   * administrator reached for the reset over.
+   */
+  rebuild: { outcome: "ready" } | { outcome: "not-ready"; reason: string };
+};
+
+type McpServerHardResetStart = {
+  resetServerIds: string[];
+  getStatusMarker: () => string;
+};
+
+type McpServerHardResetInFlight = {
+  started: Promise<McpServerHardResetStart>;
+  completion: Promise<McpServerHardResetResult>;
+  acknowledgePending: (error?: unknown) => void;
+  runFencedStatusWrite: ClusterLeaseGuard["runFencedMutation"];
+  acknowledgeReporting: () => void;
+};
+
+/**
+ * A hard reset that is under way, handed back as soon as its target is known
+ * rather than when it finishes.
+ *
+ * The teardown-plus-rebuild takes minutes; no HTTP request may be held open
+ * that long. So the reset is addressable before it settles: what it is acting
+ * on is known up front and is true for the whole run, and `completion` is the
+ * one place the report of it arrives — for the caller that starts the reset and
+ * for every caller that joins it.
+ */
+type McpServerHardReset = {
+  mcpServerId: string;
+  /** `namespace/name` of the Deployment being destroyed and rebuilt. */
+  physicalDeployment: string;
+  /** Every install whose derived runtime state this reset erases. */
+  resetServerIds: string[];
+  completion: Promise<McpServerHardResetResult>;
+  /** Only the initiating request records pending/final installation statuses. */
+  reportsOutcome: boolean;
+  /** Current durable compare-and-set identity for status recovery. */
+  getStatusMarker: () => string;
+  /** Allow destructive work after pending installation statuses are recorded. */
+  acknowledgePending: (error?: unknown) => void;
+  /** Fence status writes against a newer reset taking over the same lease. */
+  runFencedStatusWrite: ClusterLeaseGuard["runFencedMutation"];
+  /** Release the reset lease after the initiating request records its result. */
+  acknowledgeReporting: () => void;
+};
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Re-exported so demand-lane callers (mcp-client) keep importing the whole
+ * runtime surface from one place — these belong with the hibernation lifecycle
+ * that raises and bounds them.
+ * @public — used by demand-lane callers (mcp-client) that wake servers on use
+ */
+export {
+  McpServerWakeError,
+  McpServerWakePendingError,
+  wakeResponseBudgetMs,
+  withDeadline,
+};
+// SPDX-SnippetEnd
+
+/**
+ * Another replica holds the cluster-wide lease for this physical deployment's
+ * hard reset. Not a failure: the reset IS running, on a process that is not
+ * this one, and its outcome lands on the install statuses like any reset that
+ * outlives its request. Routes translate this into their "in-progress" shape.
+ */
+export class McpServerHardResetHeldElsewhereError extends Error {
+  constructor(
+    readonly physicalDeployment: string,
+    readonly resetServerIds: string[],
+  ) {
+    super(
+      `A hard reset of deployment ${physicalDeployment} is already running on another replica; its outcome will land on the install statuses.`,
+    );
+    this.name = "McpServerHardResetHeldElsewhereError";
+  }
+}
+
+/**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
  * @public — exported for testability
  */
@@ -57,6 +221,7 @@ export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAuthApi?: k8s.AuthorizationV1Api;
+  private k8sRbacApi?: k8s.RbacAuthorizationV1Api;
   private k8sNetworkingApi?: k8s.NetworkingV1Api;
   private k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   private k8sAttach?: k8s.Attach;
@@ -72,6 +237,60 @@ export class McpServerRuntimeManager {
   // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
   // can leave hundreds of Failed pod corpses that nothing else cleans up).
   private failedPodReapTimer?: NodeJS.Timeout;
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // === Idle hibernation ===
+  // Periodic sweep that scales idle MCP deployments to 0 replicas. Gating and
+  // orchestration live in ./hibernation.ee; only the timer is here.
+  private idleHibernationSweepTimer?: NodeJS.Timeout;
+  // In-flight guard: a slow sweep (DB reads + K8s patches fan-out) must not
+  // overlap the next tick.
+  private idleHibernationSweepInFlight?: Promise<void>;
+  // Keeps every node's image cache warm so a hibernated deployment can wake
+  // without the registry. Owns its own timers, gating and failure handling in
+  // ./image-prepuller.ee; nothing here ever awaits it.
+  private imagePrepuller?: McpImagePrepuller;
+  // Single-flight wakes keyed by physical deployment (`namespace/name`), so
+  // every sibling install and every concurrent caller of a shared deployment
+  // awaits ONE wake instead of racing scale-up patches.
+  private wakeInFlightByPhysicalKey: Map<string, Promise<void>> = new Map();
+  // Physical deployments this process put to sleep and has not woken itself.
+  // A deployment that comes back while it is in here was resumed by somebody
+  // else, which is the only way to notice we are sharing spec.replicas with
+  // another controller.
+  private hibernatedByUsAtByPhysicalKey = new Map<string, number>();
+  // How many times each deployment has been resumed that way. Past the limit
+  // it stops being a hibernation candidate: something else owns its replica
+  // count, and re-hibernating it just kills the pod again on the next tick.
+  private foreignResumeCountByPhysicalKey = new Map<string, number>();
+  private foreignReplicaOwners = new Set<string>();
+  // Sweeps left to skip for a deployment we have just seen resumed.
+  private foreignResumeCooldownTicks = new Map<string, number>();
+  // SPDX-SnippetEnd
+  // Single-flight hard resets, keyed the same way: the teardown destroys the
+  // pod every sibling install shares, so a second concurrent reset must join
+  // the first rather than delete what the first one is recreating. Membership
+  // is also what hides a deployment from the idle sweeper for the duration.
+  private hardResetInFlightByPhysicalKey = new Map<
+    string,
+    McpServerHardResetInFlight
+  >();
+  private hardResetPhysicalKeyByServerId = new Map<string, string>();
+  private hardResetStatusReconcileTimer?: NodeJS.Timeout;
+  private hardResetStatusReconcileInFlight?: Promise<void>;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Callbacks invoked (with every sibling server id) after a successful
+  // hibernate, registered by mcp-client at module setup to invalidate its
+  // pooled connections — a callback registry avoids a manager→mcp-client
+  // import cycle.
+  private hibernationListeners = new Set<
+    (mcpServerIds: string[]) => Promise<void> | void
+  >();
+  // SPDX-SnippetEnd
 
   // === Deployment-state watch streams ===
   // Event-driven state refresh: long-lived K8s watch streams on the pods and
@@ -90,6 +309,7 @@ export class McpServerRuntimeManager {
   private watchRefreshDebounceTimer?: NodeJS.Timeout;
   private stateRefreshListeners = new Set<() => void>();
   private refreshAllStatesInFlight?: Promise<void>;
+  private refreshAllStatesFollowUpRequested = false;
 
   /**
    * Settles once the startup adopt pass has frozen every local install's
@@ -127,6 +347,7 @@ export class McpServerRuntimeManager {
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
       this.k8sAuthApi = clients.authApi;
+      this.k8sRbacApi = clients.rbacApi;
       this.k8sNetworkingApi = clients.networkingApi;
       this.k8sCustomObjectsApi = clients.customObjectsApi;
       this.k8sAttach = clients.attach;
@@ -144,6 +365,7 @@ export class McpServerRuntimeManager {
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
       this.k8sAuthApi = undefined;
+      this.k8sRbacApi = undefined;
       this.k8sNetworkingApi = undefined;
       this.k8sCustomObjectsApi = undefined;
       this.k8sAttach = undefined;
@@ -163,7 +385,7 @@ export class McpServerRuntimeManager {
   }
 
   get platformNamespace(): string {
-    return this.namespace;
+    return process.env.POD_NAMESPACE || this.namespace;
   }
 
   async validateNamespace(namespaceName: string): Promise<void> {
@@ -202,8 +424,8 @@ export class McpServerRuntimeManager {
 
       // Fetch the platform pod's nodeSelector and tolerations to inherit for MCP server deployments
       // This allows MCP servers to be scheduled on the same node pool as the platform
-      await fetchPlatformPodNodeSelector(this.k8sApi, this.namespace);
-      await fetchPlatformPodTolerations(this.k8sApi, this.namespace);
+      await fetchPlatformPodNodeSelector(this.k8sApi, this.platformNamespace);
+      await fetchPlatformPodTolerations(this.k8sApi, this.platformNamespace);
 
       this.status = "running";
 
@@ -312,11 +534,25 @@ export class McpServerRuntimeManager {
       });
 
       this.startFailedPodReaper();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      this.startIdleHibernationSweeper();
+      this.imagePrepuller = new McpImagePrepuller({
+        coreApi: this.k8sApi,
+        appsApi: this.k8sAppsApi,
+        rbacApi: this.k8sRbacApi,
+        namespace: this.namespace,
+        platformNamespace: this.platformNamespace,
+      });
+      this.imagePrepuller.start();
+      // SPDX-SnippetEnd
 
       // Start watch streams only after the reconcile above settles: the mass
       // startServer pass generates a storm of pod/deployment events that
       // would just trigger redundant refresh sweeps mid-startup.
       this.startDeploymentStateWatchers();
+      this.startHardResetStatusReconciler();
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -337,7 +573,7 @@ export class McpServerRuntimeManager {
     }
   }
 
-  private ensureEgressBaseline(
+  private async ensureEgressBaseline(
     namespace: string,
     capabilities: K8sNetworkPolicyCapabilities,
   ): Promise<void> {
@@ -346,11 +582,17 @@ export class McpServerRuntimeManager {
       const networkingApi = this.k8sNetworkingApi;
       const customObjectsApi = this.k8sCustomObjectsApi;
       if (!networkingApi || !customObjectsApi) return Promise.resolve();
+      const ownerReferences = this.k8sRbacApi
+        ? await resolveRuntimeOwnerReferences(this.k8sRbacApi, namespace).catch(
+            () => undefined,
+          )
+        : undefined;
       ensured = ensureEgressBaselineNetworkPolicy({
         networkingApi,
         customObjectsApi,
         namespace,
         capabilities,
+        ownerReferences,
       }).then((succeeded) => {
         // Don't cache a failed attempt as done — drop it so the next deploy in
         // this namespace retries rather than leaving pods without the baseline.
@@ -379,6 +621,7 @@ export class McpServerRuntimeManager {
     const {
       k8sApi,
       k8sAppsApi,
+      k8sRbacApi,
       k8sNetworkingApi,
       k8sCustomObjectsApi,
       k8sAttach,
@@ -409,11 +652,11 @@ export class McpServerRuntimeManager {
           catalogItem,
           params.cache,
         );
-        await this.ensureEgressBaseline(namespace, params.capabilities);
         const k8sDeployment = new K8sDeployment({
           mcpServer,
           k8sApi,
           k8sAppsApi,
+          k8sRbacApi,
           k8sNetworkingApi,
           k8sCustomObjectsApi,
           k8sAttach,
@@ -421,14 +664,31 @@ export class McpServerRuntimeManager {
           k8sExec,
           namespace,
           catalogItem,
-          effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
-            mcpServer,
-            catalogItem,
-            cache: params.cache,
-          }),
+          effectiveNetworkPolicy: null,
           networkPolicyCapabilities: params.capabilities,
         });
-        await k8sDeployment.applyK8sNetworkPolicy();
+        await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+          {
+            scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+            key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
+            timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+          },
+          async (lease) => {
+            await lease.assertOwned();
+            k8sDeployment.setEffectiveNetworkPolicy(
+              await this.resolveNetworkPolicyForDeployment({
+                mcpServer,
+                catalogItem,
+              }),
+            );
+            await lease.assertOwned();
+            await this.ensureEgressBaseline(namespace, params.capabilities);
+            await lease.assertOwned();
+            await lease.runFencedMutation(() =>
+              k8sDeployment.applyK8sNetworkPolicy(),
+            );
+          },
+        );
       } catch (err) {
         logger.warn(
           { err, mcpServerId: mcpServer.id },
@@ -565,6 +825,10 @@ export class McpServerRuntimeManager {
     options?: {
       networkPolicyCapabilities?: K8sNetworkPolicyCapabilities;
       networkPolicyResolutionCache?: NetworkPolicyResolutionCache;
+      /** Pull the current image on this rollout (refresh-image flow). */
+      freshImagePull?: boolean;
+      /** Existing transition owner for restart/reset/reinstall call chains. */
+      transitionLease?: ClusterLeaseGuard;
     },
   ): Promise<void> {
     if (
@@ -690,17 +954,11 @@ export class McpServerRuntimeManager {
           )
         ).networkPolicy;
 
-      // Ensure the namespace default-deny baseline before the pod exists, so an
-      // un-reconciled or apply-failed pod is denied by default rather than open.
-      await this.ensureEgressBaseline(
-        deploymentNamespace,
-        networkPolicyCapabilities,
-      );
-
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sRbacApi: this.k8sRbacApi,
         k8sNetworkingApi: this.k8sNetworkingApi,
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
@@ -709,32 +967,29 @@ export class McpServerRuntimeManager {
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
-        effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
-          mcpServer,
-          catalogItem,
-          cache: options?.networkPolicyResolutionCache,
-        }),
+        effectiveNetworkPolicy: null,
         networkPolicyCapabilities,
         k8sExec: this.k8sExec,
       });
+
+      if (options?.freshImagePull) {
+        k8sDeployment.requestFreshImagePull();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // The rollout this arms pulls fresh only on the node the pod lands
+        // on; every other node's pre-pull cache still holds the old digest,
+        // and a later reschedule under `IfNotPresent` would happily run it.
+        this.imagePrepuller?.noteImageRefreshed(
+          catalogItem?.localConfig?.dockerImage,
+        );
+        // SPDX-SnippetEnd
+      }
 
       // Register the deployment BEFORE starting it
       this.mcpServerIdToDeploymentMap.set(id, k8sDeployment);
       logger.info(`Registered MCP server deployment ${id} in map`);
 
-      // Create K8s Secret if we have secret data
-      if (secretData && Object.keys(secretData).length > 0) {
-        await k8sDeployment.createK8sSecret(secretData);
-        logger.info(
-          { mcpServerId: id, secretId: mcpServer.secretId },
-          "Created K8s Secret from secret manager",
-        );
-      }
-
-      // Create docker-registry secrets for imagePullSecrets with credentials
-      // and resolve all imagePullSecrets names for the pod spec.
-      // Regcred passwords are stored in the catalog's localConfigSecretId, not
-      // the per-user mcpServer.secretId, so fetch them separately.
       const imagePullSecrets = catalogItem?.localConfig?.imagePullSecrets;
       const regcredSecretData: Record<string, string> = {};
       if (catalogItem?.localConfigSecretId && imagePullSecrets?.length) {
@@ -749,19 +1004,88 @@ export class McpServerRuntimeManager {
           }
         }
       }
-      const generatedRegcredNames =
-        await k8sDeployment.createDockerRegistrySecrets(
-          regcredSecretData,
-          imagePullSecrets,
-        );
-      const resolvedImagePullSecretNames =
-        K8sDeployment.collectImagePullSecretNames(
-          imagePullSecrets,
-          generatedRegcredNames,
-        );
 
-      await k8sDeployment.startOrCreateDeployment(resolvedImagePullSecretNames);
+      const start = async (lease: ClusterLeaseGuard) => {
+        await lease.assertOwned();
+        // Resolve after lease acquisition. A policy fetched while waiting can
+        // be older than a concurrent settings change and must never overwrite
+        // that newer restrictive policy once this holder finally runs.
+        k8sDeployment.setEffectiveNetworkPolicy(
+          await this.resolveNetworkPolicyForDeployment({
+            mcpServer,
+            catalogItem,
+          }),
+        );
+        await lease.assertOwned();
+        // Declarative prerequisites can span several API calls. Keep them out
+        // of the DB row-lock transaction; ownership is rechecked between each
+        // convergent phase, while destructive/final writes fence themselves.
+        await this.ensureEgressBaseline(
+          deploymentNamespace,
+          networkPolicyCapabilities,
+        );
+        await lease.assertOwned();
+
+        if (secretData && Object.keys(secretData).length > 0) {
+          await k8sDeployment.createK8sSecret(secretData);
+          logger.info(
+            { mcpServerId: id, secretId: mcpServer.secretId },
+            "Created K8s Secret from secret manager",
+          );
+          await lease.assertOwned();
+        }
+
+        // Regcred passwords live on the catalog secret, not the install.
+        const generatedRegcredNames =
+          await k8sDeployment.createDockerRegistrySecrets(
+            regcredSecretData,
+            imagePullSecrets,
+          );
+        await lease.assertOwned();
+        const resolvedImagePullSecretNames =
+          K8sDeployment.collectImagePullSecretNames(
+            imagePullSecrets,
+            generatedRegcredNames,
+          );
+        await k8sDeployment.startOrCreateDeployment(
+          resolvedImagePullSecretNames,
+          {
+            assertOwned: lease.assertOwned,
+            runFencedMutation: lease.runFencedMutation,
+          },
+        );
+        await lease.assertOwned();
+      };
+      if (options?.transitionLease) {
+        await start(options.transitionLease);
+      } else {
+        await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+          {
+            scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+            key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
+            timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+          },
+          start,
+        );
+      }
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // A just-(re)created deployment gets a full idle window. Its persisted
+      // last_used_at can be arbitrarily stale (live-reproduced: a reinstalled
+      // deployment was hibernated ~10 s after creation). One stamp covers
+      // every sibling sharing the physical deployment: the idle checks take
+      // the MAXIMUM last-used across the group, so raising one raises all —
+      // and resolving the sibling list here cost a query per install on every
+      // startup.
+      await mcpActiveUseTracker.stampIfEnabled(id);
+
+      // An install, a restart, or a refresh-image rollout can change which
+      // images the fleet runs. Debounced and never awaited.
+      this.imagePrepuller?.requestReconcile();
+      // SPDX-SnippetEnd
     } catch (error) {
       logger.error(
         { err: error },
@@ -783,39 +1107,51 @@ export class McpServerRuntimeManager {
     // Try to get from memory first, or lazy-load from database
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
 
-    if (k8sDeployment) {
-      // Multi-tenant catalogs share one K8s deployment across all callers.
-      // Only the last caller out should delete the deployment / service /
-      // secret. Earlier callers just drop their in-memory reference.
-      const sharedWithOthers =
-        await McpServerRuntimeManager.isSharedMultitenantDeployment(
-          mcpServerId,
-        );
+    if (!k8sDeployment) return;
+    const physicalKey =
+      McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment);
 
-      if (!sharedWithOthers) {
-        // Delete deployment first
-        await k8sDeployment.stopDeployment();
+    await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+      {
+        scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+        key: physicalKey,
+        timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+      },
+      async (lease) => {
+        // Multi-tenant catalogs share one K8s deployment across all callers.
+        // Only the last caller out should delete shared resources.
+        const sharedWithOthers =
+          await McpServerRuntimeManager.isSharedMultitenantDeployment(
+            mcpServerId,
+          );
 
-        // Delete K8s Service (if it exists, for HTTP-based servers)
-        await k8sDeployment.deleteK8sService();
+        if (!sharedWithOthers) {
+          await lease.runFencedMutation(() =>
+            k8sDeployment.stopDeployment({ uidPrecondition: true }),
+          );
+          await lease.runFencedMutation(() => k8sDeployment.deleteK8sService());
+          await lease.runFencedMutation(() => k8sDeployment.deleteK8sSecret());
+          await lease.runFencedMutation(() =>
+            k8sDeployment.deleteDockerRegistrySecrets(),
+          );
+          await lease.runFencedMutation(() =>
+            k8sDeployment.deleteK8sNetworkPolicy(),
+          );
+        } else {
+          logger.info(
+            { mcpServerId },
+            "Skipping K8s deployment teardown: multi-tenant catalog still has other callers",
+          );
+        }
 
-        // Delete K8s Secret (if it exists)
-        await k8sDeployment.deleteK8sSecret();
-
-        // Delete docker-registry secrets (if any were created for imagePullSecrets)
-        await k8sDeployment.deleteDockerRegistrySecrets();
-
-        // Delete K8s NetworkPolicy (if it exists)
-        await k8sDeployment.deleteK8sNetworkPolicy();
-      } else {
-        logger.info(
-          { mcpServerId },
-          "Skipping K8s deployment teardown: multi-tenant catalog still has other callers",
-        );
-      }
-
-      this.mcpServerIdToDeploymentMap.delete(mcpServerId);
-    }
+        this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await this.notifyHibernationListeners([mcpServerId]);
+        // SPDX-SnippetEnd
+      },
+    );
   }
 
   /**
@@ -905,6 +1241,7 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sRbacApi: this.k8sRbacApi,
         k8sNetworkingApi: this.k8sNetworkingApi,
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
@@ -936,6 +1273,10 @@ export class McpServerRuntimeManager {
       await k8sDeployment.resolveHttpEndpoint();
 
       this.mcpServerIdToDeploymentMap.set(mcpServerId, k8sDeployment);
+      // A lazy load is how a deployment enters THIS process (the worker never
+      // runs startServer), so its namespace joins the watch set here or not at
+      // all — set-guarded, and a no-op until the watchers are started.
+      this.ensureWatchedNamespace(k8sDeployment.k8sNamespace);
       logger.info(
         `Lazy-loaded MCP server deployment ${mcpServerId} into memory`,
       );
@@ -981,7 +1322,7 @@ export class McpServerRuntimeManager {
         if (!deployment) {
           return;
         }
-        await deployment.removeDeployment();
+        await this.removeDeploymentWithTransitionLease(deployment);
         // Drop any cached entry so the recreate path rebuilds against the new
         // namespace instead of returning this torn-down, old-namespace object.
         this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
@@ -995,29 +1336,9 @@ export class McpServerRuntimeManager {
   async removeMcpServer(mcpServerId: string): Promise<void> {
     logger.info(`Removing MCP server deployment for: ${mcpServerId}`);
 
-    // Try to get from memory first, or lazy-load from database
-    const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
-    if (!k8sDeployment) {
-      logger.warn(`No deployment found for MCP server ${mcpServerId}`);
-      return;
-    }
-
     try {
-      const sharedWithOthers =
-        await McpServerRuntimeManager.isSharedMultitenantDeployment(
-          mcpServerId,
-        );
-      if (sharedWithOthers) {
-        logger.info(
-          { mcpServerId },
-          "Skipping K8s deployment removal: multi-tenant catalog still has other callers",
-        );
-      } else {
-        await k8sDeployment.removeDeployment();
-        logger.info(
-          `Successfully removed MCP server deployment ${mcpServerId}`,
-        );
-      }
+      await this.stopServer(mcpServerId);
+      logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
     } catch (error) {
       logger.error(
         { err: error },
@@ -1026,6 +1347,15 @@ export class McpServerRuntimeManager {
       throw error;
     } finally {
       this.mcpServerIdToDeploymentMap.delete(mcpServerId);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Drop demand-tracking state so an uninstalled server's watermark can't
+      // keep a reinstalled successor's sibling group looking active.
+      mcpActiveUseTracker.remove(mcpServerId);
+      // The uninstalled server may have been the last user of its image.
+      this.imagePrepuller?.requestReconcile();
+      // SPDX-SnippetEnd
     }
   }
 
@@ -1043,7 +1373,20 @@ export class McpServerRuntimeManager {
    * Tool re-sync is the caller's responsibility (the endpoint runs it for
    * every install attached to the catalog after the pod is Ready).
    */
-  async reinstallSharedDeployment(catalogId: string): Promise<void> {
+  async reinstallSharedDeployment(
+    catalogId: string,
+    options?: {
+      freshImagePull?: boolean;
+      /**
+       * Wait for the recreated deployment to actually serve before returning.
+       * On by default. A caller that confirms readiness itself turns it off, so
+       * one rebuild is never budgeted for two consecutive ready-waits.
+       */
+      awaitReady?: boolean;
+      /** Existing transition owner, used only by the hard-reset rebuild. */
+      transitionLease?: ClusterLeaseGuard;
+    },
+  ): Promise<void> {
     logger.info(`Reinstalling shared deployment for catalog: ${catalogId}`);
 
     const installs = await McpServerModel.findByCatalogId(catalogId);
@@ -1058,51 +1401,84 @@ export class McpServerRuntimeManager {
     // Pick any install as the representative — they all alias the same
     // shared Deployment.
     const representative = installs[0];
-
-    // Stale HTTP MCP sessions for ALL installs become invalid once the
-    // pod is recreated.
-    for (const install of installs) {
-      await McpHttpSessionModel.deleteByMcpServerId(install.id);
-    }
-
     const k8sDeployment = await this.getOrLoadDeployment(representative.id);
-    if (k8sDeployment) {
-      // Unconditional teardown — explicitly bypasses the
-      // `isSharedMultitenantDeployment` guard that `stopServer` applies.
-      // That guard exists for per-tenant uninstalls; catalog-level
-      // reinstall is authorized to remove the shared pod.
-      await k8sDeployment.stopDeployment();
-      await k8sDeployment.deleteK8sService();
-      await k8sDeployment.deleteK8sSecret();
-      await k8sDeployment.deleteDockerRegistrySecrets();
-      await k8sDeployment.deleteK8sNetworkPolicy();
+    if (!k8sDeployment) {
+      throw new Error(
+        `Shared catalog ${catalogId} has no Kubernetes deployment to reinstall`,
+      );
     }
 
-    // Clear every sibling's in-memory entry — the K8s objects are gone.
-    for (const install of installs) {
-      this.mcpServerIdToDeploymentMap.delete(install.id);
+    const reinstall = async (lease: ClusterLeaseGuard) => {
+      await lease.assertOwned();
+
+      // Stale HTTP MCP sessions for ALL installs become invalid once the
+      // pod is recreated.
+      for (const install of installs) {
+        await McpHttpSessionModel.deleteByMcpServerId(install.id);
+      }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await this.notifyHibernationListeners(installs.map(({ id }) => id));
+      // SPDX-SnippetEnd
+
+      // Unconditional teardown — explicitly bypasses the per-install sibling
+      // guard. Declarative Service/Secret/policy objects remain and are
+      // reconciled by startServer; only the Deployment needs replacement.
+      await lease.runFencedMutation(() =>
+        k8sDeployment.stopDeployment({ uidPrecondition: true }),
+      );
+
+      // Clear every sibling's in-memory entry — the K8s objects are gone.
+      for (const install of installs) {
+        this.mcpServerIdToDeploymentMap.delete(install.id);
+      }
+
+      // Match single-tenant restart cadence: brief pause before recreate.
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await lease.assertOwned();
+
+      await this.startServer(representative, undefined, undefined, {
+        freshImagePull: options?.freshImagePull,
+        transitionLease: lease,
+      });
+
+      if (options?.awaitReady !== false) {
+        const newDeployment = await this.getOrLoadDeployment(representative.id);
+        if (newDeployment) {
+          await newDeployment.waitForDeploymentReady(60, 2000);
+        }
+      }
+      await lease.assertOwned();
+
+      logger.info(
+        { catalogId, representativeId: representative.id },
+        "Shared deployment reinstalled successfully",
+      );
+    };
+
+    if (options?.transitionLease) {
+      await reinstall(options.transitionLease);
+      return;
     }
-
-    // Match single-tenant restart cadence: brief pause before recreate.
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    await this.startServer(representative);
-
-    const newDeployment = await this.getOrLoadDeployment(representative.id);
-    if (newDeployment) {
-      await newDeployment.waitForDeploymentReady(60, 2000);
-    }
-
-    logger.info(
-      { catalogId, representativeId: representative.id },
-      "Shared deployment reinstalled successfully",
+    await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+      {
+        scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+        key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
+        timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+      },
+      reinstall,
     );
   }
 
   /**
    * Restart a single MCP server deployment
    */
-  async restartServer(mcpServerId: string): Promise<void> {
+  async restartServer(
+    mcpServerId: string,
+    options?: { freshImagePull?: boolean },
+  ): Promise<void> {
     logger.info(`Restarting MCP server deployment: ${mcpServerId}`);
 
     try {
@@ -1142,19 +1518,40 @@ export class McpServerRuntimeManager {
         return;
       }
 
-      // Clean up stored HTTP session IDs before stopping the server.
-      // After a restart, existing session IDs become stale and would cause
-      // "Session not found" errors for in-flight conversations.
-      await McpHttpSessionModel.deleteByMcpServerId(mcpServerId);
+      const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
+      if (!k8sDeployment) {
+        throw new Error(
+          `MCP server ${mcpServerId} has no Kubernetes deployment to restart`,
+        );
+      }
+      await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+        {
+          scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+          key: McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment),
+          timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+        },
+        async (lease) => {
+          // Existing HTTP sessions and pooled clients address the old pod.
+          await McpHttpSessionModel.deleteByMcpServerId(mcpServerId);
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await this.notifyHibernationListeners([mcpServerId]);
+          // SPDX-SnippetEnd
+          await lease.runFencedMutation(() =>
+            k8sDeployment.stopDeployment({ uidPrecondition: true }),
+          );
+          this.mcpServerIdToDeploymentMap.delete(mcpServerId);
 
-      // Stop the deployment
-      await this.stopServer(mcpServerId);
-
-      // Wait a moment for shutdown to complete
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Start the deployment again
-      await this.startServer(mcpServer);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await lease.assertOwned();
+          await this.startServer(mcpServer, undefined, undefined, {
+            freshImagePull: options?.freshImagePull,
+            transitionLease: lease,
+          });
+          await lease.assertOwned();
+        },
+      );
 
       logger.info(
         `MCP server deployment ${mcpServerId} restarted successfully`,
@@ -1167,6 +1564,578 @@ export class McpServerRuntimeManager {
       throw error;
     }
   }
+
+  /**
+   * Return a wedged MCP server to a clean slate: destroy its physical
+   * deployment, erase every piece of derived state this runtime holds for it,
+   * and rebuild it from current configuration with a fresh image pull.
+   *
+   * The recovery path of last resort, for the deployment no ordinary lifecycle
+   * action can move — a finalizer that never fires, a container that ignores
+   * SIGTERM, a cached image that is itself the fault. Its whole purpose is that
+   * an administrator can perform it without a cluster administrator, a database
+   * session, or an engineer, so it escalates (force-kill) rather than give up,
+   * and it always ends by redeploying.
+   *
+   * Only DERIVED state is erased. Stored configuration is not state: an
+   * install's `hibernation_mode` is a choice an administrator made, and a
+   * recovery action is not entitled to revert it.
+   *
+   * Single-flighted per PHYSICAL deployment — a multitenant catalog's installs
+   * all alias one pod, so concurrent resets share one teardown.
+   *
+   * Returns once the reset is under way and its target is known; the report of
+   * what it did arrives on {@link McpServerHardReset.completion}, which outlives
+   * whatever request asked for the reset.
+   */
+  async hardResetDeployment(mcpServerId: string): Promise<McpServerHardReset> {
+    if (!this.isEnabled) {
+      throw new Error(
+        "Kubernetes runtime is not available; cannot hard-reset a deployment",
+      );
+    }
+
+    const joinedPhysicalKey =
+      this.hardResetPhysicalKeyByServerId.get(mcpServerId);
+    const joinedInFlight = joinedPhysicalKey
+      ? this.hardResetInFlightByPhysicalKey.get(joinedPhysicalKey)
+      : undefined;
+    if (joinedPhysicalKey && joinedInFlight) {
+      const started = await joinedInFlight.started;
+      return {
+        mcpServerId,
+        physicalDeployment: joinedPhysicalKey,
+        resetServerIds: started.resetServerIds,
+        reportsOutcome: false,
+        getStatusMarker: started.getStatusMarker,
+        acknowledgePending: joinedInFlight.acknowledgePending,
+        runFencedStatusWrite: joinedInFlight.runFencedStatusWrite,
+        acknowledgeReporting: joinedInFlight.acknowledgeReporting,
+        completion: joinedInFlight.completion.then((outcome) => ({
+          ...outcome,
+          mcpServerId,
+        })),
+      };
+    }
+    if (joinedPhysicalKey) {
+      this.hardResetPhysicalKeyByServerId.delete(mcpServerId);
+    }
+
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer) {
+      throw new Error(`MCP server with id ${mcpServerId} not found`);
+    }
+
+    const deployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!deployment) {
+      throw new Error(
+        `MCP server ${mcpServerId} has no Kubernetes deployment to reset`,
+      );
+    }
+
+    const physicalKey =
+      McpServerRuntimeManager.physicalDeploymentKey(deployment);
+    let inFlight = this.hardResetInFlightByPhysicalKey.get(physicalKey);
+    const reportsOutcome = !inFlight;
+    if (!inFlight) {
+      let resolveStarted!: (started: McpServerHardResetStart) => void;
+      let rejectStarted!: (error: unknown) => void;
+      const started = new Promise<McpServerHardResetStart>(
+        (resolve, reject) => {
+          resolveStarted = resolve;
+          rejectStarted = reject;
+        },
+      );
+      let statusWriteFence: ClusterLeaseGuard["runFencedMutation"] | undefined;
+      let currentStatusMarker: string | undefined;
+      const getStatusMarker = () => {
+        if (!currentStatusMarker) {
+          throw new Error("Hard reset status marker was not initialized");
+        }
+        return currentStatusMarker;
+      };
+      const runFencedStatusWrite: ClusterLeaseGuard["runFencedMutation"] =
+        async (fn) => {
+          await started;
+          if (!statusWriteFence) {
+            throw new Error("Hard reset status fence was not initialized");
+          }
+          return statusWriteFence(fn);
+        };
+      let resolveCompletion!: (result: McpServerHardResetResult) => void;
+      let rejectCompletion!: (error: unknown) => void;
+      const completion = new Promise<McpServerHardResetResult>(
+        (resolve, reject) => {
+          resolveCompletion = resolve;
+          rejectCompletion = reject;
+        },
+      );
+      let releasePending!: () => void;
+      let rejectPending!: (error: unknown) => void;
+      const pendingAcknowledged = new Promise<void>((resolve, reject) => {
+        releasePending = resolve;
+        rejectPending = reject;
+      });
+      let pendingWasAcknowledged = false;
+      const acknowledgePending = (error?: unknown) => {
+        if (pendingWasAcknowledged) return;
+        pendingWasAcknowledged = true;
+        if (error === undefined) releasePending();
+        else rejectPending(error);
+      };
+      let releaseReporting!: () => void;
+      const reportingFinished = new Promise<void>((resolve) => {
+        releaseReporting = resolve;
+      });
+      let reportingAcknowledged = false;
+      const acknowledgeReporting = () => {
+        if (reportingAcknowledged) return;
+        reportingAcknowledged = true;
+        releaseReporting();
+      };
+      let startedResolved = false;
+      let completionSettled = false;
+      let knownResetServerIds: string[] = [];
+      let entry!: McpServerHardResetInFlight;
+
+      const leasedOperation = McpDeploymentLeaseModel.withLease(
+        { scope: HARD_RESET_LEASE_SCOPE, key: physicalKey },
+        async (lease) => {
+          statusWriteFence = lease.runFencedMutation;
+          // Resolve the blast radius only after this replica owns the hard-reset
+          // lease. The same set describes pending status and the actual reset.
+          const resetServerIds =
+            await this.resolveSiblingServerIds(mcpServerId);
+
+          try {
+            return await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+              {
+                scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+                key: physicalKey,
+                timeoutMs: HARD_RESET_TRANSITION_ACQUIRE_TIMEOUT_MS,
+              },
+              async (transitionLease) => {
+                // Capture the exact deployment this reset owns only after the
+                // transition lease excludes restart/wake/reinstall writers.
+                // Reconciliation can then require a different UID before it
+                // calls an interrupted reset successful.
+                const originalDeployment =
+                  await deployment.readLiveDeployment();
+                const statusMarker = createHardResetStatusMarker({
+                  physicalDeployment: physicalKey,
+                  originalDeploymentUid: originalDeployment
+                    ? originalDeployment.metadata?.uid
+                    : null,
+                });
+                currentStatusMarker = statusMarker;
+                knownResetServerIds = resetServerIds;
+                for (const serverId of resetServerIds) {
+                  this.hardResetPhysicalKeyByServerId.set(
+                    serverId,
+                    physicalKey,
+                  );
+                }
+                startedResolved = true;
+                resolveStarted({ resetServerIds, getStatusMarker });
+                // No destructive write starts before the initiating request
+                // has put every affected install into its in-progress state.
+                await pendingAcknowledged;
+
+                try {
+                  const result = await this.runHardReset({
+                    mcpServer,
+                    deployment,
+                    leases: [lease, transitionLease],
+                    physicalKey,
+                    resetServerIds,
+                    getStatusMarker,
+                    setStatusMarker: (marker) => {
+                      currentStatusMarker = marker;
+                    },
+                  });
+                  completionSettled = true;
+                  resolveCompletion(result);
+                  await reportingFinished;
+                  return result;
+                } catch (error) {
+                  completionSettled = true;
+                  rejectCompletion(error);
+                  await reportingFinished;
+                  throw error;
+                }
+              },
+            );
+          } catch (error) {
+            if (!completionSettled) {
+              completionSettled = true;
+              rejectCompletion(error);
+              if (startedResolved) await reportingFinished;
+            }
+            throw error;
+          }
+        },
+      )
+        .catch(async (error) => {
+          let mapped = error;
+          if (
+            !startedResolved &&
+            !statusWriteFence &&
+            error instanceof ClusterLeaseHeldError
+          ) {
+            let remoteResetServerIds = [mcpServerId];
+            try {
+              remoteResetServerIds =
+                await this.resolveSiblingServerIds(mcpServerId);
+            } catch {
+              // Informational only: the owning replica already has the strict
+              // set and reports every status. Never turn an active reset into
+              // a failed request because this observer could not resolve it.
+            }
+            mapped = new McpServerHardResetHeldElsewhereError(
+              physicalKey,
+              remoteResetServerIds,
+            );
+          }
+          if (!startedResolved) rejectStarted(mapped);
+          if (!completionSettled) rejectCompletion(mapped);
+          // No reporting owner exists when startup itself failed.
+          if (!startedResolved) {
+            acknowledgePending();
+            acknowledgeReporting();
+          }
+          throw mapped;
+        })
+        .finally(() => {
+          if (this.hardResetInFlightByPhysicalKey.get(physicalKey) === entry) {
+            this.hardResetInFlightByPhysicalKey.delete(physicalKey);
+          }
+          for (const serverId of knownResetServerIds) {
+            if (
+              this.hardResetPhysicalKeyByServerId.get(serverId) === physicalKey
+            ) {
+              this.hardResetPhysicalKeyByServerId.delete(serverId);
+            }
+          }
+        });
+      // Observe both internal promises if acquisition fails before a handle is
+      // returned. The caller still receives the startup rejection below.
+      leasedOperation.catch(() => {});
+      completion.catch(() => {});
+      entry = {
+        started,
+        completion,
+        acknowledgePending,
+        runFencedStatusWrite,
+        acknowledgeReporting,
+      };
+      inFlight = entry;
+      this.hardResetInFlightByPhysicalKey.set(physicalKey, inFlight);
+    }
+
+    const started = await inFlight.started;
+    const reset = inFlight.completion;
+
+    return {
+      mcpServerId,
+      physicalDeployment: physicalKey,
+      resetServerIds: started.resetServerIds,
+      reportsOutcome,
+      getStatusMarker: started.getStatusMarker,
+      acknowledgePending: inFlight.acknowledgePending,
+      runFencedStatusWrite: inFlight.runFencedStatusWrite,
+      acknowledgeReporting: inFlight.acknowledgeReporting,
+      // A joining caller shares the teardown, not the identity of whoever
+      // started it: on a multitenant catalog the in-flight reset was very
+      // likely asked for by a DIFFERENT install, and handing its result back
+      // verbatim would report on a server this caller never named. Everything
+      // else in the result describes the one physical deployment and is true
+      // for both.
+      completion: reset.then((outcome) =>
+        outcome.mcpServerId === mcpServerId
+          ? outcome
+          : { ...outcome, mcpServerId },
+      ),
+    };
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Ensure the physical deployment backing an MCP server is awake before a
+   * demand-path call reaches it.
+   *
+   * Fast path (no K8s API call): runtime disabled, server unknown/not local, or
+   * hibernation is not offered and the loaded deployment has a serving cached
+   * state. While hibernation is offered, even cached "running" is validated
+   * against cluster truth because another replica may have scaled it to zero.
+   * Cached "waking" always takes the slow path: a wake this process did not
+   * start has no in-flight promise to join and must still be resumable.
+   *
+   * Slow path: wait for any cluster-wide hibernation transition, then
+   * single-flight per physical deployment — refresh cluster truth, scale up if
+   * hibernated (or resume a half-woken deployment), wait for readiness, clear
+   * the hibernation annotation, and mark every loaded sibling alias running.
+   * Throws {@link McpServerWakeError} when the wait budget elapses; the wake
+   * keeps progressing in the cluster and a later call resumes it.
+   *
+   * A hard reset owning this deployment pre-empts both paths: there is nothing
+   * to wake while the Deployment is being destroyed and rebuilt.
+   */
+  async ensureAwake(mcpServerId: string): Promise<void> {
+    if (!this.isEnabled) return;
+
+    // A shared reset may know this sibling even when its deployment is not in
+    // the runtime cache. Reject before loading it: the reset's fenced K8s write
+    // can legitimately hold the lease transaction while demand arrives.
+    const hardResetPhysicalKey =
+      this.hardResetPhysicalKeyByServerId.get(mcpServerId);
+    if (
+      hardResetPhysicalKey &&
+      this.hardResetInFlightByPhysicalKey.has(hardResetPhysicalKey)
+    ) {
+      throw new McpServerHardResetInProgressError(
+        hardResetPhysicalKey.slice(hardResetPhysicalKey.indexOf("/") + 1),
+      );
+    }
+
+    // During a rolling config change, another replica may still be sweeping.
+    // Unknown is therefore conservative: the sync accessor starts hydration,
+    // and only a known-false org toggle plus local-off config restores the
+    // zero-cost cache fast path.
+    const hibernationMayExist =
+      isIdleHibernationOffered() ||
+      OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;
+
+    const loaded = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (loaded) {
+      this.assertNotHardResetting(loaded);
+      // A wake already in flight for this physical deployment: join it even
+      // though beginWake has moved the cached state past "hibernated".
+      const inFlight = this.wakeInFlightByPhysicalKey.get(
+        McpServerRuntimeManager.physicalDeploymentKey(loaded),
+      );
+      if (inFlight) return inFlight;
+      const cachedState = loaded.statusSummary.state;
+      // "not_created" is a cache-cold alias, not a claim about the cluster.
+      // Fall through and let wakeDeployment read cluster truth — treating it
+      // as awake here made a cross-replica hibernation a permanent no-op.
+      //
+      // "failed" is distrusted for the mirror-image reason: it is the one
+      // cached state that says the deployment CANNOT serve, so short-circuiting
+      // on it returned "awake" for a server whose pod is broken and left the
+      // caller to discover that as a transport timeout. It is also the state a
+      // wake leaves behind when it aborts, which made every later call skip the
+      // wake entirely. wakeDeployment re-reads the cluster and either finds it
+      // recovered or raises the deployment's own failure.
+      if (
+        cachedState !== "hibernated" &&
+        cachedState !== "waking" &&
+        cachedState !== "not_created" &&
+        cachedState !== "failed"
+      ) {
+        // Without hibernation this remains the zero-cost hot path. Once the
+        // operator offers scale-to-zero, another replica can have hibernated
+        // this deployment while our watch/cache still says running; validate
+        // cluster truth below before dispatch.
+        if (!hibernationMayExist) return;
+      }
+    }
+
+    // Cached "hibernated"/"waking"/"not_created", or state unknown (deployment
+    // not loaded — e.g. hibernated by another replica): resolve the deployment
+    // and share one wake per physical deployment.
+    const deployment = loaded ?? (await this.getOrLoadDeployment(mcpServerId));
+    if (!deployment) return; // remote/unknown server, or runtime can't load it
+
+    // Re-checked on the alias we just resolved: a reset may have started while
+    // the lookup above ran, and a cache-cold caller reaches this line without
+    // ever having passed the check at the top.
+    this.assertNotHardResetting(deployment);
+
+    const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+    // Explicit demand means this deployment is ours to wake again. If another
+    // controller still owns replicas, repeated external resumes will prove it
+    // again after the next sleep; stale process-local suppression must not
+    // permanently disable hibernation after legitimate use.
+    this.foreignReplicaOwners.delete(key);
+    this.foreignResumeCountByPhysicalKey.delete(key);
+    this.foreignResumeCooldownTicks.delete(key);
+    // We are waking it, so its next "running" is ours and must not be read as
+    // another controller restoring the replica count.
+    this.hibernatedByUsAtByPhysicalKey.delete(key);
+    let wake = this.wakeInFlightByPhysicalKey.get(key);
+    if (!wake) {
+      // The deadline is the self-heal catch-all: if an attempt never settles
+      // (a hung Kubernetes call, an unhandled corner), every waiter is
+      // released with a retryable error and the slot frees, so the next
+      // demand starts a fresh attempt instead of queueing behind a wedge.
+      // The abandoned attempt stays harmless: its writes are CAS-guarded.
+      const wakeDeployment = (lease?: ClusterLeaseGuard) =>
+        this.wakeDeployment(mcpServerId, deployment, lease);
+      const deadlineAt = Date.now() + MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS;
+      const makeDeadlineError = () =>
+        new McpServerWakeError(deployment.statusSummary.serverName, {
+          detail: "the wake attempt did not settle within its deadline",
+        });
+      const transition = hibernationMayExist
+        ? McpDeploymentLeaseModel.withLeaseWhenAvailable(
+            {
+              scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+              key,
+              timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+            },
+            async (lease) => {
+              lease.throwIfLost();
+              await lease.runFencedMutation(() =>
+                deployment.clearForeignReplicaOwner(),
+              );
+              await lease.assertOwned();
+              await withDeadline(
+                wakeDeployment(lease),
+                Math.max(1, deadlineAt - Date.now()),
+                makeDeadlineError,
+              );
+              await lease.assertOwned();
+            },
+          ).catch((error) => {
+            if (error instanceof ClusterLeaseHeldError) {
+              throw new McpServerWakeError(
+                deployment.statusSummary.serverName,
+                {
+                  cause: error,
+                  detail:
+                    "another replica did not finish the deployment's lifecycle transition in time",
+                },
+              );
+            }
+            throw error;
+          })
+        : withDeadline(
+            wakeDeployment(),
+            MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+            makeDeadlineError,
+          );
+      wake = transition.finally(() => {
+        this.wakeInFlightByPhysicalKey.delete(key);
+      });
+      this.wakeInFlightByPhysicalKey.set(key, wake);
+    }
+    return wake;
+  }
+
+  /**
+   * Whether this process has SEEN the deployment behind this server stop
+   * serving: hibernated, or scaled back up and not ready yet. Memory-only
+   * (never a K8s call); background paths use it to skip servers they must not
+   * wake or connect to.
+   *
+   * Only states a lifecycle transition actually produces count as an answer.
+   * "not_created" is not one of them — it is where every K8sDeployment starts,
+   * before a cluster refresh classifies it. So an unobserved deployment is
+   * reported as NOT dormant rather than guessing from absent cache state.
+   *
+   * Future-hibernation gates do not erase observed state. An administrator can
+   * disable the feature while deployments are still asleep; passive discovery
+   * must keep skipping those deployments until demand wakes them.
+   */
+  isDeploymentDormant(mcpServerId: string): boolean {
+    if (!this.isEnabled) return false;
+    const deployment = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+    if (!deployment) return false;
+    const { state } = deployment.statusSummary;
+    return state === "hibernated" || state === "waking";
+  }
+
+  /**
+   * Run passive discovery only while a local deployment is confirmed serving.
+   * Unlike ensureAwake this never scales a deployment up. Holding the
+   * transition lease through client creation and the request prevents a sweep
+   * from deleting sessions underneath a background read.
+   */
+  async runIfDeploymentServing<T>(
+    mcpServerId: string,
+    operation: () => Promise<T>,
+  ): Promise<{ ran: false } | { ran: true; value: T }> {
+    if (!this.isEnabled) return { ran: true, value: await operation() };
+    const deployment = await this.getOrLoadDeployment(mcpServerId);
+    if (!deployment) return { ran: true, value: await operation() };
+
+    const hibernationMayExist =
+      isIdleHibernationOffered() ||
+      OrganizationModel.getMcpIdleHibernationEnabledSync() !== false;
+    if (!hibernationMayExist) {
+      return { ran: true, value: await operation() };
+    }
+
+    const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+    try {
+      return await McpDeploymentLeaseModel.withLease(
+        { scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE, key },
+        async (lease) => {
+          await deployment.refreshState({
+            runFencedMutation: lease.runFencedMutation,
+          });
+          let state = deployment.statusSummary.state;
+          if (state === "not_created") {
+            const live = await deployment.readLiveDeployment();
+            if (
+              !live ||
+              (live.spec?.replicas ?? 0) < 1 ||
+              K8sDeployment.hasHibernationAnnotation(live)
+            ) {
+              return { ran: false } as const;
+            }
+            state = "running";
+          }
+          if (state !== "running") return { ran: false } as const;
+
+          lease.throwIfLost();
+          const value = await operation();
+          await lease.assertOwned();
+          return { ran: true, value } as const;
+        },
+      );
+    } catch (error) {
+      if (error instanceof ClusterLeaseHeldError) return { ran: false };
+      throw error;
+    }
+  }
+  // SPDX-SnippetEnd
+
+  /**
+   * Whether this install still resolves to something the runtime can build a
+   * deployment object for: a live mcp_server row on a local catalog entry, with
+   * the K8s clients to act on it. Callers use it to refuse a destructive action
+   * BEFORE they have mutated anything of their own.
+   *
+   * Local configuration only — it deliberately does NOT read the cluster. A
+   * missing Deployment is not a reason to refuse a hard reset; it is one of the
+   * things a hard reset repairs. What it does catch is an install with nothing
+   * to act on at all: a row whose catalog entry has since been pointed at a
+   * remote server, or whose catalog is gone.
+   * @public — the hard-reset route's precondition check
+   */
+  async hasResolvableDeployment(mcpServerId: string): Promise<boolean> {
+    if (!this.isEnabled) return false;
+    return Boolean(await this.getOrLoadDeployment(mcpServerId));
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Register a callback fired (awaited) after a successful hibernate with the
+   * ids of EVERY sibling install sharing the hibernated deployment. mcp-client
+   * registers here at module setup to invalidate its pooled connections; the
+   * registry direction avoids a manager→mcp-client import cycle.
+   */
+  registerHibernationListener(
+    listener: (mcpServerIds: string[]) => Promise<void> | void,
+  ): void {
+    this.hibernationListeners.add(listener);
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Check if an MCP server uses streamable HTTP transport
@@ -1352,28 +2321,80 @@ export class McpServerRuntimeManager {
    * Refresh the state of all deployments from K8s.
    * Detects state changes like a running pod entering CrashLoopBackOff.
    */
-  async refreshAllStates(): Promise<void> {
+  async refreshAllStates(options?: {
+    ensureFreshAfterInFlight?: boolean;
+  }): Promise<void> {
     // Single-flight: refreshState mutates per-deployment state and is not
     // concurrency-safe, so concurrent triggers (status polling, watch
     // events) coalesce onto the in-flight sweep.
     if (this.refreshAllStatesInFlight) {
+      if (options?.ensureFreshAfterInFlight) {
+        this.refreshAllStatesFollowUpRequested = true;
+      }
       return this.refreshAllStatesInFlight;
     }
-    this.refreshAllStatesInFlight = mapWithConcurrency(
-      // Bounded: each refresh makes several K8s API calls — unbounded
-      // parallelism across a large install base is a steady source of API
-      // Priority & Fairness throttling (429s).
-      Array.from(this.mcpServerIdToDeploymentMap.values()),
-      K8S_API_FANOUT_CONCURRENCY,
-      (deployment) => deployment.refreshState(),
-    ).then(
-      () => undefined,
-      () => undefined,
-    );
+    this.refreshAllStatesInFlight = (async () => {
+      do {
+        this.refreshAllStatesFollowUpRequested = false;
+        const deployments = Array.from(
+          this.mcpServerIdToDeploymentMap.entries(),
+        );
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const replacedPhysicalDeployments = new Set<string>();
+        // SPDX-SnippetEnd
+        await mapWithConcurrency(
+          // Bounded: each refresh makes several K8s API calls — unbounded
+          // parallelism across a large install base is a steady source of API
+          // Priority & Fairness throttling (429s).
+          deployments,
+          K8S_API_FANOUT_CONCURRENCY,
+          async ([, deployment]) => {
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            const before = deployment.statusSummary;
+            // SPDX-SnippetEnd
+            await deployment.refreshState();
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            const after = deployment.statusSummary;
+            if (
+              (before.podName && before.podName !== after.podName) ||
+              (before.state === "running" && after.state !== "running")
+            ) {
+              replacedPhysicalDeployments.add(
+                McpServerRuntimeManager.physicalDeploymentKey(deployment),
+              );
+            }
+            // SPDX-SnippetEnd
+          },
+        ).catch(() => {});
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (replacedPhysicalDeployments.size > 0) {
+          const invalidatedServerIds = deployments
+            .filter(([, deployment]) =>
+              replacedPhysicalDeployments.has(
+                McpServerRuntimeManager.physicalDeploymentKey(deployment),
+              ),
+            )
+            .map(([mcpServerId]) => mcpServerId);
+          await this.notifyHibernationListeners(invalidatedServerIds);
+        }
+        // SPDX-SnippetEnd
+      } while (this.refreshAllStatesFollowUpRequested);
+    })();
     try {
       await this.refreshAllStatesInFlight;
     } finally {
       this.refreshAllStatesInFlight = undefined;
+      if (this.refreshAllStatesFollowUpRequested) {
+        await this.refreshAllStates(options);
+      }
     }
   }
 
@@ -1436,6 +2457,32 @@ export class McpServerRuntimeManager {
       clearInterval(this.failedPodReapTimer);
       this.failedPodReapTimer = undefined;
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (this.idleHibernationSweepTimer) {
+      clearInterval(this.idleHibernationSweepTimer);
+      this.idleHibernationSweepTimer = undefined;
+    }
+    mcpActiveUseTracker.stop();
+    this.imagePrepuller?.stop();
+    this.imagePrepuller = undefined;
+    this.wakeInFlightByPhysicalKey.clear();
+    // SPDX-SnippetEnd
+    this.hardResetInFlightByPhysicalKey.clear();
+    if (this.hardResetStatusReconcileTimer) {
+      clearInterval(this.hardResetStatusReconcileTimer);
+      this.hardResetStatusReconcileTimer = undefined;
+    }
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    this.hibernatedByUsAtByPhysicalKey.clear();
+    this.foreignResumeCountByPhysicalKey.clear();
+    this.foreignResumeCooldownTicks.clear();
+    this.foreignReplicaOwners.clear();
+    // SPDX-SnippetEnd
 
     // Stop all deployments
     const stopPromises = Array.from(this.mcpServerIdToDeploymentMap.keys()).map(
@@ -1775,7 +2822,9 @@ export class McpServerRuntimeManager {
                 server.id,
                 { namespaceOverride: deploymentNamespace },
               );
-              await staleDeployment?.removeDeployment();
+              if (staleDeployment) {
+                await this.removeDeploymentWithTransitionLease(staleDeployment);
+              }
               // The live object can carry a diverged (legacy) name the
               // constructed-name teardown above missed. In a non-resolved
               // namespace ANY deployment labeled with this server id is stale
@@ -1937,6 +2986,928 @@ export class McpServerRuntimeManager {
     }
   }
 
+  // === Idle hibernation ===
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Start the periodic idle-hibernation sweep. The timer runs whenever the
+   * operator has not hard-disabled the feature — whether hibernation is
+   * licensed and switched on for the organization is decided per TICK, since
+   * an administrator can flip the toggle while the process is up.
+   *
+   * Half the idle window keeps the worst-case over-idle time at ~1.5× the
+   * window, capped at 60 s so large windows still notice idleness promptly.
+   * No immediate sweep: nothing can be past the idle window right at startup.
+   */
+  private startIdleHibernationSweeper(): void {
+    if (this.idleHibernationSweepTimer) {
+      clearInterval(this.idleHibernationSweepTimer);
+      this.idleHibernationSweepTimer = undefined;
+    }
+    mcpActiveUseTracker.stop();
+    // Demand protection must outlive local rollout skew: another replica can
+    // still be sweeping even when this one has the feature disabled.
+    mcpActiveUseTracker.start();
+
+    if (!isIdleHibernationOffered()) {
+      logger.info("MCP idle hibernation is disabled by configuration");
+      return;
+    }
+
+    const windowSeconds = idleHibernationWindowSeconds();
+
+    this.idleHibernationSweepTimer = setInterval(
+      () => {
+        // Skip the tick while the previous sweep (DB reads + K8s patch
+        // fan-out) is still running.
+        if (this.idleHibernationSweepInFlight) return;
+        // Deadline as the self-heal catch-all: a sweep that never settles
+        // would hold this guard and silently stop hibernation platform-wide
+        // until a restart. Releasing the guard lets the next tick retry; the
+        // abandoned sweep's patches stay CAS-guarded.
+        this.idleHibernationSweepInFlight = withDeadline(
+          this.sweepIdleDeployments(),
+          SWEEP_DEADLINE_MS,
+          () =>
+            new Error(
+              "the sweep did not settle within its deadline; releasing the in-flight guard",
+            ),
+        )
+          .catch((err) => {
+            logger.warn({ err }, "MCP idle-hibernation sweep failed");
+          })
+          .finally(() => {
+            this.idleHibernationSweepInFlight = undefined;
+          });
+      },
+      Math.min(windowSeconds / 2, 60) * 1000,
+    );
+    // Don't keep the process alive just for the sweeper
+    this.idleHibernationSweepTimer.unref?.();
+  }
+
+  /**
+   * One sweep of the idle-hibernation lifecycle. The manager owns the
+   * deployment cache and the sibling bookkeeping; WHEN a group may sleep is
+   * decided in the enterprise hibernation module.
+   */
+  private async sweepIdleDeployments(): Promise<void> {
+    if (!this.isEnabled) return;
+    await sweepIdleDeployments(this.hibernationHost);
+  }
+  // SPDX-SnippetEnd
+
+  /**
+   * Perform the actual hard reset for {@link hardResetDeployment}
+   * (single-flighted per physical deployment by the caller).
+   */
+  private async runHardReset(params: {
+    mcpServer: McpServer;
+    deployment: K8sDeployment;
+    leases: ClusterLeaseGuard[];
+    physicalKey: string;
+    resetServerIds: string[];
+    getStatusMarker: () => string;
+    setStatusMarker: (marker: string) => void;
+  }): Promise<McpServerHardResetResult> {
+    const {
+      mcpServer,
+      deployment,
+      leases,
+      physicalKey,
+      resetServerIds,
+      getStatusMarker,
+      setStatusMarker,
+    } = params;
+    const hardResetLease = leases[0];
+    const transitionLease = leases[1];
+    if (!hardResetLease || !transitionLease) {
+      throw new Error("Hard reset started without both lifecycle leases");
+    }
+    const assertLeases = async () => {
+      for (const lease of leases) await lease.assertOwned();
+    };
+    const mcpServerId = mcpServer.id;
+    const namespace = deployment.k8sNamespace;
+    const deploymentName = deployment.k8sDeploymentName;
+    const podSelectorServerId =
+      await McpServerRuntimeManager.resolvePodSelectorServerId(mcpServer);
+
+    logger.info(
+      { mcpServerId, physicalKey },
+      "Hard-resetting a stuck MCP server deployment",
+    );
+
+    await assertLeases();
+
+    // Dropping the K8sDeployment objects takes their cached pod telemetry
+    // (name, age, restart count) with them, and is what keeps the idle sweeper
+    // off this deployment for the rest of the reset: the sweep only ever
+    // considers deployments this map holds.
+    for (const serverId of resetServerIds) {
+      this.mcpServerIdToDeploymentMap.delete(serverId);
+    }
+
+    // Delete only the Deployment. Service, Secret and policies are declarative
+    // and the recreate reconciles them in place; deleting them adds no recovery
+    // value but creates extra split-brain mutations if a lease expires. The
+    // Deployment delete itself is UID-preconditioned, so a stalled holder can
+    // never delete a replacement created by a newer holder.
+    await assertLeases();
+    await transitionLease.runFencedMutation(() =>
+      deployment.stopDeployment({ uidPrecondition: true }),
+    );
+    await assertLeases();
+    const teardown = await this.awaitPodTermination({
+      namespace,
+      deploymentName,
+      podSelectorServerId,
+      mcpServerId,
+      assertOwned: assertLeases,
+      runFencedMutation: transitionLease.runFencedMutation,
+    });
+    await assertLeases();
+
+    if (teardown.outcome !== "unverified") {
+      const pendingMarker = getStatusMarker();
+      const teardownMarker = markHardResetTeardownComplete(pendingMarker);
+      try {
+        const updatedIds = await writeHardResetStatuses({
+          mcpServerIds: resetServerIds,
+          status: "pending",
+          error: teardownMarker,
+          expectedMarker: pendingMarker,
+          runFencedMutation: hardResetLease.runFencedMutation,
+        });
+        if (updatedIds.length !== new Set(resetServerIds).size) {
+          throw new Error(
+            "Could not advance every hard-reset status marker after teardown",
+          );
+        }
+        setStatusMarker(teardownMarker);
+      } catch (error) {
+        // Recovery remains conservative without this phase: it will report an
+        // interrupted reset as an error rather than mistake somebody else's
+        // replacement Deployment for this reset's success. Keep rebuilding so
+        // a transient status-store failure does not leave the workload absent.
+        logger.warn(
+          { err: error, mcpServerIds: resetServerIds },
+          "Could not persist the hard-reset teardown-complete marker",
+        );
+      }
+    }
+
+    // Durable HTTP sessions and pooled MCP connections both address a pod that
+    // no longer exists, and the demand watermarks describe a deployment that no
+    // longer exists. The post-hibernate listener registry is this runtime's only
+    // handle on mcp-client's connection pool (a callback registry avoids a
+    // manager→mcp-client import cycle), and a reset invalidates those pools for
+    // exactly the reason a hibernate does.
+    for (const serverId of resetServerIds) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      mcpActiveUseTracker.remove(serverId);
+      // SPDX-SnippetEnd
+      try {
+        await McpHttpSessionModel.deleteByMcpServerId(serverId);
+      } catch (error) {
+        logger.warn(
+          { err: error, mcpServerId: serverId },
+          "Failed to delete durable MCP HTTP sessions during a hard reset",
+        );
+      }
+    }
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await this.notifyHibernationListeners(resetServerIds);
+    // SPDX-SnippetEnd
+    await assertLeases();
+
+    // A multitenant catalog runs ONE deployment for every install on it, so the
+    // rebuild is catalog-level: per-install starts would race to create the
+    // same Deployment and all but the first would get a 409.
+    const shared =
+      await McpServerRuntimeManager.isSharedMultitenantDeployment(mcpServerId);
+    const catalogId = mcpServer.catalogId;
+    const rebuild: McpServerHardResetResult["rebuild"] =
+      teardown.outcome === "unverified"
+        ? {
+            outcome: "not-ready",
+            reason: `the old deployment teardown could not be verified; rebuild was skipped to avoid serving old and new pods together (${teardown.reason})`,
+          }
+        : await this.rebuildAfterHardReset({
+            mcpServer,
+            shared,
+            catalogId,
+            transitionLease,
+          });
+    await assertLeases();
+
+    const result: McpServerHardResetResult = {
+      mcpServerId,
+      physicalDeployment: physicalKey,
+      resetServerIds,
+      teardown,
+      recreated:
+        teardown.outcome === "unverified"
+          ? false
+          : shared && catalogId
+            ? { target: "shared-catalog-deployment", catalogId }
+            : { target: "install-deployment" },
+      rebuild,
+    };
+    logger.info(result, "Hard reset of an MCP server deployment completed");
+    return result;
+  }
+
+  /**
+   * Recover hard-reset installation rows whose reporting process disappeared.
+   * Exact operation markers make every repair compare-and-set safe: a stale
+   * sweep cannot overwrite a newer install or reset result.
+   */
+  private async reconcileInterruptedHardResets(): Promise<void> {
+    const rows = await McpServerModel.findPendingInstallationsByErrorPrefix(
+      HARD_RESET_STATUS_MARKER_PREFIX,
+    );
+    const groups = new Map<
+      string,
+      {
+        marker: NonNullable<ReturnType<typeof parseHardResetStatusMarker>>;
+        ids: string[];
+      }
+    >();
+    for (const row of rows) {
+      const marker = parseHardResetStatusMarker(row.localInstallationError);
+      if (!marker || !row.localInstallationError) continue;
+      const group = groups.get(row.localInstallationError);
+      if (group) group.ids.push(row.id);
+      else groups.set(row.localInstallationError, { marker, ids: [row.id] });
+    }
+
+    await mapWithConcurrency(
+      Array.from(groups.entries()),
+      K8S_API_FANOUT_CONCURRENCY,
+      async ([statusMarker, group]) => {
+        try {
+          await McpDeploymentLeaseModel.withLease(
+            {
+              scope: HARD_RESET_LEASE_SCOPE,
+              key: group.marker.physicalDeployment,
+            },
+            async () => {
+              const representativeId = group.ids[0];
+              if (!representativeId) return;
+              const deployment =
+                await this.getOrLoadDeployment(representativeId);
+              const ageMs = Date.now() - group.marker.startedAtMs;
+              let finalStatus: "success" | "error" | undefined;
+              let error: string | null = null;
+
+              if (deployment) {
+                const liveDeployment = await deployment.readLiveDeployment();
+                const liveUid = liveDeployment?.metadata?.uid;
+                const originalUid = group.marker.originalDeploymentUid;
+                const legacyCreationTime =
+                  liveDeployment?.metadata?.creationTimestamp?.getTime();
+                const replacementObserved =
+                  group.marker.phase === "teardown-complete" &&
+                  !!liveDeployment &&
+                  (originalUid === null ||
+                    (typeof originalUid === "string" &&
+                      typeof liveUid === "string" &&
+                      liveUid !== originalUid) ||
+                    (originalUid === undefined &&
+                      legacyCreationTime !== undefined &&
+                      legacyCreationTime >= group.marker.startedAtMs));
+
+                await (
+                  deployment as {
+                    refreshState(options: {
+                      skipWakeCompletion: boolean;
+                    }): Promise<void>;
+                  }
+                ).refreshState({ skipWakeCompletion: true });
+                const summary = deployment.statusSummary;
+                let deploymentRecovered =
+                  replacementObserved &&
+                  (liveDeployment?.status?.availableReplicas ?? 0) > 0;
+                // SPDX-SnippetBegin
+                // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+                deploymentRecovered ||=
+                  replacementObserved &&
+                  liveDeployment?.metadata?.annotations?.[
+                    MCP_HIBERNATED_ANNOTATION
+                  ] === "true" &&
+                  (liveDeployment?.spec?.replicas ?? 0) === 0;
+                // SPDX-SnippetEnd
+                if (deploymentRecovered) {
+                  finalStatus = "success";
+                } else if (summary.state === "failed") {
+                  finalStatus = "error";
+                  error =
+                    summary.message || "Hard-reset deployment recovery failed";
+                }
+              }
+
+              if (
+                !finalStatus &&
+                ageMs >= HARD_RESET_STATUS_RECOVERY_GRACE_MS
+              ) {
+                finalStatus = "error";
+                error =
+                  "Hard reset was interrupted and deployment recovery did not complete";
+              }
+              if (!finalStatus) return;
+
+              await writeHardResetStatuses({
+                mcpServerIds: group.ids,
+                status: finalStatus,
+                error,
+                expectedMarker: statusMarker,
+              });
+            },
+          );
+        } catch (error) {
+          if (error instanceof ClusterLeaseHeldError) return;
+          logger.warn(
+            {
+              err: error,
+              physicalDeployment: group.marker.physicalDeployment,
+              mcpServerIds: group.ids,
+            },
+            "Failed to reconcile an interrupted MCP hard reset",
+          );
+        }
+      },
+    );
+  }
+
+  private startHardResetStatusReconciler(): void {
+    if (this.hardResetStatusReconcileTimer) {
+      clearInterval(this.hardResetStatusReconcileTimer);
+    }
+    const reconcile = () => {
+      if (this.hardResetStatusReconcileInFlight) return;
+      this.hardResetStatusReconcileInFlight =
+        this.reconcileInterruptedHardResets()
+          .catch((error) => {
+            logger.warn(
+              { err: error },
+              "Failed to sweep interrupted MCP hard-reset statuses",
+            );
+          })
+          .finally(() => {
+            this.hardResetStatusReconcileInFlight = undefined;
+          });
+    };
+    reconcile();
+    this.hardResetStatusReconcileTimer = setInterval(
+      reconcile,
+      HARD_RESET_STATUS_RECONCILE_INTERVAL_MS,
+    );
+    this.hardResetStatusReconcileTimer.unref?.();
+  }
+
+  /**
+   * Recreate the destroyed deployment and confirm it is actually serving.
+   *
+   * `freshImagePull` is the point of the escape hatch — a reset must never come
+   * back on a node-cached image that may itself be what wedged the server. The
+   * recreate re-stamps last-used, so the next sweep cannot hibernate what it
+   * just rebuilt (the teardown cleared the old watermark).
+   *
+   * A rebuild that never comes up is reported, not thrown: the teardown already
+   * happened, and an administrator recovering a wedged server needs to know
+   * what it did — which pods were force-killed, which installs were swept up —
+   * precisely in the case where the rebuild left them worse off.
+   */
+  private async rebuildAfterHardReset(params: {
+    mcpServer: McpServer;
+    shared: boolean;
+    catalogId: string | null;
+    transitionLease: ClusterLeaseGuard;
+  }): Promise<McpServerHardResetResult["rebuild"]> {
+    const { mcpServer, shared, catalogId, transitionLease } = params;
+    try {
+      if (shared && catalogId) {
+        await this.reinstallSharedDeployment(catalogId, {
+          freshImagePull: true,
+          // The readiness confirmation below is this rebuild's only one: the
+          // catalog path's own ready-wait would double what a reset budgets,
+          // and it watches the representative install rather than the caller.
+          awaitReady: false,
+          transitionLease,
+        });
+      } else {
+        await this.startServer(mcpServer, undefined, undefined, {
+          freshImagePull: true,
+          transitionLease,
+        });
+      }
+      // Both recreate paths return once the Deployment OBJECT exists, which
+      // says nothing about whether anything is serving behind it. Confirmed
+      // against the CALLER's own view of the deployment, so a multitenant
+      // rebuild is checked as the caller sees it rather than through whichever
+      // install happened to represent the catalog.
+      const rebuilt = await this.getOrLoadDeployment(mcpServer.id);
+      if (!rebuilt) {
+        return {
+          outcome: "not-ready",
+          reason: "the rebuilt deployment could not be resolved in the runtime",
+        };
+      }
+      await rebuilt.waitForDeploymentReady(
+        HARD_RESET_READY_ATTEMPTS,
+        HARD_RESET_READY_INTERVAL_MS,
+      );
+      return { outcome: "ready" };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.error(
+        { err: error, mcpServerId: mcpServer.id },
+        "Rebuilt MCP server deployment did not come up after a hard reset",
+      );
+      return { outcome: "not-ready", reason };
+    }
+  }
+
+  /**
+   * Wait for the pods behind a just-deleted Deployment to actually disappear,
+   * force-deleting the ones that outlive the grace window.
+   *
+   * A hard reset exists because the ordinary path is stuck, so it cannot assume
+   * the cascade completes: a stuck finalizer or a container that ignores
+   * SIGTERM keeps a pod — and its ports, volumes and Service endpoints — alive
+   * indefinitely, and the rebuilt Deployment would come up alongside it.
+   * `gracePeriodSeconds: 0` is the only escalation Kubernetes offers.
+   */
+  private async awaitPodTermination(params: {
+    namespace: string;
+    deploymentName: string;
+    podSelectorServerId: string;
+    mcpServerId: string;
+    assertOwned: () => Promise<void>;
+    runFencedMutation: <T>(fn: () => Promise<T>) => Promise<T>;
+  }): Promise<McpServerHardResetResult["teardown"]> {
+    const {
+      namespace,
+      deploymentName,
+      podSelectorServerId,
+      mcpServerId,
+      assertOwned,
+      runFencedMutation,
+    } = params;
+
+    let stragglers: Array<{ name: string; uid: string }>;
+    try {
+      stragglers = await this.awaitPodsGone({
+        namespace,
+        podSelectorServerId,
+        assertOwned,
+      });
+    } catch (error) {
+      // Never claim a clean teardown after a failed pod read. Rebuilding while
+      // an old pod may still match the Service selector creates split-brain.
+      logger.warn(
+        { err: error, mcpServerId, namespace, deploymentName },
+        "Could not confirm MCP server pod termination during a hard reset",
+      );
+      return {
+        outcome: "unverified",
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    if (stragglers.length === 0) {
+      return { outcome: "terminated" };
+    }
+
+    logger.warn(
+      {
+        mcpServerId,
+        namespace,
+        deploymentName,
+        pods: stragglers.map(({ name }) => name),
+      },
+      "MCP server pods outlived the hard-reset grace window; force-deleting them",
+    );
+    for (const { name: podName, uid } of stragglers) {
+      try {
+        if (!uid) {
+          logger.warn(
+            { podName, namespace },
+            "Refusing to force-delete a pod without a UID precondition",
+          );
+          continue;
+        }
+        await runFencedMutation(async () => {
+          await this.k8sApi?.deleteNamespacedPod({
+            name: podName,
+            namespace,
+            gracePeriodSeconds: 0,
+            body: { preconditions: { uid } },
+          });
+        });
+      } catch (error) {
+        // A pod that vanished between the list and the delete is the outcome
+        // this call was asking for. Anything else — a 403, a 429, a 5xx —
+        // means the pod may still be alive; the re-observation below is what
+        // decides, so the failure is only logged here.
+        if (isK8sNotFoundError(error)) {
+          logger.debug(
+            { err: error, podName, namespace },
+            "A straggling MCP server pod vanished before its force-delete",
+          );
+        } else {
+          logger.warn(
+            { err: error, podName, namespace },
+            "Force-delete of a straggling MCP server pod failed",
+          );
+        }
+      }
+    }
+
+    // `gracePeriodSeconds: 0` is a request, not a fact — and some deletes may
+    // have failed outright. Only an empty re-listing is evidence the teardown
+    // is clean: a survivor here matches the rebuilt Deployment's reused
+    // Service selector, and old and new pods would both take traffic while
+    // the reset reports success.
+    let remaining: Array<{ name: string; uid: string }>;
+    try {
+      remaining = await this.awaitPodsGone({
+        namespace,
+        podSelectorServerId,
+        assertOwned,
+      });
+    } catch (error) {
+      return {
+        outcome: "unverified",
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+    if (remaining.length > 0) {
+      return {
+        outcome: "unverified",
+        reason: `pods survived the force-delete: ${remaining
+          .map(({ name }) => name)
+          .join(", ")}`,
+      };
+    }
+    return {
+      outcome: "force-killed",
+      pods: stragglers.map(({ name }) => name),
+    };
+  }
+
+  /** Poll until no pods remain for the deployment; returns those still there. */
+  private async awaitPodsGone(params: {
+    namespace: string;
+    podSelectorServerId: string;
+    assertOwned: () => Promise<void>;
+  }): Promise<Array<{ name: string; uid: string }>> {
+    let remaining = await this.listPodsForDeployment(params);
+    for (
+      let attempt = 0;
+      remaining.length > 0 && attempt < HARD_RESET_POD_GRACE_ATTEMPTS;
+      attempt++
+    ) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, HARD_RESET_POD_POLL_INTERVAL_MS),
+      );
+      remaining = await this.listPodsForDeployment(params);
+    }
+    return remaining;
+  }
+
+  private async listPodsForDeployment(params: {
+    namespace: string;
+    podSelectorServerId: string;
+    assertOwned: () => Promise<void>;
+  }): Promise<Array<{ name: string; uid: string }>> {
+    if (!this.k8sApi) return [];
+    const { namespace, podSelectorServerId, assertOwned } = params;
+    await assertOwned();
+    const pods = await this.k8sApi.listNamespacedPod({
+      namespace,
+      // The pod selector of exactly one Deployment, and the same selector every
+      // other pod lookup in this runtime uses. These names are handed to a
+      // `gracePeriodSeconds: 0` delete, so a match must be an identity, never a
+      // resemblance: two Deployments whose names share a prefix ("notion" and
+      // "notion-eu") are different servers, and one's reset must not kill the
+      // other's live pods.
+      labelSelector: `app=mcp-server,mcp-server-id=${sanitizeLabelValue(
+        podSelectorServerId,
+      )}`,
+    });
+    await assertOwned();
+    return pods.items
+      .map((pod) => ({
+        name: pod.metadata?.name ?? "",
+        uid: pod.metadata?.uid ?? "",
+      }))
+      .filter(({ name }) => name.length > 0);
+  }
+
+  /**
+   * The `mcp-server-id` label value stamped on a deployment's pods: the catalog
+   * id for a multitenant catalog (one Deployment serves every install on it),
+   * the install id otherwise — the identity K8sDeployment writes into the pod
+   * template and selects on.
+   */
+  private static async resolvePodSelectorServerId(
+    mcpServer: McpServer,
+  ): Promise<string> {
+    if (!mcpServer.catalogId) return mcpServer.id;
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      mcpServer.catalogId,
+    );
+    return catalogItem?.multitenant ? mcpServer.catalogId : mcpServer.id;
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Perform the actual wake for {@link ensureAwake} (single-flighted per
+   * physical deployment by the caller).
+   */
+  private async wakeDeployment(
+    mcpServerId: string,
+    deployment: K8sDeployment,
+    lease?: ClusterLeaseGuard,
+  ): Promise<void> {
+    await wakeDeployment({
+      host: this.hibernationHost,
+      mcpServerId,
+      deployment,
+      lease,
+    });
+  }
+  // SPDX-SnippetEnd
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Refuse demand for a deployment a hard reset currently owns.
+   *
+   * There is nothing to wake mid-reset: the Deployment is being deleted, so a
+   * scale-up patch would either land on an object that is going away or fight
+   * the rebuild that replaces it. Waiting for the reset instead is no kinder —
+   * a teardown plus a fresh image pull runs for minutes, well past any tool
+   * call's patience — so demand is told now, in the terms the demand lane
+   * already understands: retryable, and not the caller's fault.
+   */
+  private assertNotHardResetting(deployment: K8sDeployment): void {
+    const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+    if (!this.hardResetInFlightByPhysicalKey.has(key)) return;
+    throw new McpServerHardResetInProgressError(
+      deployment.statusSummary.serverName,
+    );
+  }
+  // SPDX-SnippetEnd
+
+  private async removeDeploymentWithTransitionLease(
+    deployment: K8sDeployment,
+  ): Promise<void> {
+    await McpDeploymentLeaseModel.withLeaseWhenAvailable(
+      {
+        scope: MCP_DEPLOYMENT_TRANSITION_LEASE_SCOPE,
+        key: McpServerRuntimeManager.physicalDeploymentKey(deployment),
+        timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
+      },
+      (lease) =>
+        deployment.removeDeployment({
+          runFencedMutation: lease.runFencedMutation,
+          uidPrecondition: true,
+        }),
+    );
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The manager surface the hibernation lifecycle runs against. Built here so
+   * every method behind it can stay private — the module needs the runtime's
+   * bookkeeping, not its internals.
+   */
+  private get hibernationHost(): HibernationRuntimeHost {
+    return {
+      loadedDeployments: this.hibernatableDeployments,
+      physicalDeploymentKey: (deployment) =>
+        McpServerRuntimeManager.physicalDeploymentKey(deployment),
+      resolveSiblingServerIds: (mcpServerId) =>
+        this.resolveSiblingServerIds(mcpServerId),
+      resolveSiblingServerIdsSafe: (mcpServerId) =>
+        this.resolveSiblingServerIdsSafe(mcpServerId),
+      setCachedStateForSiblings: (siblingIds, state) =>
+        this.setCachedStateForSiblings(siblingIds, state),
+      ensureAwake: (mcpServerId) => this.ensureAwake(mcpServerId),
+      notifyHibernated: (mcpServerIds) =>
+        this.notifyHibernationListeners(mcpServerIds),
+      noteHibernatedByUs: (deployment) => {
+        this.hibernatedByUsAtByPhysicalKey.set(
+          McpServerRuntimeManager.physicalDeploymentKey(deployment),
+          Date.now(),
+        );
+      },
+      isReplicaCountOwnedElsewhere: (
+        deployment,
+        latestUsageAt,
+        runFencedMutation,
+      ) =>
+        this.isReplicaCountOwnedElsewhere(
+          deployment,
+          latestUsageAt,
+          runFencedMutation,
+        ),
+    };
+  }
+
+  /**
+   * Whether another controller keeps restoring this deployment's replicas, and
+   * count this observation towards that verdict.
+   *
+   * Called only for a deployment the sweeper already believes is running. If
+   * we are the ones who put it to sleep and did not wake it again, it came
+   * back on its own.
+   */
+  private async isReplicaCountOwnedElsewhere(
+    deployment: K8sDeployment,
+    latestUsageAt: Date,
+    runFencedMutation: ClusterLeaseGuard["runFencedMutation"],
+  ): Promise<boolean> {
+    const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+    if (this.foreignReplicaOwners.has(key)) return true;
+
+    // Serving out a cooldown from an earlier resume.
+    const cooling = this.foreignResumeCooldownTicks.get(key) ?? 0;
+    if (cooling > 0) {
+      this.foreignResumeCooldownTicks.set(key, cooling - 1);
+      return true;
+    }
+
+    const hibernatedAt = this.hibernatedByUsAtByPhysicalKey.get(key);
+    if (hibernatedAt === undefined) return false;
+    this.hibernatedByUsAtByPhysicalKey.delete(key);
+
+    // Demand on another replica is committed before that replica wakes. This
+    // timestamp therefore proves the resume was ours, even though this process
+    // did not own the wake promise or update its local bookkeeping.
+    if (latestUsageAt.getTime() >= hibernatedAt) {
+      this.foreignResumeCountByPhysicalKey.delete(key);
+      this.foreignResumeCooldownTicks.delete(key);
+      return false;
+    }
+
+    const resumes = (this.foreignResumeCountByPhysicalKey.get(key) ?? 0) + 1;
+    this.foreignResumeCountByPhysicalKey.set(key, resumes);
+    if (resumes >= FOREIGN_RESUME_LIMIT) {
+      const marked = await deployment.markForeignReplicaOwner({
+        runFencedMutation,
+      });
+      if (!marked) return true;
+      this.foreignReplicaOwners.add(key);
+      logger.warn(
+        {
+          physicalDeployment: key,
+          serverName: deployment.statusSummary.serverName,
+        },
+        "MCP deployment replica count is owned by another controller; disabling idle hibernation until explicit demand",
+      );
+      return true;
+    }
+    // Back off rather than disqualify. One resume is not proof that another
+    // controller owns the replicas — a wake on a different replica looks
+    // identical from here — so a permanent ban would switch hibernation off
+    // for a deployment that is merely busy elsewhere. Doubling the wait
+    // bounds the pod churn either way, and a deployment whose real owner
+    // stops fighting is picked back up on the next attempt.
+    this.foreignResumeCooldownTicks.set(
+      key,
+      2 ** Math.min(resumes, FOREIGN_RESUME_COOLDOWN_MAX_EXPONENT),
+    );
+    return true;
+  }
+
+  /**
+   * The deployment cache as the idle sweeper is allowed to see it: anything a
+   * hard reset currently owns is hidden, because hibernating a deployment
+   * mid-reset would scale a Deployment the reset is in the middle of rebuilding.
+   */
+  private get hibernatableDeployments(): ReadonlyMap<string, K8sDeployment> {
+    if (this.hardResetInFlightByPhysicalKey.size === 0) {
+      return this.mcpServerIdToDeploymentMap;
+    }
+    const visible = new Map<string, K8sDeployment>();
+    for (const [mcpServerId, deployment] of this.mcpServerIdToDeploymentMap) {
+      const key = McpServerRuntimeManager.physicalDeploymentKey(deployment);
+      if (this.hardResetInFlightByPhysicalKey.has(key)) continue;
+      visible.set(mcpServerId, deployment);
+    }
+    return visible;
+  }
+  // SPDX-SnippetEnd
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Fire every registered lifecycle listener (mcp-client's pooled connection
+   * invalidation). A throwing listener must not abandon the rest.
+   */
+  private async notifyHibernationListeners(
+    mcpServerIds: string[],
+  ): Promise<void> {
+    for (const listener of this.hibernationListeners) {
+      try {
+        await listener(mcpServerIds);
+      } catch (error) {
+        logger.warn(
+          { err: error, mcpServerIds },
+          "MCP deployment lifecycle listener failed",
+        );
+      }
+    }
+  }
+  // SPDX-SnippetEnd
+
+  /**
+   * All non-deleted mcp_server rows sharing the given server's physical K8s
+   * deployment: a multitenant catalog runs ONE deployment for every install
+   * on the catalog (each install holding its own alias K8sDeployment object);
+   * a single-tenant deployment belongs to exactly its own row.
+   */
+  private async resolveSiblingServerIds(
+    mcpServerId: string,
+  ): Promise<string[]> {
+    const mcpServer = await McpServerModel.findById(mcpServerId);
+    if (!mcpServer?.catalogId) return [mcpServerId];
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      mcpServer.catalogId,
+    );
+    if (!catalogItem?.multitenant) return [mcpServerId];
+    const siblingIds = (
+      await McpServerModel.findByCatalogId(mcpServer.catalogId)
+    ).map((sibling) => sibling.id);
+    // findByCatalogId filters soft-deleted rows; keep the caller's id even if
+    // its row is mid-delete so its own alias state is still covered.
+    return siblingIds.includes(mcpServerId)
+      ? siblingIds
+      : [mcpServerId, ...siblingIds];
+  }
+
+  /**
+   * {@link resolveSiblingServerIds} that degrades to just the caller's id on a
+   * DB error — used where sibling resolution follows an already-performed K8s
+   * transition and must not turn a completed wake into a rejection.
+   */
+  private async resolveSiblingServerIdsSafe(
+    mcpServerId: string,
+  ): Promise<string[]> {
+    try {
+      return await this.resolveSiblingServerIds(mcpServerId);
+    } catch (error) {
+      logger.warn(
+        { err: error, mcpServerId },
+        "Failed to resolve MCP deployment siblings; updating only the caller's state",
+      );
+      return [mcpServerId];
+    }
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Mirror a hibernation state transition onto EVERY loaded sibling alias.
+   * K8sDeployment only transitions the object a lifecycle method was called
+   * on, but multitenant siblings each hold a distinct object for the same
+   * physical deployment — without this, a sibling's cached state would say
+   * "running" for a pod we just scaled away.
+   */
+  private setCachedStateForSiblings(
+    siblingIds: string[],
+    state: McpDeploymentState,
+  ): void {
+    for (const siblingId of siblingIds) {
+      this.mcpServerIdToDeploymentMap
+        .get(siblingId)
+        ?.syncStateFromSibling(state);
+    }
+  }
+  // SPDX-SnippetEnd
+
+  private static physicalDeploymentKey(deployment: K8sDeployment): string {
+    return `${deployment.k8sNamespace}/${deployment.k8sDeploymentName}`;
+  }
+
   private async writeLogsUnavailableMessage(
     responseStream: NodeJS.WritableStream,
     mcpServerId: string,
@@ -1963,10 +3934,32 @@ export class McpServerRuntimeManager {
 
   // === Deployment-state watch streams ===
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Start ONLY the deployment-state watch streams — the entry point for the
+   * dedicated worker process, which consumes cluster state but never
+   * reconciles it. A worker wakes servers on demand and then trusts its
+   * cached "running": without the watchers, a hibernation performed by a web
+   * replica leaves that cache stale for the process lifetime, and every
+   * later scheduled call takes ensureAwake's cached-running fast path
+   * straight into a zero-replica Service. The full start() deliberately
+   * stays web-only — its reconcile pass, idle sweeper, pod reaper and image
+   * pre-puller must not run once per worker. Idempotent; a no-op when the
+   * runtime is not configured.
+   */
+  startStateWatchersOnly(): void {
+    if (!this.isEnabled || this.deploymentStateWatchersStarted) return;
+    this.startDeploymentStateWatchers();
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Open watch streams for every namespace the runtime currently deploys
    * into. Later namespaces (a server installed into a new environment) are
-   * picked up via ensureWatchedNamespace from startServer.
+   * picked up via ensureWatchedNamespace from startServer, and lazy loads
+   * register theirs in getOrLoadDeployment.
    */
   private startDeploymentStateWatchers(): void {
     if (!this.kubeConfig) return;
@@ -2087,7 +4080,7 @@ export class McpServerRuntimeManager {
     if (this.watchRefreshDebounceTimer) return;
     this.watchRefreshDebounceTimer = setTimeout(() => {
       this.watchRefreshDebounceTimer = undefined;
-      void this.refreshAllStates()
+      void this.refreshAllStates({ ensureFreshAfterInFlight: true })
         .then(() => {
           for (const listener of this.stateRefreshListeners) {
             try {
@@ -2226,6 +4219,26 @@ function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Demand that arrived while a hard reset owned the deployment it needs.
+ *
+ * A {@link McpServerWakeError} so the demand lane keeps classifying it as the
+ * retryable, not-the-caller's-fault failure it is, but with its own wording:
+ * nothing about this is hibernation, and telling an agent its server is waking
+ * from idle would send whoever reads that message looking in the wrong place.
+ */
+class McpServerHardResetInProgressError extends McpServerWakeError {
+  constructor(serverName: string) {
+    super(serverName);
+    this.name = "McpServerHardResetInProgressError";
+    this.message = `MCP server ${serverName} is being rebuilt by a hard reset of its deployment and is not serving yet; retry shortly.`;
+  }
+}
+// SPDX-SnippetEnd
+
 /**
  * Max concurrent per-server operations when fanning out over the whole
  * install base (startup reconcile, periodic state refresh). Each operation
@@ -2233,6 +4246,38 @@ function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
  * Priority & Fairness throttling (429s) on large installs.
  */
 const K8S_API_FANOUT_CONCURRENCY = 5;
+
+/**
+ * How long a hard reset lets a deleted Deployment's pods terminate on their own
+ * before escalating to `gracePeriodSeconds: 0`. Sized just past Kubernetes'
+ * 30 s default termination grace period, so an orderly shutdown is never
+ * force-killed and a hung one is not waited on much longer than that.
+ */
+const HARD_RESET_POD_GRACE_ATTEMPTS = 35;
+const HARD_RESET_POD_POLL_INTERVAL_MS = 1_000;
+/** Lease scope serializing hard resets of one physical deployment across replicas. */
+const HARD_RESET_LEASE_SCOPE = "mcp-hard-reset";
+/** Bound pre-handle waiting to the same budget the route gives a running reset. */
+const HARD_RESET_TRANSITION_ACQUIRE_TIMEOUT_MS = 20_000;
+
+/**
+ * How long a hard reset waits for its rebuilt deployment to actually serve
+ * before reporting that it did not come up: 60 × 2 s = 2 minutes, the same
+ * budget every other (re)deploy path allows, so a reset — which always pulls a
+ * fresh image — is not the one action that gives up on a slow pull.
+ *
+ * It is the ONLY ready-wait a rebuild performs, including on a multitenant
+ * catalog, whose recreate path is told to skip its own. So the worst case for
+ * a whole reset is ~35 s of pod-termination grace plus these 2 minutes — far
+ * longer than an HTTP request may be held open, which is why the route waits
+ * only a bounded slice of it and reports an unfinished reset as unfinished.
+ */
+const HARD_RESET_READY_ATTEMPTS = 60;
+const HARD_RESET_READY_INTERVAL_MS = 2_000;
+/** Poll for durable markers left behind by a crashed reporting process. */
+const HARD_RESET_STATUS_RECONCILE_INTERVAL_MS = 30_000;
+/** Full reset budget plus room for restart-time image pulls and scheduling. */
+const HARD_RESET_STATUS_RECOVERY_GRACE_MS = 5 * 60_000;
 
 type WatchStreamKind = "pods" | "deployments";
 

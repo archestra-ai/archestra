@@ -1,6 +1,7 @@
 import { randomUUID, scryptSync } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
 import { z } from "zod";
+import { extractPdfText } from "@/knowledge-base/pdf-ocr";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -15,12 +16,15 @@ import type {
 } from "@/types";
 import { MFilesConfigSchema } from "@/types";
 import { stripHtmlTags } from "@/utils/strip-html";
-import { BaseConnector, extractErrorMessage } from "../base-connector";
+import {
+  BaseConnector,
+  extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
+} from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   describePdfEmptyText,
   describePdfExtractionWarning,
-  parsePdfBuffer,
 } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
@@ -353,6 +357,7 @@ export class MFilesConnector extends BaseConnector {
     startTime?: Date;
     endTime?: Date;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch> {
     const config = parseMFilesConfig(params.config);
     if (!config) throw new Error("Invalid M-Files configuration");
@@ -371,8 +376,13 @@ export class MFilesConnector extends BaseConnector {
         checkpoint.baselineGeneration &&
         checkpoint.baselineHeadCursor,
     );
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
+    // Image formats to ingest: only those the configured embedding model and
+    // its client accept — the same gate the other connectors apply.
+    const imageMimeTypes = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+      embeddingInputModalities: params.embeddingInputModalities,
+      embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+    });
 
     if (!compatible || !checkpoint.changeCursor || baselineActive) {
       yield* this.syncBaseline({
@@ -381,7 +391,7 @@ export class MFilesConnector extends BaseConnector {
         checkpoint: compatible ? checkpoint : { type: "mfiles" },
         capabilities,
         configFingerprint,
-        supportsImages,
+        imageMimeTypes,
       });
       return;
     }
@@ -402,7 +412,7 @@ export class MFilesConnector extends BaseConnector {
         checkpoint: { type: "mfiles" },
         capabilities,
         configFingerprint,
-        supportsImages,
+        imageMimeTypes,
       });
       return;
     }
@@ -412,7 +422,7 @@ export class MFilesConnector extends BaseConnector {
       checkpoint,
       capabilities,
       configFingerprint,
-      supportsImages,
+      imageMimeTypes,
       firstPage: firstChangePage,
     });
   }
@@ -733,7 +743,7 @@ export class MFilesConnector extends BaseConnector {
     checkpoint: MFilesCheckpoint;
     capabilities: Capabilities;
     configFingerprint: string;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const generation = params.checkpoint.baselineGeneration ?? randomUUID();
     const baselineHeadCursor =
@@ -758,7 +768,7 @@ export class MFilesConnector extends BaseConnector {
           client: params.client,
           config: params.config,
           object,
-          supportsImages: params.supportsImages,
+          imageMimeTypes: params.imageMimeTypes,
           baselineGeneration: generation,
         });
         documents.push(...objectDocuments);
@@ -826,7 +836,7 @@ export class MFilesConnector extends BaseConnector {
     checkpoint: MFilesCheckpoint;
     capabilities: Capabilities;
     configFingerprint: string;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     firstPage: ChangePage;
   }): AsyncGenerator<ConnectorSyncBatch> {
     let page = params.firstPage;
@@ -858,7 +868,7 @@ export class MFilesConnector extends BaseConnector {
               client: params.client,
               config: params.config,
               object,
-              supportsImages: params.supportsImages,
+              imageMimeTypes: params.imageMimeTypes,
             })
           : [];
         latestModifiedAt = maxIso([
@@ -1010,13 +1020,13 @@ export class MFilesConnector extends BaseConnector {
     client: MFilesClient;
     config: MFilesConfig;
     object: MFilesObjectVersion;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     baselineGeneration?: string;
   }): Promise<ConnectorDocument[]> {
     const documents: ConnectorDocument[] = [];
     for (const file of params.object.Files ?? []) {
       const extension = normalizeExtension(file.Extension);
-      if (!isSupportedExtension(extension, params.supportsImages)) {
+      if (!isSupportedExtension(extension, params.imageMimeTypes)) {
         this.trackSkipped({
           itemId: buildSourceId(params.object, file),
           name: buildFileName(file),
@@ -1032,7 +1042,7 @@ export class MFilesConnector extends BaseConnector {
         object: params.object,
         file,
         extension,
-        supportsImages: params.supportsImages,
+        imageMimeTypes: params.imageMimeTypes,
       });
       if (!extracted) continue;
       const modifiedAt = file.ChangeTimeUtc ?? params.object.LastModifiedUtc;
@@ -1159,7 +1169,7 @@ export class MFilesConnector extends BaseConnector {
     object: MFilesObjectVersion;
     file: MFilesObjectFile;
     extension: string;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
@@ -1177,10 +1187,7 @@ export class MFilesConnector extends BaseConnector {
       return null;
     }
 
-    if (
-      params.supportsImages &&
-      SUPPORTED_IMAGE_EXTENSIONS.has(params.extension)
-    ) {
+    if (isIngestibleImageExtension(params.extension, params.imageMimeTypes)) {
       return {
         text: "",
         mediaContent: {
@@ -1196,7 +1203,11 @@ export class MFilesConnector extends BaseConnector {
         text = await extractTextFromDocx(buffer);
         break;
       case "pdf": {
-        const result = await parsePdfBuffer(buffer);
+        const result = await extractPdfText({
+          buffer,
+          filename: buildFileName(params.file),
+          ocr: this.ocrContext,
+        });
         const emptyReason = describePdfEmptyText(result);
         if (emptyReason) {
           this.trackSkipped({
@@ -1755,12 +1766,22 @@ function normalizeExtension(extension: string): string {
 
 function isSupportedExtension(
   extension: string,
-  supportsImages: boolean,
+  imageMimeTypes: ReadonlySet<string>,
 ): boolean {
   return (
     SUPPORTED_TEXT_EXTENSIONS.has(extension) ||
     SUPPORTED_BINARY_EXTENSIONS.has(extension) ||
-    (supportsImages && SUPPORTED_IMAGE_EXTENSIONS.has(extension))
+    isIngestibleImageExtension(extension, imageMimeTypes)
+  );
+}
+
+function isIngestibleImageExtension(
+  extension: string,
+  imageMimeTypes: ReadonlySet<string>,
+): boolean {
+  return (
+    SUPPORTED_IMAGE_EXTENSIONS.has(extension) &&
+    imageMimeTypes.has(IMAGE_MIME_TYPES[extension])
   );
 }
 

@@ -28,7 +28,7 @@ import config from "@/config";
 import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
-import { createFastifyInstance } from "./server";
+import { buildSandboxFrameAncestors, createFastifyInstance } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -45,6 +45,7 @@ describe("createFastifyInstance", () => {
       [404, "Not found", "api_not_found_error"],
       [500, "Internal server error", "api_internal_server_error"],
       [409, "Resource conflict", "api_conflict_error"],
+      [429, "Slow down", "api_rate_limit_error"],
       [418, "I'm a teapot", "unknown_api_error"],
     ])("maps ApiError %i to its error type", async (statusCode, message, type) => {
       const app = createFastifyInstance();
@@ -62,6 +63,42 @@ describe("createFastifyInstance", () => {
       expect(response.json()).toEqual({
         error: { message, type },
       });
+    });
+
+    // Without this the client only knows it was throttled, not for how long, so
+    // it falls back to its own escalating backoff — minutes of waiting for a
+    // limit that clears in under a minute.
+    test("sends Retry-After when a throttling error knows when it clears", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-throttled", async () => {
+        const error = new ApiError(429, "Slow down");
+        error.retryAfterSeconds = 12.2;
+        throw error;
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-throttled",
+      });
+
+      expect(response.statusCode).toBe(429);
+      // Rounded up: Retry-After is whole seconds, and rounding down would
+      // invite a retry that is still inside the window.
+      expect(response.headers["retry-after"]).toBe("13");
+    });
+
+    test("omits Retry-After when the error does not say when it clears", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-plain-429", async () => {
+        throw new ApiError(429, "Slow down");
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-plain-429",
+      });
+
+      expect(response.headers["retry-after"]).toBeUndefined();
     });
 
     test("returns Fastify's own 4xx status instead of coercing it to a 500", async () => {
@@ -891,5 +928,68 @@ describe("health endpoints", () => {
         config.maintenanceMode = originalMaintenanceMode;
       }
     });
+  });
+});
+
+describe("buildSandboxFrameAncestors", () => {
+  test("stays open when the deployment declares no origins", () => {
+    // The published Docker image sets no ARCHESTRA_FRONTEND_URL and no sandbox
+    // domain, so the browser can legitimately reach it on any origin: a
+    // remapped published port, a LAN address, a reverse proxy. Anything but "*"
+    // here has the browser refuse the sandbox iframe outright
+    // (ERR_BLOCKED_BY_RESPONSE), leaving an empty app pane.
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: null,
+        recorderFrameAncestors: [],
+      }),
+    ).toBe("*");
+  });
+
+  test("the recorder cannot restrict an otherwise-open deployment", () => {
+    // The renderer's frame ancestors fall back to a guessed http://localhost:3000
+    // when nothing is configured. Adding that guess to an empty list used to
+    // turn "embeddable anywhere" into "embeddable on loopback:3000 only".
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: null,
+        recorderFrameAncestors: [
+          "http://localhost:3000",
+          "http://127.0.0.1:3000",
+        ],
+      }),
+    ).toBe("*");
+  });
+
+  test("declared origins restrict the policy, and the recorder widens it", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: ["https://archestra.example.com"],
+        sandboxDomain: null,
+        recorderFrameAncestors: ["http://renderer.internal:3000"],
+      }),
+    ).toBe("https://archestra.example.com http://renderer.internal:3000");
+  });
+
+  test("a sandbox domain alone is a declared restriction", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: [],
+        sandboxDomain: "mcp.example.com",
+        recorderFrameAncestors: [],
+      }),
+    ).toBe("*.mcp.example.com");
+  });
+
+  test("deduplicates repeated sources", () => {
+    expect(
+      buildSandboxFrameAncestors({
+        allowedOrigins: ["https://archestra.example.com"],
+        sandboxDomain: null,
+        recorderFrameAncestors: ["https://archestra.example.com"],
+      }),
+    ).toBe("https://archestra.example.com");
   });
 });

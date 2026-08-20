@@ -72,12 +72,17 @@ import {
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { AddServiceAccountDialog } from "./add-service-account-dialog";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
-import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
+import {
+  type DeploymentState,
+  DeploymentStatusDot,
+  getDeploymentLabel,
+  STATE_PRIORITY,
+} from "./deployment-status";
 import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
-import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -689,10 +694,27 @@ function ConnectionsTable({
                     />
                   );
                   if (!podName) {
+                    // SPDX-SnippetBegin
+                    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+                    // An idle-scaled deployment has no pod BY DESIGN — naming
+                    // its state beats a placeholder that reads like telemetry
+                    // went missing.
+                    // SPDX-SnippetEnd
                     return (
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
                         {dot}
-                        <span>Pod not reported yet</span>
+                        <span>
+                          {
+                            /* SPDX-SnippetBegin */
+                            /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                            /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                            effectiveState === "hibernated" ||
+                            effectiveState === "waking"
+                              ? getDeploymentLabel(effectiveState)
+                              : /* SPDX-SnippetEnd */ "Pod not reported yet"
+                          }
+                        </span>
                       </div>
                     );
                   }
@@ -830,14 +852,6 @@ function resolveServerScope(server: ServerEntry): "personal" | "team" | "org" {
 // didn't observe the pod first stays "pending" while the other goes "failed".
 // Pick a canonical state per podName (across every connection for the catalog,
 // so the personal and service-account tables agree) so all rows match.
-const DEPLOYMENT_STATE_PRIORITY: Record<string, number> = {
-  failed: 4,
-  running: 3,
-  succeeded: 3,
-  pending: 2,
-  not_created: 1,
-};
-
 function computeCanonicalStateByPod(
   servers: ServerEntry[],
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
@@ -849,8 +863,7 @@ function computeCanonicalStateByPod(
     const current = canonicalStateByPod.get(entry.podName);
     if (
       !current ||
-      (DEPLOYMENT_STATE_PRIORITY[entry.state] ?? 0) >
-        (DEPLOYMENT_STATE_PRIORITY[current] ?? 0)
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
     ) {
       canonicalStateByPod.set(entry.podName, entry.state);
     }

@@ -51,7 +51,7 @@ describe("buildChatContext enabled-tool selection", () => {
       taskBridge: {} as never,
       abortSignal: new AbortController().signal,
       suppressContentLogging: false,
-      incognitoAudit: null,
+      lockedChatAudit: null,
     });
 
   test("no custom selection fetches tools with enabledToolIds undefined", async ({

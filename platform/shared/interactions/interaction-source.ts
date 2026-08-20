@@ -24,6 +24,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:reranker",
   "knowledge:query-expansion",
   "knowledge:contextual-retrieval",
+  "knowledge:ocr",
   "app:llm_complete",
   "app:recording_enhancement",
 ]);
@@ -60,6 +61,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:contextual-retrieval": {
     label: "Knowledge - Contextual Retrieval",
   },
+  "knowledge:ocr": { label: "Knowledge - OCR" },
   "app:llm_complete": { label: "App LLM Completion" },
   "app:recording_enhancement": { label: "App Recording Enhancement" },
 };

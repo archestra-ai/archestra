@@ -1,4 +1,6 @@
 "use client";
+
+import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Info } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
@@ -22,7 +24,7 @@ import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 const telegramProviderConfig: ProviderConfig = {
   provider: "telegram",
-  providerLabel: "Telegram",
+  providerLabel: MESSAGING_CHANNEL_LABELS.telegram,
   providerIcon: "/icons/telegram.png",
   docsUrl: getFrontendDocsUrl("platform-telegram"),
   slashCommand: "/select-agent",
@@ -166,6 +168,7 @@ export default function TelegramPage() {
     telegramAvailable,
     isLoading: statusesLoading,
   } = useTriggerStatuses();
+  const channelLabel = MESSAGING_CHANNEL_LABELS.telegram;
 
   // Explicitly disabled on this deployment: hidden from the nav, and a
   // direct visit explains why
@@ -189,7 +192,7 @@ export default function TelegramPage() {
       <CollapsibleSetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={statusLoading}
-        providerLabel="Telegram"
+        providerLabel={channelLabel}
         docsUrl={getFrontendDocsUrl("platform-telegram")}
       >
         <LlmKeySetupStep />
@@ -219,7 +222,12 @@ export default function TelegramPage() {
       {allStepsCompleted && (
         <>
           <Divider />
-          <ChannelsSection providerConfig={telegramProviderConfig} />
+          <ChannelsSection
+            providerConfig={{
+              ...telegramProviderConfig,
+              providerLabel: channelLabel,
+            }}
+          />
         </>
       )}
 

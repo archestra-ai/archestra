@@ -43,4 +43,16 @@ describe("GET /api/skills/:id", () => {
     });
     expect(deleteResponse.statusCode).toBe(404);
   });
+
+  test("a non-uuid id (e.g. a skill name) is rejected as 400, not a database 500", async () => {
+    // Callers pass skill names here; the raw string used to reach Postgres
+    // and fail with `invalid input syntax for type uuid` as a 500.
+    for (const url of [
+      "/api/skills/agent-builder",
+      "/api/skills/agent-builder/usage-statistics",
+    ]) {
+      const response = await ctx.app.inject({ method: "GET", url });
+      expect(response.statusCode, url).toBe(400);
+    }
+  });
 });

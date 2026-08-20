@@ -252,8 +252,12 @@ export function useUpdateSkill() {
         // would show the backend's version numbers, which say nothing to
         // someone who was editing a form.
         if (isSkillVersionConflict(error)) {
+          // Pull the head that overtook this edit, so the editor has something
+          // current to fall back to; the rejected draft is left on screen for
+          // the author to copy from.
+          queryClient.invalidateQueries({ queryKey: ["skills", id] });
           toast.error(
-            "This skill changed while you were editing it. Reopen it to pick up the latest version, then reapply your changes.",
+            "This skill changed while you were editing it. Discard your changes to load the latest version, then reapply them.",
           );
           return null;
         }

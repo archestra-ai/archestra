@@ -3,6 +3,8 @@ export {
   getApiErrorMessage,
   getApiErrorType,
   handleApiError,
+  isReportedApiError,
+  reportApiError,
   throwOnApiError,
   toApiError,
 } from "./api";
@@ -13,6 +15,7 @@ export {
 } from "./date-time";
 export { formatContextLength } from "./format-context-length";
 export { formatCronSchedule } from "./format-cron";
+export { formatThousands } from "./format-thousands";
 export {
   computeHandlebarsReplaceOffsets,
   shouldShowHandlebarsCompletions,

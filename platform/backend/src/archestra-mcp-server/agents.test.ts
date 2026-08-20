@@ -49,6 +49,11 @@ describe("agent tool execution", () => {
       "Successfully created agent",
     );
     expect((result.content[0] as any).text).toContain("New Test Agent");
+    // The reader gets the agent's own edit page, not a list that would have to
+    // resolve the id itself.
+    expect((result.content[0] as any).text).toContain(
+      `/agents/${extractCreatedId(result)}/edit`,
+    );
   });
 
   test("create_agent attributes the calling user as author for org-scoped agents", async () => {
@@ -707,6 +712,115 @@ describe("edit_agent team assignment", () => {
 
     const unchanged = await AgentModel.findById(agent.id, admin.id, true);
     expect(unchanged?.teams.map((team) => team.id)).toEqual([team.id]);
+  });
+
+  /**
+   * A static assignment pins one installed connection, and the runtime follows
+   * that pin. Editing the record's teams through the MCP tool must therefore
+   * refuse the same changes `PUT /api/agents/:id` refuses — the tools write
+   * through the same model, so an unguarded edit here would be a way around
+   * the REST guard.
+   */
+  test("dropping the team whose connection a static pin points at is refused", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const teamA = await makeTeam(org.id, admin.id);
+    const teamB = await makeTeam(org.id, admin.id);
+    const connection = await makeMcpServer({
+      name: "Team A Connection",
+      scope: "team",
+      teamId: teamA.id,
+    });
+    const tool = await makeTool({
+      name: "team-a-tool",
+      catalogId: connection.catalogId,
+    });
+    const agent = await makeAgent({
+      name: "Pinned Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+    await makeAgentTool(agent.id, tool.id, {
+      mcpServerId: connection.id,
+      credentialResolutionMode: "static",
+    });
+
+    const result = await editAgent(
+      { id: agent.id, teams: [teamB.id] },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: admin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("team-a-tool");
+    expect((result.content[0] as any).text).toContain("Team A Connection");
+
+    // Nothing was written.
+    const unchanged = await AgentModel.findById(agent.id, admin.id, true);
+    expect(unchanged?.teams.map((team) => team.id)).toEqual([teamA.id]);
+  });
+
+  test("a team change that keeps the pinned connection's team goes through", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const teamA = await makeTeam(org.id, admin.id);
+    const teamB = await makeTeam(org.id, admin.id);
+    const connection = await makeMcpServer({
+      scope: "team",
+      teamId: teamA.id,
+    });
+    const tool = await makeTool({ catalogId: connection.catalogId });
+    const agent = await makeAgent({
+      name: "Pinned Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [teamA.id],
+    });
+    await makeAgentTool(agent.id, tool.id, {
+      mcpServerId: connection.id,
+      credentialResolutionMode: "static",
+    });
+
+    const result = await editAgent(
+      { id: agent.id, teams: [teamA.id, teamB.id] },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: admin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    const updated = await AgentModel.findById(agent.id, admin.id, true);
+    expect(updated?.teams.map((team) => team.id).sort()).toEqual(
+      [teamA.id, teamB.id].sort(),
+    );
   });
 
   test("an edit that leaves scope and teams alone still succeeds", async ({

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
@@ -57,6 +58,8 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/organization.query");
+
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
@@ -68,6 +71,9 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
   });
 
   it("submits the shared create API key flow and closes on success", async () => {

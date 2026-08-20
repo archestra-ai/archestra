@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatSkillMetadata } from "@archestra/shared";
-import { AlertTriangle, FileText, Paperclip } from "lucide-react";
+import { AlertTriangle, BookPlus, FileText, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -10,13 +10,20 @@ import {
   useMessageEditor,
 } from "@/components/chat/editable-message-editor";
 import { MessageActions } from "@/components/chat/message-actions";
+import { SaveToKnowledgeDialog } from "@/components/chat/save-to-knowledge-dialog";
 import { SkillPill } from "@/components/chat/skill-pill";
 import { UserMessageText } from "@/components/chat/user-message-text";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
+import { attachmentIdFromUrl } from "@/lib/chat/conversation-files";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -150,7 +157,7 @@ export function EditableUserMessage({
             {otherAttachments.map((attachment) => (
               <div
                 key={attachment.url}
-                className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1"
+                className="group/attachment flex items-center gap-1 rounded-lg border bg-muted/50 p-1"
               >
                 <Link
                   href={attachment.url}
@@ -176,6 +183,7 @@ export function EditableUserMessage({
                       })}
                   </span>
                 </Link>
+                <SaveAttachmentButton attachment={attachment} />
               </div>
             ))}
           </div>
@@ -210,5 +218,53 @@ export function EditableUserMessage({
         )}
       </div>
     </Message>
+  );
+}
+
+/**
+ * "Save to knowledge" on an attachment chip in the message stream.
+ *
+ * Revealed on hover rather than always shown: the chip's job is to say which
+ * file the message carried, and a permanent second button competes with that on
+ * every past message. Rendered only for real chat attachments — a file part can
+ * also be an inline image or a sandbox artifact, neither of which has an
+ * attachment to copy (see `attachmentIdFromUrl`).
+ */
+function SaveAttachmentButton({ attachment }: { attachment: FileAttachment }) {
+  const [saving, setSaving] = useState(false);
+  const attachmentId = attachmentIdFromUrl(attachment.url);
+  if (!attachmentId) return null;
+
+  const name =
+    attachment.filename ||
+    getAttachmentFallbackLabel({
+      mediaType: attachment.mediaType,
+      filename: attachment.filename,
+    });
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => setSaving(true)}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/attachment:opacity-100"
+          >
+            <BookPlus className="h-3.5 w-3.5" />
+            <span className="sr-only">Save {name} to knowledge</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Save to knowledge</TooltipContent>
+      </Tooltip>
+
+      {saving && (
+        <SaveToKnowledgeDialog
+          open
+          onOpenChange={(next) => !next && setSaving(false)}
+          attachments={[{ id: attachmentId, name }]}
+        />
+      )}
+    </>
   );
 }

@@ -257,6 +257,33 @@ describe("EditConnectorDialog - Jira admin API key", () => {
     expect(call[0].body.credentials).toEqual({ adminApiKey: "org-admin-key" });
   });
 
+  it("keeps the connector requirement and the admin-key note on separate fields", () => {
+    renderDialog(makeJiraAutoSyncConnector());
+
+    // The API token is the identity whose Jira permissions decide what the
+    // snapshot can read; the org admin key only resolves managed-account
+    // emails. Two credentials, two problems, two docs sections.
+    const apiTokenItem = screen
+      .getByLabelText(/^API Token$/)
+      .closest('[data-slot="form-item"]') as HTMLElement;
+    expect(
+      within(apiTokenItem).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://archestra.ai/docs/platform-knowledge#jira-auto-sync-permissions",
+    );
+
+    const adminKeyItem = screen
+      .getByLabelText(/Organization admin API key/)
+      .closest('[data-slot="form-item"]') as HTMLElement;
+    expect(
+      within(adminKeyItem).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://archestra.ai/docs/platform-knowledge#atlassian-organization-admin-api-key",
+    );
+  });
+
   it("submits a corrected email alone, without re-entering the token", async () => {
     mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
     const user = userEvent.setup();
@@ -276,6 +303,153 @@ describe("EditConnectorDialog - Jira admin API key", () => {
 
     const [call] = mockMutateAsync.mock.calls;
     expect(call[0].body.credentials).toEqual({ email: "correct@example.com" });
+  });
+});
+
+describe("EditConnectorDialog - Perforce permission sync", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makePerforceAutoSyncConnector(): ConnectorFixture {
+    return {
+      id: "conn-p4-1",
+      name: "Docs Depot",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "perforce",
+      environmentId: null,
+      config: {
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        p4Port: "ssl:perforce.example.com:1666",
+        adminUsername: "p4admin",
+      },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("shows the permission sync fields with the stored config values", () => {
+    renderDialog(makePerforceAutoSyncConnector());
+
+    expect(screen.getByLabelText(/^P4 Port$/)).toHaveValue(
+      "ssl:perforce.example.com:1666",
+    );
+    expect(screen.getByLabelText(/^Admin Username$/)).toHaveValue("p4admin");
+    // The stored admin password never round-trips into the form.
+    expect(screen.getByLabelText(/^Admin Password$/)).toHaveValue("");
+  });
+
+  it("points the admin account, not the ticket, at the Perforce setup docs", () => {
+    renderDialog(makePerforceAutoSyncConnector());
+
+    const adminPasswordItem = screen
+      .getByLabelText(/^Admin Password$/)
+      .closest('[data-slot="form-item"]') as HTMLElement;
+    expect(adminPasswordItem).toHaveTextContent(
+      /Auto-sync permissions needs an account that can read the full protections table/,
+    );
+    expect(
+      within(adminPasswordItem).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://archestra.ai/docs/platform-knowledge#perforce-auto-sync-permissions",
+    );
+
+    // The edit-mode note and the requirement share one description. Two
+    // stacked description blocks under a single field read as a rendering bug.
+    const descriptions = adminPasswordItem.querySelectorAll(
+      '[data-slot="form-description"]',
+    );
+    expect(descriptions).toHaveLength(1);
+    expect(descriptions[0]).toHaveTextContent(
+      /Leave empty to keep the existing password\..*needs an account that can read the full protections table/,
+    );
+
+    // The login ticket belongs to the content identity, which only needs read
+    // on the depot paths — putting the admin requirement there would be wrong.
+    const loginTicketItem = screen
+      .getByLabelText(/^Login Ticket$/)
+      .closest('[data-slot="form-item"]') as HTMLElement;
+    expect(
+      within(loginTicketItem).queryByRole("link", { name: /Learn more/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves without a P4 port, which the backend derives from the Server URL", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    const connector = makePerforceAutoSyncConnector();
+    delete (connector.config as { p4Port?: string }).p4Port;
+    renderDialog(connector);
+
+    // The derived address is shown as the placeholder so it is not a mystery.
+    expect(screen.getByLabelText(/^P4 Port$/)).toHaveAttribute(
+      "placeholder",
+      "perforce.example.com:1666 (derived from Server URL)",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const [call] = mockMutateAsync.mock.calls;
+    expect(call[0].body.config).not.toHaveProperty("p4Port");
+    expect(call[0].body.config).toMatchObject({ adminUsername: "p4admin" });
+  });
+
+  it("keeps the stored admin password when the field is left blank", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    renderDialog(makePerforceAutoSyncConnector());
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    // A blank password must not clobber the stored credential.
+    expect(call[0].body).not.toHaveProperty("credentials");
+    expect(call[0].body.config).toMatchObject({
+      type: "perforce",
+      p4Port: "ssl:perforce.example.com:1666",
+      adminUsername: "p4admin",
+    });
+  });
+
+  it("submits a new admin password alone, without the login ticket", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-p4-1" });
+    const user = userEvent.setup();
+    renderDialog(makePerforceAutoSyncConnector());
+
+    fireEvent.change(screen.getByLabelText(/^Admin Password$/), {
+      target: { value: "new-admin-password" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    // The backend merges submitted fields over the stored secret, so the
+    // admin password must survive an empty token field instead of being
+    // dropped.
+    expect(call[0].body.credentials).toEqual({
+      adminApiKey: "new-admin-password",
+    });
   });
 });
 
@@ -366,23 +540,18 @@ describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
     } as ConnectorFixture;
   }
 
-  it("shows the workspace-audience note with a Learn more link for auto-sync Notion", () => {
+  it("shows the workspace-audience note for auto-sync Notion", () => {
     renderDialog(makeNotionConnector("auto-sync-permissions"));
 
     const note = screen.getByText(
       /every synced page visible to all workspace members/,
     );
     expect(note).toBeInTheDocument();
-    // The recommendation sentence and the docs link ride in the same note.
+    // The recommendation sentence rides in the same note. What the credential
+    // itself needs lives on the Integration Token field instead, so this note
+    // carries no docs link of its own.
     expect(note).toHaveTextContent(/Share only workspace-appropriate/);
-    // The generic connector-docs link is also a "Learn more"; the note's own
-    // link is the one pointing at the auto-sync section anchor.
-    expect(
-      within(note).getByRole("link", { name: /Learn more/ }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringContaining("#notion-auto-sync-permissions"),
-    );
+    expect(within(note).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("hides the note for a Notion connector without auto-sync visibility", () => {

@@ -52,6 +52,27 @@ export class TaskQueueService {
   }
 
   async seedPeriodicTasks(): Promise<void> {
+    // Before seeding, not after: a row for a type this build retired has no
+    // handler, so leaving it queued means the first upgraded worker picks it
+    // up and reports an error for work nobody asked for.
+    try {
+      const removed = await TaskModel.deleteRetiredPeriodicTasks(
+        PERIODIC_TASK_DEFINITIONS.map((def) => def.taskType),
+      );
+      if (removed > 0) {
+        logger.info(
+          { removed },
+          "[TaskQueue] Removed periodic tasks this build no longer defines",
+        );
+      }
+    } catch (error) {
+      // Never fatal to boot: the worst case is the error log this prevents.
+      logger.warn(
+        { err: error },
+        "[TaskQueue] Could not sweep retired periodic tasks",
+      );
+    }
+
     for (const def of PERIODIC_TASK_DEFINITIONS) {
       try {
         const exists = await TaskModel.hasPendingOrProcessingByType(

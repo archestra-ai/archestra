@@ -7,7 +7,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useIsGlobalAdmin } from "@/lib/organization.query";
+import { useIsGlobalAdmin, useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import ConnectorsPage from "./page.client";
 
@@ -121,6 +121,9 @@ beforeEach(() => {
     isGlobalAdmin: true,
     isLoading: false,
   });
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
   mockUseConnectorsPaginated.mockReturnValue({
     data: {
       data: [

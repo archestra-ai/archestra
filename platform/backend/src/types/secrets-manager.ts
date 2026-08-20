@@ -48,9 +48,15 @@ export interface ISecretManager {
   /**
    * Retrieve a secret by ID
    * @param secretId - The unique identifier of the secret
+   * @param options.skipCache - Read the backing store rather than any
+   *   process-local cache. For callers that must observe a rotation performed
+   *   on another replica immediately; backends that do not cache ignore it.
    * @returns The secret if found, null otherwise
    */
-  getSecret(secretId: string): Promise<SelectSecret | null>;
+  getSecret(
+    secretId: string,
+    options?: { skipCache?: boolean },
+  ): Promise<SelectSecret | null>;
 
   /**
    * Update a secret by ID

@@ -7,9 +7,12 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KbDirectoryModel from "@/models/kb-directory";
+import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
@@ -229,6 +232,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.reinstalled",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // Destroys and recreates the physical deployment. Registered explicitly so it
+  // is not logged as `mcpServer.created` by the walk-up to `/api/mcp_server/:id`
+  // — a hard reset is the one MCP action an operator has to be able to find
+  // after the fact, and it must not be indistinguishable from an install.
+  "/api/mcp_server/:id/hard-reset": {
+    resourceType: "mcpServer",
+    action: "mcpServer.hardReset",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
   // does NOT filter soft-deleted rows, so `before` captures the deleted install
@@ -356,6 +368,42 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "knowledgeBase.purged",
     fetchById: (id, orgId) =>
       KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
+
+  // Knowledge file repository
+  "/api/knowledge-files": {
+    resourceType: "knowledgeFile",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  "/api/knowledge-files/:fileId": {
+    resourceType: "knowledgeFile",
+    resourceIdParam: "fileId",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  // Copying a chat attachment into the repository creates a file like the
+  // plain upload does; registered explicitly so the POST isn't dropped as a
+  // walk-up to the collection route.
+  "/api/knowledge-files/from-attachment": {
+    resourceType: "knowledgeFile",
+    action: "knowledgeFile.created",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
+  // Indexing rewrites a knowledge base's contents (and can create the base);
+  // the handler supplies the resource id and post-state itself because the
+  // response carries `knowledgeBaseId`, not `id`, and the result spans many
+  // files.
+  "/api/knowledge-files/index": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.updated",
+  },
+  "/api/knowledge-directories": {
+    resourceType: "knowledgeDirectory",
+    fetchById: (id, orgId) => KbDirectoryModel.findByIdForAudit(id, orgId),
+  },
+  "/api/knowledge-directories/:directoryId": {
+    resourceType: "knowledgeDirectory",
+    resourceIdParam: "directoryId",
+    fetchById: (id, orgId) => KbDirectoryModel.findByIdForAudit(id, orgId),
   },
 
   // Connectors
@@ -579,6 +627,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/environments/:id": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
+  },
+  // Org-wide setting rather than one environment's row, so the audited
+  // resource is the organization and the snapshot is the whole defaults map.
+  "/api/environments/defaults": {
+    resourceType: "environment",
+    action: "environment.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) =>
+      EnvironmentResourceDefaultModel.findByIdForAudit(id, orgId),
   },
   // Team / org tokens — rotation is semantically distinct from a generic update.
   "/api/tokens/:tokenId/rotate": {

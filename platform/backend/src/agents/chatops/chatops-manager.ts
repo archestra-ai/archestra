@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   ChatErrorCode,
   DEFAULT_APP_NAME,
+  type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
@@ -27,6 +28,7 @@ import {
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
+import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
@@ -78,6 +80,7 @@ import {
   errorMessage,
   isLlmProviderAuthError,
   isSlackDmChannel,
+  stripAgentFooterChrome,
 } from "./utils";
 
 /**
@@ -297,12 +300,30 @@ export class ChatOpsManager {
       }),
     ]);
 
+    // A channel an admin switched off must actually stop listening — a bot
+    // left running would keep answering messages the organization no longer
+    // allows that channel to carry.
+    //
+    // Deliberately fail-open, unlike the inbound email webhook: a webhook's
+    // sender retries, so deferring one delivery costs nothing, while this runs
+    // once at startup with no retry behind it — failing closed would take every
+    // chat channel offline until someone restarts or saves a config. The
+    // window is also narrow: a database the overrides cannot be read from is
+    // one the config loads above already failed on, leaving nothing to start.
+    const hiddenChannels = await getHiddenMessagingChannels().catch((error) => {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to load messaging channel overrides, treating all channels as enabled",
+      );
+      return new Set<MessagingChannelId>();
+    });
+
     // Create providers with their config
-    if (msTeamsConfig) {
+    if (msTeamsConfig && !hiddenChannels.has("ms-teams")) {
       this.msTeamsProvider = new MSTeamsProvider(msTeamsConfig);
       this.msTeamsProvider.setEventHandler(this);
     }
-    if (slackConfig) {
+    if (slackConfig && !hiddenChannels.has("slack")) {
       this.slackProvider = new SlackProvider(slackConfig);
       // Wire event handler so the provider can dispatch socket events and
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
@@ -310,7 +331,11 @@ export class ChatOpsManager {
     }
     // The Telegram integration is feature-flagged: without the master switch
     // the provider never starts, even if the DB already holds a config.
-    if (telegramConfig && config.chatops.telegramEnabled) {
+    if (
+      telegramConfig &&
+      config.chatops.telegramEnabled &&
+      !hiddenChannels.has("telegram")
+    ) {
       this.telegramProvider = new TelegramProvider(telegramConfig);
       // Telegram delivers everything over long polling, so all events flow
       // through the event handler (like Slack socket mode)
@@ -1205,7 +1230,11 @@ export class ChatOpsManager {
       );
 
       const contextMessages = history.map((msg) => {
-        const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
+        // A bot turn is replayed without the chrome the platform stamped onto
+        // it — a footer left in here is a footer the model learns to write.
+        const text = msg.isFromBot
+          ? stripAgentFooterChrome(msg.text)
+          : msg.text;
         const sender = msg.isFromBot
           ? `You (${archestraMcpBranding.appName})`
           : msg.senderName;
@@ -2535,17 +2564,6 @@ function isTransientProviderError(error: unknown): error is ProviderError {
     error.chatErrorResponse.isRetryable &&
     CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
   );
-}
-
-/**
- * Strip bot footer from message text to avoid the LLM repeating it.
- * Handles the "🤖 AgentName" footer in markdown (Teams) and plain text (Slack) formats.
- */
-function stripBotFooter(text: string): string {
-  return text
-    .replace(/\n\n---\n+🤖 .+$/i, "")
-    .replace(/\n🤖 .+$/, "")
-    .trim();
 }
 
 /**

@@ -36,7 +36,6 @@ const mockCreateLLMModelForAgent = vi.hoisted(() =>
 );
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
-const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 
 vi.mock("@/clients/llm-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/clients/llm-client")>();
@@ -57,7 +56,6 @@ vi.mock("@/knowledge-base", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/knowledge-base")>();
   return {
     ...actual,
-    extractAndIngestDocuments: mockExtractAndIngestDocuments,
   };
 });
 
@@ -174,7 +172,6 @@ describe("POST /api/chat OpenRouter `reasoning` delta", () => {
 
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
-      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
 
       server.use(
         http.post(UPSTREAM_URL, async ({ request }) => {

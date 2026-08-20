@@ -1,7 +1,10 @@
 import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
+  type KnowledgeConnectorOverrides,
   MEMBER_ROLE_NAME,
+  type MessagingChannelOverrides,
+  type ModelProviderOverrides,
   type OrganizationCustomFont,
   type SupportedProvider,
   TimeInMs,
@@ -17,6 +20,13 @@ import type {
   Organization,
   OrganizationAnalyticsState,
 } from "@/types";
+
+/** @public — the shape {@link OrganizationModel.getIntegrationOverrides} resolves */
+export type IntegrationOverrideColumns = {
+  modelProviderOverrides: ModelProviderOverrides | null;
+  messagingChannelOverrides: MessagingChannelOverrides | null;
+  knowledgeConnectorOverrides: KnowledgeConnectorOverrides | null;
+};
 
 class OrganizationModel {
   /**
@@ -34,6 +44,27 @@ class OrganizationModel {
       defaultTtl: TimeInMs.Minute,
     }),
   );
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Process-local mirror of {@link getMcpIdleHibernationEnabled}, for the two
+   * callers that cannot await: the MCP demand stamp on the tool-call hot path
+   * and the runtime manager's dormancy check. Both run per request, so even
+   * the shared (Postgres-backed) cache would be too expensive — and neither
+   * can block. Same one-minute convergence as the appearance cache.
+   */
+  private static readonly mcpIdleHibernationCache = registerProcessLocalCache(
+    new LRUCacheManager<boolean>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /** De-dupes the background hydration a cold sync read kicks off. */
+  private static mcpIdleHibernationHydration: Promise<boolean> | null = null;
+  // SPDX-SnippetEnd
 
   /**
    * Get the first organization in the database (fallback for various operations)
@@ -203,7 +234,20 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Suffixed keys are stored (and therefore deleted) exactly, not by prefix
+    // — a new one has to be dropped here explicitly or the sweeper would keep
+    // acting on the toggle's previous value for a full cache TTL.
+    await cacheManager.delete(getOrganizationMcpIdleHibernationCacheKey());
+    // SPDX-SnippetEnd
     OrganizationModel.appearanceSettingsCache.clear();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    OrganizationModel.mcpIdleHibernationCache.clear();
+    // SPDX-SnippetEnd
     return updatedOrganization || null;
   }
 
@@ -363,6 +407,34 @@ class OrganizationModel {
   }
 
   /**
+   * The admin's customization of the built-in integration catalogs. Reads only
+   * the three override columns, so callers on the cold configuration paths
+   * don't drag the row's base64 logo fields along. Pass `null` to resolve the
+   * deployment's organization, for callers with no request context (the
+   * ChatOps manager starts before any request).
+   */
+  static async getIntegrationOverrides(
+    id: string | null,
+  ): Promise<IntegrationOverrideColumns> {
+    const columns = {
+      modelProviderOverrides: schema.organizationsTable.modelProviderOverrides,
+      messagingChannelOverrides:
+        schema.organizationsTable.messagingChannelOverrides,
+      knowledgeConnectorOverrides:
+        schema.organizationsTable.knowledgeConnectorOverrides,
+    };
+    const query = db.select(columns).from(schema.organizationsTable);
+    const [row] = await (id === null
+      ? query.limit(1)
+      : query.where(eq(schema.organizationsTable.id, id)).limit(1));
+    return {
+      modelProviderOverrides: row?.modelProviderOverrides ?? null,
+      messagingChannelOverrides: row?.messagingChannelOverrides ?? null,
+      knowledgeConnectorOverrides: row?.knowledgeConnectorOverrides ?? null,
+    };
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {
@@ -448,6 +520,93 @@ class OrganizationModel {
     return policies;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Whether the organization has opted into idle hibernation of MCP servers.
+   * Single-org table, so this is a `limit 1` projected read behind the shared
+   * settings cache — the idle sweeper asks on every tick (a change must take
+   * effect without a restart) and it must not cost a query each time.
+   *
+   * Also refreshes the process-local mirror {@link
+   * getMcpIdleHibernationEnabledSync} serves, so the synchronous hot paths
+   * converge for free whenever the sweeper runs.
+   */
+  static async getMcpIdleHibernationEnabled(): Promise<boolean> {
+    const cacheKey = getOrganizationMcpIdleHibernationCacheKey();
+    const cached = await cacheManager.get<boolean>(cacheKey);
+    if (cached !== undefined) {
+      OrganizationModel.mcpIdleHibernationCache.set(
+        MCP_IDLE_HIBERNATION_CACHE_KEY,
+        cached,
+      );
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        mcpIdleHibernationEnabled:
+          schema.organizationsTable.mcpIdleHibernationEnabled,
+      })
+      .from(schema.organizationsTable)
+      .limit(1);
+
+    const enabled = organization?.mcpIdleHibernationEnabled ?? false;
+    try {
+      // Short TTL by design. This set can race a concurrent PATCH (select old
+      // value → PATCH updates row + deletes key → this set lands) and there is
+      // no version guard, so the stale value CAN be re-cached — the TTL is
+      // what bounds that exposure to about one sweep tick instead of the
+      // cache's default hour. The sweeper re-primes every tick anyway, so the
+      // short lifetime costs one query per interval, not per call.
+      await cacheManager.set(
+        cacheKey,
+        enabled,
+        MCP_IDLE_HIBERNATION_CACHE_TTL_MS,
+      );
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    OrganizationModel.mcpIdleHibernationCache.set(
+      MCP_IDLE_HIBERNATION_CACHE_KEY,
+      enabled,
+    );
+    return enabled;
+  }
+
+  /**
+   * The same answer without awaiting, for callers on synchronous hot paths.
+   * `undefined` means "not known in this process yet" — a cold read schedules
+   * the hydration itself, so the caller only has to decide what to do while
+   * the answer is missing (both current callers choose the do-nothing branch).
+   */
+  static getMcpIdleHibernationEnabledSync(): boolean | undefined {
+    const cached = OrganizationModel.mcpIdleHibernationCache.get(
+      MCP_IDLE_HIBERNATION_CACHE_KEY,
+    );
+    if (
+      cached === undefined &&
+      !OrganizationModel.mcpIdleHibernationHydration
+    ) {
+      OrganizationModel.mcpIdleHibernationHydration =
+        OrganizationModel.getMcpIdleHibernationEnabled()
+          .catch((error) => {
+            logger.warn(
+              { err: error },
+              "Failed to hydrate the MCP idle-hibernation organization toggle",
+            );
+            return false;
+          })
+          .finally(() => {
+            OrganizationModel.mcpIdleHibernationHydration = null;
+          });
+    }
+    return cached;
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Get appearance settings, cached process-locally for the unauthenticated
    * white-labeling hot path (login page, every page load).
@@ -474,7 +633,6 @@ class OrganizationModel {
         ogDescription: schema.organizationsTable.ogDescription,
         footerText: schema.organizationsTable.footerText,
         chatLinks: schema.organizationsTable.chatLinks,
-        onboardingWizard: schema.organizationsTable.onboardingWizard,
         chatErrorSupportMessage:
           schema.organizationsTable.chatErrorSupportMessage,
         slimChatErrorUi: schema.organizationsTable.slimChatErrorUi,
@@ -498,7 +656,6 @@ class OrganizationModel {
         ogDescription: null,
         footerText: null,
         chatLinks: null,
-        onboardingWizard: null,
         chatErrorSupportMessage: null,
         slimChatErrorUi: false,
         animateChatPlaceholders: true,
@@ -576,6 +733,11 @@ class OrganizationModel {
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      mcpIdleHibernationEnabled: org.mcpIdleHibernationEnabled,
+      // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
@@ -595,6 +757,7 @@ class OrganizationModel {
         org.defaultDiscoveredToolInvocationPolicy,
       defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
       rerankerModel: org.rerankerModel ?? null,
+      ocrModel: org.ocrModel ?? null,
       requireTwoFactor: org.requireTwoFactor,
       sessionMaxAgeSeconds: org.sessionMaxAgeSeconds,
       slimChatErrorUi: org.slimChatErrorUi,
@@ -602,6 +765,9 @@ class OrganizationModel {
       connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
       connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
       connectionDefaultClientId: org.connectionDefaultClientId ?? null,
+      modelProviderOverrides: org.modelProviderOverrides ?? null,
+      messagingChannelOverrides: org.messagingChannelOverrides ?? null,
+      knowledgeConnectorOverrides: org.knowledgeConnectorOverrides ?? null,
       metadata: org.metadata ?? null,
       createdAt: org.createdAt.toISOString(),
     };
@@ -611,6 +777,22 @@ export default OrganizationModel;
 
 /** Single-org table (`limit 1` read), so one fixed key is enough. */
 const APPEARANCE_SETTINGS_CACHE_KEY = "appearance-settings";
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/** Ditto — the toggle is read for the installation, not per organization. */
+const MCP_IDLE_HIBERNATION_CACHE_KEY = "mcp-idle-hibernation";
+/**
+ * One minute — the idle sweeper's fastest tick. See the set() call for why a
+ * stale value can land here at all; this is the bound on how long it lives.
+ */
+const MCP_IDLE_HIBERNATION_CACHE_TTL_MS = 60_000;
+
+function getOrganizationMcpIdleHibernationCacheKey() {
+  return `${CacheKey.OrganizationSettings}-mcp-idle-hibernation` as const;
+}
+// SPDX-SnippetEnd
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;

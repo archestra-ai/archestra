@@ -22,6 +22,7 @@ import {
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  OrganizationModel,
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
@@ -857,6 +858,56 @@ describe("knowledge base routes", () => {
       );
     });
 
+    test("rejects a connector type the organization turned off", async () => {
+      await OrganizationModel.patch(organizationId, {
+        knowledgeConnectorOverrides: { jira: { hidden: true } },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Blocked Jira",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: { email: "user@example.com", apiToken: "token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("Jira");
+      expect(response.json().error.message).toContain("turned off");
+    });
+
+    test("still creates connectors of types left switched on", async () => {
+      await OrganizationModel.patch(organizationId, {
+        knowledgeConnectorOverrides: { jira: { hidden: true } },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Allowed GitHub",
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          credentials: { apiToken: "ghp_token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
     test("rejects the M-Files Application Account auth method while its gate is off", async () => {
       config.kb.mfilesConnectorEnabled = true;
       config.kb.mfilesOauthEnabled = false;
@@ -1086,23 +1137,25 @@ describe("knowledge base routes", () => {
     });
 
     test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
-      // linear is not a permission-sync connector — so this must 400.
+      // A crawled site has no upstream ACL to mirror, so web_crawler is the
+      // stable stand-in here: connectors gaining permission sync one by one
+      // never turn this case green by accident.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Auto-sync Linear",
-          connectorType: "linear",
+          name: "Auto-sync Web Crawler",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
           teamIds: [],
-          config: { type: "linear" },
+          config: { type: "web_crawler", startUrl: "https://example.com" },
           credentials: { apiToken: "token" },
         },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "Auto-sync permissions is not supported for linear connectors",
+        "Auto-sync permissions is not supported for web_crawler connectors",
       );
     });
 
@@ -1648,6 +1701,59 @@ describe("knowledge base routes", () => {
           AND payload->>'connectorId' = ${connector.id}
       `);
       expect(rows[0]?.count).toBe(1);
+    });
+
+    test("editing an auto-sync connector stops the pass computed against its old settings", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Edited Auto-Sync Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        visibility: "auto-sync-permissions",
+      });
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        runType: "permission",
+        status: "running",
+        startedAt: new Date(),
+        leaseOwner: "worker-1",
+        leaseEpoch: 0,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "moved-org",
+            authMethod: "pat",
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      // That pass holds the previous settings for its whole duration; left
+      // running it would keep reading from the old source and, for a connector
+      // that provisions its own runtime, roll that runtime back onto them.
+      expect((await ConnectorRunModel.findById(run.id))?.status).toBe(
+        "superseded",
+      );
+      // ...and the replacement pass reconciles the new settings, so the corpus
+      // is not left half-reconciled behind a fail-closed ACL.
+      expect(
+        await TaskModel.hasPendingOrProcessing("permission_sync", connector.id),
+      ).toBe(true);
     });
 
     test("rejects switching to auto-sync-permissions for a member without the dedicated permission", async ({
@@ -2800,13 +2906,13 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      // linear is not a permission-sync connector, but a stored row can
+      // web_crawler is not a permission-sync connector, but a stored row can
       // still carry the auto-sync visibility; the trigger must reject it.
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
         {
-          connectorType: "linear",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
         },
       );

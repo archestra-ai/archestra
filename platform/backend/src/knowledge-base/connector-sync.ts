@@ -20,7 +20,7 @@ import type {
   ConnectorSyncStatus,
   KnowledgeBaseConnector,
 } from "@/types";
-import { chunkDocument } from "./chunker";
+import { chunkAndStoreDocument } from "./chunk-and-store";
 import { resolveConnectorCredentials } from "./connector-credentials";
 import {
   BaseConnector,
@@ -28,7 +28,9 @@ import {
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 import { buildDocumentContext } from "./contextual-retrieval";
-import { resolveEmbeddingConfig } from "./kb-llm-client";
+import { toKnowledgeBaseUserMessage } from "./errors";
+import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
+import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
 
@@ -286,6 +288,48 @@ class ConnectorSyncService {
         embeddingConfig?.acceptedImageMimeTypes ?? undefined;
     } catch {
       // Non-fatal: proceed without modality info
+    }
+
+    // Arm OCR for the run when the organization has it configured. Resolved
+    // once here — not per document — and degraded to "sync without OCR" on
+    // any resolution fault: OCR is an optional enhancement and must never
+    // fail a sync that would have succeeded without it. The deadline aligns
+    // with the sync's own 90%-of-budget early stop so page transcription can
+    // never push a run past its wall-clock budget.
+    try {
+      const ocrConfig = await resolveOcrConfig(connector.organizationId);
+      if (ocrConfig && connectorImpl instanceof BaseConnector) {
+        const budgetMs =
+          options?.maxDurationMs ??
+          (config.kb.connectorSyncMaxDurationSeconds
+            ? config.kb.connectorSyncMaxDurationSeconds * 1000
+            : undefined);
+        connectorImpl.setOcrContext({
+          config: ocrConfig,
+          connectorId: connector.id,
+          // No wall-clock budget on the run means no OCR deadline either.
+          deadlineAt: budgetMs
+            ? startTime + budgetMs * 0.9
+            : Number.POSITIVE_INFINITY,
+          budget: { remainingPages: OCR_RUN_PAGE_BUDGET },
+          log: runLog,
+          connectorType: connector.connectorType,
+        });
+        runLog.info(
+          { model: ocrConfig.modelName, provider: ocrConfig.provider },
+          "OCR armed: textless PDF pages will be transcribed",
+        );
+      }
+    } catch (error) {
+      runLog.warn(
+        // Prefer the taxonomy's actionable message ("provider X cannot accept
+        // PDF input…") over the generic Error message when one exists.
+        {
+          error:
+            toKnowledgeBaseUserMessage(error) ?? extractErrorMessage(error),
+        },
+        "OCR is configured but unusable — syncing without it",
+      );
     }
 
     // Estimate total items for progress display
@@ -1061,95 +1105,14 @@ class ConnectorSyncService {
     return { ingested: true, documentId: created.id };
   }
 
-  private async chunkAndStore(params: {
-    documentId: string;
-    title: string;
-    content: string;
-    mediaContent?: { mimeType: string; data: string };
-    metadata?: Record<string, unknown>;
-    connectorType: string;
-    connectorId: string;
-    organizationId: string;
-    ftsLanguage: TextSearchLanguage;
-    acl: AclEntry[];
-    log: pino.Logger;
-  }): Promise<void> {
-    const {
-      documentId,
-      title,
-      content,
-      mediaContent,
-      metadata,
-      connectorType,
-      connectorId,
-      organizationId,
-      ftsLanguage,
-      acl,
-      log,
-    } = params;
-
-    // For media (image) documents: create a single chunk whose content is the
-    // data URL. The embedding pipeline detects this prefix and routes to the
-    // multimodal embedding API instead of text embedding.
-    if (mediaContent) {
-      const dataUrl = `data:${mediaContent.mimeType};base64,${mediaContent.data}`;
-      await KbChunkModel.insertMany([
-        {
-          documentId,
-          content: dataUrl,
-          chunkIndex: 0,
-          metadataSuffixSemantic: null,
-          metadataSuffixKeyword: null,
-          // A media chunk's content is a base64 data URL, not prose: there is
-          // nothing for a stemmer to stem and no document context worth
-          // indexing against it. It is retrieved by multimodal vector search.
-          contextualHeader: null,
-          ftsLanguage,
-          acl,
-        },
-      ]);
-      metrics.rag.reportChunksCreated(connectorType, 1);
-      log.debug({ documentId }, "Image document stored as single media chunk");
-      return;
-    }
-
-    const chunks = await chunkDocument({ title, content, metadata });
-
-    if (chunks.length === 0) return;
-
-    // Best-effort and non-fatal: a document indexes without context rather than
-    // failing the sync. Generated once here and copied onto every chunk.
-    const contextualHeader = await buildDocumentContext({
-      title,
-      content,
-      organizationId,
-      connectorId,
-    });
-
-    await KbChunkModel.insertMany(
-      chunks.map((chunk) => ({
-        documentId,
-        content: chunk.content,
-        chunkIndex: chunk.chunkIndex,
-        metadataSuffixSemantic: chunk.metadataSuffixSemantic,
-        metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-        contextualHeader,
-        ftsLanguage,
-        acl,
-      })),
-    );
-
-    metrics.rag.reportChunksCreated(connectorType, chunks.length);
-
-    log.debug(
-      {
-        documentId,
-        chunkCount: chunks.length,
-        contextualHeader: contextualHeader !== null,
-        ftsLanguage,
-      },
-      "Document chunked and stored",
-    );
+  /**
+   * Delegates to the shared helper so the upload path (which stores documents
+   * without a sync) chunks identically — see `chunk-and-store.ts`.
+   */
+  private async chunkAndStore(
+    params: Parameters<typeof chunkAndStoreDocument>[0],
+  ): Promise<void> {
+    await chunkAndStoreDocument(params);
   }
 
   private buildDocumentAccessControlList(

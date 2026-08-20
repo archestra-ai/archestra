@@ -8,7 +8,10 @@ import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
 
-export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
+export function normalizeChatMessages(
+  messages: ChatMessage[],
+  options?: { preserveToolResultImages?: boolean },
+): ChatMessage[] {
   // Coerce malformed tool inputs last, over the already-cleaned parts: dedupe
   // keys on type/toolCallId/state and dangling-strip keys on state — neither
   // reads `input` — so repairing input here can never drop a deduped twin or
@@ -20,6 +23,7 @@ export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
           stripDanglingToolCallsFromMessages(
             dedupeToolPartsFromMessages(messages),
           ),
+          options,
         ),
       ),
     ),
@@ -33,7 +37,12 @@ export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
 export function normalizeChatMessagesForPersistence(
   messages: ChatMessage[],
 ): ChatMessage[] {
-  return dropNonPersistableAssistantMessages(normalizeChatMessages(messages));
+  // Retrieved images are kept here and ONLY here: this copy is what the
+  // transcript reloads and renders, while the model-bound copy above still
+  // strips every image, so nothing re-enters the prompt.
+  return dropNonPersistableAssistantMessages(
+    normalizeChatMessages(messages, { preserveToolResultImages: true }),
+  );
 }
 
 function dedupeToolPartsFromMessages(messages: ChatMessage[]): ChatMessage[] {

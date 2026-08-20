@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useState,
 } from "react";
 
@@ -126,6 +127,23 @@ export function useUnsavedChangesGuard({
     keepEditing,
     discardChanges,
   };
+}
+
+/**
+ * Warns before a reload, a typed URL, or a closed tab discards unsaved form
+ * edits. The in-app guard only sees navigations React routes.
+ */
+export function useBeforeUnloadWhileDirty(isDirty: boolean) {
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older browsers only prompt when returnValue is set.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
 }
 
 export function UnsavedChangesDialog({

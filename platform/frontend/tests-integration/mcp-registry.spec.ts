@@ -1,8 +1,9 @@
 import { expect, test } from "./fixtures";
 
 test.describe("MCP Registry", () => {
-  // FIXME(flaky): first-touch route cold-compile under `next dev` exceeds the
-  // visibility budget on loaded CI runners (passes on main). Quarantined until de-flaked.
+  // FIXME(stale): the card's settings button now routes to the server detail
+  // page instead of opening a "<name> Settings" dialog. Rewriting this against
+  // the detail route needs its own fixtures — tracked separately.
   test.fixme("lists catalog items and opens the edit form when one is clicked", async ({
     mcpRegistryPage,
     page,

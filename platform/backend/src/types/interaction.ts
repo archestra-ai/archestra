@@ -1,7 +1,8 @@
 import {
   BillingModeSchema,
   InteractionSourceSchema,
-  isIncognitoUnavailableContent,
+  isLockedChatUnavailableContent,
+  LOCKED_CHAT_REDACTED_VALUES,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -169,15 +170,15 @@ export const InteractionResponseSchema = z.union([
 ]);
 
 /**
- * The two shapes an incognito conversation's content takes when it is not
+ * The two shapes a locked chat's content takes when it is not
  * available to the reader: encrypted under the browser key (locked), or never
  * stored (redacted). Neither resembles a provider payload, so every read arm
- * has to accept them explicitly — otherwise one incognito row 500s the whole
+ * has to accept them explicitly — otherwise one locked-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
-const IncognitoUnavailableContentSchema = z.union([
-  z.object({ __incognitoLocked: z.string() }),
-  z.object({ __redacted: z.literal("incognito") }),
+const LockedChatUnavailableContentSchema = z.union([
+  z.object({ __lockedChatSealed: z.string() }),
+  z.object({ __redacted: z.enum(LOCKED_CHAT_REDACTED_VALUES) }),
 ]);
 
 const extendedFields = {
@@ -226,7 +227,7 @@ const DELTA_ENCODING_COLUMNS = {
  * field, which also carries the conversation id — so it stays out of the
  * public API surface rather than widening it for nothing.
  */
-const INTERNAL_ENCRYPTION_COLUMNS = { incognitoConversationId: true } as const;
+const INTERNAL_ENCRYPTION_COLUMNS = { lockedChatConversationId: true } as const;
 
 const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
   ...DELTA_ENCODING_COLUMNS,
@@ -265,15 +266,15 @@ const withReadFallback = <T extends z.ZodTypeAny>(schema: T) =>
 
 /**
  * Each arm's read schema accepts either the provider response, a persisted
- * error response, or unavailable incognito content, so a failed interaction
- * (stored with the provider `type`) and an incognito one both still serialize
+ * error response, or unavailable locked-chat content, so a failed interaction
+ * (stored with the provider `type`) and a locked-chat one both still serialize
  * on read-back.
  */
 const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
   z.union([
     schema,
     InteractionErrorResponseSchema,
-    IncognitoUnavailableContentSchema,
+    LockedChatUnavailableContentSchema,
   ]);
 
 /**
@@ -324,6 +325,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["bedrock:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
+  }),
+  // Cohere (direct) embeddings are normalized to the OpenAI embedding shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["cohere:embeddings"]),
     request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
     processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
       .nullable()
@@ -621,11 +631,11 @@ export function normalizeInteractionResponse(
   type: string,
   response: unknown,
 ): unknown {
-  // An incognito row's content is deliberately unavailable, not malformed.
+  // A locked-chat row's content is deliberately unavailable, not malformed.
   // Both sentinels would fail the provider schema below, and reporting them as
   // corrupt would be actively misleading — one means "encrypted, an escrow
   // holder can recover it", the other "never stored".
-  if (isIncognitoUnavailableContent(response)) {
+  if (isLockedChatUnavailableContent(response)) {
     return response;
   }
   const schema = responseSchemaByInteractionType.get(type);

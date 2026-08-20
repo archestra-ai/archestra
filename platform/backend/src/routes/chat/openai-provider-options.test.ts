@@ -80,3 +80,39 @@ describe("buildOpenAiThinkingProviderOptions", () => {
     ).toEqual(["reasoningEffort"]);
   });
 });
+
+describe("buildOpenAiThinkingProviderOptions on a self-hosted server", () => {
+  test.each([
+    "vllm",
+    "ollama",
+  ])("%s takes the depth verbatim, whatever the model is called", (provider) => {
+    // No vendor catalog can place these ids: the operator chose the name.
+    expect(
+      buildOpenAiThinkingProviderOptions({
+        provider,
+        selectedModel: "Qwen/Qwen3.8-27B",
+        thinkingEffort: "low",
+      }),
+    ).toEqual({ reasoningEffort: "low" });
+  });
+
+  test("an unchosen depth still sends nothing", () => {
+    expect(
+      buildOpenAiThinkingProviderOptions({
+        provider: "vllm",
+        selectedModel: "Qwen/Qwen3.8-27B",
+        thinkingEffort: null,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("ollama-native is not served here — its wire field is a boolean", () => {
+    expect(
+      buildOpenAiThinkingProviderOptions({
+        provider: "ollama-native",
+        selectedModel: "Qwen/Qwen3.8-27B",
+        thinkingEffort: "high",
+      }),
+    ).toBeUndefined();
+  });
+});

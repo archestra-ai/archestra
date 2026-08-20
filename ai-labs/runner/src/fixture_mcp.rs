@@ -22,8 +22,8 @@ use std::net::SocketAddr;
 
 use axum::Router;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::{
@@ -82,7 +82,7 @@ impl FixtureMcp {
         };
 
         let config = StreamableHttpServerConfig::default()
-            .with_stateful_mode(false)
+            .with_legacy_session_mode(false)
             .with_json_response(true)
             .with_sse_keep_alive(None)
             .with_cancellation_token(cancel.child_token());
@@ -147,7 +147,8 @@ impl ServerHandler for FixtureMcpHandler {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + rmcp::service::MaybeSendFuture + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + rmcp::service::MaybeSendFuture + '_
+    {
         let args = request.arguments.unwrap_or_default();
         let result = match request.name.as_ref() {
             "list_seats" => list_seats(&args),
@@ -159,7 +160,7 @@ impl ServerHandler for FixtureMcpHandler {
             "get_request_status" => get_request_status(&args),
             other => text(format!("Unknown tool {other:?}.")),
         };
-        std::future::ready(Ok(result))
+        std::future::ready(Ok(result.into()))
     }
 }
 

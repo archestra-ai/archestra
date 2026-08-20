@@ -1,4 +1,5 @@
 import GithubAppConfigModel from "@/models/github-app-config";
+import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import {
   ApiError,
@@ -13,18 +14,26 @@ import { getGoogleDriveOAuthClient } from "./connectors/gdrive/gdrive-oauth";
  * connectors reference a shared github_app_configs row (App metadata + private
  * key secret); credentialless connectors receive an empty credential object;
  * every other connector uses its own attached secret.
+ *
+ * `uncached` reads past the secrets cache. Callers that hand the credential to
+ * a runtime they also rotate — the Perforce permission-sync shim — need it:
+ * the cache is process-local, so a replica that rolls the shim's pod for a
+ * changed password could otherwise authenticate the fresh pod with the one it
+ * just retired. Ordinary sync paths keep the cached read.
  */
 export async function resolveConnectorCredentials(
   connector: Pick<
     KnowledgeBaseConnector,
     "config" | "organizationId" | "secretId"
   >,
+  options?: { uncached?: boolean },
 ): Promise<ConnectorCredentials> {
   const githubAppConfigId = extractGithubAppConfigId(connector.config);
   if (githubAppConfigId) {
     return resolveGithubAppCredentials({
       githubAppConfigId,
       organizationId: connector.organizationId,
+      uncached: options?.uncached ?? false,
     });
   }
 
@@ -32,7 +41,28 @@ export async function resolveConnectorCredentials(
     return { apiToken: "" };
   }
 
-  return loadSecretCredentials(connector.secretId);
+  return loadSecretCredentials(connector.secretId, options?.uncached ?? false);
+}
+
+/**
+ * Version marker for a connector's stored credentials: the secret row's own
+ * `updatedAt`, read straight from the database rather than through the
+ * secrets cache.
+ *
+ * Read uncached deliberately. The cache is a 5-minute process-local LRU
+ * refreshed only on the replica that handled the write, so a cached read would
+ * let a credential rotation go unnoticed here for minutes — and this value is
+ * what tells the Perforce shim to retire its pod and token.
+ *
+ * The connector row's own `updatedAt` cannot serve: a permission-sync pass
+ * writes that row on every run, so it would rotate the pod every pass.
+ */
+export async function resolveConnectorCredentialVersion(
+  secretId: string | null,
+): Promise<string> {
+  if (!secretId) return "";
+  const secret = await SecretModel.findById(secretId);
+  return secret?.updatedAt?.toISOString() ?? "";
 }
 
 // ===== Internal helpers =====
@@ -47,6 +77,7 @@ function extractGithubAppConfigId(config: ConnectorConfig): string | null {
 async function resolveGithubAppCredentials(params: {
   githubAppConfigId: string;
   organizationId: string;
+  uncached: boolean;
 }): Promise<ConnectorCredentials> {
   const appConfig = await GithubAppConfigModel.findByIdForOrganization({
     id: params.githubAppConfigId,
@@ -57,7 +88,7 @@ async function resolveGithubAppCredentials(params: {
   }
 
   return {
-    apiToken: await readSecretApiToken(appConfig.secretId),
+    apiToken: await readSecretApiToken(appConfig.secretId, params.uncached),
     githubApp: {
       githubUrl: appConfig.githubUrl,
       appId: appConfig.appId,
@@ -68,8 +99,9 @@ async function resolveGithubAppCredentials(params: {
 
 async function loadSecretCredentials(
   secretId: string | null,
+  uncached: boolean,
 ): Promise<ConnectorCredentials> {
-  const secret = await getSecretOrThrow(secretId);
+  const secret = await getSecretOrThrow(secretId, uncached);
   const data = secret.secret as Record<string, unknown>;
   const googleOAuth = resolveGoogleOAuthCredential(data);
   return {
@@ -126,17 +158,22 @@ function resolveGoogleOAuthCredential(
   };
 }
 
-async function readSecretApiToken(secretId: string | null): Promise<string> {
-  const secret = await getSecretOrThrow(secretId);
+async function readSecretApiToken(
+  secretId: string | null,
+  uncached: boolean,
+): Promise<string> {
+  const secret = await getSecretOrThrow(secretId, uncached);
   const data = secret.secret as Record<string, unknown>;
   return (data.apiToken as string) || "";
 }
 
-async function getSecretOrThrow(secretId: string | null) {
+async function getSecretOrThrow(secretId: string | null, uncached: boolean) {
   if (!secretId) {
     throw new ApiError(400, "Connector has no associated credentials");
   }
-  const secret = await secretManager().getSecret(secretId);
+  const secret = await secretManager().getSecret(secretId, {
+    skipCache: uncached,
+  });
   if (!secret) {
     throw new ApiError(404, "Connector credentials not found");
   }

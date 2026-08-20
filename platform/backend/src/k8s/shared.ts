@@ -15,6 +15,7 @@ interface K8sClients {
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
   authApi: k8s.AuthorizationV1Api;
+  rbacApi: k8s.RbacAuthorizationV1Api;
   networkingApi: k8s.NetworkingV1Api;
   customObjectsApi: k8s.CustomObjectsApi;
   attach: k8s.Attach;
@@ -22,6 +23,37 @@ interface K8sClients {
   log: k8s.Log;
   namespace: string;
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Deployment annotation marking an MCP server the idle-hibernation manager
+ * scaled to 0 replicas (value "true" when set). Presence with replicas 0 means
+ * "hibernated"; presence with replicas >= 1 means "waking" (the annotation is
+ * only removed once the woken deployment is ready). A zero-replica deployment
+ * WITHOUT this annotation was scaled down externally — not ours to wake.
+ */
+export const MCP_HIBERNATED_ANNOTATION = "archestra.io/hibernated";
+
+/**
+ * Companion annotation recording the deployment's `spec.replicas` at the
+ * moment it was hibernated (stringified integer). Written in the same merge
+ * patch as {@link MCP_HIBERNATED_ANNOTATION}; the wake path restores this
+ * count instead of assuming 1, and both annotations are removed together once
+ * the woken deployment is ready.
+ */
+export const MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION =
+  "archestra.io/pre-hibernation-replicas";
+
+/**
+ * Persistent opt-out written after repeated unsolicited scale-ups prove that
+ * another controller owns a deployment's replica count. Explicit demand
+ * removes it before the next managed wake attempt.
+ */
+export const MCP_FOREIGN_REPLICA_OWNER_ANNOTATION =
+  "archestra.io/foreign-replica-owner";
+// SPDX-SnippetEnd
 
 /**
  * Validates kubeconfig file and throws descriptive errors for various failure scenarios
@@ -112,12 +144,21 @@ export function createK8sClients(
 ): K8sClients {
   return {
     kubeConfig,
-    coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api),
-    appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api),
-    batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api),
-    authApi: kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
-    networkingApi: kubeConfig.makeApiClient(k8s.NetworkingV1Api),
-    customObjectsApi: kubeConfig.makeApiClient(k8s.CustomObjectsApi),
+    coreApi: withK8sRequestTimeout(kubeConfig.makeApiClient(k8s.CoreV1Api)),
+    appsApi: withK8sRequestTimeout(kubeConfig.makeApiClient(k8s.AppsV1Api)),
+    batchApi: withK8sRequestTimeout(kubeConfig.makeApiClient(k8s.BatchV1Api)),
+    authApi: withK8sRequestTimeout(
+      kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
+    ),
+    rbacApi: withK8sRequestTimeout(
+      kubeConfig.makeApiClient(k8s.RbacAuthorizationV1Api),
+    ),
+    networkingApi: withK8sRequestTimeout(
+      kubeConfig.makeApiClient(k8s.NetworkingV1Api),
+    ),
+    customObjectsApi: withK8sRequestTimeout(
+      kubeConfig.makeApiClient(k8s.CustomObjectsApi),
+    ),
     attach: new k8s.Attach(kubeConfig),
     exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),
@@ -364,6 +405,31 @@ export function sanitizeMetadataLabels(
 }
 
 // === Internal helpers ===
+
+/** Bound generated CRUD calls so fenced DB transactions cannot pin forever. */
+class TimedK8sHttpLibrary implements k8s.HttpLibrary {
+  constructor(private readonly delegate: k8s.HttpLibrary) {}
+
+  send(request: k8s.RequestContext): k8s.Observable<k8s.ResponseContext> {
+    if (!request.getSignal()) {
+      request.setSignal(AbortSignal.timeout(K8S_API_REQUEST_TIMEOUT_MS));
+    }
+    return this.delegate.send(request);
+  }
+}
+
+const K8S_API_REQUEST_TIMEOUT_MS = 30_000;
+
+function withK8sRequestTimeout<T>(client: T): T {
+  const generatedClient = client as {
+    api?: { configuration?: { httpApi?: k8s.HttpLibrary } };
+  };
+  const configuration = generatedClient?.api?.configuration;
+  if (configuration?.httpApi) {
+    configuration.httpApi = new TimedK8sHttpLibrary(configuration.httpApi);
+  }
+  return client;
+}
 
 /**
  * Extract the HTTP status code from a Kubernetes client error, if any.

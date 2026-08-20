@@ -22,6 +22,7 @@ import type {
   AclEntry,
   Connector,
   ConnectorCredentials,
+  ConnectorIdentity,
   InsertKbContainerAcl,
   InsertKbExternalGroup,
   InsertKbExternalUserGroup,
@@ -33,7 +34,10 @@ import type {
   ResolveMappedEmail,
 } from "@/types";
 import { buildContainerToken, normalizeEmail } from "./acl-tokens";
-import { resolveConnectorCredentials } from "./connector-credentials";
+import {
+  resolveConnectorCredentials,
+  resolveConnectorCredentialVersion,
+} from "./connector-credentials";
 import {
   BaseConnector,
   extractErrorMessage,
@@ -134,6 +138,20 @@ class PermissionSyncService {
       log.debug(
         { connectorId, visibility: connector.visibility },
         "Connector is not auto-sync-permissions; skipping permission pass",
+      );
+      return { runId: "", status: "skipped" };
+    }
+
+    // Disabled means disabled, for permissions as much as for content. Stated
+    // here rather than left to the scheduler: a task enqueued before the
+    // connector was switched off still arrives afterwards, and a pass costs a
+    // pod, a token and an egress rule against the customer's Perforce server.
+    // Stored ACLs are untouched, so nothing is opened up by not running — the
+    // audience simply stops being refreshed until the connector is re-enabled.
+    if (!connector.enabled) {
+      log.info(
+        { connectorId },
+        "Connector is disabled; skipping permission pass",
       );
       return { runId: "", status: "skipped" };
     }
@@ -302,8 +320,21 @@ class PermissionSyncService {
     // the scheduled cadence is the retry path instead).
     let snapshotProgressed = false;
 
+    // Ownership, as the write paths take it: every access-granting write in
+    // this pass carries it, so a pass whose run was reclaimed cannot land one
+    // even if it never notices it lost the lease.
+    const fence = { runId, epoch };
+
     try {
-      const credentials = await resolveConnectorCredentials(connector);
+      const credentials = await resolveConnectorCredentials(connector, {
+        // Perforce alone provisions a runtime from these credentials: the pass
+        // rotates the shim's pod whenever the stored password changes, and a
+        // cached read on this replica would hand the fresh pod the password it
+        // just retired. Every other connector authenticates upstream directly,
+        // where a stale read costs one failed pass and no rotation.
+        uncached: connector.connectorType === "perforce",
+      });
+      const identity = await connectorIdentity(connector, fence);
       // Read-back of already-ingested docs, injected into the hooks so
       // container-scoped connectors (GitHub) can tag a container's documents
       // without re-enumerating upstream. Keyset-paginated, O(page) memory.
@@ -364,6 +395,7 @@ class PermissionSyncService {
         try {
           probe = await connectorImpl.probePermissionChanges({
             config: connector.config as Record<string, unknown>,
+            identity,
             credentials,
             state: previousState,
           });
@@ -498,6 +530,7 @@ class PermissionSyncService {
           const pendingGroups: InsertKbExternalGroup[] = [];
           for await (const group of connectorImpl.syncGroups({
             config: connector.config as Record<string, unknown>,
+            identity,
             credentials,
             cursor: null,
             readIngestedDocuments,
@@ -553,17 +586,26 @@ class PermissionSyncService {
               });
             }
             if (pending.length >= this.batchSize) {
-              await KbExternalUserGroupModel.upsertMany(pending);
+              await this.assertStillOwnsRun({ runId, epoch });
+              if (
+                !(await KbExternalUserGroupModel.upsertMany(pending, fence))
+              ) {
+                throw new LeaseLostError();
+              }
               membershipsPersisted += pending.length;
               pending = [];
               await yieldToEventLoop();
             }
           }
           if (pending.length > 0) {
-            await KbExternalUserGroupModel.upsertMany(pending);
+            await this.assertStillOwnsRun({ runId, epoch });
+            if (!(await KbExternalUserGroupModel.upsertMany(pending, fence))) {
+              throw new LeaseLostError();
+            }
             membershipsPersisted += pending.length;
           }
           for (let i = 0; i < pendingGroups.length; i += this.batchSize) {
+            await this.assertStillOwnsRun({ runId, epoch });
             await KbExternalGroupModel.upsertMany(
               pendingGroups.slice(i, i + this.batchSize),
             );
@@ -579,6 +621,7 @@ class PermissionSyncService {
               externalAccountId: row.externalAccountId,
             }));
           for (let i = 0; i < revoked.length; i += this.batchSize) {
+            await this.assertStillOwnsRun({ runId, epoch });
             membershipsRemoved += await KbExternalUserGroupModel.deleteByKeys({
               connectorId,
               keys: revoked.slice(i, i + this.batchSize),
@@ -613,6 +656,11 @@ class PermissionSyncService {
           // read as "nothing changed" — the removal IS the change.
           stats.membershipsRemoved = membershipsRemoved;
         } catch (error) {
+          // Losing the run is not a group-step failure to be absorbed: this
+          // pass has no authority to write anything at all any more, so it
+          // must not fall through to the document reconcile below. The catch
+          // exists for an upstream group read that failed, not for this.
+          if (error instanceof LeaseLostError) throw error;
           stats.groupsSynced = groupsEnumerated;
           stats.membershipsUpserted = membershipsPersisted;
           // Deletions that completed before the failure are real revocations
@@ -688,6 +736,7 @@ class PermissionSyncService {
         if (connectorImpl.refreshContainerAudiences) {
           await this.refreshStoredContainerAudiences({
             connector,
+            identity,
             connectorImpl,
             credentials,
             resolveMappedEmail,
@@ -697,6 +746,7 @@ class PermissionSyncService {
               : undefined,
             stats,
             runLog,
+            fence: { runId, epoch },
           });
         }
 
@@ -757,6 +807,7 @@ class PermissionSyncService {
 
       const generator = connectorImpl.syncPermissionSnapshot?.({
         config: connector.config as Record<string, unknown>,
+        identity,
         credentials,
         cursor: resumeCursor,
         readIngestedDocuments,
@@ -770,6 +821,9 @@ class PermissionSyncService {
         for await (const item of generator) {
           if (!unit || item.cursor !== unit.key) {
             if (unit) {
+              // Before the unit's writes, which fail-close documents the unit
+              // did not see — the most destructive write the pass makes.
+              await this.assertStillOwnsRun({ runId, epoch });
               await this.finishUnit({ connector, unit, stats, aclConfigEpoch });
               lastCompletedUnit = unit.key;
               snapshotProgressed = true;
@@ -806,6 +860,7 @@ class PermissionSyncService {
               clearsStaleMarks: true,
               stats,
               runLog,
+              fence: { runId, epoch },
             });
             stats.containersChanged = (stats.containersChanged ?? 0) + changed;
           } else {
@@ -817,6 +872,7 @@ class PermissionSyncService {
               exceptionUsers: item.exceptionUsers,
             });
             if (unit.pending.length >= this.batchSize) {
+              await this.assertStillOwnsRun({ runId, epoch });
               await this.flushAssignments({
                 connector,
                 batch: unit.pending.splice(0),
@@ -834,6 +890,7 @@ class PermissionSyncService {
           }
         }
         if (unit) {
+          await this.assertStillOwnsRun({ runId, epoch });
           await this.finishUnit({ connector, unit, stats, aclConfigEpoch });
           lastCompletedUnit = unit.key;
           snapshotProgressed = true;
@@ -886,6 +943,17 @@ class PermissionSyncService {
       });
       return { runId, status: "success" };
     } catch (error) {
+      if (error instanceof LeaseLostError) {
+        // Someone else owns this connector now — a settings edit superseded
+        // this pass, or the reaper declared it dead and a replacement ran.
+        // That owner has already written the run's terminal row and the
+        // connector's status; anything written here would overwrite a newer
+        // truth with an older one. Leaving quietly IS the correct ending.
+        runLog.info(
+          "Permission run was reclaimed while it was running; stopping without writing",
+        );
+        return { runId, status: "superseded" };
+      }
       const message = extractErrorMessage(error);
       // A run that advanced its snapshot cursor is `partial` (checkpoint
       // preserved; a re-enqueued resume picks up from the last completed
@@ -895,7 +963,7 @@ class PermissionSyncService {
       // enqueued and the next scheduled pass is the retry.
       const status = snapshotProgressed ? "partial" : "failed";
       runLog.error({ error: message, status }, "Permission sync pass failed");
-      await ConnectorRunModel.updateIfOwned({
+      const owned = await ConnectorRunModel.updateIfOwned({
         runId,
         epoch,
         data: {
@@ -907,9 +975,14 @@ class PermissionSyncService {
       });
       // `stats` is scoped to the try block (it captures the content-run check);
       // the terminal row keeps whatever the last checkpoint persisted.
-      await KnowledgeBaseConnectorModel.update(connectorId, {
-        lastPermissionSyncStatus: status,
-      });
+      // Mirrored onto the connector only while we still own the run: a pass
+      // reclaimed between its last check and this one must not stamp `failed`
+      // over the success a replacement pass already recorded.
+      if (owned) {
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastPermissionSyncStatus: status,
+        });
+      }
       metrics.rag.reportPermissionSync({
         connectorType: connector.connectorType,
         status,
@@ -928,6 +1001,7 @@ class PermissionSyncService {
    * until the periodic full reconcile.
    */
   private async refreshStoredContainerAudiences(params: {
+    identity: ConnectorIdentity;
     connector: KnowledgeBaseConnector;
     connectorImpl: Connector;
     credentials: ConnectorCredentials;
@@ -936,11 +1010,14 @@ class PermissionSyncService {
     containerKeys?: string[];
     stats: PermissionSyncRunStats;
     runLog: pino.Logger;
+    /** The run whose ownership authorises these writes. */
+    fence: { runId: string; epoch: number };
   }): Promise<void> {
     const {
       connector,
       connectorImpl,
       credentials,
+      identity,
       resolveMappedEmail,
       readIngestedDocuments,
       stats,
@@ -968,11 +1045,13 @@ class PermissionSyncService {
           clearsStaleMarks: false,
           stats,
           runLog,
+          fence: params.fence,
         }));
       pending = [];
     };
     for await (const item of connectorImpl.refreshContainerAudiences({
       config: connector.config as Record<string, unknown>,
+      identity,
       credentials,
       containerKeys,
       readIngestedDocuments,
@@ -1067,8 +1146,10 @@ class PermissionSyncService {
     clearsStaleMarks: boolean;
     stats: PermissionSyncRunStats;
     runLog: pino.Logger;
+    /** The run whose ownership authorises these writes. */
+    fence: { runId: string; epoch: number };
   }): Promise<number> {
-    const { connector, batch, clearsStaleMarks, stats, runLog } = params;
+    const { connector, batch, clearsStaleMarks, stats, runLog, fence } = params;
     if (batch.length === 0) return 0;
 
     // Keyed, so a container yielded twice in one batch collapses to its last
@@ -1130,7 +1211,8 @@ class PermissionSyncService {
       }
     }
 
-    await KbContainerAclModel.upsertMany(toWrite);
+    const written = await KbContainerAclModel.upsertMany(toWrite, fence);
+    if (!written) throw new LeaseLostError();
     return changed;
   }
 
@@ -1308,13 +1390,42 @@ class PermissionSyncService {
     checkpoint: PermissionSyncCheckpoint,
     stats?: PermissionSyncRunStats,
   ): Promise<void> {
-    await ConnectorRunModel.updateIfOwned({
+    const owned = await ConnectorRunModel.updateIfOwned({
       runId,
       epoch,
       // Stats ride along with every checkpoint so a running pass shows live
       // progress (they are cheap — same fenced UPDATE).
       data: { checkpoint, ...(stats ? { stats: { ...stats } } : {}) },
     });
+    // The fenced UPDATE not matching is the signal that this pass no longer
+    // owns its run. Discarding it was how a thawed worker got to keep writing.
+    if (!owned) throw new LeaseLostError();
+  }
+
+  /**
+   * Renew the lease and stop the pass if it has been reclaimed.
+   *
+   * Called immediately BEFORE each unit of ACL writes, not after: the point is
+   * to not write at all once a newer pass owns the connector. Renewing here
+   * also couples liveness to actual work, so a unit that takes minutes starts
+   * with a full lease TTL of headroom rather than depending on the heartbeat
+   * timer, which a blocked event loop starves.
+   *
+   * The same shape as the content family's per-batch check in
+   * `connector-sync.ts`; the permission family reads its own writes through
+   * `kb_container_acls`, where a stale audience silently restores access.
+   */
+  private async assertStillOwnsRun(params: {
+    runId: string;
+    epoch: number;
+  }): Promise<void> {
+    const held = await ConnectorRunModel.renewLease({
+      runId: params.runId,
+      owner: WORKER_ID,
+      epoch: params.epoch,
+      leaseTtlSeconds: config.kb.connectorRunLeaseTtlSeconds,
+    });
+    if (!held) throw new LeaseLostError();
   }
 
   /**
@@ -1333,7 +1444,7 @@ class PermissionSyncService {
     getLogOutput?: () => string;
     nextSyncState: PermissionSyncState | null;
   }): Promise<void> {
-    await this.finalize({
+    const owned = await this.finalize({
       connectorId: params.connectorId,
       runId: params.runId,
       epoch: params.epoch,
@@ -1341,6 +1452,12 @@ class PermissionSyncService {
       stats: params.stats,
       getLogOutput: params.getLogOutput,
     });
+    // Every write below describes THIS pass's view of upstream. A pass that
+    // lost its run mid-flight has an older view than whoever took it over, and
+    // `permissionSyncState` is the probe fingerprint the next pass diffs
+    // against: writing a stale one there makes the next pass skip real
+    // changes. So the pass ends silently rather than reporting.
+    if (!owned) throw new LeaseLostError();
     if (params.nextSyncState) {
       await KnowledgeBaseConnectorModel.update(params.connectorId, {
         permissionSyncState: params.nextSyncState,
@@ -1359,7 +1476,7 @@ class PermissionSyncService {
     startedAt: Date;
     stats?: PermissionSyncRunStats;
     getLogOutput?: () => string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const owned = await ConnectorRunModel.updateIfOwned({
       runId: params.runId,
       epoch: params.epoch,
@@ -1376,6 +1493,7 @@ class PermissionSyncService {
         lastPermissionSyncStatus: "success",
       });
     }
+    return !!owned;
   }
 }
 
@@ -1384,6 +1502,22 @@ export const permissionSyncService = new PermissionSyncService();
 // ===== Internal helpers =====
 
 const EMPTY_SOURCE_ID_SET: ReadonlySet<string> = new Set();
+
+/**
+ * This pass no longer owns its run: it was superseded by a settings edit, or
+ * reclaimed after its lease expired and a replacement has since run.
+ *
+ * Thrown rather than returned because every remaining step of the pass would
+ * write a view of upstream that is older than the current owner's, and the
+ * call stack at the point of discovery is many frames deep in an enumeration.
+ * Caught in `runClaimedPass`, where it ends the pass without touching the run
+ * row or the connector.
+ */
+class LeaseLostError extends Error {
+  constructor() {
+    super("The permission run was reclaimed by another pass");
+  }
+}
 
 /**
  * A document's ACL under the container model: its `container:` token plus any
@@ -1421,4 +1555,26 @@ function aclEquals(a: string[], b: string[]): boolean {
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
   return sortedA.every((entry, index) => entry === sortedB[index]);
+}
+
+/**
+ * The connector's identity, handed to every extraction hook. Connectors that
+ * provision their own runtime key it off this so one connector's credentials
+ * never pass through another's infrastructure, and so an edit retires that
+ * runtime — see {@link ConnectorIdentity}.
+ */
+async function connectorIdentity(
+  connector: KnowledgeBaseConnector,
+  run?: { runId: string; epoch: number },
+): Promise<ConnectorIdentity> {
+  return {
+    connectorId: connector.id,
+    organizationId: connector.organizationId,
+    environmentId: connector.environmentId,
+    secretId: connector.secretId,
+    ...(run ? { run } : {}),
+    credentialVersion: await resolveConnectorCredentialVersion(
+      connector.secretId,
+    ),
+  };
 }

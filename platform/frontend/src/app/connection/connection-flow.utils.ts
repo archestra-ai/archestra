@@ -1,7 +1,9 @@
 import {
   type archestraApiTypes,
+  isIntegrationHidden,
   isSupportedProvider,
   type SupportedProvider,
+  SupportedProviders,
 } from "@archestra/shared";
 
 const DEFAULT_MCP_SERVER_SLUG = "archestra";
@@ -66,19 +68,25 @@ export function deriveMcpServerName(params: {
 }
 
 /**
- * Narrow `organization.connectionShownProviders` (typed as `string[] | null`
- * by the generated API client) to `SupportedProvider[] | null`, dropping any
- * provider IDs the frontend doesn't know about.
+ * The providers /connection may offer: every one this deployment has not
+ * switched off, under Available model providers in LLM settings.
+ *
+ * The connect page used to carry a second, page-local provider list. It only
+ * ever narrowed what this page displayed, never what could be configured, so
+ * one deployment-wide list now answers both.
  */
-export function getShownProviders(
+export function getConnectableProviders(
   organization:
-    | { connectionShownProviders?: readonly string[] | null }
+    | {
+        modelProviderOverrides?: Record<string, { hidden?: boolean }> | null;
+      }
     | null
     | undefined,
-): SupportedProvider[] | null {
-  const raw = organization?.connectionShownProviders;
-  if (!raw) return null;
-  return raw.filter(isSupportedProvider);
+): SupportedProvider[] {
+  const overrides = organization?.modelProviderOverrides ?? null;
+  return SupportedProviders.filter(
+    (provider) => !isIntegrationHidden(overrides, provider),
+  );
 }
 
 /**

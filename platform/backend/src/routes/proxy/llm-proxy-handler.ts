@@ -6,6 +6,7 @@
  */
 
 import {
+  APP_ID_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
@@ -18,8 +19,10 @@ import {
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -35,9 +38,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
-  INCOGNITO_KEY_HEADER,
-  parseIncognitoDekHeader,
-} from "@/content-encryption/incognito";
+  LOCKED_CHAT_KEY_HEADER,
+  parseLockedChatDekHeader,
+} from "@/content-encryption/locked-chat";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
@@ -45,10 +48,12 @@ import {
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  AppModel,
   EnvironmentModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -102,12 +107,14 @@ import {
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
 import {
+  type AccumulatedToolCall,
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
   canonicalizeCommonMessageToolNames,
   handleError,
   normalizeToolCallsForPolicy,
+  planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
@@ -116,10 +123,10 @@ import {
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
-  type IncognitoAuditDisposition,
-  redactIncognitoInteraction,
-  resolveIncognitoAuditContext,
-} from "./utils/incognito-session";
+  type LockedChatAuditDisposition,
+  redactLockedChatInteraction,
+  resolveLockedChatAuditContext,
+} from "./utils/locked-chat-session";
 
 const {
   observability: {
@@ -146,9 +153,9 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Incognito chat session: span content capture is suppressed and persisted
+   * Locked chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
-   * True whenever `incognito.kind !== "none"`.
+   * True whenever `locked-chat.kind !== "none"`.
    */
   suppressContent: boolean;
   /**
@@ -156,13 +163,19 @@ export interface LLMProxyContext<TRequest> {
    * carries the validated conversation key; `redact` is the fail-closed
    * fallback. Resolved once per request so every write site agrees.
    */
-  incognito: IncognitoAuditDisposition;
+  lockedChat: LockedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
    * loopback-gated delegation header and re-validated against the executing
    * agent row. Undefined for every non-advisor request.
    */
   delegationBillingEnvironmentId?: string;
+  /**
+   * MCP App whose runtime made this call, resolved from the loopback-gated app
+   * header and re-validated against the executing agent's organization.
+   * Undefined for every request that is not an app-runtime completion.
+   */
+  appId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -388,6 +401,9 @@ export async function handleLLMProxy<
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
       });
+      await virtualKeyRateLimiter.recordSuccess({
+        credential: passthroughVirtualKeyToken,
+      });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
@@ -493,6 +509,7 @@ export async function handleLLMProxy<
       tokenValue: rawApiKey,
       expectedProvider: providerName,
       agent: resolvedAgent,
+      requestedModel: requestAdapter.getModel(),
     });
     if (oauthResult) {
       apiKey = oauthResult.apiKey;
@@ -523,6 +540,7 @@ export async function handleLLMProxy<
         rawApiKey,
         providerName,
       );
+      await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
@@ -687,13 +705,13 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // Incognito chat sessions: interaction rows keep all usage/cost/session
+  // Locked chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
   // safely), and span content capture is suppressed either way. Resolved once
   // up front (server-derived, fail closed) so the catch below and both stream
   // handlers agree on it.
-  const incognito = await resolveIncognitoAuditContext({
+  const lockedChat = await resolveLockedChatAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -701,17 +719,21 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
-    dek: readIncognitoDek(request),
+    dek: readLockedChatDek(request),
   });
-  // Content never reaches spans or logs for an incognito session, whether it
+  // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted.
-  const suppressContent = incognito.kind !== "none";
+  const suppressContent = lockedChat.kind !== "none";
 
   // Advisor consultations bill to the delegating caller's environment (the
   // advisor's own row is env-less). Resolved once so the limit check and every
   // interaction write agree on it.
   const delegationBillingEnvironmentId =
     await resolveDelegationBillingEnvironment(request, resolvedAgent);
+
+  // App-runtime completions carry the calling app, so per-app runtime spend is
+  // attributable instead of collapsing into the shared App Runtime agent.
+  const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
   // Check usage limits
   try {
@@ -820,11 +842,33 @@ export async function handleLLMProxy<
       tools,
     );
 
-    if (optimizedModel) {
+    // A cost-optimization rule names a model, not an endpoint. On providers
+    // whose keys are servers, the credential and base URL were already resolved
+    // for the model the client asked for, so substituting one this endpoint
+    // does not host would send the request somewhere it cannot be answered.
+    // Keeping the baseline model costs an optimization; taking it would cost
+    // the whole call.
+    const optimizedModelServedHere =
+      optimizedModel &&
+      perKeyChatApiKeyId &&
+      providerHasEndpointLocalModels(providerName)
+        ? await endpointServesModel({
+            apiKeyId: perKeyChatApiKeyId,
+            provider: providerName,
+            modelId: optimizedModel,
+          })
+        : true;
+
+    if (optimizedModel && optimizedModelServedHere) {
       requestAdapter.setModel(optimizedModel);
       logger.info(
         { resolvedAgentId, optimizedModel },
         "Optimized model selected",
+      );
+    } else if (optimizedModel) {
+      logger.info(
+        { resolvedAgentId, optimizedModel, baselineModel },
+        "Optimized model is not served by the resolved endpoint, keeping the baseline model",
       );
     } else {
       logger.info(
@@ -1245,8 +1289,9 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
-      incognito,
+      lockedChat,
       delegationBillingEnvironmentId,
+      appId: attributedAppId,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1302,6 +1347,7 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId: attributedAppId,
         sessionId,
         sessionSource,
         source,
@@ -1321,7 +1367,7 @@ export async function handleLLMProxy<
       };
       await persistProxyInteraction(
         record,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -1374,8 +1420,9 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    incognito,
+    lockedChat,
     delegationBillingEnvironmentId,
+    appId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1422,6 +1469,7 @@ async function handleStreaming<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId,
         sessionId,
         sessionSource,
         source,
@@ -1439,7 +1487,7 @@ async function handleStreaming<
       };
       await persistProxyInteraction(
         record,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -1626,7 +1674,7 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content (suppressed for incognito chats)
+        // Capture streamed completion content (suppressed for locked chats)
         if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
@@ -1642,7 +1690,17 @@ async function handleStreaming<
     let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
       null;
 
+    let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+
     if (toolCalls.length > 0) {
+      rewrittenToolCalls = planDispatchRewrites({
+        supported: streamAdapter.formatToolCallsSSE !== undefined,
+        toolCalls,
+        enabledToolNames,
+        canonicalizeToolName,
+        providerName,
+      });
+
       logger.info(
         {
           toolCallCount: toolCalls.length,
@@ -1651,8 +1709,15 @@ async function handleStreaming<
         "Evaluating tool invocation policies",
       );
 
+      // Policies are evaluated against the rewritten calls, which
+      // `normalizeToolCallsForPolicy` unwraps straight back to the same
+      // targets — so a repaired call faces exactly the gate a `run_tool`
+      // dispatch the model wrote itself would have faced.
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
+        normalizeToolCallsForPolicy(
+          rewrittenToolCalls ?? toolCalls,
+          canonicalizeToolName,
+        ),
         agent.id,
         {
           teamIds: teamIds ?? [],
@@ -1707,7 +1772,23 @@ async function handleStreaming<
       // already hung up must not read at all — the write would go to a closed
       // socket and the reconstructed turn would claim a delivery.
       if (!reply.raw.destroyed) {
-        const allEvents = streamAdapter.getRawToolCallEvents();
+        // A repaired batch replaces the buffered events wholesale: the raw
+        // fragments still name the tool the model called directly, which is the
+        // call the client cannot execute. `state.toolCalls` is updated to match
+        // what actually went out, so the persisted interaction and
+        // `toProviderResponse()` describe the turn the client saw rather than
+        // the one the model first wrote.
+        const allEvents =
+          rewrittenToolCalls && streamAdapter.formatToolCallsSSE
+            ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
+            : streamAdapter.getRawToolCallEvents();
+        if (rewrittenToolCalls) {
+          streamAdapter.state.toolCalls.splice(
+            0,
+            streamAdapter.state.toolCalls.length,
+            ...rewrittenToolCalls,
+          );
+        }
         if (allEvents.length > 0) {
           ensureStreamHeaders();
           for (const event of allEvents) {
@@ -1837,6 +1918,7 @@ async function handleStreaming<
           userId,
           virtualKeyId,
           passthroughVirtualKeyId,
+          appId,
           sessionId,
           sessionSource,
           source,
@@ -1855,7 +1937,7 @@ async function handleStreaming<
         });
         await persistProxyInteraction(
           record,
-          incognito,
+          lockedChat,
           delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
@@ -1904,8 +1986,9 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    incognito,
+    lockedChat,
     delegationBillingEnvironmentId,
+    appId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -2057,7 +2140,7 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content (suppressed for incognito chats)
+      // Capture completion content (suppressed for locked chats)
       if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
@@ -2078,9 +2161,29 @@ async function handleNonStreaming<
   );
 
   // Evaluate tool invocation policies
+  let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
   if (toolCalls.length > 0) {
+    rewrittenToolCalls = planDispatchRewrites({
+      supported: responseAdapter.withRewrittenToolCalls !== undefined,
+      toolCalls: toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        arguments: JSON.stringify(toolCall.arguments),
+      })),
+      enabledToolNames,
+      canonicalizeToolName,
+      providerName,
+    });
+
     const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
+      normalizeToolCallsForPolicy(
+        rewrittenToolCalls ??
+          toolCalls.map((toolCall) => ({
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          })),
+        canonicalizeToolName,
+      ),
       agent.id,
       {
         teamIds: teamIds ?? [],
@@ -2161,6 +2264,7 @@ async function handleNonStreaming<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        appId,
         sessionId,
         sessionSource,
         source,
@@ -2179,7 +2283,7 @@ async function handleNonStreaming<
       });
       await persistProxyInteraction(
         refusalRecord,
-        incognito,
+        lockedChat,
         delegationBillingEnvironmentId,
       );
 
@@ -2189,6 +2293,14 @@ async function handleNonStreaming<
 
   // Tool calls allowed (or no tool calls) - return response.
   // `usage` (corrected for zero-input above) is reused here.
+  //
+  // Computed once: a translator adapter that rewrites remembers the inner
+  // (logged) shape it produced, so `getLoggedResponse` below must observe the
+  // same call that produced the client response.
+  const clientResponse =
+    rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+      ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+      : responseAdapter.getOriginalResponse();
 
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
@@ -2238,6 +2350,7 @@ async function handleNonStreaming<
       userId,
       virtualKeyId,
       passthroughVirtualKeyId,
+      appId,
       sessionId,
       sessionSource,
       source,
@@ -2246,9 +2359,11 @@ async function handleNonStreaming<
       processedRequest: request,
       // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
       // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
-      response:
-        responseAdapter.getLoggedResponse?.() ??
-        responseAdapter.getOriginalResponse(),
+      //
+      // A repaired batch logs what the client actually received. `getLoggedResponse`
+      // still wins where it exists: those adapters log a different wire shape on
+      // purpose, and after a rewrite they hand back that shape's rewritten form.
+      response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
       actualModel,
       baselineModel,
       usage,
@@ -2260,7 +2375,7 @@ async function handleNonStreaming<
     });
     await persistProxyInteraction(
       record,
-      incognito,
+      lockedChat,
       delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
@@ -2270,7 +2385,45 @@ async function handleNonStreaming<
     );
   }
 
-  return reply.send(responseAdapter.getOriginalResponse());
+  return reply.send(clientResponse);
+}
+
+/**
+ * Plan the dispatch-mode repair for one turn's tool calls, and record it when
+ * there is one. Shared by the streaming and non-streaming paths so the two
+ * surfaces stay in step.
+ *
+ * `supported` is the adapter's ability to re-emit the rewritten calls in its
+ * own wire format; without it the repair could never reach the client, so that
+ * provider keeps the pre-existing refusal-with-steer behavior.
+ */
+function planDispatchRewrites(params: {
+  supported: boolean;
+  toolCalls: AccumulatedToolCall[];
+  enabledToolNames: Set<string>;
+  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
+  providerName: string;
+}): AccumulatedToolCall[] | null {
+  if (!params.supported) {
+    return null;
+  }
+
+  const rewritten = planDispatchModeToolCallRewrites({
+    toolCalls: params.toolCalls,
+    enabledToolNames: params.enabledToolNames,
+    canonicalizeToolName: params.canonicalizeToolName,
+  });
+
+  if (rewritten) {
+    logger.info(
+      {
+        toolNames: params.toolCalls.map((toolCall) => toolCall.name),
+        provider: params.providerName,
+      },
+      "Re-addressing direct tool calls through run_tool (dispatch mode)",
+    );
+  }
+  return rewritten;
 }
 
 function normalizeVirtualKeyCandidate(
@@ -2338,6 +2491,29 @@ function providerSuppliesServerCredential(providerName: string): boolean {
   return providerName === "gemini" && isVertexAiEnabled();
 }
 
+/**
+ * Whether a resolved endpoint can run a model, for providers whose keys are
+ * servers. Conservative: only a model the catalog places on other endpoints and
+ * not this one counts as unserved. A model nothing has synced — one an operator
+ * has just deployed, say — is left to the endpoint to accept or reject.
+ */
+async function endpointServesModel(params: {
+  apiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
+}): Promise<boolean> {
+  const servingKeyIds =
+    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
+      provider: params.provider,
+      modelId: params.modelId,
+    });
+
+  if (servingKeyIds === null || servingKeyIds.length === 0) {
+    return true;
+  }
+  return servingKeyIds.includes(params.apiKeyId);
+}
+
 function shouldUseKeylessProviderApiKey(params: {
   row: Awaited<ReturnType<typeof LlmProviderApiKeyModel.findById>>;
   providerName: string;
@@ -2394,7 +2570,7 @@ function extractDurationStatusCode(error: unknown): string {
 
 /**
  * The single funnel every proxy interaction write goes through, so all five
- * sites treat incognito identically.
+ * sites treat locked-chat identically.
  *
  * - `encrypt`: store the full record, keyed to the conversation's browser-held
  *   DEK (recoverable offline via that conversation's escrow record).
@@ -2404,12 +2580,12 @@ function extractDurationStatusCode(error: unknown): string {
  */
 async function persistProxyInteraction(
   record: InsertInteraction,
-  incognito: IncognitoAuditDisposition,
+  lockedChat: LockedChatAuditDisposition,
   environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
-    incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
-    incognito.kind === "encrypt" ? incognito.audit : null,
+    lockedChat.kind === "redact" ? redactLockedChatInteraction(record) : record,
+    lockedChat.kind === "encrypt" ? lockedChat.audit : null,
     environmentIdOverride ? { environmentIdOverride } : undefined,
   );
 }
@@ -2487,16 +2663,72 @@ async function resolveDelegationBillingEnvironment(
 }
 
 /**
- * Read the incognito conversation key off the request. A malformed header is
+ * Resolve the MCP App an app-runtime completion is attributed to, from
+ * APP_ID_HEADER. Honored only when all three hold: the request arrived over the
+ * loopback socket (the in-process app-runtime tool's path — the raw socket peer,
+ * not request.ip, which trustProxy can rewrite from forwarded headers), the id
+ * is a uuid, and it names an app of the executing agent's organization.
+ * Anything else ignores the header with a warning: the worst a spoofed value
+ * can do is misattribute app spend between one organization's apps, so an
+ * unusable header must be ignored rather than fail the LLM call.
+ */
+async function resolveAttributedAppId(
+  request: FastifyRequest,
+  agent: GatewayAgent,
+): Promise<string | undefined> {
+  const raw = request.headers[APP_ID_HEADER.toLowerCase()];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return undefined;
+  }
+
+  if (!isLoopbackRequest(request)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring app attribution header from a non-loopback peer",
+    );
+    return undefined;
+  }
+  // The app-id column is a uuid; a non-uuid value would make the lookup's cast
+  // throw and 500 the LLM call, so reject it here.
+  if (!isUuid(value)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring malformed app attribution header",
+    );
+    return undefined;
+  }
+  let app: Awaited<ReturnType<typeof AppModel.findById>>;
+  try {
+    app = await AppModel.findById(value);
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId: agent.id },
+      "Ignoring app attribution header after a lookup error",
+    );
+    return undefined;
+  }
+  if (!app || app.organizationId !== agent.organizationId) {
+    logger.warn(
+      { agentId: agent.id, appId: value },
+      "Ignoring app attribution header naming an app outside the agent's organization",
+    );
+    return undefined;
+  }
+  return app.id;
+}
+
+/**
+ * Read the locked chat key off the request. A malformed header is
  * treated as absent (the resolver then fails closed to redaction) rather than
  * failing the LLM call — the proxy's job is to serve the request; losing the
  * key costs audit fidelity, not the user's turn.
  */
-function readIncognitoDek(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[INCOGNITO_KEY_HEADER];
+function readLockedChatDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[LOCKED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseIncognitoDekHeader(value);
+    return parseLockedChatDekHeader(value);
   } catch {
     return null;
   }

@@ -30,9 +30,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
+import { useFeature } from "@/lib/config/config.query";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
+  AutoSyncCredentialRequirement,
+  autoSyncRequirementSlot,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   connectorNeedsEmail,
@@ -42,10 +45,10 @@ import {
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
-  getPermissionSyncCredentialNote,
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -103,6 +106,8 @@ export function EditConnectorDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateConnector = useUpdateConnector();
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
   const [visibility, setVisibility] = useState(connector.visibility);
   const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
 
@@ -143,6 +148,14 @@ export function EditConnectorDialog({
   }, [open, connector, form]);
 
   const connectorType = connector.connectorType;
+  // Uploads-backed connectors have no credentials, schedule or config to edit,
+  // and the connectors list excludes them, so nothing can open this dialog for
+  // one. Bailing keeps that guarantee enforced rather than assumed — every
+  // config lookup below is keyed by a type this one has no entry for.
+  if (connectorType === "file_upload") {
+    return null;
+  }
+
   const typeLabel = getConnectorTypeLabel(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
@@ -156,6 +169,30 @@ export function EditConnectorDialog({
     connectorType === "github" && authMethod === "github_app";
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
+  // Only the auto-sync visibility mirrors the source's access control, so the
+  // upstream-permission requirement is noise on any other visibility.
+  const autoSyncRequirement =
+    visibility === "auto-sync-permissions" ? (
+      <AutoSyncCredentialRequirement type={connectorType} />
+    ) : undefined;
+  // Sources whose credential is minted inside the customer's own workspace
+  // link to that workspace, taken from the URL field above.
+  const connectorInstanceUrl = form.watch("config.outlineUrl") as
+    | string
+    | undefined;
+  const requirementSlot = autoSyncRequirementSlot({
+    type: connectorType,
+    authMethod,
+    authMode,
+  });
+  const credentialRequirement =
+    requirementSlot === "credential" ? autoSyncRequirement : undefined;
+  const connectorFieldsRequirement =
+    requirementSlot === "connector-fields" ? autoSyncRequirement : undefined;
+  const permissionSyncRequirement =
+    requirementSlot === "permission-sync-fields"
+      ? autoSyncRequirement
+      : undefined;
   const {
     apiTokenHelpText,
     apiTokenLabel,
@@ -167,9 +204,9 @@ export function EditConnectorDialog({
     mode: "edit",
     authMethod,
     authMode,
+    autoSyncRequirementShown: Boolean(credentialRequirement),
+    instanceUrl: connectorInstanceUrl,
   });
-  const permissionSyncCredentialNote =
-    getPermissionSyncCredentialNote(connectorType);
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
@@ -284,9 +321,7 @@ export function EditConnectorDialog({
                 <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={getConnectorNamePlaceholder(
-                      connector.connectorType,
-                    )}
+                    placeholder={getConnectorNamePlaceholder(connectorType)}
                     {...field}
                   />
                 </FormControl>
@@ -336,7 +371,10 @@ export function EditConnectorDialog({
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
-            supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+            supportsAutoSync={connectorSupportsAutoSync(
+              connectorType,
+              orchestratorK8sRuntime,
+            )}
             autoSyncPermissionAction="update"
           />
 
@@ -372,6 +410,7 @@ export function EditConnectorDialog({
             form={form}
             mode="edit"
             emailRequired={emailRequired}
+            autoSyncRequirement={connectorFieldsRequirement}
           />
 
           {Boolean(apiTokenLabel) && (
@@ -396,15 +435,12 @@ export function EditConnectorDialog({
                     )}
                   </FormControl>
                   <FormDescription>
-                    Leave empty to keep existing credentials unchanged.
+                    <span>
+                      Leave empty to keep existing credentials unchanged.
+                    </span>{" "}
+                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
+                    {credentialRequirement}
                   </FormDescription>
-                  {apiTokenHelpText}
-                  {visibility === "auto-sync-permissions" &&
-                    permissionSyncCredentialNote && (
-                      <FormDescription>
-                        {permissionSyncCredentialNote}
-                      </FormDescription>
-                    )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -432,6 +468,15 @@ export function EditConnectorDialog({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+            )}
+
+          {visibility === "auto-sync-permissions" &&
+            connectorType === "perforce" && (
+              <PerforcePermissionSyncFields
+                form={form}
+                mode="edit"
+                adminCredentialDescription={permissionSyncRequirement}
               />
             )}
 

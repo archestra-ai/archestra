@@ -4,7 +4,8 @@ import {
 } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganization } from "@/lib/organization.query";
 import { LlmModelSearchableSelect } from "./llm-model-select";
 
 vi.mock("next/image", () => ({
@@ -12,6 +13,17 @@ vi.mock("next/image", () => ({
     <img alt={alt} src={src} />
   ),
 }));
+
+vi.mock("@/lib/organization.query");
+
+// The components under test resolve provider labels through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider visible under its built-in name.
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("LlmModelSearchableSelect", () => {
   it("can render fit-content dropdown content with full option labels", async () => {
@@ -150,6 +162,52 @@ describe("LlmModelSearchableSelect", () => {
 
     await user.click(screen.getByRole("combobox"));
     expect(screen.getByText("Latest")).toBeInTheDocument();
+  });
+
+  it("renders model modalities, tool support, and context in option rows", async () => {
+    const user = userEvent.setup();
+    render(
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        options={[
+          {
+            value: "vision-model",
+            model: "Vision Model",
+            modelId: "vision-model-v1",
+            description: "vision-model-v1",
+            provider: "openai",
+            capabilities: {
+              contextLength: 128000,
+              inputModalities: ["text", "image"],
+              outputModalities: ["text"],
+              supportsToolCalling: true,
+              supportsReasoningEffort: null,
+              recommendedForAgents: true,
+              pricePerMillionInput: null,
+              pricePerMillionOutput: null,
+              isCustomPrice: false,
+              priceSource: "default",
+              pricePerMillionCacheRead: null,
+              pricePerMillionCacheWrite: null,
+              cachePriceSource: "default",
+            },
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(screen.getByLabelText("Supports text input")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Supports vision (images)"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Supports tool calling")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("128,000 token context window"),
+    ).toHaveTextContent("128K");
+    expect(screen.getAllByText("vision-model-v1")).toHaveLength(1);
   });
 
   it("pins the routers to the top of the list", async () => {

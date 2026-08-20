@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -531,6 +532,32 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(getResponse.statusCode).toBe(404);
   });
 
+  test("refuses to delete a key backing the organization's OCR configuration", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "OCR Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-ocr-test",
+        scope: "personal",
+      },
+    });
+    const createdKey = createResponse.json();
+    await OrganizationModel.patch(organizationId, {
+      ocrChatApiKeyId: createdKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toContain("OCR");
+  });
+
   test("should return 404 for non-existent LLM provider API key", async () => {
     const response = await app.inject({
       method: "GET",
@@ -904,9 +931,7 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
-    expect(message).toBe(
-      "Invalid API key: Failed to fetch Anthropic models: 401",
-    );
+    expect(message).toBe("Invalid API key: HTTP 401");
     expect(message).not.toContain("Could not reach");
   });
 
@@ -975,7 +1000,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
     expect(message).toContain(
-      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: Failed to fetch Anthropic models: 404",
+      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: HTTP 404",
     );
     expect(message).toContain("verify it");
     expect(message).not.toContain("temporary provider issue");
@@ -1025,7 +1050,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(response.statusCode).toBe(400);
     const message = response.json().error.message;
     expect(message).toContain(
-      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: Failed to fetch Anthropic models: 429",
+      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: HTTP 429",
     );
     expect(message).toContain("temporary provider issue");
     expect(message).not.toContain("Invalid API key");
@@ -1827,5 +1852,191 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("Vault");
+  });
+});
+
+describe("LLM Provider API Keys — providers the organization turned off", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const turnOffAnthropic = async (displayName?: string) => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: {
+          anthropic: { hidden: true, ...(displayName ? { displayName } : {}) },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  };
+
+  test("refuses to create a key for a turned-off provider", async () => {
+    await turnOffAnthropic();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Blocked Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-blocked",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("turned off");
+  });
+
+  test("names the turned-off provider the way the admin renamed it", async () => {
+    await turnOffAnthropic("Anthropic (retired)");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Blocked Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-blocked",
+        scope: "personal",
+      },
+    });
+
+    expect(response.json().error.message).toContain("Anthropic (retired)");
+  });
+
+  test("still allows providers left switched on", async () => {
+    await turnOffAnthropic();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Allowed Key",
+        provider: "openai",
+        apiKey: "sk-openai-allowed",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("freezes an existing key once its provider is turned off, but keeps it deletable", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Existing Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-existing",
+        scope: "personal",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const keyId = created.json().id;
+
+    await turnOffAnthropic();
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed" },
+    });
+    expect(update.statusCode).toBe(400);
+
+    const removal = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(removal.statusCode).toBe(200);
+  });
+});
+
+describe("validation errors name the provider the way the organization does", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupAdminApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const createOpenAiKey = () =>
+    app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Key",
+        provider: "openai",
+        apiKey: "sk-rejected",
+        scope: "personal",
+      },
+    });
+
+  test("uses the renamed provider and never its shipped name", async () => {
+    await app.inject({
+      method: "PATCH",
+      url: "/api/organization/integration-settings",
+      payload: {
+        modelProviderOverrides: { openai: { displayName: "Northwind Models" } },
+      },
+    });
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch OpenAI models: 429"),
+    );
+
+    const response = await createOpenAiKey();
+
+    const message = response.json().error.message;
+    expect(message).toContain("Northwind Models");
+    // The fetchers' own noun would be a second, contradicting name.
+    expect(message).not.toContain("OpenAI");
+    // Classification still keys off the raw message, so the 429 guidance survives.
+    expect(message).toContain("temporary provider issue");
+  });
+
+  test("falls back to the shipped name when nothing is renamed", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch OpenAI models: 429"),
+    );
+
+    const response = await createOpenAiKey();
+
+    expect(response.json().error.message).toContain("OpenAI");
   });
 });

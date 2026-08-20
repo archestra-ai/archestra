@@ -60,10 +60,8 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
-  useDeleteSkill,
   usePermanentlyDeleteSkill,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -72,8 +70,8 @@ import {
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { withOpenEditRewritten } from "./_parts/editor-url";
-import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
+import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
+import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
@@ -192,17 +190,12 @@ function SkillsList() {
     [sorting, pathname, router, searchParams],
   );
 
-  // The dialog fetches the skill by id itself, so deep links open instantly
-  // and work regardless of the current page/search of the table.
+  // Legacy deep link: the editor used to be a dialog on this page opened by
+  // `?edit=<skillId>`; it is the skill's edit wizard now.
   const editId = searchParams.get("edit");
-  const {
-    entity: editingSkill,
-    open: openEditor,
-    close: closeEditor,
-  } = useDialogUrlParam<SkillItem | { id: string }>({
-    paramName: "edit",
-    entityFromUrl: editId ? { id: editId } : null,
-  });
+  useEffect(() => {
+    if (editId) router.replace(skillEditHref(editId));
+  }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
@@ -214,21 +207,16 @@ function SkillsList() {
 
   const items = skills?.data ?? [];
 
-  // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
-  // the matching skill (e.g. from the chat SkillPill). Once the name resolves
-  // to an id from the loaded items, the URL is rewritten to the durable
-  // `edit=<skillId>` form so it keeps working on refresh and stays copyable.
+  // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
+  // (e.g. from the chat SkillPill). The name resolves to an id once the items
+  // it was searched by have loaded.
   const openEdit = searchParams.get("openEdit");
   useEffect(() => {
     if (!openEdit || items.length === 0) return;
     const match = items.find((s) => s.name === openEdit);
     if (!match) return;
-    const params = withOpenEditRewritten(
-      new URLSearchParams(searchParams.toString()),
-      match.id,
-    );
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [openEdit, items, searchParams, pathname, router]);
+    router.replace(`/skills/${match.id}`);
+  }, [openEdit, items, router]);
   const pagination = skills?.pagination;
   const totalSkills = pagination?.total ?? 0;
   const hasActiveFilters =
@@ -463,7 +451,7 @@ function SkillsList() {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
                 permissions: { skill: ["update"] },
-                onClick: () => openEditor(skill),
+                href: skillEditHref(skill.id),
               },
               {
                 icon: <MessageSquare className="h-4 w-4" />,
@@ -612,20 +600,16 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={isDeletedView ? undefined : (row) => openEditor(row)}
+              onRowClick={
+                isDeletedView
+                  ? undefined
+                  : (row) => router.push(`/skills/${row.id}`)
+              }
               isLoading={isFetching}
             />
           </>
         )}
       </PageLayout>
-
-      {editingSkill && (
-        <SkillEditorDialog
-          skillId={editingSkill.id}
-          open={!!editingSkill}
-          onOpenChange={(open) => !open && closeEditor()}
-        />
-      )}
 
       {deletingSkill && (
         <DeleteSkillDialog
@@ -702,38 +686,6 @@ function SkillsEmptyState() {
         </div>
       </div>
     </div>
-  );
-}
-
-function DeleteSkillDialog({
-  skill,
-  open,
-  onOpenChange,
-}: {
-  skill: SkillItem;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const deleteSkill = useDeleteSkill();
-
-  const handleDelete = useCallback(async () => {
-    const result = await deleteSkill.mutateAsync(skill.id);
-    if (result) {
-      onOpenChange(false);
-    }
-  }, [skill.id, deleteSkill, onOpenChange]);
-
-  return (
-    <DeleteConfirmDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Delete Skill"
-      description={`Delete the skill "${skill.name}"? This removes its instructions and resource files. This action cannot be undone.`}
-      isPending={deleteSkill.isPending}
-      onConfirm={handleDelete}
-      confirmLabel="Delete Skill"
-      pendingLabel="Deleting..."
-    />
   );
 }
 

@@ -54,6 +54,22 @@ async function apiJson(
   return response.json();
 }
 
+async function createCatalog(
+  page: Page,
+  spec: { name: string; multitenant: boolean; description: string },
+): Promise<{ id: string }> {
+  return apiJson(page, "post", "/api/internal_mcp_catalog", {
+    ...spec,
+    serverType: "local",
+    localConfig: {
+      command: "sleep",
+      arguments: ["3600"],
+      dockerImage: BASE_IMAGE,
+      environment: [],
+    },
+  });
+}
+
 /**
  * A catalog item plus one install, which is all the save gate reads. The
  * install is not waited on: `affectedServerCount > 0` is what makes the form
@@ -64,17 +80,10 @@ async function createCatalogWithInstall(
   name: string,
   multitenant: boolean,
 ): Promise<InstalledFixture> {
-  const catalog = await apiJson(page, "post", "/api/internal_mcp_catalog", {
+  const catalog = await createCatalog(page, {
     name,
-    description: "e2e confirm bar fixture",
-    serverType: "local",
     multitenant,
-    localConfig: {
-      command: "sleep",
-      arguments: ["3600"],
-      dockerImage: BASE_IMAGE,
-      environment: [],
-    },
+    description: "e2e confirm bar fixture",
   });
   const server = await apiJson(page, "post", "/api/mcp_server", {
     name,
@@ -138,7 +147,7 @@ async function bumpImageUntilConfirmBar(
     await expect(imageInput).toHaveValue(/^alpine:/, { timeout: 60_000 });
     await imageInput.fill(BUMP_TAGS[(attempt - 1) % BUMP_TAGS.length]);
 
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("button", { name: "Save & Continue" }).click();
     await expect(page.getByText(barText)).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 120_000, intervals: [500] });
 }
@@ -230,5 +239,78 @@ test.describe("MCP catalog edit — reinstall confirm bar", () => {
         { timeout: 30_000 },
       )
       .toMatchObject({ reinstallRequired: true, reinstallReason: "restart" });
+  });
+});
+
+/**
+ * The wizard's Configuration step has to hand the user to the next step on
+ * save. Its CTA sits in a footer stuck to the bottom of the viewport, which is
+ * where the success toast lands too — so a save that left the user on this step
+ * left them looking at a covered button for the toast's lifetime.
+ *
+ * No install here on purpose: `computeCascadeOutcome` short-circuits to "skip"
+ * at `affectedServerCount === 0`, so the save is direct and the step change is
+ * the only thing under test. The confirm-bar route to the same save is covered
+ * above.
+ */
+test.describe("MCP catalog edit — saving the configuration step", () => {
+  let catalogId: string | null = null;
+
+  test.afterEach(async ({ adminPage }) => {
+    if (!catalogId) return;
+    const response = await adminPage.request
+      .delete(getE2eRequestUrl(`/api/internal_mcp_catalog/${catalogId}`), {
+        headers: { Origin: UI_BASE_URL },
+      })
+      .catch((error: Error) => error);
+    if (response instanceof Error) {
+      console.warn(`cleanup DELETE catalog threw: ${response.message}`);
+    } else if (!response.ok()) {
+      console.warn(`cleanup DELETE catalog -> ${response.status()}`);
+    }
+    catalogId = null;
+  });
+
+  test("save moves on to Test Connection instead of waiting behind the toast", async ({
+    adminPage,
+    makeRandomString,
+  }) => {
+    const name = makeRandomString(8, "wizard-edit");
+    const catalog = await createCatalog(adminPage, {
+      name,
+      multitenant: false,
+      description: "before edit",
+    });
+    catalogId = catalog.id;
+
+    await goToPage(adminPage, `/mcp/registry/${catalog.id}/edit`);
+    const description = adminPage.getByRole("textbox", { name: "Description" });
+    // The catalog query has resolved once it has populated this field.
+    await expect(description).toHaveValue("before edit", { timeout: 60_000 });
+    await description.fill("after edit");
+
+    await adminPage.getByRole("button", { name: "Save & Continue" }).click();
+
+    await expect(adminPage).toHaveURL(/step=test/, { timeout: 30_000 });
+    await expect(
+      adminPage.getByText("Create a connection to verify the server"),
+    ).toBeVisible();
+    await expect(description).toBeHidden();
+
+    // The step change is only worth anything if the save it reports actually
+    // landed — assert the edit, not just the navigation.
+    await expect
+      .poll(
+        async () =>
+          (
+            (await apiJson(
+              adminPage,
+              "get",
+              `/api/internal_mcp_catalog/${catalog.id}`,
+            )) as { description: string | null }
+          ).description,
+        { timeout: 15_000 },
+      )
+      .toBe("after edit");
   });
 });

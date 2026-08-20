@@ -9,6 +9,7 @@ import {
 } from "@/models";
 import { agentKnowledgeSourcesCache } from "@/models/agent-knowledge-sources-cache";
 import { secretManager } from "@/secrets-manager";
+import { teardownP4Shim } from "./connectors/perforce/p4-shim-service";
 
 /**
  * Shared soft-delete and restore orchestration for knowledge bases and
@@ -61,7 +62,10 @@ export async function deleteConnector(connectorId: string): Promise<boolean> {
   // longer fails on its own, so without this an executing sync would keep
   // pulling from the upstream source and writing documents for a connector the
   // user just deleted.
-  await ConnectorRunModel.supersedeRunningForConnector(connectorId);
+  await ConnectorRunModel.supersedeRunningForConnector({
+    connectorId,
+    reason: "Sync stopped: the connector was deleted.",
+  });
 
   const deleted = await KnowledgeBaseConnectorModel.delete(connectorId);
 
@@ -70,6 +74,24 @@ export async function deleteConnector(connectorId: string): Promise<boolean> {
       agentKnowledgeSourcesCache.invalidate(agentId);
     }
     await revokeConnectorSecret(connector?.secretId ?? null);
+
+    // Each connector has its own p4 shim; deleting the connector removes its
+    // pod, its bearer token and its egress rule into the customer's network.
+    // Awaited, not fired off: this is the admin cutting the platform's access
+    // to that server, and it should be done by the time they are told it is.
+    // Still non-fatal — the row is already stamped, so failing the caller
+    // would report a delete that happened as one that did not, and the
+    // periodic shim reconcile removes what a cluster outage leaves behind.
+    if (connector?.connectorType === "perforce") {
+      try {
+        await teardownP4Shim(connectorId);
+      } catch (error) {
+        logger.warn(
+          { err: error, connectorId },
+          "Could not tear down the p4 shim for the deleted Perforce connector; the periodic sweep will retry",
+        );
+      }
+    }
   }
 
   return deleted;

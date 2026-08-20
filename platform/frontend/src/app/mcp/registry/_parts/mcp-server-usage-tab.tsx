@@ -27,10 +27,18 @@ type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
  */
 export function McpServerUsageTab({
   serversForCatalog,
+  autoModeAgents,
 }: {
   serversForCatalog: McpServerFromApi[];
+  /** Org-wide auto-mode roster, fetched once by the parent (useAutoModeAgents). */
+  autoModeAgents:
+    | archestraApiTypes.GetMcpServerAutoModeAgentsResponses["200"]
+    | undefined;
 }) {
-  const { all, assigned, autoOnly } = deriveAgentUsage(serversForCatalog);
+  const { all, assigned, autoOnly } = deriveAgentUsage({
+    serversForCatalog,
+    autoModeAgents,
+  });
 
   if (all.length === 0) {
     return (

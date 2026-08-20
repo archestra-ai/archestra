@@ -188,6 +188,29 @@ describe("classifyErrorForTracking", () => {
     });
   });
 
+  test("groups database resource exhaustion by root cause", () => {
+    // One full disk (or exhausted memory/connection slots) fails every
+    // in-flight query; per-statement wrappers must not fragment it.
+    const pgError = Object.assign(
+      new Error("could not write init file: No space left on device"),
+      { code: "53100" },
+    );
+    const dbError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: pgError },
+    );
+    const decision = classifyErrorForTracking(dbError);
+    expect(decision.report).toBe(true);
+    expect(decision.fingerprint).toEqual([
+      "db-resource-exhaustion",
+      "disk_full",
+    ]);
+    expect(decision.tags).toMatchObject({
+      error_type: "db_resource_exhaustion",
+      db_error_code: "disk_full",
+    });
+  });
+
   test("groups secrets-backend outages by the root condition", () => {
     const error = new ApiError(
       503,
@@ -232,5 +255,15 @@ describe("classifyErrorForTracking", () => {
     const decision = classifyErrorForTracking(error);
     expect(decision.tags?.secrets_backend_error).toHaveLength(200);
     expect(decision.tags?.secrets_backend_error).toMatch(/^500: x+$/);
+  });
+  test("drops a deployment failure whose wrapper lost the error name", () => {
+    // Several report paths persist or re-wrap the runtime's
+    // McpServerDeploymentFailedError as a plain Error, losing the name the
+    // unreachable-server set matches on. The stable message prefix still
+    // identifies the user's container failing, not a crash of ours.
+    const rewrapped = new Error(
+      "Deployment mcp-example-server-abc123 failed: CrashLoopBackOff - back-off 10s restarting failed container",
+    );
+    expect(classifyErrorForTracking(rewrapped)).toEqual({ report: false });
   });
 });

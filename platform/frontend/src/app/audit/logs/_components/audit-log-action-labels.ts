@@ -87,6 +87,12 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeBase.deleted": "Knowledge base deleted",
   "knowledgeBase.purged": "Knowledge base permanently deleted",
   "knowledgeBase.restored": "Knowledge base restored",
+  "knowledgeDirectory.created": "Knowledge directory created",
+  "knowledgeDirectory.updated": "Knowledge directory updated",
+  "knowledgeDirectory.deleted": "Knowledge directory deleted",
+  "knowledgeFile.created": "Knowledge file created",
+  "knowledgeFile.updated": "Knowledge file updated",
+  "knowledgeFile.deleted": "Knowledge file deleted",
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
@@ -113,6 +119,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.deleted": "MCP server deleted",
   "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
+  "mcpServer.hardReset": "MCP server hard reset",
   // MCP install request
   // Retired with the installation-request feature; retained so audit rows
   // written before its removal still render with a readable label.
@@ -295,6 +302,8 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "internalMcpCatalog",
   "invitation",
   "knowledgeBase",
+  "knowledgeDirectory",
+  "knowledgeFile",
   "limit",
   "llmModel",
   "llmOauthClient",
@@ -337,6 +346,8 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   mcpServerInstallationRequest: "MCP install request",
   identityProvider: "Identity provider",
   knowledgeBase: "Knowledge base",
+  knowledgeDirectory: "Knowledge directory",
+  knowledgeFile: "Knowledge file",
   optimizationRule: "Optimization rule",
   organization: "Organization",
   scheduleTrigger: "Scheduled task",

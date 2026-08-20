@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
@@ -67,6 +68,7 @@ function toDraft(rule: OptimizationRule): RuleDraft {
 }
 
 export default function OptimizationRulesPage() {
+  const providerCatalog = useModelProviderCatalog();
   const setActionButton = useSetCostsAction();
   const {
     data: rules = [],
@@ -181,7 +183,7 @@ export default function OptimizationRulesPage() {
         cell: ({ row }) => (
           <LlmProviderOptionLabel
             icon={providerLogoUrl(row.original.provider)}
-            name={providerDisplayNames[row.original.provider]}
+            name={providerCatalog.label(row.original.provider)}
           />
         ),
       },
@@ -242,7 +244,7 @@ export default function OptimizationRulesPage() {
         ),
       },
     ],
-    [teams, updateRule, openEditDialog],
+    [teams, updateRule, openEditDialog, providerCatalog],
   );
 
   function closeDialog() {

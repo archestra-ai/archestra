@@ -2854,7 +2854,12 @@ fn rollout_token(rollout_key: &str, model_name: &str) -> String {
         .trim_matches('-')
         .to_string();
     let slug = if slug.is_empty() { "model".to_string() } else { slug };
-    let digest = format!("{:x}", Sha256::digest(rollout_key.as_bytes()))[..8].to_string();
+    // sha2 0.11 hands back a `hybrid-array::Array`, which no longer implements `LowerHex`, so
+    // hex-encode by hand. Same token as before: the first 8 hex chars (four bytes) of the digest.
+    let digest: String = Sha256::digest(rollout_key.as_bytes())[..4]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     format!("{slug}-{digest}")
 }
 

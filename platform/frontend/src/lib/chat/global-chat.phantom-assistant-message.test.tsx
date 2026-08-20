@@ -126,8 +126,6 @@ function finishTurn(stream: ScriptedStream) {
   stream.close();
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const assistantMessages = (messages: UIMessage[]) =>
   messages.filter((message) => message.role === "assistant");
 

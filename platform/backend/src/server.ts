@@ -55,6 +55,11 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
+// SPDX-SnippetEnd
 import config, {
   shouldRunRenderer,
   shouldRunWebServer,
@@ -62,7 +67,7 @@ import config, {
 } from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
-import { verifyIncognitoChatConfig } from "@/content-encryption/incognito-escrow";
+import { verifyLockedChatConfig } from "@/content-encryption/locked-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
@@ -105,6 +110,12 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -753,6 +764,19 @@ export const createFastifyInstance = () =>
           this.log.error(logPayload, "HTTP request error occurred");
         }
 
+        // A throttling error that knows when it clears says so, so clients wait
+        // that long instead of guessing with their own escalating backoff.
+        // Headers cannot be added once a streaming reply has committed them.
+        const { retryAfterSeconds } = error;
+        if (
+          typeof retryAfterSeconds === "number" &&
+          Number.isFinite(retryAfterSeconds) &&
+          retryAfterSeconds > 0 &&
+          !reply.raw.headersSent
+        ) {
+          reply.header("retry-after", String(Math.ceil(retryAfterSeconds)));
+        }
+
         return reply.status(statusCode).send({
           error: {
             message,
@@ -1055,6 +1079,48 @@ const loadArchestraAppBaseCss = (): string | null => {
 const archestraAppBaseCss = loadArchestraAppBaseCss();
 
 /**
+ * Build the `frame-ancestors` source list for the sandbox proxy response.
+ *
+ * Only origins the operator actually declared may restrict this policy —
+ * `ARCHESTRA_FRONTEND_URL` and friends (via `mcpSandbox.allowedOrigins`) and a
+ * configured `ARCHESTRA_MCP_SANDBOX_DOMAIN`. A deployment that declares none of
+ * them is an open one: the sandbox must stay embeddable wherever the platform is
+ * reached, so the policy stays `*`.
+ *
+ * Ancillary features may only WIDEN an already-restricted list, never create
+ * one. The app-recording renderer is the case in point: its frame ancestors fall
+ * back to a guessed `http://localhost:3000` when nothing is configured, and
+ * pushing that guess unconditionally turned the open policy into a loopback-only
+ * one — so a container reached on any other origin (a remapped published port, a
+ * LAN address, a reverse proxy) had every app iframe refused with
+ * `ERR_BLOCKED_BY_RESPONSE` and rendered an empty box.
+ *
+ * @public — exercised by server.test.ts (knip --production ignores tests)
+ */
+export function buildSandboxFrameAncestors(params: {
+  allowedOrigins: readonly string[];
+  sandboxDomain: string | null | undefined;
+  /** Extra ancestors from the offline video renderer; empty when it is off. */
+  recorderFrameAncestors: readonly string[];
+}): string {
+  const declared = [...params.allowedOrigins];
+  if (params.sandboxDomain) {
+    declared.push(`*.${params.sandboxDomain}`);
+  }
+  if (declared.length === 0) return "*";
+
+  // The renderer loads the replay page from this deployment's own frontend,
+  // which then frames the sandbox exactly as a person's browser does. It
+  // normally reaches it at the configured frontend origin, already declared
+  // above; a deployment that points the renderer somewhere internal instead
+  // needs that address named too, or the sandbox refuses to load inside the
+  // render and the replay films an empty app pane.
+  return [...new Set([...declared, ...params.recorderFrameAncestors])].join(
+    " ",
+  );
+}
+
+/**
  * Register the sandbox proxy route on the main Fastify instance.
  *
  * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
@@ -1074,6 +1140,27 @@ const registerSandboxRoute = (
     );
   }
 
+  // frame-ancestors restricts which origins can embed this sandbox iframe.
+  // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
+  // Guest content CSP is handled by the proxy HTML (meta tag injection from
+  // sandbox-resource-ready message). Purely config-derived, so resolve it once.
+  const frameAncestors = buildSandboxFrameAncestors({
+    allowedOrigins: config.mcpSandbox.allowedOrigins,
+    sandboxDomain: config.mcpSandbox.domain,
+    recorderFrameAncestors: config.hackathonRecorder.enabled
+      ? config.hackathonRecorder.renderFrameAncestors
+      : [],
+  });
+  if (frameAncestors !== "*") {
+    // Reaching the platform on any other origin makes the browser refuse the
+    // sandbox iframe outright, and an app then renders as an empty box with no
+    // JS-visible error. Say so at startup so that is a one-line diagnosis.
+    logger.info(
+      { frameAncestors },
+      "MCP App sandbox may only be embedded by these origins (from ARCHESTRA_FRONTEND_URL / ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS / ARCHESTRA_MCP_SANDBOX_DOMAIN)",
+    );
+  }
+
   fastify.get("/_sandbox/mcp-sandbox-proxy.html", async (request, reply) => {
     // When a sandbox domain is configured, validate the Host header matches
     // *.{domain} to prevent the sandbox route from being abused on the main origin.
@@ -1084,26 +1171,6 @@ const registerSandboxRoute = (
       }
     }
 
-    // frame-ancestors restricts which origins can embed this sandbox iframe.
-    // This is the only CSP directive set via HTTP header — it cannot be set via meta tag.
-    // Guest content CSP is handled by the proxy HTML (meta tag injection from sandbox-resource-ready message).
-    const frameAncestorsList = [...config.mcpSandbox.allowedOrigins];
-    if (config.mcpSandbox.domain) {
-      frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
-    }
-    // The offline video renderer loads the replay page from this deployment's
-    // own frontend, which then frames the sandbox exactly as a person's browser
-    // does. It normally reaches it at the configured frontend origin, already
-    // listed above; a deployment that points the renderer somewhere internal
-    // instead needs that address named too, or the sandbox refuses to load
-    // inside the render and the replay films an empty app pane.
-    if (config.hackathonRecorder.enabled) {
-      frameAncestorsList.push(...config.hackathonRecorder.renderFrameAncestors);
-    }
-    const frameAncestors =
-      frameAncestorsList.length > 0
-        ? [...new Set(frameAncestorsList)].join(" ")
-        : "*";
     void reply.header(
       "Content-Security-Policy",
       `frame-ancestors ${frameAncestors}`,
@@ -1166,6 +1233,13 @@ const registerSandboxRoute = (
 const startMcpServerRuntime = async (
   fastify: ReturnType<typeof createFastifyInstance>,
 ) => {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Demand can be served while K8s initialization is still running or after it
+  // fails. Start protection first so long calls keep heartbeating either way.
+  mcpActiveUseTracker.start();
+  // SPDX-SnippetEnd
   // Initialize MCP Server Runtime (K8s-based)
   if (McpServerRuntimeManager.isEnabled) {
     try {
@@ -1305,7 +1379,7 @@ const startWebServer = async () => {
     // Fail-closed content-key verification, before any write could encrypt
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
-    verifyIncognitoChatConfig();
+    verifyLockedChatConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1375,6 +1449,14 @@ const startWebServer = async () => {
     });
 
     startMcpServerRuntime(fastify);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Wire pooled-connection invalidation to hibernation events. Done here —
+    // not at mcp-client module scope — because the manager module sits in an
+    // import cycle with mcp-client.
+    registerMcpClientHibernationInvalidation();
+    // SPDX-SnippetEnd
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
     skillSandboxRuntimeService.init().catch((error) => {
@@ -1762,7 +1844,7 @@ const startWorker = async () => {
     // Workers write messages and interactions (scheduled runs, triggers), so
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
-    verifyIncognitoChatConfig();
+    verifyLockedChatConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();
@@ -1790,6 +1872,26 @@ const startWorker = async () => {
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Worker task handlers call MCP servers through mcp-client too — wire its
+    // pooled-connection invalidation to hibernation events (see `start`).
+    registerMcpClientHibernationInvalidation();
+    // The idle sweeper runs on the web replicas, but it decides from a row
+    // THIS process's calls keep honest. Without the heartbeat, a worker-side
+    // call that outlives the idle window — an MCP Task makes that ordinary —
+    // ages out of its own protection: the worker's active counter is invisible
+    // cross-process, and the web sweeper hibernates the pod mid-call.
+    // Heartbeat only; a worker never sweeps. Keep this running across rolling
+    // configuration changes because web replicas with the previous flags can
+    // still be sweeping from the same database timestamp.
+    mcpActiveUseTracker.start();
+    // The mirror-image staleness: a web replica can hibernate a deployment this
+    // worker woke. Watchers therefore stay active across flag skew too;
+    // reconcile/sweep remain web-side.
+    McpServerRuntimeManager.startStateWatchersOnly();
+    // SPDX-SnippetEnd
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
@@ -1867,6 +1969,11 @@ const startWorker = async () => {
 
       try {
         await healthServer.close();
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        mcpActiveUseTracker.stop();
+        // SPDX-SnippetEnd
         cacheManager.shutdown();
         await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();

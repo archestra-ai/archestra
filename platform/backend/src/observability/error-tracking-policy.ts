@@ -1,5 +1,6 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
+  getDbResourceExhaustionErrorCode,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
@@ -71,6 +72,24 @@ export function classifyErrorForTracking(
     };
   }
 
+  // Database resource exhaustion (SQLSTATE class 53: disk full, out of
+  // memory, too many connection slots) fails every in-flight query the same
+  // way, and the ORM's per-query "Failed query: <sql>" wrapper otherwise
+  // fragments one capacity incident into a new issue per SQL statement. Like
+  // statement timeouts these are deliberately not retried, but they should
+  // group into a single issue per root cause.
+  const resourceExhaustionCode = getDbResourceExhaustionErrorCode(error);
+  if (resourceExhaustionCode) {
+    return {
+      report: true,
+      fingerprint: ["db-resource-exhaustion", resourceExhaustionCode],
+      tags: {
+        error_type: "db_resource_exhaustion",
+        db_error_code: resourceExhaustionCode,
+      },
+    };
+  }
+
   // A secrets-backend (e.g. Vault) outage fails every route that reads secrets,
   // fragmenting one incident into an issue per endpoint and upstream message.
   // The user-facing message is deliberately generic, so surface the backend's
@@ -137,6 +156,16 @@ const MCP_UNREACHABLE_ERROR_NAMES = new Set([
 
 function isNonActionableError(error: unknown): boolean {
   if (error instanceof Error && MCP_UNREACHABLE_ERROR_NAMES.has(error.name)) {
+    return true;
+  }
+
+  // The same deployment failures matched by message shape: several report
+  // paths re-wrap the runtime's error (or persist and re-surface its message),
+  // which loses the error name the set above matches on. The message prefix
+  // is stable — every McpServerDeploymentFailedError is built as
+  // "Deployment <name> failed: <reason>" (k8s-deployment.ts) — and describes
+  // the state of the user's container, not a crash of ours.
+  if (error instanceof Error && /^Deployment .+ failed: /.test(error.message)) {
     return true;
   }
 

@@ -1,6 +1,7 @@
 import type { ModelInputModality } from "@archestra/shared";
 import type { files, sharing, users } from "dropbox";
 import { Dropbox } from "dropbox";
+import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
   ConnectorCredentials,
@@ -32,7 +33,6 @@ import {
 import {
   describePdfEmptyText,
   describePdfExtractionWarning,
-  parsePdfBuffer,
 } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
@@ -994,10 +994,12 @@ export class DropboxConnector extends BaseConnector {
     const ext = getExtension(file.name);
 
     if (BINARY_EXTENSIONS.has(ext)) {
-      const extracted = await extractTextFromBinary(
+      const extracted = await extractTextFromBinary({
         buffer,
-        ext as BinaryFormat,
-      );
+        format: ext as BinaryFormat,
+        filename: file.name,
+        ocr: this.ocrContext,
+      });
       if (extracted.warning) {
         this.log.warn(
           { fileId: file.id, fileName: file.name, reason: extracted.warning },
@@ -1554,16 +1556,19 @@ function parseDropboxConfig(
   return result.success ? result.data : null;
 }
 
-async function extractTextFromBinary(
-  buffer: Buffer,
-  format: BinaryFormat,
-): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+async function extractTextFromBinary(params: {
+  buffer: Buffer;
+  format: BinaryFormat;
+  filename?: string;
+  ocr?: OcrRunContext;
+}): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+  const { buffer, format, filename, ocr } = params;
   switch (format) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      const result = await parsePdfBuffer(buffer);
+      const result = await extractPdfText({ buffer, filename, ocr });
       return {
         text: result.text,
         emptyReason: describePdfEmptyText(result),

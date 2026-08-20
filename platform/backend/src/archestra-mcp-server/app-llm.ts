@@ -99,6 +99,11 @@ async function runAppLlmCompletion(
     );
   }
 
+  // No `inheritFrom`: unlike the chat subagents, an app completion has no
+  // calling agent whose model it could follow — the same app runs from any
+  // chat and standalone from its own page. The App Runtime LLM Agent's own
+  // model is therefore the only per-organization control over which model
+  // serves apps; without one it falls through to the organization default.
   const selection = await resolveAgentLlmOrDefault({
     agent,
     organizationId,
@@ -120,6 +125,10 @@ async function runAppLlmCompletion(
     source: "app:llm_complete",
     baseUrl: selection.baseUrl,
     chatApiKeyId: selection.chatApiKeyId,
+    // Attribute the spend to the calling app, not just to the org-wide App
+    // Runtime agent every app shares — without this an app's runtime cost is
+    // unattributable, and "what does this app cost to run" has no answer.
+    appId,
   });
 
   const system = args.jsonMode

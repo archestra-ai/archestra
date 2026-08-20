@@ -8,6 +8,25 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
 
+/**
+ * BM25 tuning constants for one query. Resolved per organization by the query
+ * service (an organization's Knowledge-settings override, else the deployment
+ * default from config), and passed down rather than read here so the ranker
+ * stays a pure function of its inputs.
+ *
+ * Okapi BM25 computed in plain SQL from the corpus statistics in
+ * `kb_bm25_term_stats` and `kb_bm25_corpus_stats` (no extension, no extra
+ * index on `kb_chunks`) is the keyword ranker. PostgreSQL's built-in `ts_rank`
+ * runs only while those statistics do not exist yet — the query service checks
+ * {@link KbChunkModel.hasBm25Stats} and omits the constants until then.
+ */
+export interface Bm25Tuning {
+  /** Term-frequency saturation; 0 makes a term binary (present/absent). */
+  k1: number;
+  /** Document-length normalization in [0, 1]; 0 ignores chunk length. */
+  b: number;
+}
+
 export interface VectorSearchResult {
   id: string;
   content: string;
@@ -227,6 +246,14 @@ class KbChunkModel {
      * {@link getTextSearchLanguages}. Empty falls back to the column default.
      */
     languages?: TextSearchLanguage[];
+    /**
+     * BM25 constants to score with. Left unset, the statement ranks with
+     * PostgreSQL's `ts_rank` instead — which the query service does only while
+     * the BM25 statistics are not built yet (see {@link hasBm25Stats}); the BM25
+     * statement itself also uses `ts_rank` to pick its candidate set (see
+     * {@link buildSqlBm25Statement}).
+     */
+    bm25?: Bm25Tuning;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
@@ -260,6 +287,13 @@ class KbChunkModel {
     return KbChunkModel.runFullTextStatement({
       ...params,
       tsQueryText: terms.join(" OR "),
+      // The OR form is tsquery syntax, not text to score against: BM25 parses
+      // its scored terms with to_tsvector, where "OR" is a stopword only in
+      // some configurations — under `simple` or `german` it survives as a
+      // lexeme, and being rare it carries a large IDF, so a chunk that happens
+      // to contain "or" would get a sizeable phantom boost. Score against what
+      // the user actually asked.
+      lexemeText: queryText,
     });
   }
 
@@ -392,7 +426,14 @@ class KbChunkModel {
     connectorIds: string[];
     /** The text handed to websearch_to_tsquery, verbatim. */
     tsQueryText: string;
+    /**
+     * The text BM25 parses its scored terms from. Defaults to `tsQueryText`
+     * and differs only for the OR-fallback, whose operators are not query
+     * terms.
+     */
+    lexemeText?: string;
     languages?: TextSearchLanguage[];
+    bm25?: Bm25Tuning;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     environmentId?: string | null;
@@ -402,6 +443,7 @@ class KbChunkModel {
       connectorIds,
       tsQueryText,
       languages,
+      bm25,
       userAcl,
       bypassAcl = false,
       environmentId,
@@ -468,12 +510,13 @@ class KbChunkModel {
       sql`, `,
     );
 
-    const rows = await executeWithSearchTimeout(sql`
-      SELECT
-        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
-        kbc.connector_type AS "connectorType",
-        GREATEST(${scoreExpression}) AS score
+    // The matched set, with every filter applied. Shared verbatim by both
+    // rankers: these predicates are a security surface (ACL, soft-deleted
+    // connector, environment isolation), so there is exactly one copy of them
+    // and the BM25 ranker cannot drift from it. It also fixes the ordering
+    // that matters — filters run BEFORE any recall cap below, so capping can
+    // never hand a user a shorter list than their permissions allow.
+    const matchedSet = sql`
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
@@ -485,11 +528,427 @@ class KbChunkModel {
         AND (${matchPredicate})
         ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+    `;
+
+    const statement = bm25
+      ? KbChunkModel.buildSqlBm25Statement({
+          matchedSet,
+          scoreExpression,
+          lexemeText: params.lexemeText ?? tsQueryText,
+          limit,
+          tuning: bm25,
+        })
+      : sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        GREATEST(${scoreExpression}) AS score
+      ${matchedSet}
       ORDER BY score DESC
       LIMIT ${limit}
-    `);
+    `;
+
+    const rows = await executeWithSearchTimeout(statement);
 
     return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  /**
+   * Rebuild the BM25 corpus statistics from `kb_chunks`.
+   *
+   * `ts_stat()` does the expensive part: it walks the corpus and returns
+   * document frequency per lexeme, which is precisely BM25's `df`. Running it
+   * once per text-search configuration keeps German stems counted against the
+   * German corpus and English against English — pooling them would compute IDF
+   * over a corpus that does not exist.
+   *
+   * Replaced with DELETE + INSERT in one transaction rather than TRUNCATE: a
+   * TRUNCATE takes ACCESS EXCLUSIVE and would block every concurrent keyword
+   * query for the whole rebuild, while under MVCC the DELETE lets readers keep
+   * the previous snapshot until commit.
+   *
+   * Read-only against `kb_chunks`, so it never blocks ingestion.
+   */
+  static async refreshBm25Stats(): Promise<{
+    languages: number;
+    terms: number;
+  }> {
+    return db.transaction(async (tx) => {
+      // The pool's statement_timeout is sized for request-path queries
+      // (30s by default), and this is a full corpus scan whose cost grows with
+      // the corpus — past roughly half a million chunks it would be killed
+      // mid-rebuild, every hour, forever, leaving every search on the ts_rank
+      // fallback with nothing but a settings-page flag to show for it. Raise
+      // it for this transaction only.
+      await tx.execute(
+        sql`SELECT set_config('statement_timeout', ${String(config.kb.bm25StatsRefreshTimeoutMillis)}, true)`,
+      );
+      // Serialize overlapping rebuilds (a run the stuck-task sweep re-queued
+      // while the original is still going, for instance). The second waits for
+      // the first to commit, then sees its rows and replaces them, instead of
+      // racing the DELETE and failing on duplicate keys. Transaction-scoped, so
+      // it releases with the commit.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext('kb_bm25_stats_refresh'))`,
+      );
+      await tx.execute(sql`
+        CREATE TEMP TABLE kb_bm25_term_stats_next
+          ON COMMIT DROP
+          AS SELECT
+               language.fts_language,
+               stat.word AS term,
+               stat.ndoc::bigint AS df
+             FROM (
+               SELECT DISTINCT fts_language::text AS fts_language FROM kb_chunks
+             ) language
+             CROSS JOIN LATERAL ts_stat(
+               format(
+                 'SELECT search_vector FROM kb_chunks WHERE fts_language::text = %L',
+                 language.fts_language
+               )
+             ) stat
+      `);
+
+      // DELETE + INSERT rather than TRUNCATE: under MVCC, concurrent readers
+      // keep seeing the previous snapshot until this transaction commits, so
+      // the keyword lane never observes an empty statistics table mid-rebuild.
+      await tx.execute(sql`DELETE FROM kb_bm25_term_stats`);
+      const inserted = await tx.execute(sql`
+        INSERT INTO kb_bm25_term_stats (fts_language, term, df)
+        SELECT fts_language, term, df FROM kb_bm25_term_stats_next
+      `);
+
+      await tx.execute(sql`DELETE FROM kb_bm25_corpus_stats`);
+      const languages = await tx.execute(sql`
+        INSERT INTO kb_bm25_corpus_stats (fts_language, n_docs, avg_dl)
+        SELECT fts_language::text, count(*)::bigint, avg(tok_len)::numeric
+        FROM kb_chunks
+        WHERE tok_len IS NOT NULL
+        GROUP BY fts_language::text
+        -- A configuration with no measurable length would make every score
+        -- divide by zero; skip it and leave that language on ts_rank.
+        HAVING avg(tok_len) > 0
+      `);
+
+      return {
+        languages: languages.rowCount ?? 0,
+        terms: inserted.rowCount ?? 0,
+      };
+    });
+  }
+
+  /**
+   * Whether BM25 can actually rank this query right now.
+   *
+   * Every term the query parses to is scored against the statistics for the
+   * chunk's own configuration, so a configuration whose statistics do not
+   * exist yet scores nothing meaningful — a freshly upgraded deployment would
+   * rank as if the corpus were empty. The query service checks this and ranks
+   * with `ts_rank` until the first rebuild has run.
+   *
+   * A configuration with no indexed chunks is harmless and must NOT block
+   * BM25: it contributes no rows either way, and `ts_stat` never produces
+   * statistics for it, so blocking on it would disable BM25 permanently
+   * rather than until the next rebuild. That is not hypothetical — a
+   * connector created in a language nothing has been indexed in yet puts its
+   * language on this list from the moment it exists.
+   *
+   * Chunks left in a configuration no connector claims any more are handled
+   * in the statement itself (deployment-wide totals stand in), not here: a
+   * check for them would have to prove that NO chunk of the searched
+   * connectors lacks statistics, which means reading every one of them on
+   * every search — `fts_language` carries no index, and the healthy case is
+   * exactly the case that cannot short-circuit.
+   */
+  static async hasBm25Stats(
+    languages: TextSearchLanguage[],
+    connectorIds: string[],
+  ): Promise<boolean> {
+    if (connectorIds.length === 0) return false;
+    const wanted =
+      languages.length > 0 ? languages : [DEFAULT_TEXT_SEARCH_LANGUAGE];
+    const names = sql.join(
+      wanted.map((language) => sql`${language}`),
+      sql`, `,
+    );
+    // One small read against the statistics tables (one row per configuration)
+    // on the healthy path. Nothing here touches kb_chunks: a check that had to
+    // prove NO chunk lacks statistics would have to scan every chunk of every
+    // searched connector on every search, and `fts_language` carries no index.
+    const result = await db.execute(sql`
+      SELECT fts_language AS "language"
+      FROM kb_bm25_corpus_stats
+      WHERE fts_language IN (${names}) AND n_docs > 0
+    `);
+    const covered = new Set(
+      (result.rows as Array<{ language: string }>).map((row) => row.language),
+    );
+    const missing = wanted.filter((language) => !covered.has(language));
+    if (missing.length === 0) return true;
+
+    // Something is uncovered. It only matters if chunks are actually stored in
+    // it — a connector created in a language nothing has been indexed in yet
+    // never gets statistics (`ts_stat` only sees languages that have chunks),
+    // so blocking on it would disable BM25 permanently rather than until the
+    // next rebuild. This EXISTS stops at the first matching row, and the case
+    // it has to scan for (no chunks at all in that language) is the rare one.
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const missingNames = sql.join(
+      missing.map((language) => sql`${language}`),
+      sql`, `,
+    );
+    const probe = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM kb_documents d
+        JOIN kb_chunks c ON c.document_id = d.id
+        WHERE d.connector_id IN (${ids})
+          AND c.fts_language::text IN (${missingNames})
+      ) AS "present"
+    `);
+    return !(
+      (probe.rows[0] as { present: boolean } | undefined)?.present ?? false
+    );
+  }
+
+  /**
+   * Whether the organization has any indexed chunk at all — the difference
+   * between "nothing to rank yet" and "ranking". Kept separate from
+   * {@link getBm25StatsCoverage} because chunks can sit in a language no
+   * connector currently claims (a connector whose language was changed after
+   * indexing), which is still indexed content.
+   */
+  static async hasIndexedChunks(organizationId: string): Promise<boolean> {
+    const result = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM kb_documents d
+        JOIN kb_chunks c ON c.document_id = d.id
+        WHERE d.organization_id = ${organizationId}
+      ) AS "present"
+    `);
+    return (
+      (result.rows[0] as { present: boolean } | undefined)?.present ?? false
+    );
+  }
+
+  /**
+   * BM25 statistics coverage for everything an organization can search: one
+   * row per text-search configuration its connectors use, with whether chunks
+   * are actually stored in that configuration and whether statistics exist for
+   * it. Knowledge settings turns this into the keyword-ranking status.
+   *
+   * The two flags mirror {@link hasBm25Stats} exactly, so the status can never
+   * claim BM25 is ranking while queries fall back: chunks-and-no-statistics is
+   * the degraded state, and a language with no chunks never blocks anything.
+   *
+   * Candidate languages come from the connector rows (small, indexed by
+   * organization); chunk presence is an EXISTS probe through
+   * `kb_documents(connector_id)` and `kb_chunks(document_id)`, keyed by the
+   * chunk's own language.
+   */
+  static async getBm25StatsCoverage(organizationId: string): Promise<
+    Array<{
+      language: TextSearchLanguage;
+      hasChunks: boolean;
+      hasStats: boolean;
+    }>
+  > {
+    const result = await db.execute(sql`
+      SELECT
+        kbc.fts_language AS language,
+        EXISTS (
+          SELECT 1
+          FROM kb_documents d
+          JOIN kb_chunks c ON c.document_id = d.id
+          WHERE d.connector_id IN (
+            SELECT id FROM knowledge_base_connectors
+            WHERE organization_id = ${organizationId} AND deleted_at IS NULL
+          )
+          AND c.fts_language::text = kbc.fts_language
+        ) AS "hasChunks",
+        EXISTS (
+          SELECT 1 FROM kb_bm25_corpus_stats s
+          WHERE s.fts_language = kbc.fts_language AND s.n_docs > 0
+        ) AS "hasStats"
+      FROM (
+        SELECT DISTINCT fts_language
+        FROM knowledge_base_connectors
+        WHERE organization_id = ${organizationId} AND deleted_at IS NULL
+      ) kbc
+      ORDER BY kbc.fts_language
+    `);
+    return result.rows as Array<{
+      language: TextSearchLanguage;
+      hasChunks: boolean;
+      hasStats: boolean;
+    }>;
+  }
+
+  /**
+   * Okapi BM25 over the same matched set, in plain SQL.
+   *
+   * Two stages, because BM25 is a scoring function and not an index. Stage one
+   * is recall: the GIN index on `search_vector` produces candidates, ordered by
+   * `ts_rank` and capped. Stage two rescores those candidates properly.
+   *
+   * The cap is the one approximation here, and it is a deliberate dial. Scoring
+   * is linear in candidates (~0.03 ms each, measured on a 60k-chunk corpus), so
+   * an uncapped broad query matching half the corpus costs over a second, while
+   * capping keeps the worst case bounded. Uncapped, this returns byte-identical
+   * top-10 rankings to ParadeDB's `pg_search` on the same corpus; capped, it
+   * can only reorder what `ts_rank` already surfaced. Raise
+   * `config.kb.bm25RecallCap` to trade latency back for fidelity.
+   *
+   * Everything is keyed by the CHUNK's own `fts_language`, not the query's:
+   * a German chunk stores German stems, so it must be scored with German query
+   * lexemes against German corpus statistics. `fts_language` is `regconfig` on
+   * `kb_chunks` and `text` in the statistics tables, and PostgreSQL will not
+   * coerce between them — hence the explicit `::text`.
+   */
+  private static buildSqlBm25Statement(params: {
+    matchedSet: SQL;
+    scoreExpression: SQL;
+    /** The text the scored query terms are parsed from. */
+    lexemeText: string;
+    limit: number;
+    tuning: Bm25Tuning;
+  }): SQL {
+    const {
+      matchedSet,
+      scoreExpression,
+      lexemeText,
+      limit,
+      tuning: { k1, b },
+    } = params;
+    const { bm25RecallCap: recallCap } = config.kb;
+
+    return sql`
+      WITH candidate_ids AS (
+        -- Ids only. The sort that picks the candidate window has to carry its
+        -- payload through, and content and search_vector are toasted: selecting
+        -- them here made PostgreSQL spill the whole matched set to an external
+        -- merge sort (measured on a 60k-chunk corpus: 55 MB of sort space and
+        -- ~115 MB of temp blocks, against 26 kB for a bounded top-N heapsort).
+        -- The columns are joined back for the capped window instead.
+        SELECT c.id
+        ${matchedSet}
+        -- c.id after the score: equally-ranked chunks at the cap boundary would
+        -- otherwise be admitted in whatever order the plan produced, so the same
+        -- query could return different results run to run.
+        ORDER BY GREATEST(${scoreExpression}) DESC, c.id ASC
+        LIMIT ${recallCap}
+      ),
+      candidates AS (
+        SELECT
+          c.id, c.content, c.chunk_index, c.document_id, c.search_vector,
+          c.tok_len, c.fts_language,
+          d.source_id, d.title, d.source_url, d.metadata,
+          kbc.connector_type
+        FROM candidate_ids
+        JOIN kb_chunks c ON c.id = candidate_ids.id
+        JOIN kb_documents d ON d.id = c.document_id
+        LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      ),
+      -- Query lexemes per configuration actually present in the candidate set,
+      -- not per configuration the caller passed. A chunk keeps the language it
+      -- was indexed under, so a connector switched to another one afterwards
+      -- still holds chunks in the old configuration; parsing the query only in
+      -- the connector's current language would leave those candidates with no
+      -- term to match and drop them from the keyword lane entirely.
+      --
+      -- Normalizing through to_tsvector (rather than splitting the raw text)
+      -- applies the same stemmer and stopword list that built search_vector, so
+      -- query lexemes and indexed lexemes are directly comparable.
+      query_terms AS (
+        SELECT
+          language.fts_language,
+          unnest(tsvector_to_array(
+            to_tsvector(language.fts_language, ${lexemeText})
+          )) AS term
+        FROM (SELECT DISTINCT fts_language FROM candidates) language
+      )
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        c.source_id AS "sourceId", c.title, c.source_url AS "sourceUrl", c.metadata,
+        c.connector_type AS "connectorType",
+        -- Cast to double precision, not the bare numeric this sum produces:
+        -- the driver decodes numeric as a STRING, so a BM25 row would carry a
+        -- string score where the ts_rank path (float8) carries a number, and
+        -- both feed one fused list typed as number.
+        SUM(
+          -- IDF, log(1 + …) variant: strictly positive, so a term present in
+          -- most of the corpus stops contributing rather than subtracting.
+          -- The textbook form goes negative there, which would rank a chunk
+          -- BELOW one that omits the term entirely. Matches the variant the
+          -- tool-search BM25F already uses.
+          -- GREATEST guards the numerator: df and n_docs are written by two
+          -- separate statements of the rebuild, so a deletion landing between
+          -- them can leave df > n_docs. Unguarded, that makes the logarithm's
+          -- argument non-positive and PostgreSQL aborts the whole keyword
+          -- query ("cannot take logarithm of a negative number").
+          ln(1 + (GREATEST(corpus.n_docs - COALESCE(ts.df, 0), 0) + 0.5)
+                 / (COALESCE(ts.df, 0) + 0.5))
+          -- Term-frequency saturation: the 10th occurrence adds almost nothing.
+          -- Every tuning constant is cast explicitly: PostgreSQL infers a bound
+          -- parameter's type from its context and picks integer here, which
+          -- rejects the fractional defaults (k1=1.2, b=0.75) outright.
+          * (tf.tf * (${k1}::numeric + 1))
+          / (
+            tf.tf
+            + ${k1}::numeric * (
+              1 - ${b}::numeric
+              -- Length normalization: a hit in a short chunk is stronger
+              -- evidence than the same hit in a long one.
+              + ${b}::numeric * (c.tok_len::numeric / NULLIF(corpus.avg_dl, 0))
+            )
+          )
+        )::double precision AS score
+      FROM candidates c
+      -- LEFT, with deployment-wide totals standing in: a chunk stored under a
+      -- configuration that has no statistics row (a connector whose language
+      -- was changed after indexing leaves chunks behind in the old one) would
+      -- otherwise be dropped by an inner join — silently returning FEWER
+      -- results than the fallback ranker would have. Approximate totals for
+      -- one refresh interval beat losing the chunk.
+      LEFT JOIN kb_bm25_corpus_stats cs ON cs.fts_language = c.fts_language::text
+      CROSS JOIN LATERAL (
+        SELECT
+          -- Deployment-wide totals stand in for a configuration with no row of
+          -- its own; the trailing constants keep the score finite even with an
+          -- empty statistics table, where avg_dl = this chunk's own length
+          -- makes length normalization neutral rather than undefined.
+          COALESCE(cs.n_docs, (SELECT sum(n_docs) FROM kb_bm25_corpus_stats), 1) AS n_docs,
+          COALESCE(cs.avg_dl, (SELECT avg(avg_dl) FROM kb_bm25_corpus_stats), c.tok_len::numeric) AS avg_dl
+      ) corpus
+      JOIN LATERAL unnest(c.search_vector) u ON true
+      JOIN query_terms q
+        ON q.fts_language = c.fts_language AND q.term = u.lexeme
+      -- LEFT, not INNER: a lexeme indexed since the last statistics rebuild has
+      -- no row here. Dropping the pair would drop the chunk from the keyword
+      -- lane whenever every matched term is new — exactly the case of searching
+      -- for an identifier in a document that was just ingested. Absent from the
+      -- statistics means "in no counted document", which is what df = 0 says,
+      -- and the IDF term above then treats it as maximally rare.
+      LEFT JOIN kb_bm25_term_stats ts
+        ON ts.fts_language = c.fts_language::text AND ts.term = u.lexeme
+      -- A lexeme with no positions (a stripped tsvector) still occurred once.
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(array_length(u.positions, 1), 1)::numeric AS tf
+      ) tf
+      WHERE c.tok_len IS NOT NULL
+      GROUP BY
+        c.id, c.content, c.chunk_index, c.document_id, c.source_id, c.title,
+        c.source_url, c.metadata, c.connector_type
+      -- c.id breaks ties deterministically, so pagination and the eval
+      -- harness see a stable order for equally-scored chunks.
+      ORDER BY score DESC, c.id ASC
+      LIMIT ${limit}
+    `;
   }
 }
 

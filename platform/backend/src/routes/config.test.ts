@@ -110,6 +110,12 @@ describe("config routes", () => {
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
       kbAutoSyncPermissionsEnabled: expect.any(Boolean),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Beta flag, off in the test environment (no env var, no master switch).
+      mcpIdleHibernationBetaEnabled: false,
+      // SPDX-SnippetEnd
     });
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");

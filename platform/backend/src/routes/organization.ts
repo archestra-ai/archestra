@@ -9,12 +9,20 @@ import {
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
-import { enterpriseTier } from "@/enterprise-tier";
+import {
+  enterpriseTier,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
+  // SPDX-SnippetEnd
+} from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -44,6 +52,7 @@ import {
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  KeywordRankingStatusSchema,
   type NetworkPolicy,
   type OrganizationRole,
   SelectOrganizationSchema,
@@ -53,6 +62,7 @@ import {
   UpdateAuthSettingsSchema,
   UpdateConnectionSettingsSchema,
   UpdateDefaultEnvironmentSchema,
+  UpdateIntegrationSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
@@ -199,13 +209,38 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateMcpSettings,
-        description: "Update MCP settings (online catalog availability)",
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        description:
+          "Update MCP settings (online catalog availability, idle hibernation)",
+        // SPDX-SnippetEnd
         tags: ["Organization"],
         body: UpdateMcpSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Scaling idle MCP servers to zero is enterprise-licensed. Refuse the
+      // field outright rather than silently dropping it, so an unlicensed
+      // deployment can't believe it turned the feature off either.
+      if (
+        "mcpIdleHibernationEnabled" in body &&
+        !enterpriseTier.isCoreActive()
+      ) {
+        throw new ApiError(403, MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE);
+      }
+      // Stamp before committing the toggle. Another replica may observe the
+      // enabled setting immediately after that commit; every deployment must
+      // already have a full idle window when its first sweep starts.
+      if (body.mcpIdleHibernationEnabled === true) {
+        await McpServerModel.grantIdleWindowToAll();
+      }
+      // SPDX-SnippetEnd
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
@@ -381,6 +416,36 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/integration-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateIntegrationSettings,
+        description:
+          "Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
+        tags: ["Organization"],
+        body: UpdateIntegrationSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      // Hiding a messaging channel has to actually stop it: a Slack or Teams
+      // bot left listening would keep answering after the admin switched the
+      // channel off. The manager re-reads the overrides on initialize.
+      if (body.messagingChannelOverrides !== undefined) {
+        await chatOpsManager.reinitialize();
       }
 
       return reply.send(organization);
@@ -690,6 +755,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.rerankerModel !== undefined
           ? body.rerankerModel
           : (currentOrg?.rerankerModel ?? null);
+      const effectiveOcrKeyId =
+        body.ocrChatApiKeyId !== undefined
+          ? body.ocrChatApiKeyId
+          : (currentOrg?.ocrChatApiKeyId ?? null);
+      const effectiveOcrModel =
+        body.ocrModel !== undefined
+          ? body.ocrModel
+          : (currentOrg?.ocrModel ?? null);
 
       // Embedding is locked once fully configured: changing OR clearing it (any
       // difference from the current pair, incl. a null clear) must go through the
@@ -719,6 +792,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const patchTouchesReranker =
         body.rerankerChatApiKeyId !== undefined ||
         body.rerankerModel !== undefined;
+      const patchTouchesOcr =
+        body.ocrChatApiKeyId !== undefined || body.ocrModel !== undefined;
 
       // Embedding is mandatory: a half-configured pair (a key with no model, or a
       // model with no key) is invalid and blocks save. To clear the embedding
@@ -786,6 +861,57 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "reranker_validation_failed",
           );
         }
+      }
+
+      if (
+        patchTouchesOcr &&
+        Boolean(effectiveOcrKeyId) !== Boolean(effectiveOcrModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Both an OCR API key and model are required, or clear both.",
+          "ocr_validation_failed",
+        );
+      }
+      if (patchTouchesOcr && effectiveOcrKeyId && effectiveOcrModel) {
+        const result = await knowledgeSettingsService.validateOcrConfig({
+          keyId: effectiveOcrKeyId,
+          model: effectiveOcrModel,
+          organizationId,
+        });
+        if (!result.ok) {
+          throw new ApiError(
+            400,
+            result.error ?? "OCR validation failed.",
+            "ocr_validation_failed",
+          );
+        }
+      }
+
+      // Turning OCR on (unset -> configured) resets connector checkpoints so
+      // the next sync re-presents documents that were previously skipped as
+      // having no extractable text — a delta sync would otherwise never show
+      // them again and enabling OCR would appear to do nothing. Key/model
+      // swaps and clears deliberately do not trigger this. The reset runs
+      // BEFORE the organization write: resetting is idempotent and benign on
+      // its own, while the reverse order could persist an enabled OCR whose
+      // reset failed — and a retry would then see OCR as "already configured"
+      // and never reset at all.
+      const ocrWasConfigured =
+        !!currentOrg?.ocrChatApiKeyId && !!currentOrg?.ocrModel;
+      const ocrBecomesConfigured =
+        patchTouchesOcr &&
+        !ocrWasConfigured &&
+        !!effectiveOcrKeyId &&
+        !!effectiveOcrModel;
+      if (ocrBecomesConfigured) {
+        await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
+          organizationId,
+        );
+        logger.info(
+          { organizationId },
+          "OCR enabled — connector checkpoints reset for a full re-sync",
+        );
       }
 
       const organization = await OrganizationModel.patch(organizationId, body);
@@ -896,6 +1022,61 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await knowledgeSettingsService.validateRerankerConfig({
         keyId: body.rerankerChatApiKeyId,
         model: body.rerankerModel,
+        organizationId,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/knowledge-settings/keyword-ranking-status",
+    {
+      schema: {
+        operationId: RouteId.GetKeywordRankingStatus,
+        description:
+          "Where BM25 keyword ranking stands for the organization: whether " +
+          "its corpus statistics cover every language with indexed " +
+          "documents (until they do, keyword search ranks that language " +
+          "with PostgreSQL's built-in ts_rank), when they were last rebuilt " +
+          "and when the next rebuild is due",
+        tags: ["Organization"],
+        response: constructResponseSchema(KeywordRankingStatusSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(
+        await knowledgeSettingsService.getKeywordRankingStatus(organizationId),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/test-ocr",
+    {
+      schema: {
+        operationId: RouteId.TestOcrConnection,
+        description:
+          "Test the OCR configuration by sending a synthetic PDF page to the model",
+        tags: ["Organization"],
+        body: z.object({
+          ocrChatApiKeyId: z.string().uuid(),
+          ocrModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      const result = await knowledgeSettingsService.validateOcrConfig({
+        keyId: body.ocrChatApiKeyId,
+        model: body.ocrModel,
         organizationId,
       });
       return reply.send({

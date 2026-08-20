@@ -90,6 +90,7 @@ export async function resolveProxyModelsApiKey(params: {
       apiKey: resolved.apiKey,
       provider,
     });
+    await virtualKeyRateLimiter.recordSuccess({ credential: token });
     // Per-key extra headers (e.g. gateway RBAC headers) live on the parent
     // provider key, applied here the same way the inference path applies them.
     const providerKey = resolved.chatApiKeyId
@@ -180,9 +181,13 @@ export async function appendClaudeContextVariants(
   for (const model of models) {
     withVariants.push(model);
     const variantId = `${model.id}[1m]`;
-    const contextLength = catalogRows.get(
-      `anthropic:${model.id}`,
-    )?.contextLength;
+    // Resolved, not raw: an admin-set window is a statement about what this
+    // model's endpoint actually serves, and it is what the rest of the
+    // platform sizes against.
+    const catalogRow = catalogRows.get(`anthropic:${model.id}`);
+    const contextLength = catalogRow
+      ? ModelModel.resolveArchitecturalContextLength(catalogRow)
+      : null;
     if (
       contextLength != null &&
       contextLength >= ONE_MILLION_TOKEN_CONTEXT &&
@@ -203,7 +208,11 @@ export function toAnthropicModelsList(models: ModelInfo[]) {
     data: models.map((model) => ({
       type: "model" as const,
       id: model.id,
-      display_name: model.displayName,
+      // ModelInfo types displayName as required, but rows built from
+      // non-Anthropic-shaped upstream listings can leave it undefined at
+      // runtime — the response schema requires a string, so a single bare
+      // row used to fail the whole listing with a serialization 500.
+      display_name: model.displayName ?? model.id,
       created_at: model.createdAt,
     })),
     has_more: false,

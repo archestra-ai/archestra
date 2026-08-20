@@ -2,7 +2,7 @@
 {{/*
 Database migration Job.
 
-Runs `drizzle-kit migrate` as a Helm pre-upgrade hook so the target version's
+Runs tracked Drizzle migrations as a Helm pre-upgrade hook so the target version's
 schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
@@ -21,7 +21,7 @@ metadata:
   annotations:
     helm.sh/hook: pre-upgrade
     helm.sh/hook-weight: "-5"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded,hook-failed
 spec:
   backoffLimit: {{ .Values.archestra.migrationJob.backoffLimit | default 3 }}
   {{- with .Values.archestra.migrationJob.activeDeadlineSeconds }}
@@ -45,11 +45,29 @@ spec:
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
-          {{- include "archestra-platform.vaultSecretsCommand" "./node_modules/.bin/drizzle-kit migrate" | nindent 10 }}
+          {{- include "archestra-platform.vaultSecretsCommand" "node ./scripts/migrate-with-lock.mjs" | nindent 10 }}
           {{- else }}
-          command: ["./node_modules/.bin/drizzle-kit", "migrate"]
+          command: ["node", "./scripts/migrate-with-lock.mjs"]
           {{- end }}
           env:
+            {{- /*
+            Preserve existing external-DB configurations. Before this Job had
+            dedicated settings, operators supplied database credentials through
+            the shared secret/valueFrom lists. Render them before hook-specific
+            values so migrationJob entries can override duplicate names.
+            */}}
+            {{- range .Values.archestra.envFromSecrets }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+            {{- range .Values.archestra.envWithValueFrom }}
+            - name: {{ .name }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+            {{- end }}
             {{- range $key, $value := .Values.archestra.migrationJob.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -66,6 +84,10 @@ spec:
               valueFrom:
                 {{- toYaml .valueFrom | nindent 16 }}
             {{- end }}
+            {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) }}
+            - name: ARCHESTRA_DATABASE_URL
+              value: {{ index .Values.archestra.env "ARCHESTRA_DATABASE_URL" | quote }}
+            {{- end }}
             {{- /*
             Fail-fast lock acquisition for migration DDL: the hook overlaps
             live traffic from the previous release, so DDL waiting on a table
@@ -78,7 +100,7 @@ spec:
             - name: PGOPTIONS
               value: {{ printf "-c lock_timeout=%s" (toString .Values.archestra.migrationJob.lockTimeout) | quote }}
             {{- end }}
-            {{- include "archestra-platform.env" $migrationContext | nindent 12 }}
+            {{- include "archestra-platform.databaseEnv" $migrationContext | nindent 12 }}
           {{- if or .Values.archestra.envFrom .Values.archestra.migrationJob.envFrom }}
           envFrom:
             {{- with .Values.archestra.envFrom }}

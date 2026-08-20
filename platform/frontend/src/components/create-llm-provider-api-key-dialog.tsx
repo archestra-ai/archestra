@@ -13,7 +13,6 @@ import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
-  PROVIDER_CONFIG,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,7 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
@@ -78,11 +78,13 @@ export function CreateLlmProviderApiKeyDialog({
   const { data: canCreateOrgScopedKey } = useHasPermissions({
     llmProviderApiKey: ["admin"],
   });
+  const providerCatalog = useModelProviderCatalog();
 
   const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: getDefaultFormValues({
       defaultValues,
       canCreateOrgScopedKey: canCreateOrgScopedKey === true,
+      availableProviders: providerCatalog.visibleIds,
     }),
   });
 
@@ -92,9 +94,10 @@ export function CreateLlmProviderApiKeyDialog({
       getDefaultFormValues({
         defaultValues,
         canCreateOrgScopedKey: canCreateOrgScopedKey === true,
+        availableProviders: providerCatalog.visibleIds,
       }),
     );
-  }, [canCreateOrgScopedKey, defaultValues, form, open]);
+  }, [canCreateOrgScopedKey, defaultValues, form, open, providerCatalog]);
 
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
@@ -125,7 +128,7 @@ export function CreateLlmProviderApiKeyDialog({
           values.name?.trim() ||
           (subscriptionKind
             ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
-            : PROVIDER_CONFIG[values.provider].name),
+            : providerCatalog.label(values.provider)),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
@@ -238,11 +241,17 @@ export function CreateLlmProviderApiKeyDialog({
 function getDefaultFormValues(params: {
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
   canCreateOrgScopedKey: boolean;
+  /** Providers the organization still allows, in catalog order. */
+  availableProviders: LlmProviderApiKeyFormValues["provider"][];
 }): LlmProviderApiKeyFormValues {
-  const { defaultValues, canCreateOrgScopedKey } = params;
+  const { defaultValues, canCreateOrgScopedKey, availableProviders } = params;
   return {
     name: "",
-    provider: "anthropic",
+    // Anthropic unless the admins turned it off — the dialog must never open
+    // on a provider its own picker refuses to offer.
+    provider: availableProviders.includes("anthropic")
+      ? "anthropic"
+      : (availableProviders[0] ?? "anthropic"),
     apiKey: null,
     baseUrl: null,
     inferenceBaseUrl: null,

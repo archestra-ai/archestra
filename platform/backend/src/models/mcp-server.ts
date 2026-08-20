@@ -7,6 +7,12 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  lt,
+  // SPDX-SnippetEnd
   ne,
   or,
   type SQL,
@@ -26,14 +32,17 @@ import { catalogInEnvironmentPredicate } from "@/services/environments/environme
 import type {
   InsertMcpServer,
   McpServer,
-  McpServerAgentUsage,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerHibernationMode,
+  // SPDX-SnippetEnd
   ResourceVisibilityScope,
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
-import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -51,6 +60,39 @@ const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 const SCOPE_PRECEDENCE: ResourceVisibilityScope[] = ["personal", "team", "org"];
 const scopeRank = (scope: ResourceVisibilityScope): number =>
   SCOPE_PRECEDENCE.indexOf(scope);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Minimum age of `lastUsedAt` before {@link McpServerModel.updateLastUsed}
+ * refreshes it. Every proxied MCP request touches the server row, so an
+ * unconditional write would turn the row into a lock hot spot — the staleness
+ * window collapses a burst into at most one write.
+ *
+ * @public — consumed by the idle-hibernation sweeper and tests
+ */
+export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS = 30_000;
+
+/**
+ * How often a server with a call in flight has `lastUsedAt` re-stamped, so a
+ * long call cannot age out of its own protection while it is still running.
+ * Half the refresh interval, so a running call's row is never more than one
+ * interval plus one tick stale — which is exactly the grace the idle sweeper
+ * extends its window by.
+ *
+ * Defined HERE, beside the interval it derives from, rather than next to the
+ * tracker that ticks on it: the tracker imports the models barrel, so a
+ * sweeper that imported this from the tracker would close an import cycle and
+ * read the binding before it was initialised. That cost an outage-shaped bug —
+ * `undefined` made the whole idle cutoff NaN, every `>=` against it false, and
+ * so every candidate deployment was hibernated no matter how recently used.
+ *
+ * @public — consumed by the idle-hibernation sweeper, the demand tracker, and tests
+ */
+export const MCP_DEMAND_HEARTBEAT_INTERVAL_MS =
+  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS / 2;
+// SPDX-SnippetEnd
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
@@ -465,22 +507,14 @@ class McpServerModel {
       await AgentToolModel.getAssignedAgentDetailsForMcpServers([
         ...serversMap.keys(),
       ]);
-    // Auto-mode agents belong to the viewing org and can reach every server, so
-    // the same set decorates each one. Skipped when the caller omits an org
-    // (e.g. background/admin sweeps that do not render the registry card).
-    let autoModeAgents: McpServerAgentUsage[] = [];
-    if (organizationId) {
-      const autoModeAgentsByOrg =
-        await AgentModel.getAutoModeAgentDetailsByOrganizations([
-          organizationId,
-        ]);
-      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
-    }
+    // Auto-mode agents (implicit access to all tools) are deliberately NOT
+    // decorated here: the set is org-wide and identical for every server, so
+    // embedding it repeated the whole roster once per row. It is served once
+    // by GET /api/mcp_server/auto_mode_agents instead.
 
     return servers.map((server) => ({
       ...server,
       assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
-      autoModeAgents,
     }));
   }
 
@@ -963,7 +997,6 @@ class McpServerModel {
     id: string,
     userId?: string,
     isMcpServerAdmin?: boolean,
-    organizationId?: string,
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
@@ -1015,14 +1048,6 @@ class McpServerModel {
       McpServerUserModel.getUserDetailsForMcpServer(id),
       AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
     ]);
-    let autoModeAgents: McpServerAgentUsage[] = [];
-    if (organizationId) {
-      const autoModeAgentsByOrg =
-        await AgentModel.getAutoModeAgentDetailsByOrganizations([
-          organizationId,
-        ]);
-      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
-    }
 
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
@@ -1048,7 +1073,6 @@ class McpServerModel {
       teamDetails,
       secretStorageType,
       assignedAgents: assignedAgentsByServer.get(id) ?? [],
-      autoModeAgents,
     };
   }
 
@@ -1203,6 +1227,196 @@ class McpServerModel {
 
     return updatedServer;
   }
+
+  /** Atomically move every install sharing one reset to the same status. */
+  static async updateInstallationStatuses(params: {
+    ids: string[];
+    status: "pending" | "success" | "error";
+    error: string | null;
+    expected?: {
+      status: "pending" | "success" | "error";
+      error: string | null;
+    };
+    tx?: Transaction;
+  }): Promise<string[]> {
+    const ids = [...new Set(params.ids)];
+    if (ids.length === 0) return [];
+    const rows = await (params.tx ?? db)
+      .update(schema.mcpServersTable)
+      .set({
+        localInstallationStatus: params.status,
+        localInstallationError: params.error,
+      })
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          params.expected
+            ? eq(
+                schema.mcpServersTable.localInstallationStatus,
+                params.expected.status,
+              )
+            : undefined,
+          params.expected
+            ? params.expected.error === null
+              ? isNull(schema.mcpServersTable.localInstallationError)
+              : eq(
+                  schema.mcpServersTable.localInstallationError,
+                  params.expected.error,
+                )
+            : undefined,
+        ),
+      )
+      .returning({ id: schema.mcpServersTable.id });
+    return rows.map(({ id }) => id);
+  }
+
+  /** Pending installs carrying one internal operation-marker prefix. */
+  static async findPendingInstallationsByErrorPrefix(
+    errorPrefix: string,
+  ): Promise<Array<{ id: string; localInstallationError: string | null }>> {
+    return db
+      .select({
+        id: schema.mcpServersTable.id,
+        localInstallationError: schema.mcpServersTable.localInstallationError,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.localInstallationStatus, "pending"),
+          like(
+            schema.mcpServersTable.localInstallationError,
+            `${errorPrefix}%`,
+          ),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Refresh `lastUsedAt` for a server that just handled a request.
+   *
+   * Skips the write when `lastUsedAt` is already fresh (see
+   * {@link MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS}); concurrent callers that
+   * lose the race re-check the condition after the winner commits and skip
+   * too. `updatedAt` is deliberately pinned to its current value so a pure
+   * usage touch never churns it (drizzle's `$onUpdate` would otherwise bump it
+   * on every update).
+   */
+  static async updateLastUsed(id: string): Promise<void> {
+    const cutoff = new Date(
+      Date.now() - MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        lastUsedAt: new Date(),
+        // No-op self-assignment: overrides the column's $onUpdate bump.
+        updatedAt: sql`${schema.mcpServersTable.updatedAt}`,
+      })
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            isNull(schema.mcpServersTable.lastUsedAt),
+            lt(schema.mcpServersTable.lastUsedAt, cutoff),
+          ),
+        ),
+      );
+  }
+
+  /** Grant every live install a full idle window before hibernation is enabled. */
+  static async grantIdleWindowToAll(): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        lastUsedAt: new Date(),
+        // No-op self-assignment: overrides the column's $onUpdate bump.
+        updatedAt: sql`${schema.mcpServersTable.updatedAt}`,
+      })
+      .where(notDeleted(schema.mcpServersTable));
+  }
+
+  /**
+   * Latest usage timestamp across the given (non-deleted) servers, treating a
+   * NULL `lastUsedAt` as "never used since creation" via `createdAt`. Returns
+   * null for empty input or when none of the ids match an active row.
+   */
+  static async getLatestUsageAt(ids: string[]): Promise<Date | null> {
+    if (ids.length === 0) return null;
+
+    const [row] = await db
+      .select({
+        // mapWith reuses the timestamp column's decoder so the aggregate's
+        // driver string is parsed as UTC, exactly like a plain column read
+        latest:
+          sql`max(coalesce(${schema.mcpServersTable.lastUsedAt}, ${schema.mcpServersTable.createdAt}))`.mapWith(
+            schema.mcpServersTable.createdAt,
+          ),
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return row?.latest ?? null;
+  }
+
+  /**
+   * The per-install idle-hibernation modes of the given (non-deleted)
+   * servers. Projected to the one column the sweeper resolves the group's
+   * verdict from — it runs over every loaded deployment on a timer, so it
+   * must not pull whole rows to read a single enum.
+   */
+  static async getHibernationModes(
+    ids: string[],
+  ): Promise<McpServerHibernationMode[]> {
+    if (ids.length === 0) return [];
+
+    const rows = await db
+      .select({ hibernationMode: schema.mcpServersTable.hibernationMode })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return rows.map((row) => row.hibernationMode);
+  }
+
+  /**
+   * Cascade the idle-hibernation override onto every live install of a
+   * catalog. The registry's server settings dialog is catalog-scoped, so its
+   * PUT writes through here; the reinstall route remains the path for setting
+   * a single installation apart. `updatedAt` is deliberately pinned — an
+   * operational toggle is not a config edit.
+   */
+  static async setHibernationModeForCatalog(
+    catalogId: string,
+    hibernationMode: McpServerHibernationMode,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        hibernationMode,
+        // No-op self-assignment: overrides the column's $onUpdate bump.
+        updatedAt: sql`${schema.mcpServersTable.updatedAt}`,
+      })
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Set the visibility scope of an MCP server. For installed servers scope is
@@ -1754,6 +1968,50 @@ class McpServerModel {
   }
 
   /**
+   * Of `catalogIds`, the ones the caller can already reach at least one live
+   * install of — their own personal install, an install shared with a team they
+   * belong to, or an org-scoped install. This is the batch, pre-flight shape of
+   * the same own → team → org precedence the runtime applies per call when it
+   * picks which install serves a tool, so a catalog missing from the result is
+   * one the caller would be prompted to connect at tool time.
+   */
+  static async getCatalogIdsWithAccessibleInstall(params: {
+    userId: string;
+    catalogIds: string[];
+  }): Promise<Set<string>> {
+    const { userId, catalogIds } = params;
+    if (catalogIds.length === 0) return new Set();
+
+    const accessibleServerIds =
+      await McpServerModel.getAccessibleInstallIds(userId);
+    if (accessibleServerIds.length === 0) return new Set();
+
+    // Filtered by catalog in SQL and intersected with the caller's access in
+    // memory, rather than sending every accessible install id as a bind
+    // parameter — the caller's set grows with the organization, while the
+    // catalogs asked about are only the ones an agent actually uses.
+    const accessible = new Set(accessibleServerIds);
+    const rows = await db
+      .select({
+        id: schema.mcpServersTable.id,
+        catalogId: schema.mcpServersTable.catalogId,
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return new Set(
+      rows.flatMap((row) =>
+        row.catalogId && accessible.has(row.id) ? [row.catalogId] : [],
+      ),
+    );
+  }
+
+  /**
    * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(
@@ -1888,6 +2146,11 @@ class McpServerModel {
       // (flag-only) restore flips deletedAt → null and reinstallRequired → true.
       deletedAt: s.deletedAt ? s.deletedAt.toISOString() : null,
       reinstallRequired: s.reinstallRequired,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      hibernationMode: s.hibernationMode,
+      // SPDX-SnippetEnd
       createdAt: s.createdAt.toISOString(),
     };
   }

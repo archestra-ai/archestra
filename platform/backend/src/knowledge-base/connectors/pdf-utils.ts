@@ -13,12 +13,54 @@ type PdfExtractionStatus =
   | "empty"
   | "parse_failed";
 
-interface PdfExtractionResult {
+/**
+ * Per-page outcome of a successful document parse. `text` holds the page's
+ * extracted text; `"textless"` pages parsed cleanly but yielded none (blank,
+ * image-only, or graphics-only); `"failed"` pages threw during extraction.
+ * Absent entirely when the document itself could not be parsed.
+ */
+export interface PdfPageOutcome {
+  pageNumber: number;
+  status: "text" | "textless" | "failed";
+  text?: string;
+}
+
+/**
+ * What the optional OCR pass did to a document's textless pages. Attached to
+ * the extraction result by `extractPdfText` (pdf-ocr.ts) so the skip/warning
+ * descriptions can tell an admin whether OCR ran, what it recovered, and what
+ * stopped it.
+ */
+export interface OcrOutcome {
+  transcribedPageCount: number;
+  /** Textless pages OCR attempted but could not transcribe. */
+  failedPageCount: number;
+  /** Textless pages never attempted because a limit stopped OCR first. */
+  skippedPageCount: number;
+  /**
+   * Which limit stopped scheduling, when skippedPageCount > 0. When several
+   * limits bind in one document the label is the dominant one (deadline over
+   * budget over cap); the counts stay exact.
+   */
+  skippedBy?:
+    | "document-page-cap"
+    | "run-page-budget"
+    | "sync-deadline"
+    | "document-size-limit";
+  /** Summary of the first failure, for run diagnostics. */
+  failureSummary?: string;
+}
+
+export interface PdfExtractionResult {
   text: string;
   status: PdfExtractionStatus;
   pageCount?: number;
   failedPageCount?: number;
   textlessPageCount?: number;
+  /** Ordered per-page outcomes; only present when the document parsed. */
+  pages?: PdfPageOutcome[];
+  /** Present when an OCR pass ran over the document's textless pages. */
+  ocr?: OcrOutcome;
   error?: string;
 }
 
@@ -36,12 +78,12 @@ export function describePdfEmptyText(
       return undefined;
     case "no_text_layer": {
       const details = describeEmptyPages(result);
-      return `PDF has ${result.pageCount} page(s) but no extractable text layer${details ? ` (${details})` : ""}`;
+      return `PDF has ${result.pageCount} page(s) but no extractable text layer${details ? ` (${details})` : ""}${describeFailedOcr(result)}`;
     }
     case "empty":
       return "PDF contains no pages";
     case "parse_failed":
-      return `PDF could not be parsed or its pages could not be extracted${result.error ? `: ${result.error}` : ""}`;
+      return `PDF could not be parsed or its pages could not be extracted${result.error ? `: ${result.error}` : ""}${describeFailedOcr(result)}`;
   }
 }
 
@@ -53,6 +95,7 @@ export function describePdfExtractionWarning(
   result: PdfExtractionResult,
 ): string | undefined {
   if (result.status !== "partial") return undefined;
+  const ocrSuffix = describeOcrSummary(result.ocr);
 
   if (result.failedPageCount) {
     const causes = [
@@ -61,10 +104,15 @@ export function describePdfExtractionWarning(
     if (result.textlessPageCount) {
       causes.push(describeTextlessPages(result.textlessPageCount));
     }
-    return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.`;
+    return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.${ocrSuffix}`;
   }
   if (result.textlessPageCount) {
-    return `PDF ${describeTextlessPages(result.textlessPageCount)}. Text from the other pages was indexed.`;
+    return `PDF ${describeTextlessPages(result.textlessPageCount)}. Text from the other pages was indexed.${ocrSuffix}`;
+  }
+  if (ocrSuffix) {
+    // Every originally-textless page was transcribed but some pages had
+    // failed extraction, or vice versa — surface the OCR contribution.
+    return ocrSuffix.trim();
   }
   return undefined;
 }
@@ -104,6 +152,7 @@ export async function parsePdfBuffer(
 
     const pageTexts: string[] = [];
     const pageErrors: string[] = [];
+    const pages: PdfPageOutcome[] = [];
     let failedPageCount = 0;
     let textlessPageCount = 0;
 
@@ -119,6 +168,7 @@ export async function parsePdfBuffer(
 
           if (pageText.trim()) {
             pageTexts.push(pageText);
+            pages.push({ pageNumber, status: "text", text: pageText });
             continue;
           }
           // Conservatively record every successfully parsed textless page.
@@ -126,6 +176,7 @@ export async function parsePdfBuffer(
           // render operator list, which decodes image resources and is unsafe
           // for large or adversarial PDFs. The warning keeps that ambiguity.
           textlessPageCount++;
+          pages.push({ pageNumber, status: "textless" });
         } finally {
           // Release per-page text/font resources before moving on so large
           // PDFs do not accumulate every page until document destruction.
@@ -137,6 +188,7 @@ export async function parsePdfBuffer(
         }
       } catch (error) {
         failedPageCount++;
+        pages.push({ pageNumber, status: "failed" });
         pageErrors.push(
           `page ${pageNumber}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -155,6 +207,7 @@ export async function parsePdfBuffer(
         status: "parse_failed",
         pageCount,
         ...counts,
+        pages,
         error: summarizePageErrors(pageErrors),
       };
     }
@@ -164,6 +217,7 @@ export async function parsePdfBuffer(
         status: "no_text_layer",
         pageCount,
         ...counts,
+        pages,
       };
     }
     if (failedPageCount > 0 || textlessPageCount > 0) {
@@ -172,12 +226,13 @@ export async function parsePdfBuffer(
         status: "partial",
         pageCount,
         ...counts,
+        pages,
         ...(pageErrors.length > 0
           ? { error: summarizePageErrors(pageErrors) }
           : {}),
       };
     }
-    return { text, status: "ok", pageCount, ...counts };
+    return { text, status: "ok", pageCount, ...counts, pages };
   } catch (error) {
     return {
       text: "",
@@ -227,6 +282,62 @@ function summarizePageErrors(errors: string[]): string {
   const shown = errors.slice(0, 3);
   const remainder = errors.length - shown.length;
   return `${shown.join("; ")}${remainder > 0 ? `; and ${remainder} more` : ""}`;
+}
+
+/** " ; OCR ..." suffix for a document whose OCR pass recovered nothing. */
+function describeFailedOcr(result: PdfExtractionResult): string {
+  const ocr = result.ocr;
+  if (!ocr || ocr.transcribedPageCount > 0) return "";
+  const attempted = ocr.failedPageCount + ocr.skippedPageCount;
+  const cause = ocr.failureSummary
+    ? `: ${ocr.failureSummary}`
+    : ocr.skippedBy
+      ? ` (stopped by ${describeOcrLimit(ocr.skippedBy)})`
+      : "";
+  return `; OCR could not transcribe any of the ${attempted} textless page(s)${cause}`;
+}
+
+/** Sentence describing a partially-successful OCR pass, appended to warnings. */
+function describeOcrSummary(ocr: OcrOutcome | undefined): string {
+  if (!ocr) return "";
+  const attempted =
+    ocr.transcribedPageCount + ocr.failedPageCount + ocr.skippedPageCount;
+  const parts = [
+    `OCR transcribed ${ocr.transcribedPageCount} of ${attempted} textless page(s)`,
+  ];
+  if (ocr.failedPageCount > 0) {
+    parts.push(
+      `${ocr.failedPageCount} could not be transcribed${ocr.failureSummary ? ` (${ocr.failureSummary})` : ""}`,
+    );
+  }
+  if (ocr.skippedPageCount > 0 && ocr.skippedBy) {
+    parts.push(
+      `${ocr.skippedPageCount} skipped by the ${describeOcrLimit(ocr.skippedBy)}`,
+    );
+  }
+  // A zero-transcription outcome whose cause the counts above don't carry
+  // (e.g. an oversize document skipped wholesale) still names its reason.
+  if (
+    parts.length === 1 &&
+    ocr.transcribedPageCount === 0 &&
+    ocr.failureSummary
+  ) {
+    parts.push(ocr.failureSummary);
+  }
+  return ` ${parts.join("; ")}.`;
+}
+
+function describeOcrLimit(limit: NonNullable<OcrOutcome["skippedBy"]>): string {
+  switch (limit) {
+    case "document-page-cap":
+      return "per-document OCR page cap";
+    case "run-page-budget":
+      return "sync run's OCR page budget";
+    case "sync-deadline":
+      return "sync run's time budget";
+    case "document-size-limit":
+      return "per-document size limit";
+  }
 }
 
 function describeEmptyPages(result: PdfExtractionResult): string {

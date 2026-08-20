@@ -575,6 +575,25 @@ class AnthropicResponseAdapter
     return reason ? [reason] : [];
   }
 
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ): AnthropicResponse {
+    // Positional: one rewritten entry per call this response carries, in
+    // order, so ids the client correlates by are untouched.
+    let next = 0;
+    const content = this.response.content.map((block) => {
+      if (block.type !== "tool_use") return block;
+      const rewritten = toolCalls[next++];
+      if (!rewritten) return block;
+      return {
+        ...block,
+        name: rewritten.name,
+        input: parseArgs(rewritten.arguments),
+      };
+    });
+    return { ...this.response, content };
+  }
+
   toRefusalResponse(
     _refusalMessage: string,
     contentMessage: string,
@@ -798,6 +817,59 @@ class AnthropicStreamAdapter
     });
   }
 
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
+    // Same release semantics as getRawToolCallEvents: these blocks are becoming
+    // the client's, so toProviderResponse must name them. The buffered raw
+    // events are deliberately NOT replayed — they carry the tool the model
+    // named directly, which is the call being repaired — so these blocks get
+    // freshly allocated output indices instead of going through the upstream
+    // index mapping.
+    this.toolCallsReleased = true;
+    const events: string[] = [];
+    for (const toolCall of toolCalls) {
+      const index = this.nextOutIndex++;
+      let input: Record<string, unknown> = {};
+      try {
+        input = JSON.parse(toolCall.arguments);
+      } catch {
+        // A call whose arguments do not parse is never rewritten upstream of
+        // here; keep the block well-formed rather than emitting invalid JSON.
+      }
+      events.push(
+        `event: content_block_start\ndata: ${JSON.stringify({
+          type: "content_block_start",
+          index,
+          content_block: {
+            type: "tool_use",
+            id: toolCall.id,
+            name: toolCall.name,
+            input: {},
+          },
+        })}\n\n`,
+      );
+      // Anthropic streams tool input as `partial_json` fragments that the
+      // client concatenates and parses; one fragment carrying the whole object
+      // is the valid degenerate case.
+      events.push(
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index,
+          delta: {
+            type: "input_json_delta",
+            partial_json: JSON.stringify(input),
+          },
+        })}\n\n`,
+      );
+      events.push(
+        `event: content_block_stop\ndata: ${JSON.stringify({
+          type: "content_block_stop",
+          index,
+        })}\n\n`,
+      );
+    }
+    return events;
+  }
+
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
     const index = this.nextOutIndex++;
@@ -832,9 +904,7 @@ class AnthropicStreamAdapter
             : (this.state.stopReason ?? "end_turn"),
           stop_sequence: null,
         },
-        usage: {
-          output_tokens: this.state.usage?.outputTokens ?? 0,
-        },
+        usage: this.deltaUsage(),
       })}\n\n`,
     );
 
@@ -858,10 +928,7 @@ class AnthropicStreamAdapter
         model: this.state.model,
         stop_reason: "end_turn",
         stop_sequence: null,
-        usage: {
-          input_tokens: this.state.usage?.inputTokens ?? 0,
-          output_tokens: this.state.usage?.outputTokens ?? 0,
-        },
+        usage: this.responseUsage(),
       };
     }
 
@@ -913,10 +980,62 @@ class AnthropicStreamAdapter
       model: this.state.model,
       stop_reason: stopReason,
       stop_sequence: null,
-      usage: {
-        input_tokens: this.state.usage?.inputTokens ?? 0,
-        output_tokens: this.state.usage?.outputTokens ?? 0,
-      },
+      usage: this.responseUsage(),
+    };
+  }
+
+  /**
+   * The turn's usage in the `message_delta` wire shape.
+   *
+   * Anthropic documents `message_delta.usage` as the turn's CUMULATIVE usage —
+   * input, output and both cache directions — not an output-only tail. Emitting
+   * `output_tokens` alone forces every consumer to have kept `message_start`'s
+   * numbers, and any consumer that treats the final event as authoritative (the
+   * usual reading of "cumulative") records the turn with no prompt and no cache
+   * reads at all.
+   */
+  private deltaUsage(): Record<string, number> {
+    const usage = this.state.usage;
+    return {
+      input_tokens: usage?.inputTokens ?? 0,
+      output_tokens: usage?.outputTokens ?? 0,
+      cache_read_input_tokens: usage?.cacheReadTokens ?? 0,
+      cache_creation_input_tokens: usage?.cacheWriteTokens ?? 0,
+    };
+  }
+
+  /**
+   * The turn's usage in the `MessagesResponse` shape, for the reconstructed
+   * response the interaction log persists.
+   *
+   * The cache counts belong here for the same reason they belong on the wire:
+   * without them the stored body reports a prompt of only the tokens that missed
+   * the cache, contradicting the row's own `cache_read_tokens` column and making
+   * any usage re-derived from the stored response (`getUsageTokens`) silently
+   * cache-free.
+   */
+  private responseUsage(): AnthropicResponse["usage"] {
+    const usage = this.state.usage;
+    const cacheWrite = usage?.cacheWriteTokens ?? 0;
+    const cacheWrite1h = Math.min(
+      Math.max(usage?.cacheWrite1hTokens ?? 0, 0),
+      cacheWrite,
+    );
+    return {
+      input_tokens: usage?.inputTokens ?? 0,
+      output_tokens: usage?.outputTokens ?? 0,
+      cache_read_input_tokens: usage?.cacheReadTokens ?? 0,
+      cache_creation_input_tokens: cacheWrite,
+      // Only meaningful when something was written; the per-TTL split is what
+      // separates a 1.25x write from a 2x one in the cost calc.
+      ...(cacheWrite > 0
+        ? {
+            cache_creation: {
+              ephemeral_1h_input_tokens: cacheWrite1h,
+              ephemeral_5m_input_tokens: cacheWrite - cacheWrite1h,
+            },
+          }
+        : {}),
     };
   }
 
@@ -1488,4 +1607,18 @@ function createAnthropicAzureFoundryFetch(
       headers,
     });
   };
+}
+
+/** Rewritten arguments arrive as the JSON string the model emitted; this wire
+ * shape carries them as an object. A repaired call always parses (the planner
+ * refuses to rewrite otherwise), so the fallback is defensive only. */
+function parseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
 }

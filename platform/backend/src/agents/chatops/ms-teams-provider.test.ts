@@ -1058,7 +1058,7 @@ describe("MSTeamsProvider.sendReply", () => {
     options: Pick<
       Parameters<MSTeamsProvider["sendReply"]>[0],
       "footer" | "hint"
-    >,
+    > & { text?: string },
   ): Promise<string> {
     const provider = createProvider();
     const sendActivity = vi.fn().mockResolvedValue({ id: "reply-1" });
@@ -1089,8 +1089,8 @@ describe("MSTeamsProvider.sendReply", () => {
         isThreadReply: false,
         metadata: { conversationReference: { foo: "bar" } },
       },
-      text: "Here is your answer",
       ...options,
+      text: options.text ?? "Here is your answer",
     });
 
     return sendActivity.mock.calls[0][0] as string;
@@ -1111,6 +1111,16 @@ describe("MSTeamsProvider.sendReply", () => {
     const text = await captureReplyText({ hint: 'Reply "mute" to stop' });
 
     expect(text).toBe('Here is your answer\n\n---\n\n_Reply "mute" to stop_');
+  });
+
+  test("renders one branding line when the model signed off with the footer itself", async () => {
+    const text = await captureReplyText({
+      // The model copied the footer off an earlier bot reply in the thread.
+      text: "Here is your answer\n\n---\n\n🤖 Agent",
+      footer: "🤖 Agent",
+    });
+
+    expect(text).toBe("Here is your answer\n\n---\n\n🤖 Agent");
   });
 });
 

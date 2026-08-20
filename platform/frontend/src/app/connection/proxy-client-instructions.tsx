@@ -48,6 +48,7 @@ import {
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
@@ -154,6 +155,7 @@ export function ProxyClientInstructions({
   baseUrl,
 }: ProxyClientInstructionsProps) {
   const appName = useAppName();
+  const providerCatalog = useModelProviderCatalog();
   const shownSet = useMemo(
     () => (shownProviders ? new Set(shownProviders) : null),
     [shownProviders],
@@ -224,7 +226,7 @@ export function ProxyClientInstructions({
   };
 
   const providerLabel = selectedProvider
-    ? providerDisplayNames[selectedProvider]
+    ? providerCatalog.label(selectedProvider)
     : null;
   const url = selectedProvider
     ? `${baseUrl}/${selectedProvider}/${profileId}`
@@ -521,6 +523,7 @@ function GenericProxyInstructions({
  * so router setups pick which provider the minted key maps to.
  */
 function ModelRouterInstructions() {
+  const providerCatalog = useModelProviderCatalog();
   const [authMethod, setAuthMethod] =
     useState<GenericAuthMethod>("provider-key");
   const { data: canCreateVirtualKey } = useHasPermissions({
@@ -643,7 +646,7 @@ function ModelRouterInstructions() {
                     <SelectContent>
                       {providersWithKeys.map((p) => (
                         <SelectItem key={p} value={p}>
-                          {providerDisplayNames[p]}
+                          {providerCatalog.label(p)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -654,7 +657,7 @@ function ModelRouterInstructions() {
               <p className="text-xs text-muted-foreground">
                 A personal virtual key mapped to your
                 {mappedProvider ? (
-                  <span> {providerDisplayNames[mappedProvider]}</span>
+                  <span> {providerCatalog.label(mappedProvider)}</span>
                 ) : null}{" "}
                 provider key is created automatically and shown below. Models
                 from other providers need a key mapped to that provider.
@@ -725,6 +728,7 @@ export function GenericEndpointCard({
   /** Overrides the default "Replace the … base URL … with:" line. */
   caption?: React.ReactNode;
 }) {
+  const providerCatalog = useModelProviderCatalog();
   const PRIMARY: SupportedProvider[] = [
     "openai",
     "anthropic",
@@ -744,13 +748,13 @@ export function GenericEndpointCard({
     ? [...primary, selectedFromRest]
     : primary;
   const searchResults = rest.filter((p) =>
-    providerDisplayNames[p].toLowerCase().includes(search.toLowerCase()),
+    providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
   );
 
   const label = routerSelected
     ? "OpenAI-compatible"
     : selectedProvider
-      ? providerDisplayNames[selectedProvider]
+      ? providerCatalog.label(selectedProvider)
       : "";
   const originalUrl = routerSelected
     ? "https://api.openai.com/v1/"
@@ -807,7 +811,7 @@ export function GenericEndpointCard({
                 onClick={() => onSelectProvider(p)}
                 className={endpointTabClass(selectedProvider === p)}
               >
-                {providerDisplayNames[p]}
+                {providerCatalog.label(p)}
               </button>
             ))}
             {rest.length > (selectedFromRest ? 1 : 0) && (
@@ -847,7 +851,7 @@ export function GenericEndpointCard({
                               setSearch("");
                             }}
                           >
-                            {providerDisplayNames[p]}
+                            {providerCatalog.label(p)}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -1222,6 +1226,7 @@ function ProviderPicker({
   onSelect,
   modelRouter,
 }: ProviderPickerProps) {
+  const providerCatalog = useModelProviderCatalog();
   const PRIMARY: SupportedProvider[] = [
     "openai",
     "anthropic",
@@ -1238,7 +1243,7 @@ function ProviderPicker({
   const selectedFromRest =
     selected && rest.includes(selected) ? selected : null;
   const searchResults = providers.filter((p) =>
-    providerDisplayNames[p].toLowerCase().includes(search.toLowerCase()),
+    providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
   );
 
   const pickFromSearch = (p: SupportedProvider) => {
@@ -1329,7 +1334,7 @@ function ProviderPicker({
                         <span className="flex min-w-0 items-center gap-2">
                           <ProviderGlyph provider={p} />
                           <span className="truncate">
-                            {providerDisplayNames[p]}
+                            {providerCatalog.label(p)}
                           </span>
                           {!supported.includes(p) && (
                             <span className="text-[11px] text-muted-foreground">
@@ -1367,6 +1372,7 @@ function ProviderPickerButton({
   isSelected: boolean;
   onSelect: (p: SupportedProvider) => void;
 }) {
+  const providerCatalog = useModelProviderCatalog();
   return (
     <Button
       type="button"
@@ -1380,7 +1386,7 @@ function ProviderPickerButton({
       )}
     >
       <ProviderGlyph provider={provider} />
-      {providerDisplayNames[provider]}
+      {providerCatalog.label(provider)}
     </Button>
   );
 }

@@ -49,11 +49,13 @@ import {
   type Agent,
   type AgentScope,
   type AgentScopeFilter,
+  type AgentToolRef,
   type AgentType,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
@@ -72,7 +74,6 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
-import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
@@ -436,6 +437,16 @@ class AgentModel {
        * onto the new agent.
        */
       skipCreationDefaultTools?: boolean;
+      /**
+       * Delegation targets the new agent starts with excluded from its
+       * Auto-subagent surface (today: the Advisor, which is opt-in). Applied
+       * inside create so version 1's snapshot already records them — a
+       * follow-up write from the caller would fork a second version, and one
+       * made by the client silently never happens for roles without
+       * `agent:read`. Which ids these are is the caller's rule; see
+       * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
+       */
+      defaultExcludedSubagentIds?: string[];
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -589,6 +600,30 @@ class AgentModel {
       }
     }
 
+    // Seed the caller's default Auto-mode subagent exclusions. Before the
+    // version-1 fork below, so the first snapshot carries them like any other
+    // part of the created config. Best-effort, like the fork itself: the agent
+    // row and its junctions are already committed (create is not transactional,
+    // and this write is a delete+insert of its own), so throwing here would
+    // leave a half-made agent behind. One that starts with the Advisor
+    // reachable is degraded, not broken.
+    if (
+      options?.defaultExcludedSubagentIds &&
+      options.defaultExcludedSubagentIds.length > 0
+    ) {
+      try {
+        await AgentExcludedSubagentModel.replaceForAgent(
+          createdAgent.id,
+          options.defaultExcludedSubagentIds,
+        );
+      } catch (error) {
+        logger.warn(
+          { error, agentId: createdAgent.id },
+          "Default subagent exclusions were not seeded; agent created without them",
+        );
+      }
+    }
+
     // Fork version 1 now that the full config of this create (row, junctions,
     // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
     // versioning failure must never fail the create itself.
@@ -605,7 +640,7 @@ class AgentModel {
         ? AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
         : Promise.resolve([]),
       db
-        .select({ tool: schema.toolsTable })
+        .select({ tool: agentToolRefColumns })
         .from(schema.agentToolsTable)
         .innerJoin(
           schema.toolsTable,
@@ -649,20 +684,18 @@ class AgentModel {
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
+      /**
+       * Keep only agents that enforce a missing-credential behavior. The
+       * readiness pre-flight has nothing to say about the rest, and this keeps
+       * it from loading an organization's whole agent roster to discard it.
+       */
+      onlyEnforcingMissingCredentials?: boolean;
     },
   ): Promise<Agent[]> {
-    let query = db
-      .select()
-      .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentToolsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-      )
-      .leftJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .$dynamic();
+    // Tools are attached afterwards as slim refs via one batched query:
+    // joining them here multiplied every agent row (system prompt included)
+    // by that agent's tool count.
+    let query = db.select().from(schema.agentsTable).$dynamic();
 
     // Build where conditions
     const whereConditions: SQL[] = [
@@ -678,6 +711,12 @@ class AgentModel {
     // Filter by agentType if specified (single type, backwards compatible)
     else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    if (options?.onlyEnforcingMissingCredentials) {
+      whereConditions.push(
+        ne(schema.agentsTable.missingCredentialBehavior, "allow"),
+      );
     }
 
     // Exclude built-in agents when explicitly requested or when user is not an admin
@@ -732,41 +771,43 @@ class AgentModel {
 
     const rows = await query;
 
-    // Group the flat join results by agent
-    const agentsMap = new Map<string, Agent>();
-
-    for (const row of rows) {
-      const agent = row.agents;
-      const tool = row.tools;
-
-      if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          users: [] as Array<{ id: string; name: string; email: string }>,
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-          suggestedPrompts: [],
-        });
-      }
-
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
-        agentsMap.get(agent.id)?.tools.push(tool);
-      }
-    }
-
-    const agents = Array.from(agentsMap.values());
+    const agents: Agent[] = rows.map((agent) => ({
+      ...agent,
+      tools: [],
+      teams: [] as Array<{ id: string; name: string }>,
+      users: [] as Array<{ id: string; name: string; email: string }>,
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    }));
     const agentIds = agents.map((agent) => agent.id);
 
-    // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, usersMap, labelsMap] = await Promise.all([
+    // Populate tools, teams, and labels for all agents with bulk queries to
+    // avoid N+1
+    const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
+      agentIds.length > 0
+        ? db
+            .select({
+              agentId: schema.agentToolsTable.agentId,
+              tool: agentToolRefColumns,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+            )
+            .where(inArray(schema.agentToolsTable.agentId, agentIds))
+        : Promise.resolve([]),
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
+
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    for (const row of toolRows) {
+      agentsById.get(row.agentId)?.tools.push(row.tool);
+    }
 
     // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
@@ -834,7 +875,7 @@ class AgentModel {
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          tool: schema.toolsTable,
+          tool: agentToolRefColumns,
         })
         .from(schema.agentToolsTable)
         .innerJoin(
@@ -845,10 +886,7 @@ class AgentModel {
     ]);
 
     // Group tools by agent
-    const toolsByAgent = new Map<
-      string,
-      (typeof schema.toolsTable.$inferSelect)[]
-    >();
+    const toolsByAgent = new Map<string, AgentToolRef[]>();
     for (const row of toolsResult) {
       const existing = toolsByAgent.get(row.agentId) || [];
       existing.push(row.tool);
@@ -924,7 +962,7 @@ class AgentModel {
       db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          tool: schema.toolsTable,
+          tool: agentToolRefColumns,
         })
         .from(schema.agentToolsTable)
         .innerJoin(
@@ -935,10 +973,7 @@ class AgentModel {
     ]);
 
     // Group tools by agent
-    const toolsByAgent = new Map<
-      string,
-      (typeof schema.toolsTable.$inferSelect)[]
-    >();
+    const toolsByAgent = new Map<string, AgentToolRef[]>();
     for (const row of toolsResult) {
       const existing = toolsByAgent.get(row.agentId) || [];
       existing.push(row.tool);
@@ -1590,6 +1625,27 @@ class AgentModel {
       .limit(1);
 
     return result?.environmentId ?? null;
+  }
+
+  /**
+   * The two fields that decide whether a caller missing an MCP connection is
+   * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
+   * check costs one indexed row read.
+   */
+  static async findMissingCredentialEnforcement(
+    id: string,
+  ): Promise<ReadinessAgent | null> {
+    const [result] = await db
+      .select({
+        id: schema.agentsTable.id,
+        missingCredentialBehavior: schema.agentsTable.missingCredentialBehavior,
+        accessAllTools: schema.agentsTable.accessAllTools,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result ?? null;
   }
 
   static async findIdentityProviderId(id: string): Promise<string | null> {
@@ -2727,7 +2783,7 @@ class AgentModel {
     ]);
 
     const toolRows = await db
-      .select({ tool: schema.toolsTable })
+      .select({ tool: agentToolRefColumns })
       .from(schema.agentToolsTable)
       .innerJoin(
         schema.toolsTable,
@@ -2937,20 +2993,33 @@ class AgentModel {
   }
 
   /**
-   * Ensure a personal default chat agent exists for a member.
-   * Idempotent: skips if member already has a defaultAgentId set.
+   * Ensure a personal chat agent exists for a member, and return the one they
+   * should chat with — their oldest live personal chat agent.
+   *
+   * Idempotent, and deliberately keyed on authorship alone: having *ever*
+   * authored a personal chat agent in this organization is the durable marker
+   * (soft-deleted rows count), so deleting the seeded assistant does not bring
+   * it straight back on the next login, app chat, or backend start. It must not
+   * key on `members.default_agent_id`, which now records only a deliberate
+   * choice and is null for almost everyone — reading it here would re-seed an
+   * assistant per login for every member who never picked one.
+   *
+   * Returns null only for a member who authored personal chat agents and then
+   * deleted them all: seeding is skipped by design, and they have none live.
    */
   static async ensurePersonalChatAgent(params: {
     userId: string;
     organizationId: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const { userId, organizationId } = params;
 
-    const existingDefault = await MemberModel.getDefaultAgentId(
-      userId,
-      organizationId,
-    );
-    if (existingDefault !== null) return;
+    // Live agents first: this is the common path (every login and app chat),
+    // and it answers in one indexed query.
+    const [existing] = await AgentModel.findOwnPersonalChatAgentIds(params);
+    if (existing) return existing;
+    // None live. Seed only for a member who never had one — soft-deleted rows
+    // are the durable marker that they did and chose to delete it.
+    if (await AgentModel.hasEverAuthoredPersonalChatAgent(params)) return null;
 
     const agent = await AgentModel.create(
       {
@@ -2973,12 +3042,65 @@ class AgentModel {
     // The default built-in tools (artifact_write, todo_write,
     // query_knowledge_sources) are assigned inside AgentModel.create along
     // with the rest of the creation-default set.
-    await MemberModel.setDefaultAgent(userId, organizationId, agent.id);
 
     logger.info(
       { userId, organizationId, agentId: agent.id },
-      "Created personal default chat agent",
+      "Created personal chat agent",
     );
+
+    return agent.id;
+  }
+
+  /**
+   * Live personal chat agents this member authored in the organization,
+   * oldest first, excluding `excludeId`.
+   */
+  private static async findOwnPersonalChatAgentIds(params: {
+    userId: string;
+    organizationId: string;
+    excludeId?: string;
+  }): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.authorId, params.userId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.scope, "personal"),
+          eq(schema.agentsTable.builtIn, false),
+          params.excludeId
+            ? ne(schema.agentsTable.id, params.excludeId)
+            : undefined,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      // `id` breaks a createdAt tie so "the member's own personal chat agent"
+      // is one stable answer — the same order migration 0426 used to recognise
+      // the implicitly adopted defaults it cleared.
+      .orderBy(asc(schema.agentsTable.createdAt), asc(schema.agentsTable.id));
+    return rows.map((row) => row.id);
+  }
+
+  private static async hasEverAuthoredPersonalChatAgent(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.authorId, params.userId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.scope, "personal"),
+          eq(schema.agentsTable.builtIn, false),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /**
@@ -3805,5 +3927,22 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
  * finite number rather than no limit at all.
  */
 const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
+
+/**
+ * Column set for the slim {@link AgentToolRef} embedded in agent payloads.
+ * Deliberately excludes `parameters` and the other wide tool columns so agent
+ * list queries don't drag every assigned tool's JSON schema out of the
+ * database once per assignment; the dedicated per-agent tools endpoints serve
+ * full tool definitions.
+ */
+const agentToolRefColumns = {
+  id: schema.toolsTable.id,
+  agentId: schema.toolsTable.agentId,
+  catalogId: schema.toolsTable.catalogId,
+  delegateToAgentId: schema.toolsTable.delegateToAgentId,
+  name: schema.toolsTable.name,
+  rawName: schema.toolsTable.rawName,
+  description: schema.toolsTable.description,
+};
 
 export default AgentModel;

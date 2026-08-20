@@ -1,5 +1,5 @@
-import { isIncognitoUnavailableContent } from "../incognito-content";
 import type { SupportedProvider } from "../index";
+import { isLockedChatUnavailableContent } from "../locked-chat-content";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";
@@ -44,6 +44,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "gemini:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
   "bedrock:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
+  // Cohere (direct) embeddings are normalized to the OpenAI embedding shape.
+  "cohere:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
@@ -166,7 +168,7 @@ export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
   private interaction: Interaction;
   /**
-   * An incognito interaction stores a sentinel where the provider payload
+   * A locked-chat interaction stores a sentinel where the provider payload
    * would be. Every accessor below dereferences that payload unguarded
    * (`request.messages`, `response.choices`), so the check lives here once
    * rather than in each provider mapper, which would have to learn a shape it
@@ -191,8 +193,8 @@ export class DynamicInteraction implements InteractionUtils {
 
     this.interaction = interaction;
     this.contentUnavailable =
-      isIncognitoUnavailableContent(interaction.request) ||
-      isIncognitoUnavailableContent(interaction.response);
+      isLockedChatUnavailableContent(interaction.request) ||
+      isLockedChatUnavailableContent(interaction.response);
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
@@ -300,7 +302,7 @@ export class DynamicInteraction implements InteractionUtils {
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
-    // An incognito interaction stores a sentinel where the provider payload
+    // A locked-chat interaction stores a sentinel where the provider payload
     // would be, so there is no conversation to render. Provider mappers read
     // fields off it unguarded (`request.messages.length`), so this has to stop
     // before delegating rather than relying on a mapper tolerating it. The

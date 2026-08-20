@@ -31,6 +31,33 @@ describe("DbSecretsManager", () => {
     findByIdSpy.mockRestore();
   });
 
+  test("skipCache sees a rotation this process never handled", async ({
+    makeSecret,
+  }) => {
+    const createdSecret = await makeSecret({
+      secret: { access_token: "initial-token" },
+    });
+    const manager = new DbSecretsManager();
+    await manager.getSecret(createdSecret.id);
+
+    // The write another replica made: this process's cache knows nothing of
+    // it, and would keep serving the retired value for the rest of the TTL.
+    await SecretModel.update(createdSecret.id, {
+      secret: { access_token: "rotated-elsewhere" },
+    });
+
+    expect((await manager.getSecret(createdSecret.id))?.secret).toEqual({
+      access_token: "initial-token",
+    });
+    expect(
+      (await manager.getSecret(createdSecret.id, { skipCache: true }))?.secret,
+    ).toEqual({ access_token: "rotated-elsewhere" });
+    // The fresh row replaces the stale entry, so later cached readers benefit.
+    expect((await manager.getSecret(createdSecret.id))?.secret).toEqual({
+      access_token: "rotated-elsewhere",
+    });
+  });
+
   test("invalidates cached secrets on delete", async ({ makeSecret }) => {
     const createdSecret = await makeSecret({
       secret: { access_token: "delete-token" },

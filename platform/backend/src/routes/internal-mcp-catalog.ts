@@ -20,6 +20,14 @@ import {
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import {
+  enterpriseTier,
+  MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
+} from "@/enterprise-tier";
+// SPDX-SnippetEnd
 import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
@@ -42,6 +50,7 @@ import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
   assertValuesMatchEnvironmentRegex,
+  resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import {
   extractLocalConfigSecrets,
@@ -297,15 +306,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
 
+      const canDeployToRestricted = await callerCanDeployToRestricted(
+        request.headers,
+      );
+
+      // No environment chosen at all (as opposed to an explicit null, which
+      // picks the default environment on purpose) hands the choice to the org's
+      // configured landing environment for new MCP servers.
+      if (restBody.environmentId === undefined) {
+        restBody.environmentId = await resolveDefaultEnvironmentForNewResource({
+          organizationId: request.organizationId,
+          resource: "mcpRegistry",
+          canDeployToRestricted,
+        });
+      }
+
       // Gate assigning a restricted environment. Requires
       // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
       // environments are open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
-        canDeployToRestricted: await callerCanDeployToRestricted(
-          request.headers,
-        ),
+        canDeployToRestricted,
       });
 
       let clientSecretId: string | undefined;
@@ -613,11 +635,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Operational field on the INSTALL rows, not a catalog column: pulled
+        // out here and cascaded onto every live install after the permission
+        // gate, so it never reaches the catalog update.
+        hibernationMode,
+        // SPDX-SnippetEnd
         ...restBodyInput
       } = body;
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Idle hibernation is enterprise-licensed at both ends: the org toggle
+      // and this per-server override. Refuse rather than ignore, so an
+      // unlicensed caller never believes it pinned a server awake.
+      if (hibernationMode !== undefined && !enterpriseTier.isCoreActive()) {
+        throw new ApiError(403, MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE);
+      }
+      // SPDX-SnippetEnd
 
       // Secret FK columns are server-managed (see POST): a client-supplied id
       // would otherwise be persisted onto the row, repointing it at another
@@ -1085,6 +1126,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Cascade the per-server idle-hibernation override onto every live
+      // install of this catalog. The registry dialog is catalog-scoped, so
+      // this PUT is its write path; the reinstall route remains the
+      // per-install path when a single installation must diverge. Runs after
+      // the permission gate above — whoever may edit the catalog may pin it
+      // awake — and only once every validation gate and the catalog update
+      // itself have passed: a PUT that 409s on a rename conflict (or fails
+      // env-regex / network-policy / team checks) must not silently change
+      // runtime policy on the way out. Idempotent, so a failure later in
+      // this handler is repaired by re-sending the same request.
+      if (hibernationMode !== undefined) {
+        await McpServerModel.setHibernationModeForCatalog(id, hibernationMode);
+      }
+      // SPDX-SnippetEnd
 
       // Only tear down the old-namespace deployment when it will actually be
       // recreated. A single-tenant edit that ALSO requires new user input (e.g.
@@ -2152,7 +2211,7 @@ async function reinstallApprovedImage(
 
 async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
   if (catalogItem.multitenant === true) {
-    await reinstallMultitenantCatalog(catalogItem);
+    await reinstallMultitenantCatalog(catalogItem, { freshImagePull: true });
     return;
   }
 
@@ -2166,7 +2225,9 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
       broadcastMcpInstallationStatus(server.id, "pending", null);
 
       try {
-        await autoReinstallServer(server, catalogItem);
+        await autoReinstallServer(server, catalogItem, {
+          freshImagePull: true,
+        });
         await McpServerModel.update(server.id, {
           localInstallationStatus: "success",
           localInstallationError: null,

@@ -1,26 +1,33 @@
 "use client";
 
-import {
-  type AgentType,
-  type archestraApiTypes,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
-import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  AGENT_PAGE_CONFIGS,
+  agentDetailHref,
+  agentEditHref,
+  agentNewHref,
+  resolveLegacyAgentDialogRedirect,
+} from "@/components/agent-pages/agent-page-config";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
+import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
-  ConnectDialog,
-  ConnectDialogSection,
-} from "@/components/connect-dialog";
+  DefaultAgentTag,
+  offersDefaultPin,
+  resolveDefaultAgentBadge,
+} from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -42,19 +49,21 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
   usePermanentlyDeleteProfile,
-  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
+  useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useDefaultEnvironment,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
@@ -105,7 +114,6 @@ function SortIcon({
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const {
     searchParams,
-    pathname,
     pageIndex,
     pageSize,
     offset,
@@ -194,24 +202,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingAgent, setConnectingAgent] = useState<{
-    id: string;
-    name: string;
-    agentType: AgentType;
-  } | null>(null);
-  const editId = searchParams.get("edit");
-  const { data: editAgentFromUrl } = useProfile(editId ?? undefined);
-  const editDialog = useDialogUrlParam<AgentData>({
-    paramName: "edit",
-    entityFromUrl: editAgentFromUrl ?? null,
-  });
-  const viewId = searchParams.get("view");
-  const { data: viewAgentFromUrl } = useProfile(viewId ?? undefined);
-  const viewDialog = useDialogUrlParam<AgentData>({
-    paramName: "view",
-    entityFromUrl: viewAgentFromUrl ?? null,
-  });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
     useState<AgentData | null>(null);
@@ -220,6 +210,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+  const { data: personalDefaultAgentId } = useDefaultAgentId();
+  const { data: organization } = useOrganization();
+  // Exactly one agent starts this viewer's new chats, so exactly one row is
+  // badged — badging a personal pin AND the organization default would put two
+  // answers on screen to a question that has one.
+  const effectiveDefault = resolveDefaultAgentBadge({
+    personalDefaultAgentId,
+    organizationDefaultAgentId: organization?.defaultAgentId,
+  });
+  const updateDefaultAgentId = useUpdateDefaultAgentId();
   const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
   // The row's scope check travels with the id: it is computed per row, and the
@@ -232,16 +232,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     null,
   );
 
-  // Handle 'create' URL parameter to open the Create Agent dialog
+  // Create/edit/view used to be dialogs on this page, opened from
+  // `?create=true`, `?edit=<id>` and `?view=<id>`; those links still arrive
+  // (bookmarks, other pages) and now land on the routed pages.
   useEffect(() => {
-    if (searchParams.get("create") === "true") {
-      setIsCreateDialogOpen(true);
-      // Remove the 'create' parameter from URL after opening the dialog
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("create");
-      router.replace(`${pathname}?${newParams.toString()}`);
-    }
-  }, [searchParams, pathname, router]);
+    const redirect = resolveLegacyAgentDialogRedirect("agent", searchParams);
+    if (redirect) router.replace(redirect);
+  }, [searchParams, router]);
 
   // Update URL when sorting changes
   const handleSortingChange = useCallback(
@@ -330,9 +327,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
+            // A trashed agent has no detail page: `GET /api/agents/:id`
+            // filters deleted rows, so the link would land on "not found".
+            href={
+              agent.deletedAt ? undefined : agentDetailHref("agent", agent.id)
+            }
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
             labels={agent.labels}
+            extraBadges={
+              effectiveDefault?.agentId === agent.id ? (
+                <DefaultAgentTag source={effectiveDefault.source} />
+              ) : undefined
+            }
           />
         );
       },
@@ -342,15 +349,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: "Accessible to",
       enableSorting: false,
       cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
+        <RowClickShield>
+          <ResourceVisibilityBadge
+            scope={row.original.scope}
+            teams={row.original.teams}
+            users={row.original.users}
+            authorId={row.original.authorId}
+            authorName={row.original.authorName}
+            currentUserId={currentUserId}
+            showSelfAsMe
+          />
+        </RowClickShield>
       ),
     },
     ...(showEnvironmentColumn
@@ -368,6 +377,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   defaultEnvironmentName: defaultEnvironment.name,
                 }) ?? defaultEnvironment.name;
               return (
+                // A plain badge with nothing to activate: the click may reach
+                // the row and open the agent, like the rest of the cell.
                 <Badge variant="outline" className="text-muted-foreground">
                   <span className="max-w-32 truncate">{label}</span>
                 </Badge>
@@ -383,58 +394,94 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       size: 220,
       cell: ({ row }) => {
         const agent = row.original;
-        const scope = agent.scope;
-        const authorId = agent.authorId;
-        const agentTeams = agent.teams;
-        const isPersonal = scope === "personal";
-        const isTeamScoped = scope === "team";
-        const isOwner = !!currentUserId && authorId === currentUserId;
-        const isMemberOfAgentTeam = agentTeams?.some((t) =>
-          userTeamIdSet.has(t.id),
-        );
-        const canModify =
-          !!isAgentAdmin ||
-          (isTeamScoped && !!isAgentTeamAdmin && !!isMemberOfAgentTeam) ||
-          (isPersonal && isOwner);
+        const canModify = computeCanModifyAgent({
+          agent,
+          isAdmin: !!isAgentAdmin,
+          isTeamAdmin: !!isAgentTeamAdmin,
+          currentUserId,
+          userTeamIds: userTeamIdSet,
+        });
         return (
-          <AgentActions
-            agent={agent}
-            canModify={canModify}
-            onConnect={setConnectingAgent}
-            onEdit={editDialog.open}
-            onView={viewDialog.open}
-            onDelete={setDeletingAgentId}
-            onRestore={(agentId) => {
-              restoreAgent.mutate(agentId, {
-                onSuccess: (data) => {
-                  if (!data) return;
-                  toast.success("Agent restored successfully");
-                },
-              });
-            }}
-            onPermanentlyDelete={setPermanentlyDeletingAgent}
-            onClone={setCloningAgent}
-            onConvertToSkill={setConvertingAgent}
-            onHistory={(id, historyCanModify) =>
-              setHistory({ id, canModify: historyCanModify })
-            }
-            onExport={(agentData) => {
-              exportAgent.mutate(agentData.id, {
-                onSuccess: (data) => {
-                  if (!data) return;
-                  const blob = new Blob([JSON.stringify(data, null, 2)], {
-                    type: "application/json",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${agentData.name.replace(/\s+/g, "-").toLowerCase()}-agent.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                },
-              });
-            }}
-          />
+          // The whole cell, so a disabled action's tooltip wrapper cannot let
+          // the click through to the row either.
+          <RowClickShield>
+            <AgentActions
+              agent={agent}
+              canModify={canModify}
+              onConnect={(target) =>
+                router.push(agentDetailHref("agent", target.id, "connect"))
+              }
+              onEdit={(target) =>
+                router.push(agentEditHref("agent", target.id))
+              }
+              onView={(target) =>
+                router.push(agentDetailHref("agent", target.id))
+              }
+              onDelete={setDeletingAgentId}
+              onRestore={(agentId) => {
+                restoreAgent.mutate(agentId, {
+                  onSuccess: (data) => {
+                    if (!data) return;
+                    toast.success("Agent restored successfully");
+                  },
+                });
+              }}
+              onPermanentlyDelete={setPermanentlyDeletingAgent}
+              onClone={setCloningAgent}
+              onConvertToSkill={setConvertingAgent}
+              // Pinning a default is about this viewer's own chats, not about
+              // owning the agent: every chat agent on this page is one they
+              // can start a chat with, so every one of them can be pinned.
+              // Except the one already badged `default (org)` — see
+              // offersDefaultPin.
+              personalDefault={
+                agent.agentType === "agent" &&
+                !agent.builtIn &&
+                offersDefaultPin({
+                  agentId: agent.id,
+                  badge: effectiveDefault,
+                })
+                  ? {
+                      isDefault: agent.id === personalDefaultAgentId,
+                      onToggle: (target, makeDefault) => {
+                        updateDefaultAgentId.mutate(
+                          makeDefault ? target.id : null,
+                          {
+                            onSuccess: (data) => {
+                              if (!data) return;
+                              toast.success(
+                                makeDefault
+                                  ? `${target.name} is now your default agent`
+                                  : `${target.name} is no longer your default agent`,
+                              );
+                            },
+                          },
+                        );
+                      },
+                    }
+                  : undefined
+              }
+              onHistory={(id, historyCanModify) =>
+                setHistory({ id, canModify: historyCanModify })
+              }
+              onExport={(agentData) => {
+                exportAgent.mutate(agentData.id, {
+                  onSuccess: (data) => {
+                    if (!data) return;
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {
+                      type: "application/json",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${agentData.name.replace(/\s+/g, "-").toLowerCase()}-agent.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  },
+                });
+              }}
+            />
+          </RowClickShield>
         );
       },
     },
@@ -479,15 +526,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               permissions={{ agent: ["create"] }}
               onClick={() => setIsImportDialogOpen(true)}
             >
-              <Upload className="mr-2 h-4 w-4" />
+              <Upload className="h-4 w-4" />
               Import Agent
             </PermissionButton>
             <PermissionButton
               permissions={{ agent: ["create"] }}
-              onClick={() => setIsCreateDialogOpen(true)}
+              onClick={() => router.push(agentNewHref("agent"))}
               data-testid={E2eTestId.CreateAgentButton}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Create Agent
             </PermissionButton>
           </div>
@@ -496,7 +543,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         <div>
           <div>
             <div className="mb-6 flex flex-col gap-2">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <SearchInput
                   objectNamePlural="agents"
                   searchFields={["name"]}
@@ -535,6 +582,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   total: pagination?.total ?? 0,
                 }}
                 onPaginationChange={handlePaginationChange}
+                // Trashed rows have no page to open — Restore and permanent
+                // delete stay row actions.
+                onRowClick={
+                  isDeletedView
+                    ? undefined
+                    : (row, event) =>
+                        openRowOnPlainClick(event, () =>
+                          router.push(agentDetailHref("agent", row.id)),
+                        )
+                }
                 emptyMessage="No agents found"
                 hasActiveFilters={hasActiveFilters}
                 filteredEmptyMessage={
@@ -545,41 +602,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onClearFilters={clearFilters}
               />
             </div>
-
-            <AgentDialog
-              open={isCreateDialogOpen}
-              onOpenChange={setIsCreateDialogOpen}
-              agentType="agent"
-              onCreated={(created) => {
-                setIsCreateDialogOpen(false);
-                // Land the user on "how do I use this?" instead of a closed
-                // dialog: open the connect dialog for the new agent.
-                setConnectingAgent({ ...created, agentType: "agent" });
-              }}
-            />
-
-            {connectingAgent && (
-              <ConnectAgentDialog
-                agent={connectingAgent}
-                open={!!connectingAgent}
-                onOpenChange={(open) => !open && setConnectingAgent(null)}
-              />
-            )}
-
-            <AgentDialog
-              open={!!editDialog.entity}
-              onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.entity}
-              agentType="agent"
-            />
-
-            <AgentDialog
-              open={!!viewDialog.entity}
-              onOpenChange={(open) => !open && viewDialog.close()}
-              agent={viewDialog.entity}
-              agentType="agent"
-              readOnly
-            />
 
             {deletingAgentId && (
               <DeleteAgentDialog
@@ -596,13 +618,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   !open && setPermanentlyDeletingAgent(null)
                 }
                 title="Delete agent permanently"
-                description={`This destroys "${permanentlyDeletingAgent.name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`}
+                description={AGENT_PAGE_CONFIGS.agent.permanentDeleteDescription(
+                  permanentlyDeletingAgent.name,
+                )}
                 isPending={permanentlyDeleteAgent.isPending}
-                onConfirm={async () => {
-                  const ok = await permanentlyDeleteAgent.mutateAsync(
-                    permanentlyDeletingAgent.id,
-                  );
-                  if (ok) setPermanentlyDeletingAgent(null);
+                onConfirm={() => {
+                  permanentlyDeleteAgent.mutate(permanentlyDeletingAgent.id, {
+                    onSuccess: (ok) => {
+                      if (ok) setPermanentlyDeletingAgent(null);
+                    },
+                  });
                 }}
                 confirmLabel={PERMANENT_DELETE_LABEL}
               />
@@ -627,8 +652,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 if (!open) setCloningAgent(null);
               }}
               onCloned={(cloned) => {
-                // Open edit dialog for the cloned agent so user can rename immediately
-                editDialog.open(cloned as AgentData);
+                // Land on the clone's Configuration step so it can be renamed
+                // straight away.
+                router.push(agentEditHref("agent", cloned.id, "configuration"));
               }}
             />
 
@@ -646,52 +672,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   );
 }
 
-function AgentConnectionColumns({ agentId }: { agentId: string }) {
-  const appName = useAppName();
-  // Fetch by id so a just-created agent resolves without waiting for the
-  // paginated list cache to refresh.
-  const { data: agent, isPending } = useProfile(agentId);
-
-  if (isPending || !agent) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <ConnectDialogSection
-        title="A2A Connection"
-        description={`Connect directly to this agent with ${appName}'s A2A endpoint, tokens, deep links, and optional email invocation.`}
-      >
-        <A2AConnectionInstructions agent={agent} />
-      </ConnectDialogSection>
-    </div>
-  );
-}
-
-function ConnectAgentDialog({
-  agent,
-  open,
-  onOpenChange,
-}: {
-  agent: {
-    id: string;
-    name: string;
-    agentType: AgentType;
-  };
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <ConnectDialog agent={agent} open={open} onOpenChange={onOpenChange}>
-      <AgentConnectionColumns agentId={agent.id} />
-    </ConnectDialog>
-  );
-}
-
 function DeleteAgentDialog({
   agentId,
   open,
@@ -703,12 +683,17 @@ function DeleteAgentDialog({
 }) {
   const deleteAgent = useDeleteProfile();
 
-  const handleDelete = useCallback(async () => {
-    const result = await deleteAgent.mutateAsync(agentId);
-    if (result) {
-      toast.success("Agent deleted successfully");
-      onOpenChange(false);
-    }
+  // `mutate` with callbacks rather than an awaited `mutateAsync`: the query
+  // layer rejects on failure (and toasts), and an unhandled rejection here
+  // would take the page down instead.
+  const handleDelete = useCallback(() => {
+    deleteAgent.mutate(agentId, {
+      onSuccess: (result) => {
+        if (!result) return;
+        toast.success("Agent deleted successfully");
+        onOpenChange(false);
+      },
+    });
   }, [agentId, deleteAgent, onOpenChange]);
 
   return (

@@ -1,5 +1,8 @@
 import { vi } from "vitest";
-import { KnowledgeBaseConnectorModel } from "@/models";
+import {
+  EnvironmentResourceDefaultModel,
+  KnowledgeBaseConnectorModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -145,5 +148,48 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(open.id);
+  });
+
+  test("a connector created without an environment lands in the configured default", async () => {
+    const explore = await createEnvironment({
+      organizationId,
+      data: { name: "Explore" },
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "knowledgeSource",
+      environmentId: explore.id,
+    });
+
+    const { environmentId: _omitted, ...body } = createBody(null);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connectors",
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(explore.id);
+  });
+
+  test("a connector created with an explicit null keeps the default environment", async () => {
+    const explore = await createEnvironment({
+      organizationId,
+      data: { name: "Explore" },
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "knowledgeSource",
+      environmentId: explore.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connectors",
+      payload: createBody(null),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
   });
 });

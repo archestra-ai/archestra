@@ -10,6 +10,11 @@ import {
 import type {
   InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatus,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  McpServerHibernationMode,
+  // SPDX-SnippetEnd
   McpServerReinstallReason,
   ResourceVisibilityScope,
 } from "@/types";
@@ -100,6 +105,28 @@ const mcpServerTable = softDeletablePgTable(
     oauthRefreshFailedAt: timestamp("oauth_refresh_failed_at", {
       mode: "date",
     }),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // When the server last handled a tool call / request (throttled writes via
+    // McpServerModel.updateLastUsed). Defaults to now() so freshly created (and
+    // backfilled pre-existing) rows count as "just used" and are not
+    // immediately hibernated. Nullable: NULL is treated as "never used" and
+    // falls back to createdAt in usage queries.
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }).defaultNow(),
+    /**
+     * Per-install override of the organization's idle-hibernation toggle:
+     * "inherit" follows the org, "disabled" pins this install (and, for a
+     * multitenant catalog, the whole shared deployment) permanently awake, and
+     * "enabled" is an explicit opt-in that today behaves exactly like
+     * "inherit". The org toggle stays the master switch — a per-install mode
+     * can only ever restrict hibernation further, never grant it.
+     */
+    hibernationMode: text("hibernation_mode")
+      .$type<McpServerHibernationMode>()
+      .notNull()
+      .default("inherit"),
+    // SPDX-SnippetEnd
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

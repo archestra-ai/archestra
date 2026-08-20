@@ -1,5 +1,6 @@
 import {
   MAX_CONFIGURABLE_NUM_CTX,
+  MAX_CUSTOM_MODEL_TOKEN_LIMIT,
   MAX_STOP_SEQUENCE_LENGTH,
   MAX_STOP_SEQUENCES,
   ModelInputModalitySchema,
@@ -171,6 +172,7 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   inputModalities: true,
   outputModalities: true,
   supportsToolCalling: true,
+  supportsReasoningEffort: true,
 }).extend({
   /**
    * Endpoint-scoped agent-suitability verdict from the `api_key_models` link
@@ -198,6 +200,19 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
 /**
+ * An admin-set token limit: a whole number of tokens, or `null` to clear the
+ * override. The upper bound is only a runaway-typo guard — these overrides
+ * exist precisely because the provider published no limit to check against.
+ */
+const CustomModelTokenLimitSchema = z
+  .number()
+  .int("Must be a whole number of tokens")
+  .min(1, "Must be 1 or greater")
+  .max(MAX_CUSTOM_MODEL_TOKEN_LIMIT)
+  .nullable()
+  .optional();
+
+/**
  * Schema for updating model details (pricing + modalities) from the edit dialog.
  */
 export const PatchModelBodySchema = createUpdateSchema(
@@ -209,6 +224,8 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: true,
     customPricePerMillionCacheRead: true,
     customPricePerMillionCacheWrite: true,
+    customContextLength: true,
+    customOutputLength: true,
     ignored: true,
     embeddingDimensions: true,
     inputModalities: true,
@@ -220,6 +237,13 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: z.string().nullable().optional(),
     customPricePerMillionCacheRead: z.string().nullable().optional(),
     customPricePerMillionCacheWrite: z.string().nullable().optional(),
+    /**
+     * Admin-set context window / max output tokens, overriding whatever the
+     * provider reported (including nothing at all). `null` clears the override
+     * and falls back to the synced value; omitted leaves it untouched.
+     */
+    customContextLength: CustomModelTokenLimitSchema,
+    customOutputLength: CustomModelTokenLimitSchema,
     ignored: z.boolean().optional(),
     embeddingDimensions:
       SupportedEmbeddingDimensionsSchema.nullable().optional(),

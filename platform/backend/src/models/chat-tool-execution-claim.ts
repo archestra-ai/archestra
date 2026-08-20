@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import {
-  decryptIncognitoValue,
-  encryptIncognitoValue,
-  type IncognitoAuditContext,
-} from "@/content-encryption/incognito";
+  decryptLockedChatValue,
+  encryptLockedChatValue,
+  type LockedChatAuditContext,
+} from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { ChatToolExecutionClaim } from "@/types";
@@ -28,7 +28,7 @@ class ChatToolExecutionClaimModel {
       conversationId: string;
       toolCallId: string;
     },
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
   ): Promise<ChatToolExecutionClaim.Select | null> {
     const [row] = await db
       .select()
@@ -62,7 +62,7 @@ class ChatToolExecutionClaimModel {
       toolCallId: string;
       toolName: string;
     },
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
   ): Promise<ClaimOutcome> {
     const [row] = await db
       .insert(schema.chatToolExecutionClaimsTable)
@@ -114,7 +114,7 @@ class ChatToolExecutionClaimModel {
       state: Exclude<ChatToolExecutionClaim.State, "executing">;
       result: ChatToolExecutionClaim.StoredResult | null;
     },
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
   ): Promise<void> {
     await db
       .update(schema.chatToolExecutionClaimsTable)
@@ -163,13 +163,13 @@ const CLAIM_RESULT_CONTEXT = "chat_tool_execution_claims.result" as const;
 
 function encryptClaimResult(
   result: ChatToolExecutionClaim.StoredResult | null,
-  auditContext: IncognitoAuditContext | null,
+  auditContext: LockedChatAuditContext | null,
 ): ChatToolExecutionClaim.StoredResult | null {
   if (!result || !auditContext) return result;
   // The whole payload is wrapped, not just `content`: `truncated` and
   // `resultKind` are derived from the result and the column is typed to the
   // object, so splitting them would leak shape and still need a cast.
-  return encryptIncognitoValue(result, {
+  return encryptLockedChatValue(result, {
     ...auditContext,
     context: CLAIM_RESULT_CONTEXT,
   }) as ChatToolExecutionClaim.StoredResult;
@@ -184,14 +184,14 @@ function encryptClaimResult(
  */
 function withDecryptedResult(
   row: ChatToolExecutionClaim.Select,
-  auditContext: IncognitoAuditContext | null,
+  auditContext: LockedChatAuditContext | null,
 ): ChatToolExecutionClaim.Select {
   if (!isContentEnvelope(row.result)) return row;
   if (auditContext) {
     try {
       return {
         ...row,
-        result: decryptIncognitoValue(row.result, {
+        result: decryptLockedChatValue(row.result, {
           ...auditContext,
           context: CLAIM_RESULT_CONTEXT,
         }) as ChatToolExecutionClaim.StoredResult,

@@ -3900,6 +3900,100 @@ describe("ChatOpsManager attachment passthrough", () => {
     // The directive that stops an empty-prompt agent denying it has context.
     expect(sent).toContain("you DO have access to it and remember it");
   });
+
+  test("replays bot turns without the branding footer, however many they carry", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "m",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "m",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "footer-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "footer-history@example.com",
+    });
+    mockProvider.getThreadHistory = vi.fn().mockResolvedValue([
+      {
+        messageId: "bot-1",
+        senderId: "bot",
+        senderName: "Bot",
+        // A reply that already double-footered. Leaving even one branding line
+        // in the replayed history is what teaches the next turn to sign off the
+        // same way — and that echo is what renders as a second footer.
+        text: "The deploy finished.\n\n🤖 Sales Bot\n\n🤖 Sales Bot",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: true,
+      },
+      {
+        messageId: "bot-2",
+        senderId: "bot",
+        senderName: "Bot",
+        text: "Sorry, I encountered an error.\n\n🤖 Sales Bot · Error: boom\n  at handler()",
+        timestamp: new Date(Date.now() - 30_000),
+        isFromBot: true,
+      },
+      {
+        messageId: "bot-3",
+        senderId: "bot",
+        senderName: "Bot",
+        // How a Slack turn actually reads back: the API returns emoji in colon
+        // notation, and the model's own echo ran onto the end of its prose.
+        text: "The slot is free now. :robot_face: Sales Bot\n\n:robot_face: Sales Bot",
+        timestamp: new Date(Date.now() - 15_000),
+        isFromBot: true,
+      },
+    ]);
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        threadId: "root-message-id",
+        isThreadReply: true,
+        text: "and now?",
+      }),
+      provider: mockProvider,
+    });
+
+    const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
+    expect(sent).toContain("The deploy finished.");
+    expect(sent).toContain("Sorry, I encountered an error.");
+    expect(sent).toContain("The slot is free now.");
+    expect(sent).not.toContain("🤖");
+    expect(sent).not.toContain("robot_face");
+  });
 });
 
 // =============================================================================

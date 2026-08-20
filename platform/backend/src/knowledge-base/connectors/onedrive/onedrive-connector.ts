@@ -3,6 +3,7 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import type { DriveItem as GraphDriveItem } from "@microsoft/microsoft-graph-types";
+import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
   ConnectorCredentials,
@@ -34,7 +35,6 @@ import {
 import {
   describePdfEmptyText,
   describePdfExtractionWarning,
-  parsePdfBuffer,
 } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
@@ -837,10 +837,12 @@ export class OneDriveConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
-      const extracted = await extractTextFromBinary(
-        Buffer.from(arrayBuffer),
+      const extracted = await extractTextFromBinary({
+        buffer: Buffer.from(arrayBuffer),
         ext,
-      );
+        filename: fileName,
+        ocr: this.ocrContext,
+      });
       if (extracted.warning) {
         this.log.warn(
           { itemId, fileName, reason: extracted.warning },
@@ -1924,16 +1926,19 @@ function isModifiedSince(
   return itemTimestamp >= syncFrom;
 }
 
-async function extractTextFromBinary(
-  buffer: Buffer,
-  ext: string,
-): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+async function extractTextFromBinary(params: {
+  buffer: Buffer;
+  ext: string;
+  filename?: string;
+  ocr?: OcrRunContext;
+}): Promise<{ text: string; emptyReason?: string; warning?: string }> {
+  const { buffer, ext, filename, ocr } = params;
   switch (ext) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      const result = await parsePdfBuffer(buffer);
+      const result = await extractPdfText({ buffer, filename, ocr });
       return {
         text: result.text,
         emptyReason: describePdfEmptyText(result),

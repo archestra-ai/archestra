@@ -3,14 +3,16 @@ title: Built-in Subagents
 category: Agents
 order: 10
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: you turn it on per agent.
 
-An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported. When one has no model set, it falls back to the organization's default model.
+An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported.
+
+When a subagent has no model set, it runs on the model of the work it serves. A chat subagent uses the conversation's own model, so titles and compaction summaries stay on the model you picked for that chat. The organization's default model is the fallback when there is no such model to follow.
 
 ## Advisor
 
@@ -18,7 +20,7 @@ The Advisor is in beta.
 
 The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
 
-Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.
+Turn it on per agent or MCP gateway with the **Advisor Subagent** switch, under **Subagents**. It works the same in Auto and Custom mode. **Advisor settings** on that row opens **Settings → LLM**, where the Advisor's model is picked — a stronger model than the callers use is the point.
 
 Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
 
@@ -62,4 +64,6 @@ The Chat Title Generation Subagent generates a concise three-to-six-word title f
 
 ## App Runtime LLM Agent
 
-The App Runtime LLM Agent backs `archestra.llm.complete()` for [MCP Apps](/docs/platform-apps). An app's completion request runs through it, so the call goes through the limit-enforcing LLM proxy and counts against the viewer's usage limits. The app cannot choose a model — the host resolves the organization's default — and the subagent's system prompt is only a minimal fallback used when the app supplies none.
+The App Runtime LLM Agent backs `archestra.llm.complete()` for [MCP Apps](/docs/platform-apps). An app's completion request runs through it, so the call goes through the limit-enforcing LLM proxy and counts against the viewer's usage limits. Its system prompt is only a minimal fallback used when the app supplies none.
+
+The app cannot choose a model. An app runs from any chat and from its own page, so there is no calling agent to follow — set a model on this subagent to control which one serves apps. Without one, app completions use the organization's default model.

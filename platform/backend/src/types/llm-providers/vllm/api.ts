@@ -87,6 +87,13 @@ export const ChatCompletionRequestSchema = z
      * declared or inbound validation strips it before the adapter.
      */
     chat_template_kwargs: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * Reasoning depth. vLLM injects the chat template's thinking switch from
+     * it, so a request that carries one reasons at that depth. Declared for the
+     * same reason as `chat_template_kwargs` above: undeclared fields never
+     * reach the adapter.
+     */
+    reasoning_effort: z.string().nullable().optional(),
   })
   .describe("vLLM chat completion request (OpenAI-compatible)");
 

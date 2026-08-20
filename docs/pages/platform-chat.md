@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,9 @@ Reasoning models think before answering by default. A Low/Medium/High control si
 
 Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Medium is the default, matching what these models do on their own, so a chat only changes behaviour when you ask it to.
 
-The control appears only on models that take a reasoning level. Today that is Gemini 3 and newer, Flash and Pro alike.
+The control appears only on models that take a reasoning level: Gemini 3 and newer, the OpenAI GPT-5 and o-series models, and the Claude models that already reason.
+
+Self-hosted models count too. A model you serve with vLLM or Ollama shows the control when Archestra can tell it reasons — Ollama reports that itself, and for vLLM the model registry answers. Sync your models after upgrading if a model you expect is missing it.
 
 ### Available Commands
 
@@ -76,9 +78,15 @@ Use **Compact now** in the panel to summarize earlier turns before auto-compacti
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
 
+### Speech to Text
+
+The microphone in the prompt input dictates into the message box. It listens in your own language, taken from your browser's language preferences — if your browser is set to German, so is the microphone. Browsers ship different language packs, so one that cannot listen in your language falls back to its own default rather than going silent.
+
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
+
+[Chat, Project, and Knowledge Files](./platform-knowledge#chat-project-and-knowledge-files) compares all three places a file can live.
 
 You can attach any file type. Images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`) go straight to the model. Other files — a zip archive, for example — are saved to the chat's Files panel. When the agent has a code sandbox, those files are also staged there for the agent to process; without one, the agent can't read them and tells you so.
 

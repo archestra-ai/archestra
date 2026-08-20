@@ -22,12 +22,14 @@ import {
 import { afterEach, describe, expect, test } from "@/test";
 import {
   EmbeddingConfigUnresolvableError,
+  OcrConfigUnresolvableError,
   RerankerConfigUnresolvableError,
 } from "./errors";
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
   resolveEmbeddingConfig,
+  resolveOcrConfig,
   resolveRerankerConfig,
 } from "./kb-llm-client";
 
@@ -298,6 +300,76 @@ describe("resolveEmbeddingConfig", () => {
     expect(result?.acceptedImageMimeTypes).toEqual(["image/jpeg", "image/png"]);
   });
 
+  test("resolves a Cohere direct key to the KB's Cohere client with its image formats", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Cohere Key",
+      provider: "cohere",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "embed-v4.0",
+    });
+    await ModelModel.create({
+      externalId: "cohere/embed-v4.0",
+      provider: "cohere",
+      modelId: "embed-v4.0",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.provider).toBe("cohere");
+    expect(result?.dimensions).toBe(1536);
+    expect(result?.inputModalities).toEqual(["text", "image"]);
+    expect(result?.acceptedImageMimeTypes).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ]);
+  });
+
+  test("clamps image off a Cohere embedding model the KB client does not know", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Cohere Key",
+      provider: "cohere",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "embed-english-v2.0",
+    });
+    await ModelModel.create({
+      externalId: "cohere/embed-english-v2.0",
+      provider: "cohere",
+      modelId: "embed-english-v2.0",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text"]);
+  });
+
   test("trusts the models table for an allowlisted multimodal Gemini model", async ({
     makeOrganization,
   }) => {
@@ -468,6 +540,99 @@ describe("resolveRerankerConfig", () => {
     // degrades; save blocks on it).
     await expect(resolveRerankerConfig(org.id)).rejects.toBeInstanceOf(
       RerankerConfigUnresolvableError,
+    );
+  });
+});
+
+describe("resolveOcrConfig", () => {
+  test("returns null when the organization has no OCR pair configured", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    expect(await resolveOcrConfig(org.id)).toBeNull();
+  });
+
+  test("resolves a direct LLM model for an allowlisted provider", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Vision Key",
+      provider: "anthropic",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+    mockGetSecretValue.mockResolvedValueOnce("sk-ant-api-key");
+
+    const result = await resolveOcrConfig(org.id);
+
+    expect(result).toMatchObject({
+      modelName: "claude-sonnet-5",
+      provider: "anthropic",
+    });
+    expect(mockCreateDirectLLMModel).toHaveBeenCalledWith({
+      provider: "anthropic",
+      apiKey: "sk-ant-api-key",
+      modelName: "claude-sonnet-5",
+      baseUrl: "https://api.anthropic.com",
+    });
+  });
+
+  test("rejects a provider whose transport cannot carry PDF input", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Native Ollama",
+      provider: "ollama-native",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "llava",
+    });
+    mockGetSecretValue.mockResolvedValueOnce("unused");
+
+    await expect(resolveOcrConfig(org.id)).rejects.toThrow(
+      OcrConfigUnresolvableError,
+    );
+  });
+
+  test("throws when the configured credential cannot be resolved", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Broken Key",
+      provider: "anthropic",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      ocrChatApiKeyId: chatApiKey.id,
+      ocrModel: "claude-sonnet-5",
+    });
+    mockGetSecretValue.mockResolvedValueOnce(null);
+
+    await expect(resolveOcrConfig(org.id)).rejects.toThrow(
+      OcrConfigUnresolvableError,
     );
   });
 });

@@ -102,6 +102,29 @@ const interactionsTable = pgTable(
      */
     connectorId: uuid("connector_id"),
     /**
+     * MCP App whose runtime made this LLM call. Set only on app-runtime
+     * interactions (`source = 'app:llm_complete'` today) from the app-bound
+     * proxy header, which the LLM proxy honours only on its loopback path and
+     * only for an app of the executing agent's organization — see
+     * `resolveAttributedAppId`.
+     *
+     * This is the *runtime* half of per-app cost: an app is not always LLM-free
+     * once built, and every such call used to collapse into the shared
+     * APP_RUNTIME agent with the app identity dropped at the call site. The
+     * *build* half is not stored here — authoring turns are ordinary chat
+     * interactions, joined through `apps.authoring_session_id`.
+     *
+     * Deliberately not a foreign key and deliberately unindexed, for the same
+     * reason as `connectorId` above: ON DELETE SET NULL would seq-scan
+     * `interactions` on every app delete, and an index on this table cannot be
+     * built in a transactional migration (see the
+     * archestra-dev-interactions-migrations skill). The per-app aggregation is
+     * an analytics query that already filters on `created_at`, so it rides the
+     * created-at index and reads this column from the heap. A deleted app's id
+     * is kept and resolves to no name on read.
+     */
+    appId: uuid("app_id"),
+    /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
@@ -196,7 +219,7 @@ const interactionsTable = pgTable(
     /**
      * Non-null marks this row's five content columns (request, processedRequest,
      * response, dualLlmAnalyses, unsafeContextBoundary) as encrypted under an
-     * incognito conversation's browser-held key rather than the server key, and
+     * locked chat's browser-held key rather than the server key, and
      * names the conversation whose escrow record recovers it. Readers MUST
      * consult this before decrypting: a server-key decrypt of these envelopes
      * throws.
@@ -205,7 +228,7 @@ const interactionsTable = pgTable(
      * retention — and no index: reads test it per row, and break-glass rides
      * the existing sessionId index.
      */
-    incognitoConversationId: uuid("incognito_conversation_id"),
+    lockedChatConversationId: uuid("locked_chat_conversation_id"),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),
     /**

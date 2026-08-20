@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const { getAgentSubagentExclusions, updateAgentSubagentExclusions } =
   archestraApiSdk;
@@ -35,8 +35,7 @@ export function useUpdateAgentSubagentExclusions() {
         body: params.exclusions,
       });
       if (error) {
-        handleApiError(error);
-        throw toApiError(error);
+        throw reportApiError(error);
       }
       return data;
     },

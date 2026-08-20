@@ -28,6 +28,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
@@ -163,7 +164,11 @@ const PROVIDER_CONFIG: Record<
     enabled: boolean;
     consoleUrl: string;
     consoleName: string;
-    description?: string;
+    /**
+     * A function when the blurb names the provider itself, so it can render
+     * the organization's own label for it; a plain string otherwise.
+     */
+    description?: string | ((providerLabel: string) => string);
     baseUrlRequired?: boolean;
     /** Whether this provider can be used for embeddings (defaults to true). */
     supportsEmbeddings?: boolean;
@@ -256,6 +261,11 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://docs.vllm.ai/",
     consoleName: "vLLM Docs",
+    // A vLLM key is a server, not an account, so the endpoint is the whole
+    // point of the form and belongs above "advanced settings" rather than
+    // hidden inside it. It is also unusable when blank — vLLM has no default
+    // endpoint, so an unset base URL routes to api.openai.com.
+    baseUrlRequired: true,
   },
   ollama: {
     name: "Ollama (OpenAI-compatible)",
@@ -264,7 +274,8 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
-    description: "For self-hosted Ollama, an API key is not required.",
+    description: (name) =>
+      `For self-hosted ${name}, an API key is not required.`,
   },
   "ollama-native": {
     name: "Ollama (Native)",
@@ -273,8 +284,8 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
-    description:
-      "Native /api/chat transport — lets you set num_ctx, num_predict, top_k, thinking effort, and other Ollama parameters. An API key is not required for self-hosted Ollama.",
+    description: (name) =>
+      `Native /api/chat transport — lets you set num_ctx, num_predict, top_k, thinking effort, and other ${name} parameters. An API key is not required for self-hosted ${name}.`,
     supportsEmbeddings: false,
   },
   zhipuai: {
@@ -303,9 +314,10 @@ const PROVIDER_CONFIG: Record<
     // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     consoleName: "Archestra",
     baseUrlRequired: true,
-    description:
-      // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
-      "Route through another Archestra instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.",
+    description: (name) =>
+      // The upstream instance is named by whatever this deployment calls the
+      // provider, so a renamed one reads consistently here too.
+      `Route through another ${name} instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.`,
   },
   kimi: {
     name: "Moonshot (Kimi)",
@@ -318,7 +330,10 @@ const PROVIDER_CONFIG: Record<
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",
-    placeholder: "Bedrock API key (bedrock-api-key-... / ABSK...)",
+    // The field is already labelled "API Key" and the prefixes below are the
+    // literal shapes AWS issues, so the provider's name adds nothing here —
+    // and would be the org's own name for it, which AWS keys do not carry.
+    placeholder: "API key (bedrock-api-key-... / ABSK...)",
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
@@ -353,8 +368,10 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://github.com/settings/copilot",
     consoleName: "GitHub Copilot Settings",
-    description:
-      "No API key to find — just use Sign in with GitHub below to connect your Copilot subscription. Keys are per-user: everyone using a Copilot model signs in with their own GitHub account.",
+    // "Sign in with GitHub" names the identity provider, not this one, so it
+    // stays literal.
+    description: (name) =>
+      `No API key to find — just use Sign in with GitHub below to connect your ${name} subscription. Keys are per-user: everyone using a ${name} model signs in with their own GitHub account.`,
     // Copilot only exposes chat-completion models through Archestra.
     supportsEmbeddings: false,
   },
@@ -365,8 +382,10 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://m365.cloud.microsoft/chat",
     consoleName: "Microsoft 365 Copilot",
-    description:
-      "No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using Microsoft 365 Copilot signs in with their own account.",
+    // The licence is a Microsoft SKU and keeps its real name; the second
+    // mention is this provider, so it follows the organization's label.
+    description: (name) =>
+      `No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using ${name} signs in with their own account.`,
     // The Graph Chat API is text-only chat; no embeddings.
     supportsEmbeddings: false,
   },
@@ -456,6 +475,7 @@ export function LlmProviderApiKeyForm({
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
   const baseUrl = form.watch("baseUrl");
   const isBedrock = provider === "bedrock";
+  const isVllm = provider === "vllm";
   const authMethod = form.watch("authMethod");
   const providerSubscriptionKind = subscriptionKindForProvider(provider);
   // Credential-level subscription mode (e.g. ChatGPT on `openai`): the provider
@@ -481,14 +501,38 @@ export function LlmProviderApiKeyForm({
   const hasCopilotCredential =
     isEditMode || (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER);
   const providerConfig = PROVIDER_CONFIG[provider];
+  const providerCatalog = useModelProviderCatalog();
+  /**
+   * What to call this provider in copy. Every sentence naming the provider
+   * itself uses it, so an organization that renamed one does not read about a
+   * provider it does not have. Vendor products and identifiers stay literal —
+   * "AWS", "Azure OpenAI", `bedrock:InvokeModel` — because renaming those would
+   * point at things that do not exist.
+   */
+  const providerLabel = providerCatalog.label(provider);
+  const providerBlurb =
+    typeof providerConfig.description === "function"
+      ? providerConfig.description(providerLabel)
+      : providerConfig.description;
   // The auto-filled key name follows the selected credential type, so choosing
   // ChatGPT Subscription renames the key from "OpenAI" to "ChatGPT Subscription".
   const defaultKeyName =
     isCredentialSubscriptionMode && providerSubscriptionKind
       ? SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind].label
-      : providerConfig.name;
+      : providerLabel;
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+  /**
+   * Where the Base URL field belongs. For a self-hosted provider the endpoint
+   * *is* the credential — nothing about the key identifies which server it
+   * reaches — so it is a primary field and sits above "Advanced settings" with
+   * the rest of them, whether or not it is strictly required. Everywhere else
+   * the base URL only overrides a working default, which is what advanced
+   * means. Bedrock is deliberately excluded: its primary field is the region,
+   * and the endpoint that region writes stays advanced.
+   */
+  const showBaseUrlUpFront =
+    !isBedrock && (isBaseUrlRequired || isSelfHostedProvider(provider));
 
   // Bedrock's effective region, in the same precedence order the backend's
   // getBedrockRegion applies: this key's own endpoint, then the server-wide
@@ -549,6 +593,15 @@ export function LlmProviderApiKeyForm({
   // one transport has already made the choice — in both cases there is nothing
   // to pick, and offering the control would let the form produce a key the
   // caller's own setup instructions do not describe.
+  // The two Ollama transports collapse to one entry, so it drops the built-in
+  // "(Native)" / "(OpenAI-compatible)" suffix — unless an admin renamed the
+  // listed transport, in which case their name is what belongs there.
+  const collapsedOllamaLabel =
+    providerCatalog.label(ollamaListedTransport) ===
+    PROVIDER_CONFIG[ollamaListedTransport].name
+      ? "Ollama"
+      : providerCatalog.label(ollamaListedTransport);
+
   const showOllamaTransport =
     isOllamaProvider(provider) &&
     !forEmbedding &&
@@ -810,6 +863,82 @@ export function LlmProviderApiKeyForm({
       />
     );
 
+  // Rendered either above "Advanced settings" or inside it, depending on
+  // `showBaseUrlUpFront`, so the field itself is defined once.
+  const baseUrlField = (
+    <div className="space-y-2">
+      <Label htmlFor="llm-provider-api-key-base-url">
+        {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
+        {!isBaseUrlRequired && (
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        )}
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        {isBedrock
+          ? `Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a ${providerLabel}-compatible gateway.`
+          : isVllm
+            ? "The server's OpenAI-compatible API. Every model it lists is added."
+            : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
+      </p>
+      {isVllm && (
+        <p className="text-xs text-muted-foreground">
+          One URL per server. If you run more than one vLLM server, add each as
+          its own vLLM key — every model is routed to the server that hosts it.
+        </p>
+      )}
+      {isSelfHostedProvider(provider) && (
+        <p className="text-xs text-muted-foreground">
+          If this app runs in Docker, <code>localhost</code> points at the
+          container, not your host machine. Use{" "}
+          <code>host.docker.internal</code> instead
+          {dockerBaseUrlExample && (
+            <>
+              {" "}
+              (e.g. <code>{dockerBaseUrlExample}</code>)
+            </>
+          )}
+          .
+        </p>
+      )}
+      <Input
+        id="llm-provider-api-key-base-url"
+        type="url"
+        placeholder={
+          (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
+          providerBaseUrls?.[provider] ||
+          DEFAULT_PROVIDER_BASE_URLS[provider] ||
+          "https://..."
+        }
+        disabled={isPending}
+        {...form.register("baseUrl", {
+          validate: (value) => {
+            if (!value) {
+              if (isBaseUrlRequired) {
+                return "Base URL is required for this provider";
+              }
+              return true;
+            }
+
+            try {
+              const url = new URL(value);
+              if (!["http:", "https:"].includes(url.protocol)) {
+                return "URL must use http or https protocol";
+              }
+              return true;
+            } catch {
+              return "Please enter a valid URL (e.g. https://api.example.com)";
+            }
+          },
+        })}
+      />
+      {form.formState.errors.baseUrl && (
+        <p className="text-xs text-destructive">
+          {form.formState.errors.baseUrl.message}
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
@@ -859,13 +988,30 @@ export function LlmProviderApiKeyForm({
                             (!isOllamaProvider(key) ||
                               key === ollamaListedTransport),
                         )
+                        // Providers the admins turned off are not offered. The
+                        // one already selected stays in the list even when
+                        // hidden, so an existing key's disabled trigger still
+                        // renders its own provider.
+                        .filter(
+                          ([key]) =>
+                            key === provider ||
+                            !providerCatalog.isHidden(
+                              key as CreateLlmProviderApiKeyBody["provider"],
+                            ),
+                        )
                         .map(
                           ([key, config]) =>
                             [
                               key,
-                              key === ollamaListedTransport
-                                ? { ...config, name: "Ollama" }
-                                : config,
+                              {
+                                ...config,
+                                name:
+                                  key === ollamaListedTransport
+                                    ? collapsedOllamaLabel
+                                    : providerCatalog.label(
+                                        key as CreateLlmProviderApiKeyBody["provider"],
+                                      ),
+                              },
                             ] as const,
                         )
                         .sort(([, a], [, b]) => a.name.localeCompare(b.name))
@@ -981,8 +1127,8 @@ export function LlmProviderApiKeyForm({
             </fieldset>
             <p className="text-xs text-muted-foreground">
               {provider === "ollama-native"
-                ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
-                : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
+                ? `${providerLabel}'s own /api/chat. Supports per-model parameters such as num_ctx and thinking.`
+                : `${providerLabel}'s OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored.`}
             </p>
           </div>
         )}
@@ -1025,11 +1171,11 @@ export function LlmProviderApiKeyForm({
             {provider === "bedrock" && bedrockAuthMethod === "iam" && (
               <div className="space-y-3 text-sm">
                 <p className="text-muted-foreground">
-                  Authenticate Bedrock requests using IAM credentials picked up
-                  from the server's environment. Uses the AWS SDK credential
-                  chain — IRSA (IAM Roles for Service Accounts), EC2/ECS
-                  instance profiles, or environment variables — so no static
-                  keys are stored in {appName}.
+                  Authenticate {providerLabel} requests using IAM credentials
+                  picked up from the server's environment. Uses the AWS SDK
+                  credential chain — IRSA (IAM Roles for Service Accounts),
+                  EC2/ECS instance profiles, or environment variables — so no
+                  static keys are stored in {appName}.
                 </p>
                 {bedrockIamAuthEnabled ? (
                   <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
@@ -1037,8 +1183,8 @@ export function LlmProviderApiKeyForm({
                       Enabled on this server
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Bedrock requests will be signed automatically; you don't
-                      need to create an API key.
+                      {providerLabel} requests will be signed automatically; you
+                      don't need to create an API key.
                     </p>
                   </div>
                 ) : (
@@ -1060,7 +1206,7 @@ export function LlmProviderApiKeyForm({
                       </li>
                       <li>
                         Grant the pod's service account (IRSA) or instance
-                        profile permission to call Bedrock (e.g.{" "}
+                        profile permission to call {providerLabel} (e.g.{" "}
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
                           bedrock:InvokeModel
                         </code>
@@ -1120,9 +1266,9 @@ export function LlmProviderApiKeyForm({
                           {connectCopy.signInHint}
                         </p>
                       ) : (
-                        providerConfig.description && (
+                        providerBlurb && (
                           <p className="text-xs text-muted-foreground">
-                            {providerConfig.description}
+                            {providerBlurb}
                           </p>
                         )
                       )}
@@ -1200,9 +1346,9 @@ export function LlmProviderApiKeyForm({
                       )
                     )}
                   </Label>
-                  {providerConfig.description && (
+                  {providerBlurb && (
                     <p className="text-xs text-muted-foreground">
-                      {providerConfig.description}
+                      {providerBlurb}
                     </p>
                   )}
                   <div className="relative">
@@ -1339,46 +1485,6 @@ export function LlmProviderApiKeyForm({
           </VisibilitySelector>
         )}
 
-        {progressive && !isSubscriptionFlow && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-auto w-full justify-between px-0 py-2 text-sm"
-            aria-expanded={advancedSettingsOpen}
-            onClick={() => setAdvancedSettingsOpen((open) => !open)}
-          >
-            Advanced settings
-            <ChevronDown
-              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
-            />
-          </Button>
-        )}
-
-        {showAdvancedSettings &&
-          !isSubscriptionFlow &&
-          !hideScopeAndPrimary && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="llm-provider-api-key-is-primary">
-                  Primary key
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {existingPrimaryKey
-                    ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
-                    : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
-                </p>
-              </div>
-              <Switch
-                id="llm-provider-api-key-is-primary"
-                checked={form.watch("isPrimary")}
-                onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked, { shouldDirty: true })
-                }
-                disabled={isPending || Boolean(existingPrimaryKey)}
-              />
-            </div>
-          )}
-
         {/* Region is a primary Bedrock field, not an advanced one: AWS enables
             models per region, so a key is unusable until it points at the right
             one. The endpoint it writes lives under Advanced settings below. */}
@@ -1386,8 +1492,9 @@ export function LlmProviderApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-bedrock-region">Region</Label>
             <p className="text-xs text-muted-foreground">
-              The AWS region to send Bedrock requests to. Models are enabled per
-              region, so pick the one where your models are available.
+              The AWS region to send {providerLabel} requests to. Models are
+              enabled per region, so pick the one where your models are
+              available.
             </p>
             <Select
               value={bedrockRegion}
@@ -1421,73 +1528,62 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!isSubscriptionFlow && (isBaseUrlRequired || showAdvancedSettings) && (
-          <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-base-url">
-              {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
-              {!isBaseUrlRequired && (
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              )}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {isBedrock
-                ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
-                : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
-            </p>
-            {isSelfHostedProvider(provider) && (
-              <p className="text-xs text-muted-foreground">
-                If this app runs in Docker, <code>localhost</code> points at the
-                container, not your host machine. Use{" "}
-                <code>host.docker.internal</code> instead
-                {dockerBaseUrlExample && (
-                  <>
-                    {" "}
-                    (e.g. <code>{dockerBaseUrlExample}</code>)
-                  </>
-                )}
-                .
-              </p>
-            )}
-            <Input
-              id="llm-provider-api-key-base-url"
-              type="url"
-              placeholder={
-                (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
-                providerBaseUrls?.[provider] ||
-                DEFAULT_PROVIDER_BASE_URLS[provider] ||
-                "https://..."
-              }
-              disabled={isPending}
-              {...form.register("baseUrl", {
-                validate: (value) => {
-                  if (!value) {
-                    if (isBaseUrlRequired) {
-                      return "Base URL is required for this provider";
-                    }
-                    return true;
-                  }
+        {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
 
-                  try {
-                    const url = new URL(value);
-                    if (!["http:", "https:"].includes(url.protocol)) {
-                      return "URL must use http or https protocol";
-                    }
-                    return true;
-                  } catch {
-                    return "Please enter a valid URL (e.g. https://api.example.com)";
-                  }
-                },
-              })}
+        {progressive && !isSubscriptionFlow && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-between px-0 py-2 text-sm"
+            aria-expanded={advancedSettingsOpen}
+            onClick={() => setAdvancedSettingsOpen((open) => !open)}
+          >
+            Advanced settings
+            <ChevronDown
+              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
             />
-            {form.formState.errors.baseUrl && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.baseUrl.message}
-              </p>
-            )}
-          </div>
+          </Button>
         )}
+
+        {showAdvancedSettings &&
+          !isSubscriptionFlow &&
+          !hideScopeAndPrimary && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="llm-provider-api-key-is-primary">
+                  Primary key
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  <span>
+                    {existingPrimaryKey
+                      ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope.`
+                      : "When multiple keys exist for the same provider and scope, the primary key is preferred."}
+                  </span>{" "}
+                  {/* The mechanism, which the sentence above only implies: key
+                      resolution takes the conversation's pinned key, then the
+                      agent's configured one, and only then falls through a
+                      scope's keys — primary first, oldest after. */}
+                  <span>
+                    Chats and agents without a key of their own fall back to it;
+                    with no primary set, the oldest key is used.
+                  </span>
+                </p>
+              </div>
+              <Switch
+                id="llm-provider-api-key-is-primary"
+                checked={form.watch("isPrimary")}
+                onCheckedChange={(checked) =>
+                  form.setValue("isPrimary", checked, { shouldDirty: true })
+                }
+                disabled={isPending || Boolean(existingPrimaryKey)}
+              />
+            </div>
+          )}
+
+        {!isSubscriptionFlow &&
+          !showBaseUrlUpFront &&
+          showAdvancedSettings &&
+          baseUrlField}
 
         {!isSubscriptionFlow &&
           showAdvancedSettings &&

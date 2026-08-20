@@ -103,6 +103,24 @@ export const ATTACHMENTS_SECTION = {
 } as const;
 
 /**
+ * The attachment id inside a chat attachment's byte URL, or null for a URL that
+ * is not one.
+ *
+ * Message-part attachments carry only a URL, a media type and a filename — no
+ * id — but that URL is the attachment's own byte route, so it is where the id
+ * has to come from. Returns null for the other things a file part's URL can be
+ * (a `data:` image the model produced, a sandbox artifact), which is what keeps
+ * "save this to knowledge" off files that are not chat attachments.
+ */
+export function attachmentIdFromUrl(url: string): string | null {
+  return (
+    /\/api\/chat\/attachments\/([0-9a-fA-F-]{36})\/content(?:$|[?#])/.exec(
+      url,
+    )?.[1] ?? null
+  );
+}
+
+/**
  * Which delete endpoint removes a given file. Attachments have their own chat
  * route; generated and project files are both persisted artifacts behind the
  * skill-sandbox artifact route.

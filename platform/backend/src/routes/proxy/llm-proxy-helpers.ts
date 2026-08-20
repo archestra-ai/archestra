@@ -12,12 +12,16 @@ import {
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
+  resolveRunToolTargetName,
 } from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
@@ -123,6 +127,133 @@ export function normalizeToolCallsForPolicy(
     }
     return { toolCallName: canonicalName, toolCallArgs: argsString };
   });
+}
+
+/**
+ * A tool call as the stream/response adapters accumulate it, in the shape
+ * {@link planDispatchModeToolCallRewrites} reads and rewrites.
+ */
+export interface AccumulatedToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/**
+ * Rewrite a dispatch-mode agent's *direct* tool calls into `run_tool` calls.
+ *
+ * In `search_and_run_only` exposure (which Auto tool mode implies) every
+ * third-party tool is reachable through `run_tool` but deliberately absent from
+ * the request's tool list. When the model calls one directly — which it does
+ * routinely, because it learned the exact name from `search_tools`, a skill
+ * body, or its own earlier turn — the name is not in `enabledToolNames` and the
+ * guardrail drops the whole batch, ending the turn with a steer the user reads
+ * as an assistant message. The tool was never unreachable; only the calling
+ * convention was wrong.
+ *
+ * So repair the convention instead of refusing: re-address the call to
+ * `run_tool` with the model's own name and arguments moved into `tool_name` /
+ * `tool_args`. Nothing about enforcement changes — `normalizeToolCallsForPolicy`
+ * unwraps the rewritten call straight back to the same target, so it is policy-
+ * evaluated exactly like a `run_tool` dispatch the model had written itself.
+ *
+ * Returns `null` when there is nothing to do — no dispatch pair in the tool
+ * list (`full` exposure, where a missing tool really is disabled), or every
+ * call already directly callable — so callers keep the untouched raw events.
+ *
+ * The call's `id` is preserved: the client correlates its tool result by id,
+ * and the rewrite must be invisible to that bookkeeping.
+ */
+export function planDispatchModeToolCallRewrites(params: {
+  toolCalls: AccumulatedToolCall[];
+  enabledToolNames: Set<string>;
+  canonicalizeToolName?: ToolNameCanonicalizer;
+}): AccumulatedToolCall[] | null {
+  const { toolCalls, enabledToolNames } = params;
+  const canonicalizeToolName = params.canonicalizeToolName ?? ((name) => name);
+
+  const runToolName = findRunToolName(enabledToolNames);
+  if (!runToolName || !hasSearchToolsName(enabledToolNames)) {
+    return null;
+  }
+
+  let rewroteAny = false;
+  const rewritten = toolCalls.map((toolCall) => {
+    const canonicalName = canonicalizeToolName(toolCall.name);
+
+    // Already callable, or one of the built-ins that bypass the enabled-tools
+    // filter entirely (`run_tool` itself included — a genuine dispatch must not
+    // be wrapped a second time).
+    if (
+      archestraMcpBranding.isToolName(canonicalName) ||
+      enabledToolNames.has(canonicalName)
+    ) {
+      return toolCall;
+    }
+
+    // `run_tool` expands a bare Archestra short name to its built-in
+    // (`read_file` -> `archestra__read_file`). A third-party tool whose
+    // unprefixed name collides with one of those would therefore come out of
+    // the wrapper as a DIFFERENT tool than the model asked for — and a
+    // policy-bypassed built-in at that. Refusing such a call is the safe
+    // outcome; silently retargeting it is not.
+    if (resolveRunToolTargetName(canonicalName) !== canonicalName) {
+      return toolCall;
+    }
+
+    // Arguments the model did not emit as a JSON object cannot be re-wrapped
+    // faithfully — `tool_args` has to be that object. Leave the call alone and
+    // let the guardrail refuse it with the existing steer rather than invent a
+    // shape and dispatch something the model did not ask for.
+    let toolArgs: unknown;
+    try {
+      toolArgs = JSON.parse(toolCall.arguments || "{}");
+    } catch {
+      return toolCall;
+    }
+    if (
+      typeof toolArgs !== "object" ||
+      toolArgs === null ||
+      Array.isArray(toolArgs)
+    ) {
+      return toolCall;
+    }
+
+    rewroteAny = true;
+    return {
+      id: toolCall.id,
+      name: runToolName,
+      arguments: JSON.stringify({
+        tool_name: canonicalName,
+        tool_args: toolArgs,
+      }),
+    };
+  });
+
+  return rewroteAny ? rewritten : null;
+}
+
+function findRunToolName(declaredToolNames: Set<string>): string | null {
+  for (const name of declaredToolNames) {
+    if (
+      archestraMcpBranding.getToolShortName(name) === TOOL_RUN_TOOL_SHORT_NAME
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function hasSearchToolsName(declaredToolNames: Set<string>): boolean {
+  for (const name of declaredToolNames) {
+    if (
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_SEARCH_TOOLS_SHORT_NAME
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -284,6 +415,8 @@ export function buildInteractionRecord(params: {
   userId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
+  /** MCP App whose runtime made this call; only app-runtime completions set it. */
+  appId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source?: InteractionSource | null;
@@ -316,6 +449,7 @@ export function buildInteractionRecord(params: {
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,
     passthroughVirtualKeyId: params.passthroughVirtualKeyId,
+    appId: params.appId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
     source: params.source,
@@ -436,6 +570,7 @@ export function handleError(
   }
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
+  let isClassifiedTransportFailure = false;
   if (!hasExplicitStatus) {
     if (isClientAbortError(error)) {
       // The proxy client disconnected and the disconnect was propagated to
@@ -449,6 +584,13 @@ export function handleError(
       const upstreamStatus = classifyTransientUpstreamError(error);
       if (upstreamStatus !== undefined) {
         statusCode = upstreamStatus;
+        // A status-less SDK connection/timeout failure ("Connection error.",
+        // "fetch failed", ETIMEDOUT) is by definition the upstream being
+        // unreachable, not a crash of ours — but it carries neither a parsed
+        // provider body nor response headers, so the provider-shape check
+        // below cannot mark it. Mark it here so error tracking drops the
+        // relay while clients still get the mapped 502/504.
+        isClassifiedTransportFailure = true;
       }
     }
   }
@@ -558,7 +700,10 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   const apiError = new ApiError(statusCode, errorMessage, internalCode);
-  apiError.upstream = isUpstreamProviderFailure || isUpstreamOverload;
+  apiError.upstream =
+    isUpstreamProviderFailure ||
+    isUpstreamOverload ||
+    isClassifiedTransportFailure;
   throw apiError;
 }
 
@@ -569,7 +714,16 @@ export function handleError(
  */
 function hasProviderHttpErrorShape(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return "error" in error || "headers" in error || "$metadata" in error;
+  return (
+    "error" in error ||
+    "headers" in error ||
+    "$metadata" in error ||
+    // The Bedrock client's non-OK errors carry the provider's raw body as
+    // `responseBody` (see clients/bedrock-client.ts) rather than a parsed
+    // `error` member — without this, a relayed Bedrock 500/502 was treated
+    // as a crash of ours.
+    "responseBody" in error
+  );
 }
 
 /**

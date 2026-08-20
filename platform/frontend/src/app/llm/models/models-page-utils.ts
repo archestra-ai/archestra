@@ -2,6 +2,7 @@ import {
   type archestraApiTypes,
   compareModelsForDisplay,
   MAX_CONFIGURABLE_NUM_CTX,
+  MAX_CUSTOM_MODEL_TOKEN_LIMIT,
 } from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
@@ -203,6 +204,7 @@ export function buildConfiguredParameters(
 /** The subset of a model row {@link resolveDisplayContextLength} reads. */
 type DisplayContextLengthModel = {
   contextLength?: number | null;
+  customContextLength?: number | null;
   effectiveContextLength?: number | null;
 };
 
@@ -216,6 +218,10 @@ type DisplayContextLengthModel = {
  * architectural number here would over-promise and make the two screens
  * disagree.
  *
+ * An admin-set `customContextLength` takes the architectural slot: it exists
+ * precisely because the provider's number is missing or wrong, so the Modelfile
+ * comparison below has to be made against the value the admin stated.
+ *
  * `isCapped` is true only when both numbers are known and the enforced window
  * is smaller — the case worth explaining to the user.
  */
@@ -223,15 +229,72 @@ export function resolveDisplayContextLength(model: DisplayContextLengthModel): {
   display: number | null;
   architectural: number | null;
   isCapped: boolean;
+  isCustom: boolean;
 } {
-  const architectural = model.contextLength ?? null;
+  const custom = model.customContextLength ?? null;
+  const architectural = custom ?? model.contextLength ?? null;
   const effective = model.effectiveContextLength ?? null;
   return {
     display: effective ?? architectural,
     architectural,
     isCapped:
       effective !== null && architectural !== null && effective < architectural,
+    isCustom: custom !== null,
   };
+}
+
+/**
+ * Pick the max-output-tokens figure to show for a model: the admin override
+ * when set, otherwise the provider-reported limit. Mirrors the backend's
+ * `ModelModel.resolveEffectiveOutputLength`, which is what an agent turn
+ * actually asks the provider for.
+ */
+export function resolveDisplayOutputLength(model: {
+  outputLength?: number | null;
+  customOutputLength?: number | null;
+}): { display: number | null; isCustom: boolean } {
+  const custom = model.customOutputLength ?? null;
+  return {
+    display: custom ?? model.outputLength ?? null,
+    isCustom: custom !== null,
+  };
+}
+
+/**
+ * Validate an admin-set token limit (context window / max output tokens) in the
+ * shape react-hook-form's `rules.validate` expects. Empty clears the override
+ * and falls back to whatever the provider reported, so it is always valid.
+ *
+ * Mirrors the backend's `CustomModelTokenLimitSchema` — without a client-side
+ * rule a typo comes back as a bare 400 that reads like a failed save.
+ */
+export function validateCustomTokenLimit(value: string): true | string {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return "Must be a number";
+  if (!Number.isInteger(parsed)) return "Must be a whole number of tokens";
+  if (parsed < 1) return "Must be 1 or greater";
+  if (parsed > MAX_CUSTOM_MODEL_TOKEN_LIMIT) {
+    return `Must be ${MAX_CUSTOM_MODEL_TOKEN_LIMIT.toLocaleString()} or less`;
+  }
+  return true;
+}
+
+/**
+ * Parse an admin-set token limit field into its payload value. Empty means
+ * "clear the override" (null), which is what makes the provider's own number
+ * reachable again after one has been set.
+ *
+ * Returns null for unparseable input too, so this must run behind
+ * {@link validateCustomTokenLimit} — never on its own.
+ */
+export function parseCustomTokenLimit(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export type ModelsPageAvailableApiKey = {

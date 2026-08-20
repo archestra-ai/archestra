@@ -294,9 +294,17 @@ New users are automatically added to the "Default Team" when they accept an invi
 
 **For MCP Servers:**
 
-- Users can only access MCP servers assigned to teams they belong to
+- Users can only see, install, and manage MCP servers assigned to teams they belong to
 - Exception: Users with \`mcpServerInstallation:admin\` permission can access all MCP servers
 - Exception: MCP servers with no team assignment are accessible to all users
+
+#### Agent Access vs MCP Server Access
+
+The two team assignments gate different things. Agent access decides who can call the agent's tools. MCP server access decides who can see, install, and manage the server in the registry.
+
+In **Custom** tool mode, sharing an agent shares its assigned tools. A user with agent access can call an assigned tool even when its MCP server is not shared with them. [Credential resolution](/docs/mcp-authentication#credential-resolution) decides whose connection serves each call: a pinned connection serves every caller, and resolve-at-call-time looks for a connection the caller can reach.
+
+In **Auto** tool mode, each caller can only discover and run tools from MCP servers they can access themselves — plus any tools explicitly assigned to the agent. See [Tool Access Modes](/docs/platform-agents#tool-access-modes).
 
 **Associated Artifacts:**
 

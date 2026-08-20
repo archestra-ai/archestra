@@ -2,12 +2,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { CreateOAuthClientDialog } from "./create-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
+vi.mock("@/lib/organization.query");
 
 // Radix Popper / floating-ui needs ResizeObserver as a real constructor
 global.ResizeObserver = class ResizeObserver {
@@ -41,6 +46,12 @@ function renderDialog(
 }
 
 beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
   vi.clearAllMocks();
   vi.mocked(useHasPermissions).mockReturnValue({
     data: false,

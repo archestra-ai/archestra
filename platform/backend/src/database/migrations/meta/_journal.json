@@ -2899,6 +2899,97 @@
       "when": 1786554207675,
       "tag": "0413_grey_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 414,
+      "version": "7",
+      "when": 1786754855754,
+      "tag": "0414_brief_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 415,
+      "version": "7",
+      "when": 1786819743500,
+      "tag": "0415_youthful_kronos",
+      "breakpoints": true
+    },
+    {
+      "idx": 416,
+      "version": "7",
+      "when": 1786826617329,
+      "tag": "0416_marvelous_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 417,
+      "version": "7",
+      "when": 1786885497228,
+      "tag": "0417_plain_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 418,
+      "version": "7",
+      "when": 1786989381709,
+      "tag": "0418_kb_ocr_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 419,
+      "version": "7",
+      "when": 1787001961180,
+      "tag": "0419_tearful_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 420,
+      "version": "7",
+      "when": 1787007240714,
+      "tag": "0420_knowledge_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 421,
+      "version": "7",
+      "when": 1787039911186,
+      "tag": "0421_mcp_idle_hibernation",
+      "breakpoints": true
+    },
+    {
+      "idx": 422,
+      "version": "7",
+      "when": 1787079223098,
+      "tag": "0422_app_skill_cost_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 423,
+      "version": "7",
+      "when": 1787085224831,
+      "tag": "0423_gray_king_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 424,
+      "version": "7",
+      "when": 1787177198298,
+      "tag": "0424_naive_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 425,
+      "version": "7",
+      "when": 1787185607593,
+      "tag": "0425_kb_bm25_keyword_ranking",
+      "breakpoints": true
+    },
+    {
+      "idx": 426,
+      "version": "7",
+      "when": 1787215258447,
+      "tag": "0426_member_default_agent_explicit_only",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,6 +29,8 @@ This separation lets admins curate a small approved catalog while still allowing
 Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
 
 ## Server Configuration
+
+Every server has a page of its own. Its **Overview** reads back the setup wizard: how the server is reached and run, how callers authenticate, what its container is given at run time, and the tools it exposes. Secret values are never shown there — only whether a value is set here or asked for at installation. **Edit** in the page header reopens the wizard.
 
 Registry entries can describe either a remote server or a self-hosted server.
 
@@ -94,6 +96,10 @@ The registry does not expose tools to clients by itself. After a server is insta
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
 
 Each registry card shows how many agents and gateways can reach the server. Hover the count to list them, grouped by how they get access — an explicit tool assignment, or Automatic tool assignment mode. The server's **Usage** tab shows the same list as a read-only table. Personal agents all share a name, so each one is labelled with its owner. The uninstall dialog lists them too, so you can see who is affected before removing a connection.
+
+## Needs Attention
+
+Servers with an outstanding problem are counted on the **MCP Registry** entry in the sidebar and on the registry's **Needs attention** tab, so you spot them from any page. The tab lists each server with its status, the cause, how many agents depend on it, and the one action that clears it — **Re-authenticate**, **Reinstall**, **Review image**, or **View logs**. Statuses: Failed to start, Not running, Needs re-authentication, Reinstall required, Awaiting image approval, Stuck starting. Only servers you can fix count; other people's connections and servers still starting are listed separately, without adding to the count. In the server list, the **Status** filter's **Needs attention** option and the table's Status column use the same words.
 
 ## Refreshing Tools
 

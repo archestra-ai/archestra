@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
   LINKED_IDP_SSO_MODE,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  LOCKED_CHAT_REDACTED_MARKER,
+  // SPDX-SnippetEnd
   MCP_APPS_EXTENSION_ID,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -22,13 +27,31 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  OrganizationModel,
+  // SPDX-SnippetEnd
   ToolModel,
 } from "@/models";
 import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
+// SPDX-SnippetEnd
 import { beforeEach, describe, expect, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
-import mcpClient, { type TokenAuthContext } from "./mcp-client";
+import mcpClient, {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  registerMcpClientHibernationInvalidation,
+  // SPDX-SnippetEnd
+  type TokenAuthContext,
+} from "./mcp-client";
 
 // Mock the MCP SDK
 const mockCallTool = vi.fn();
@@ -76,21 +99,124 @@ const {
   mockGetHttpEndpointUrl,
   mockGetRunningPodHttpEndpoint,
   mockGetOrLoadDeployment,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  mockEnsureAwake,
+  mockIsDeploymentDormant,
+  mockRunIfDeploymentServing,
+  mockRegisterHibernationListener,
+  // SPDX-SnippetEnd
 } = vi.hoisted(() => ({
   mockUsesStreamableHttp: vi.fn(),
   mockGetHttpEndpointUrl: vi.fn(),
   mockGetRunningPodHttpEndpoint: vi.fn(),
   mockGetOrLoadDeployment: vi.fn(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  mockEnsureAwake: vi.fn(),
+  mockIsDeploymentDormant: vi.fn(),
+  mockRunIfDeploymentServing: vi.fn(),
+  mockRegisterHibernationListener: vi.fn(),
+  // SPDX-SnippetEnd
 }));
 
-vi.mock("@/k8s/mcp-server-runtime", () => ({
-  McpServerRuntimeManager: {
-    usesStreamableHttp: mockUsesStreamableHttp,
-    getHttpEndpointUrl: mockGetHttpEndpointUrl,
-    getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
-    getOrLoadDeployment: mockGetOrLoadDeployment,
-  },
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/** The wake response budget the mocked runtime reports, in ms. */
+const { WAKE_RESPONSE_BUDGET_TEST_MS } = vi.hoisted(() => ({
+  WAKE_RESPONSE_BUDGET_TEST_MS: 50,
 }));
+// SPDX-SnippetEnd
+
+vi.mock("@/k8s/mcp-server-runtime", () => {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Declared here, not in the returned literal, so McpServerWakePendingError
+  // can extend it. The funnel classifies by `instanceof McpServerWakeError`,
+  // so a pending error that did not inherit from it would be reported to the
+  // agent as "unexpected" — the opposite of what it means.
+  class McpServerWakeError extends Error {
+    constructor(serverName: string, options?: { detail?: string }) {
+      super(
+        `MCP server ${serverName} is waking from idle hibernation but ${
+          options?.detail ?? "did not become ready in time"
+        }; retry shortly.`,
+      );
+      this.name = "McpServerWakeError";
+    }
+  }
+  class McpServerWakePendingError extends McpServerWakeError {
+    constructor(serverName: string, waitedMs: number) {
+      super(serverName, {
+        detail:
+          `it is still starting up and did not become ready within ${Math.round(waitedMs / 1000)}s. ` +
+          "It is still starting in the background: retry this same tool call with the same arguments " +
+          "in about 30 seconds and it should run normally. Nothing needs to be fixed or changed",
+      });
+      this.name = "McpServerWakePendingError";
+    }
+  }
+  // SPDX-SnippetEnd
+  return {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    McpServerWakeError,
+    McpServerWakePendingError,
+    // SPDX-SnippetEnd
+    McpServerRuntimeManager: {
+      usesStreamableHttp: mockUsesStreamableHttp,
+      getHttpEndpointUrl: mockGetHttpEndpointUrl,
+      getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
+      getOrLoadDeployment: mockGetOrLoadDeployment,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      ensureAwake: mockEnsureAwake,
+      isDeploymentDormant: mockIsDeploymentDormant,
+      runIfDeploymentServing: mockRunIfDeploymentServing,
+      registerHibernationListener: mockRegisterHibernationListener,
+      // SPDX-SnippetEnd
+    },
+    McpServerDeploymentFailedError: class McpServerDeploymentFailedError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = "McpServerDeploymentFailedError";
+      }
+    },
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Real logic, not a stub: the point of the budget path is the timing, so a
+    // stub that resolved immediately would test nothing. Kept faithful to
+    // hibernation.ee.ts — it must not cancel the work, and it must attach a
+    // rejection handler so a wake that fails after the budget cannot surface as
+    // an unhandled rejection.
+    withDeadline: <T>(work: Promise<T>, ms: number, makeError: () => Error) =>
+      new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(makeError()), ms);
+        timer.unref?.();
+        work.then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        );
+      }),
+    // Short enough to keep the test fast; the production value is derived from
+    // the tool-call timeout and is exercised in hibernation.ee.test.ts.
+    wakeResponseBudgetMs: () => WAKE_RESPONSE_BUDGET_TEST_MS,
+    // SPDX-SnippetEnd
+  };
+});
 
 // The shared fixture connection below is personal-scope with no owner (as a
 // connection looks once its owning user is deleted), so calls through it run
@@ -155,6 +281,21 @@ describe("McpClient", () => {
     mockGetHttpEndpointUrl.mockReset();
     mockGetRunningPodHttpEndpoint.mockReset();
     mockGetOrLoadDeployment.mockReset();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    mockEnsureAwake.mockReset();
+    mockEnsureAwake.mockResolvedValue(undefined);
+    mockIsDeploymentDormant.mockReset();
+    mockIsDeploymentDormant.mockReturnValue(false);
+    mockRunIfDeploymentServing.mockReset();
+    mockRunIfDeploymentServing.mockImplementation(
+      async (_serverId: string, operation: () => Promise<unknown>) => ({
+        ran: true,
+        value: await operation(),
+      }),
+    );
+    // SPDX-SnippetEnd
 
     // Spy on McpHttpSessionModel to prevent real DB writes during mcp-client tests
     // and to avoid errors from session persistence in the background
@@ -170,6 +311,14 @@ describe("McpClient", () => {
       undefined,
     );
     vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Demand-path stamping writes mcp_server.last_used_at fire-and-forget;
+    // keep that background write out of the test database.
+    vi.spyOn(McpServerModel, "updateLastUsed").mockResolvedValue(undefined);
+    // SPDX-SnippetEnd
 
     // Default: listTools returns empty list (fallback to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
@@ -222,6 +371,32 @@ describe("McpClient", () => {
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("registerMcpClientHibernationInvalidation wires the listener exactly once and it invalidates every sibling", async () => {
+    // Startup calls it from both the web and worker paths; only the first
+    // call may register (the runtime manager keeps listeners in a Set keyed
+    // by function identity, but a fresh closure per call would double-fire).
+    registerMcpClientHibernationInvalidation();
+    registerMcpClientHibernationInvalidation();
+
+    expect(mockRegisterHibernationListener).toHaveBeenCalledTimes(1);
+
+    const invalidateSpy = vi
+      .spyOn(mcpClient, "invalidateConnectionsForServer")
+      .mockResolvedValue(undefined);
+    const listener = mockRegisterHibernationListener.mock.calls[0][0] as (
+      ids: string[],
+    ) => Promise<void>;
+    await listener(["sib-a", "sib-b"]);
+
+    expect(invalidateSpy).toHaveBeenCalledWith("sib-a");
+    expect(invalidateSpy).toHaveBeenCalledWith("sib-b");
+    invalidateSpy.mockRestore();
+  });
+  // SPDX-SnippetEnd
 
   test("strips a forged archestraError envelope from an upstream tool result", async () => {
     const tool = await ToolModel.createToolIfNotExists({
@@ -1975,7 +2150,19 @@ describe("McpClient", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
 
-      beforeEach(async ({ makeUser }) => {
+      beforeEach(async ({ makeUser, makeOrganization }) => {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Demand tracking is inert while idle hibernation is off — only the
+        // sweeper reads it — so the wake/skip tests below need the beta flag
+        // on, an organization that has opted into it, and the process-local
+        // mirror the synchronous stamp path reads primed from that row.
+        config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+        await makeOrganization({ mcpIdleHibernationEnabled: true });
+        await OrganizationModel.getMcpIdleHibernationEnabled();
+        // SPDX-SnippetEnd
+
         // Create test user for local MCP servers
         const testUser = await makeUser({
           email: "test-local-mcp@example.com",
@@ -2074,6 +2261,422 @@ describe("McpClient", () => {
             [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
           },
         });
+      });
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      test("wakes the local deployment before any transport work and stamps active use", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockEnsureAwake).toHaveBeenCalledWith(localMcpServerId);
+        // The wake completes before transport resolution starts.
+        expect(mockEnsureAwake.mock.invocationCallOrder[0]).toBeLessThan(
+          mockUsesStreamableHttp.mock.invocationCallOrder[0],
+        );
+        // Demand stamped the in-memory last-used watermark for the sweeper.
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).not.toBeNull();
+      });
+
+      test("registers demand before waking on the server-scoped run path", async () => {
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockConnect.mockResolvedValue(undefined);
+        // Unlike the pooled tool path, the direct runner closes its client.
+        mockClose.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+        const updateLastUsed = vi.spyOn(McpServerModel, "updateLastUsed");
+        // What matters is the state AT THE MOMENT the wake begins: waking
+        // outside the demand scope passes every after-the-fact assertion,
+        // because trackActiveUse still runs — just too late to protect the
+        // wake itself from a sweeper on another replica.
+        let atWake: { active: number; persisted: number } | undefined;
+        mockEnsureAwake.mockImplementation(async () => {
+          atWake = {
+            active: mcpActiveUseTracker.getActiveUseCount(localMcpServerId),
+            persisted: updateLastUsed.mock.calls.length,
+          };
+        });
+
+        await mcpClient.callToolForServer({
+          mcpServerId: localMcpServerId,
+          name: "test_tool",
+        });
+
+        expect(atWake).toEqual({ active: 1, persisted: 1 });
+      });
+
+      test("redacts a locked chat call's arguments when the wake fails", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerWakeError("local-streamable-http-server"),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_locked_chat_wake",
+            name: "local-streamable-http-server__test_tool",
+            arguments: { query: "the-part-that-must-not-persist" },
+          },
+          agentOwner(agentId),
+          undefined,
+          { suppressContentLogging: true },
+        );
+
+        expect(result.isError).toBe(true);
+        // The wake-failure result is persisted like any other tool failure —
+        // and a locked chat's arguments must not survive it in
+        // plaintext just because the pod was slow to come up.
+        const [logged] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+        expect(logged).toBeDefined();
+        expect((logged.toolCall as { arguments?: unknown }).arguments).toEqual(
+          LOCKED_CHAT_REDACTED_MARKER,
+        );
+        expect(JSON.stringify(logged)).not.toContain(
+          "the-part-that-must-not-persist",
+        );
+      });
+
+      test("a stop mid-wake persists the cancelled marker, not a wake failure", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+        const controller = new AbortController();
+        // A wake that never settles: the abort, not the reply budget, is what
+        // has to end the wait.
+        mockEnsureAwake.mockImplementation(() => {
+          queueMicrotask(() => controller.abort());
+          return new Promise(() => {});
+        });
+
+        await expect(
+          mcpClient.executeToolCallForOwner(
+            {
+              id: "call_stop_mid_wake",
+              name: "local-streamable-http-server__test_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            undefined,
+            { abortSignal: controller.signal },
+          ),
+        ).rejects.toThrow();
+
+        // A user-initiated stop is not a wake failure: the row carries the
+        // structured cancelled marker the log surfaces key off.
+        const [logged] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+        expect(logged).toBeDefined();
+        const loggedResult = logged.toolResult as {
+          isError?: boolean;
+          _meta?: { archestraError?: { type?: string } };
+        };
+        expect(loggedResult.isError).toBe(false);
+        expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
+      });
+
+      test("surfaces a wake timeout's retryable message instead of connecting", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerWakeError("local-streamable-http-server"),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_failure",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content).toEqual([
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "waking from idle hibernation but did not become ready in time; retry shortly",
+            ),
+          },
+        ]);
+        // A wake still progressing in the cluster must never read as the
+        // terminal outcome, which tells the agent to stop trying.
+        expect(result.error).not.toContain("retrying will not help");
+        // The failed wake short-circuits before any transport work.
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("a terminally broken deployment surfaces as a do-not-retry error naming the fix", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        const { McpServerDeploymentFailedError } = await import(
+          "@/k8s/mcp-server-runtime"
+        );
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerDeploymentFailedError(
+            'Deployment mcp-mt-9f1c2ab3-local-streamable-http-server failed: ImagePullBackOff - Back-off pulling image "ghcr.io/example/mcp:v3"',
+          ),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_terminal",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        // A terminal deployment failure must reach the calling agent as a tool
+        // error carrying the real cause and the operator action that clears
+        // it — never as a retryable wake, which would loop the agent forever.
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "cannot start, and retrying will not help",
+        );
+        expect(result.error).toContain(
+          "edit or reinstall it from the registry",
+        );
+        expect(result.error).toContain(
+          'ImagePullBackOff - Back-off pulling image "ghcr.io/example/mcp:v3"',
+        );
+        expect(result.error).not.toContain("retry shortly");
+        // The agent is told which SERVER failed, by the name it knows. The
+        // Kubernetes object the platform observed is invisible everywhere the
+        // caller can look, so it stays out of the result entirely.
+        expect(result.error).toMatch(
+          /^MCP server local-streamable-http-server\S* cannot start/,
+        );
+        expect(result.error).not.toContain(
+          "mcp-mt-9f1c2ab3-local-streamable-http-server",
+        );
+        expect(result.error).not.toContain("Deployment ");
+        expect(result.content).toEqual([{ type: "text", text: result.error }]);
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("an unexpected wake failure becomes a tool error result rather than a thrown exception", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockEnsureAwake.mockRejectedValue(
+          new Error(
+            'k8s: deployments.apps "mcp-mt-9f1c2ab3-local-streamable-http-server" is forbidden',
+          ),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_unexpected",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        // Throwing here would leave the gateway with a protocol-level
+        // exception: no tool result, no tool-call row.
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "the platform failed to complete the wake",
+        );
+        // Neither of the two server-state verdicts applies — the wake never
+        // got far enough to learn anything about the server.
+        expect(result.error).not.toContain("retry shortly");
+        expect(result.error).not.toContain("retrying will not help");
+        // The raw diagnostic is the operator's, not the agent's.
+        expect(result.error).not.toContain("is forbidden");
+        expect(result.error).not.toContain(
+          "mcp-mt-9f1c2ab3-local-streamable-http-server",
+        );
+        expect(result.content).toEqual([{ type: "text", text: result.error }]);
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+
+        // Every other tool failure lands in the tool-call log; an unexpected
+        // wake failure is no exception.
+        const [logged] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+        expect(logged).toBeDefined();
+        expect((logged.toolResult as { isError?: boolean }).isError).toBe(true);
+      });
+
+      test("list operations skip hibernated deployments and never wake them", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        mockIsDeploymentDormant.mockReturnValue(true);
+        const hibernated = await mcpClient.listResources(agentId);
+        expect(hibernated.resources).toEqual([]);
+        expect(mockIsDeploymentDormant).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockEnsureAwake).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+        // A skipped hibernated server is NOT stamped — listing must never
+        // extend a sleeping server's idle window.
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).toBeNull();
+
+        // The same listing connects once the deployment is awake again — and
+        // still counts as NOTHING: listings are passive reads, and a client
+        // that re-lists on a timer (session starts, listChanged pollers)
+        // must not keep an otherwise-unused server from ever reaching the
+        // idle cutoff.
+        mockIsDeploymentDormant.mockReturnValue(false);
+        await mcpClient.listResources(agentId);
+        expect(mockRunIfDeploymentServing).toHaveBeenCalledWith(
+          localMcpServerId,
+          expect.any(Function),
+        );
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).toBeNull();
+      });
+
+      test("list operation skips when transition gate finds stale awake cache", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+        mockIsDeploymentDormant.mockReturnValue(false);
+        mockRunIfDeploymentServing.mockResolvedValue({ ran: false });
+
+        const result = await mcpClient.listResources(agentId);
+
+        expect(result.resources).toEqual([]);
+        expect(mockRunIfDeploymentServing).toHaveBeenCalledWith(
+          localMcpServerId,
+          expect.any(Function),
+        );
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      // SPDX-SnippetEnd
+      test("remote servers never touch the wake or hibernation checks", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_remote_no_wake",
+            name: "github-mcp-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        expect(mockEnsureAwake).not.toHaveBeenCalled();
+        expect(mockIsDeploymentDormant).not.toHaveBeenCalled();
+        // SPDX-SnippetEnd
       });
 
       test("returns error when HTTP endpoint URL is missing", async () => {
@@ -5922,19 +6525,25 @@ describe("McpClient", () => {
         });
         mockConnect.mockResolvedValue(undefined);
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         // The sibling test above proves this exact error triggers a
-        // fresh-session retry. With the run aborted, the abort guard must
-        // short-circuit before that retry — no second callTool, no session
-        // teardown — and propagate the abort.
-        mockCallTool.mockRejectedValue(
-          new StreamableHTTPError(
-            404,
-            "Error POSTing to endpoint: Session not found",
-          ),
-        );
-
+        // fresh-session retry. Aborted MID-CALL — a signal aborted before the
+        // call now refuses at the wake and never dispatches — the abort guard
+        // must short-circuit before that retry: no second callTool, no
+        // session teardown, and the abort propagates.
+        // SPDX-SnippetEnd
         const controller = new AbortController();
-        controller.abort();
+        mockCallTool.mockImplementation(() => {
+          controller.abort();
+          return Promise.reject(
+            new StreamableHTTPError(
+              404,
+              "Error POSTing to endpoint: Session not found",
+            ),
+          );
+        });
 
         await expect(
           mcpClient.executeToolCallForOwner(
@@ -8566,6 +9175,87 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
     expect(result).toEqual(RESOURCE_CONTENTS);
     expect(mockReadResource).toHaveBeenCalledWith({ uri: RESOURCE_URI });
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("registers demand before waking a hibernated local server on the resource path", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "local",
+      localConfig: {
+        command: "npx",
+        arguments: [
+          "@modelcontextprotocol/server-everything",
+          "streamableHttp",
+        ],
+        transportType: "streamable-http",
+        httpPort: 3001,
+        httpPath: "/mcp",
+      },
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      serverType: "local",
+    });
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "widget__open",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+
+    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+    // The gate, not the plumbing, is stubbed: this test is about WHERE the
+    // wake sits relative to the demand scope, not about toggle hydration.
+    const syncMirror = vi
+      .spyOn(OrganizationModel, "getMcpIdleHibernationEnabledSync")
+      .mockReturnValue(true);
+    const updateLastUsed = vi.spyOn(McpServerModel, "updateLastUsed");
+    try {
+      mockUsesStreamableHttp.mockResolvedValue(true);
+      mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+      mockConnect.mockResolvedValue(undefined);
+      mockReadResource.mockResolvedValueOnce(RESOURCE_CONTENTS);
+      // The state AT THE MOMENT the wake begins is the whole point: waking
+      // outside the demand scope passes every after-the-fact assertion.
+      let atWake: { active: number; persisted: number } | undefined;
+      mockEnsureAwake.mockImplementation(async () => {
+        atWake = {
+          active: mcpActiveUseTracker.getActiveUseCount(server.id),
+          persisted: updateLastUsed.mock.calls.length,
+        };
+      });
+
+      const result = await mcpClient.readResource(
+        RESOURCE_URI,
+        agent.id,
+        dynamicToken(user.id, org.id),
+      );
+
+      expect(result).toEqual(RESOURCE_CONTENTS);
+      expect(atWake).toEqual({ active: 1, persisted: 1 });
+    } finally {
+      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
+      syncMirror.mockRestore();
+      updateLastUsed.mockRestore();
+    }
+  });
+  // SPDX-SnippetEnd
 
   test("falls back to dynamic access to read a UI resource for an unassigned tool in all-tools mode", async ({
     makeOrganization,

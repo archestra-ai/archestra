@@ -21,7 +21,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
-import { IncognitoIcon } from "@/components/chat/incognito-icon";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -39,10 +39,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  NEW_INCOGNITO_CHAT_HREF,
+  NEW_LOCKED_CHAT_HREF,
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
-  SHORTCUT_NEW_INCOGNITO_CHAT,
+  SHORTCUT_NEW_LOCKED_CHAT,
   SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
@@ -190,7 +190,7 @@ export function ConversationSearchPalette({
     chat: ["read"],
   });
   const { modKey, altKey } = usePlatform();
-  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
 
   const deleteMutation = useDeleteConversation();
   const pinMutation = usePinConversation();
@@ -263,8 +263,8 @@ export function ConversationSearchPalette({
     onOpenChange(false);
   }, [router, onOpenChange]);
 
-  const handleNewIncognitoChat = useCallback(() => {
-    router.push(NEW_INCOGNITO_CHAT_HREF);
+  const handleNewLockedChat = useCallback(() => {
+    router.push(NEW_LOCKED_CHAT_HREF);
     onOpenChange(false);
   }, [router, onOpenChange]);
 
@@ -341,12 +341,12 @@ export function ConversationSearchPalette({
         handlePinConversation(conversationId);
       }
 
-      // Alt+I starts a new incognito chat (mirrors the global shortcut, so it
+      // Alt+I starts a new locked chat (mirrors the global shortcut, so it
       // also works with the palette open).
-      if (incognitoEnabled && e.code === SHORTCUT_NEW_INCOGNITO_CHAT.code) {
+      if (lockedChatEnabled && e.code === SHORTCUT_NEW_LOCKED_CHAT.code) {
         e.preventDefault();
         e.stopPropagation();
-        handleNewIncognitoChat();
+        handleNewLockedChat();
       }
     };
 
@@ -359,8 +359,8 @@ export function ConversationSearchPalette({
     isPendingDeletion,
     handleDeleteConversation,
     handlePinConversation,
-    incognitoEnabled,
-    handleNewIncognitoChat,
+    lockedChatEnabled,
+    handleNewLockedChat,
   ]);
 
   /** Generates a contextual preview snippet with search term context */
@@ -460,11 +460,11 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {conv.incognito && (
+          {conv.lockedChat && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IncognitoIcon className="mt-0.5 h-3.5 w-3.5" />
+                  <LockedChatIcon className="mt-0.5 h-3.5 w-3.5" />
                 </TooltipTrigger>
                 <TooltipContent side="top">Locked chat</TooltipContent>
               </Tooltip>
@@ -569,13 +569,13 @@ export function ConversationSearchPalette({
                     <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">New chat</span>
                   </CommandItem>
-                  {incognitoEnabled && (
+                  {lockedChatEnabled && (
                     <CommandItem
-                      value="new-incognito-chat private locked"
-                      onSelect={handleNewIncognitoChat}
+                      value="new-locked-chat private locked"
+                      onSelect={handleNewLockedChat}
                       className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                     >
-                      <IncognitoIcon className="h-4 w-4 shrink-0" />
+                      <LockedChatIcon className="h-4 w-4 shrink-0" />
                       <span className="font-medium">New locked chat</span>
                     </CommandItem>
                   )}
@@ -688,9 +688,9 @@ export function ConversationSearchPalette({
             keys={[altKey, SHORTCUT_NEW_CHAT.label]}
             label="New Chat"
           />
-          {incognitoEnabled && (
+          {lockedChatEnabled && (
             <FooterShortcut
-              keys={[altKey, SHORTCUT_NEW_INCOGNITO_CHAT.label]}
+              keys={[altKey, SHORTCUT_NEW_LOCKED_CHAT.label]}
               label="New Locked Chat"
             />
           )}

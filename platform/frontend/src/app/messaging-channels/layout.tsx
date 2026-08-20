@@ -1,9 +1,16 @@
 "use client";
 
+import {
+  MESSAGING_CHANNEL_LABELS,
+  type MessagingChannelId,
+} from "@archestra/shared";
 import { Bot, Mail } from "lucide-react";
-import { useMemo } from "react";
+import { usePathname } from "next/navigation";
+import { type ReactNode, useMemo } from "react";
+import { CHANNEL_ICON_SRC } from "@/components/channel-icon";
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils";
 import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 
@@ -47,6 +54,10 @@ function TabLabel({
   );
 }
 
+const CHANNEL_IDS = Object.keys(
+  MESSAGING_CHANNEL_LABELS,
+) as MessagingChannelId[];
+
 export default function AgentTriggersLayout({
   children,
 }: {
@@ -63,14 +74,20 @@ export default function AgentTriggersLayout({
     email: emailActive,
     a2a: a2aActive,
   } = useTriggerStatuses();
+  const channelCatalog = useMessagingChannelCatalog();
+  const pathname = usePathname();
+  const currentChannel = (
+    Object.keys(MESSAGING_CHANNEL_LABELS) as MessagingChannelId[]
+  ).find((id) => pathname === `/messaging-channels/${id}`);
 
   const tabs = useMemo(() => {
     const channelTabs = [
       {
+        id: "ms-teams" as const,
         label: (
           <TabLabel
-            iconSrc="/icons/ms-teams.png"
-            label="MS Teams"
+            iconSrc={CHANNEL_ICON_SRC["ms-teams"]}
+            label={MESSAGING_CHANNEL_LABELS["ms-teams"]}
             active={msTeamsActive}
           />
         ),
@@ -78,10 +95,11 @@ export default function AgentTriggersLayout({
         active: msTeamsActive,
       },
       {
+        id: "slack" as const,
         label: (
           <TabLabel
-            iconSrc="/icons/slack.png"
-            label="Slack"
+            iconSrc={CHANNEL_ICON_SRC.slack}
+            label={MESSAGING_CHANNEL_LABELS.slack}
             active={slackActive}
           />
         ),
@@ -92,10 +110,11 @@ export default function AgentTriggersLayout({
       ...(telegramAvailable
         ? [
             {
+              id: "telegram" as const,
               label: (
                 <TabLabel
-                  iconSrc="/icons/telegram.png"
-                  label="Telegram"
+                  iconSrc={CHANNEL_ICON_SRC.telegram}
+                  label={MESSAGING_CHANNEL_LABELS.telegram}
                   active={telegramActive}
                 />
               ),
@@ -105,7 +124,14 @@ export default function AgentTriggersLayout({
           ]
         : []),
       {
-        label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
+        id: "email" as const,
+        label: (
+          <TabLabel
+            icon={Mail}
+            label={MESSAGING_CHANNEL_LABELS.email}
+            active={emailActive}
+          />
+        ),
         href: "/messaging-channels/email",
         active: emailActive,
       },
@@ -115,11 +141,20 @@ export default function AgentTriggersLayout({
     return [
       ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
       {
-        label: <TabLabel icon={Bot} label="A2A" active={a2aActive} />,
+        id: "a2a" as const,
+        label: (
+          <TabLabel
+            icon={Bot}
+            label={MESSAGING_CHANNEL_LABELS.a2a}
+            active={a2aActive}
+          />
+        ),
         href: "/messaging-channels/a2a",
         active: a2aActive,
       },
-    ];
+      // Channels the admins turned off leave the page entirely — their routes
+      // render a "turned off" notice, so a bookmark cannot walk back in.
+    ].filter((tab) => !channelCatalog.isHidden(tab.id));
   }, [
     msTeamsActive,
     slackActive,
@@ -127,19 +162,62 @@ export default function AgentTriggersLayout({
     telegramAvailable,
     emailActive,
     a2aActive,
+    channelCatalog,
   ]);
 
   if (canReadTriggers === false) {
     return null;
   }
 
+  // Every channel turned off: no tabs to show, nowhere for the index route to
+  // land, and no channel page worth rendering — so the page collapses to one
+  // explanation instead of a header describing an empty list.
+  const noChannels = tabs.length === 0;
+
   return (
     <PageLayout
       title="Messaging Channels"
-      description={`Manage how agents are invoked through Slack, Microsoft Teams, ${telegramAvailable ? "Telegram, " : ""}email, and A2A`}
+      description={
+        noChannels
+          ? "Every messaging channel is turned off for this organization."
+          : `Manage how agents are invoked through ${describeChannels(
+              // Catalog order, not tab order: the tabs re-sort as channels
+              // connect, and a sentence that reshuffles itself reads like a bug.
+              CHANNEL_IDS.filter((id) => tabs.some((tab) => tab.id === id)).map(
+                (id) => MESSAGING_CHANNEL_LABELS[id],
+              ),
+            )}`
+      }
       tabs={tabs}
     >
-      {children}
+      {noChannels ? (
+        <ChannelsOffNotice
+          title="No messaging channels are available"
+          body="An administrator turned every channel off for your organization. Agents can still be reached through the API."
+        />
+      ) : currentChannel && channelCatalog.isHidden(currentChannel) ? (
+        <ChannelsOffNotice
+          title={`${MESSAGING_CHANNEL_LABELS[currentChannel]} is turned off`}
+          body="An administrator turned this channel off for your organization, so it cannot be configured or used."
+        />
+      ) : (
+        children
+      )}
     </PageLayout>
   );
+}
+
+function ChannelsOffNotice({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+      <div className="font-medium text-foreground">{title}</div>
+      <p className="mt-1">{body}</p>
+    </div>
+  );
+}
+
+/** "Slack, Microsoft Teams and A2A" from the channels still on the page. */
+function describeChannels(labels: string[]): string {
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }

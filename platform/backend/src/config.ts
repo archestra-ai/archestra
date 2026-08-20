@@ -3,6 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+  BM25_B_DEFAULT,
+  BM25_B_MAX,
+  BM25_B_MIN,
+  BM25_K1_DEFAULT,
+  BM25_K1_MAX,
+  BM25_K1_MIN,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
@@ -954,6 +960,76 @@ export const parseClampedInt = (
   return Math.min(Math.max(parsed, min), max);
 };
 
+/**
+ * Like {@link parseClampedInt} for values that are genuinely fractional — the
+ * BM25 tuning constants, where `b` lives entirely in [0, 1] and rounding to an
+ * integer would collapse it to "off" or "full".
+ *
+ * Non-finite input (`Infinity`, `NaN`) falls back to the default rather than
+ * clamping, because clamping `NaN` silently yields `NaN` and would poison every
+ * score computed from it.
+ *
+ * @public — exported for testability
+ */
+export const parseClampedFloat = (
+  envValue: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseFloat(envValue);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  return Math.min(Math.max(parsed, min), max);
+};
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Parses `ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`.
+ *
+ * The env var is no longer the on/off switch — idle hibernation is an
+ * enterprise feature an organization opts into. What is left here is the
+ * operator's two decisions:
+ *
+ *  - an explicit "0" is a HARD kill switch: hibernation is off platform-wide
+ *    no matter what the organization has enabled, for deployments that must
+ *    never see a scaled-to-zero MCP pod;
+ *  - anything else configures the idle WINDOW. Unset or unparseable falls
+ *    back to 30 minutes; a parsed value is floored at 120 seconds, because a
+ *    lower threshold could hibernate a server in the gap between normal
+ *    consecutive tool calls of one conversation and thrash pods.
+ *
+ * @public — exported for testability
+ */
+export const parseMcpIdleHibernationSeconds = (
+  envValue: string | undefined,
+): { windowSeconds: number; hardDisabled: boolean } => {
+  // Parse BEFORE testing for zero: "00", "0.0" and "+0" are all an operator
+  // writing zero, and a numerically-zero spelling that silently ARMED
+  // hibernation with the default window — instead of killing it — would be
+  // the worst possible reading of their intent.
+  if (envValue?.trim() && Number.parseInt(envValue, 10) === 0) {
+    return {
+      windowSeconds: DEFAULT_MCP_IDLE_HIBERNATION_SECONDS,
+      hardDisabled: true,
+    };
+  }
+  const parsed = parsePositiveInt(envValue, 0);
+  return {
+    windowSeconds:
+      parsed === 0
+        ? DEFAULT_MCP_IDLE_HIBERNATION_SECONDS
+        : Math.max(120, parsed),
+    hardDisabled: false,
+  };
+};
+
+/** 30 minutes — the idle window when the operator configures none. */
+const DEFAULT_MCP_IDLE_HIBERNATION_SECONDS = 1800;
+// SPDX-SnippetEnd
+
 /** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
@@ -1396,6 +1472,138 @@ const mcpServerResources = {
     }),
   },
 };
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The pre-pull DaemonSet's own footprint. It runs `true` once per image and
+ * then sleeps, so the requests are deliberately minimal — they are paid on
+ * EVERY node in the cluster, and anything larger would distort scheduling for
+ * the real workloads pre-pulling exists to serve.
+ */
+const MCP_IMAGE_PREPULL_DEFAULTS = {
+  // Copied into arbitrary MCP images, so this must be static rather than
+  // inheriting the chart's generic init-container BusyBox.
+  bootstrapImage: "docker.io/library/busybox:1.36-musl",
+  resourceRequestCpu: "10m",
+  resourceRequestMemory: "16Mi",
+  resourceLimitMemory: "64Mi",
+} as const;
+
+/**
+ * The OPERATOR half of MCP image pre-pulling: the DaemonSet that keeps every
+ * node's image cache warm so a hibernated MCP server can wake without reaching
+ * the container registry.
+ *
+ * `enabled` is a KILL SWITCH, not a feature gate — pre-pulling follows idle
+ * hibernation (beta flag + enterprise licence + organization toggle), and this
+ * only lets an operator turn the extra per-node pod off while keeping
+ * hibernation on. Hence default-on and an explicit `"false"` to disable, the
+ * mirror of the hibernation flag's default-off shape.
+ *
+ * `priorityClassName` is unset by default (the namespace default applies).
+ * Point it at a low or negative-priority class so warming a cache can never
+ * preempt a real workload.
+ *
+ * @public — exported for testability
+ */
+export const getMcpImagePrepullConfig = () => ({
+  enabled:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED?.trim() !==
+    "false",
+  /**
+   * Image for the DaemonSet's OWN containers — the noop bootstrap and the
+   * keepalive. Deliberately independent of the configurable MCP server base
+   * image: that one is an operator's choice (a pinned older release, a custom
+   * derivative), and assuming anything about its contents wedges every
+   * pre-pull pod in init. Override alongside
+   * `archestra.initContainers.busyboxImage` on clusters that mirror images.
+   */
+  bootstrapImage:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE?.trim() ||
+    MCP_IMAGE_PREPULL_DEFAULTS.bootstrapImage,
+  bootstrapImagePullSecrets: Array.from(
+    new Set(
+      parseCommaSeparatedList(
+        process.env
+          .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE_PULL_SECRETS ??
+          "",
+      ),
+    ),
+  ),
+  priorityClassName:
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_PRIORITY_CLASS_NAME?.trim() ||
+    undefined,
+  resources: {
+    requests: {
+      cpu: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST",
+        value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_CPU_REQUEST,
+        validator: isValidK8sCpuQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceRequestCpu,
+      }),
+      memory: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST",
+        value:
+          process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_REQUEST,
+        validator: isValidK8sMemoryQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceRequestMemory,
+      }),
+    },
+    limits: {
+      memory: parseK8sResourceQuantity({
+        envName: "ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT",
+        value:
+          process.env.ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_MEMORY_LIMIT,
+        validator: isValidK8sMemoryQuantity,
+        defaultValue: MCP_IMAGE_PREPULL_DEFAULTS.resourceLimitMemory,
+      }),
+    },
+  },
+});
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The Helm release this platform was installed as, injected by the chart
+ * (`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`) rather than inferred from the
+ * cluster. It names cluster objects the platform creates for itself but Helm
+ * does not template — today the MCP image pre-pull DaemonSet — so that two
+ * releases sharing a namespace never fight over one object.
+ *
+ * A name that is not a valid Helm release name resolves to `undefined` rather
+ * than to something approximate: the consumers of this value name a cluster
+ * object with it, and a name guessed from a bad value creates a SECOND object
+ * that nothing afterwards will ever look for, delete, or upgrade. Not knowing
+ * is a state they can handle; being wrong is not.
+ *
+ * @public — exported for testability
+ */
+export const parseHelmReleaseName = (
+  envValue: string | undefined,
+): string | undefined => {
+  const releaseName = envValue?.trim();
+  if (!releaseName) return undefined;
+  // Helm's own rule: a DNS-1123 label, at most 53 characters so the release
+  // name still fits the names generated from it.
+  if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(releaseName)) {
+    logger.warn(
+      `Ignoring ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME "${releaseName}": not a valid Helm release name (lowercase alphanumerics and "-")`,
+    );
+    return undefined;
+  }
+  if (releaseName.length > 53) {
+    logger.warn(
+      `Ignoring ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME "${releaseName}": longer than the 53 characters Helm allows`,
+    );
+    return undefined;
+  }
+  return releaseName;
+};
+// SPDX-SnippetEnd
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -2503,8 +2711,53 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
+     * MCP server must sit unused before it is scaled to zero (default 30 min,
+     * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
+     * the whole feature ships behind — off by default, a blank value falling
+     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+     * Whether hibernation runs at all is decided together with the enterprise
+     * licence and the organization's own toggle — see
+     * `k8s/mcp-server-runtime/hibernation.ee`.
+     */
+    mcpIdleHibernation: {
+      ...parseMcpIdleHibernationSeconds(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS,
+      ),
+      betaEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
+      ),
+    },
+    /**
+     * The pre-pull DaemonSet's kill switch, priority class and footprint — see
+     * {@link getMcpImagePrepullConfig}. The reconciler that acts on it lives in
+     * `k8s/mcp-server-runtime/image-prepuller.ee`.
+     */
+    mcpImagePrepull: getMcpImagePrepullConfig(),
+    // SPDX-SnippetEnd
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+      runtimeOwnerRoleName:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE?.trim() ||
+        undefined,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      /**
+       * The Helm release this platform was installed as — see
+       * {@link parseHelmReleaseName}. `undefined` when the chart did not inject
+       * it (a non-Helm deployment, or local development), which is a state the
+       * features that name objects after it must handle by doing nothing.
+       */
+      helmReleaseName: parseHelmReleaseName(
+        process.env.ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME,
+      ),
+      // SPDX-SnippetEnd
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
       loadKubeconfigFromCurrentCluster:
         process.env
@@ -2528,6 +2781,21 @@ const config = {
    * runs commands, holds uploaded files, and materializes activated skills.
    * On when a Dagger runner host is configured, or `ARCHESTRA_CODE_RUNTIME_ENABLED`
    * is set with the orchestrator (Kubernetes) configured.   */
+  /**
+   * Knowledge file repository. Uploads are held as Postgres bytea, so the cap
+   * bounds a single request's memory as well as row size.
+   */
+  knowledgeFiles: {
+    maxUploadBytes: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_FILES_MAX_UPLOAD_BYTES,
+      25 * 1024 * 1024,
+    ),
+    /** Ceiling on how many files one directory selection expands to. */
+    maxFilesPerIndexRequest: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_FILES_MAX_FILES_PER_INDEX_REQUEST,
+      500,
+    ),
+  },
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
     cpuLimit: parsePositiveInt(
@@ -2797,6 +3065,37 @@ const config = {
     // Intentionally undocumented while the method is being validated.
     mfilesOauthEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
+    /**
+     * The p4 shim: the in-cluster pod that executes allowlisted Perforce CLI
+     * commands for Perforce permission sync (k8s/p4-shim-runtime). The image
+     * contains no Perforce software; the backend downloads the pinned `p4`
+     * binary from `p4Binary.<arch>.url`, verifies its sha256, and pushes it to
+     * the pod at provision time. Air-gapped installs point the URL at an
+     * internal mirror (the checksum must then match that mirror's binary).
+     */
+    perforceShim: {
+      image:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
+        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:${appVersion}`,
+      p4Binary: {
+        x64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64 ||
+            "ba4b931bd37a1fd073785c3194a608906934f62b52d407178121a8184bee8ae6",
+        },
+        arm64: {
+          url:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64 ||
+            "https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4",
+          sha256:
+            process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64 ||
+            "a67bcae67dd810fdc099525289457ab6af6f647f6e3aceadc0260f42d19cbc93",
+        },
+      },
+    },
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     /**
@@ -2842,6 +3141,17 @@ const config = {
     contextualRetrievalEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED ===
       "true",
+    /**
+     * Ceiling on how many textless pages of a single PDF the OCR pass will
+     * transcribe. Each page is one vision-model request billed against the
+     * organization's configured OCR model, so this bounds the worst-case cost
+     * of one document (a 500-page scan stops at this many pages and the
+     * document is indexed with an honest partial-extraction warning).
+     */
+    ocrMaxPagesPerDocument: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT,
+      100,
+    ),
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,
@@ -2877,6 +3187,84 @@ const config = {
       8_000,
       0,
       120_000,
+    ),
+    /**
+     * Deployment default for BM25 term-frequency saturation. Higher means
+     * repeated terms keep earning score for longer; 0 makes a term's
+     * contribution binary (present/absent). 1.2 is the Lucene/Elasticsearch
+     * default. An organization can override it from Knowledge settings
+     * (`organization.kb_bm25_k1`); this applies where that is unset.
+     */
+    bm25K1: parseClampedFloat(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_K1,
+      BM25_K1_DEFAULT,
+      BM25_K1_MIN,
+      BM25_K1_MAX,
+    ),
+    /**
+     * Deployment default for BM25 document-length normalization. 0 ignores
+     * chunk length entirely (which is what `ts_rank` does today); 1 normalizes
+     * fully. 0.75 is the Lucene/Elasticsearch default. An organization can
+     * override it from Knowledge settings (`organization.kb_bm25_b`); this
+     * applies where that is unset.
+     */
+    bm25B: parseClampedFloat(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_B,
+      BM25_B_DEFAULT,
+      BM25_B_MIN,
+      BM25_B_MAX,
+    ),
+    /**
+     * How many candidates the BM25 ranker rescores per query.
+     *
+     * BM25 is a scoring function, not an index: the GIN index finds candidates
+     * and this bounds how many of them get scored. Cost is linear in the cap
+     * (~0.03 ms per candidate measured on a 60k-chunk corpus), so this trades
+     * latency against fidelity. Uncapped, the ranking is exactly BM25; capped,
+     * a query matching more chunks than the cap can only reorder what
+     * `ts_rank` surfaced first. 2000 keeps the rescoring near 60 ms while
+     * covering all but pathologically broad queries.
+     *
+     * It bounds the rescoring only. Choosing the candidates still ranks every
+     * matching chunk with `ts_rank`, which the GIN index cannot do for us, so
+     * a query whose terms match a large fraction of the corpus stays expensive
+     * however low this is set — the per-statement search timeout is what
+     * bounds that half.
+     */
+    bm25RecallCap: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_RECALL_CAP,
+      2_000,
+      10,
+      100_000,
+    ),
+    /**
+     * Statement timeout for one statistics rebuild.
+     *
+     * Deliberately far above the pool default: the rebuild is a full,
+     * read-only corpus scan on a timer, not a request, and a rebuild killed by
+     * the request-path timeout would leave keyword search on the `ts_rank`
+     * fallback indefinitely — it never gets further on the next attempt.
+     */
+    bm25StatsRefreshTimeoutMillis: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_TIMEOUT_MS,
+      15 * 60 * 1_000,
+      30_000,
+      6 * 60 * 60 * 1_000,
+    ),
+    /**
+     * How often the BM25 corpus statistics are rebuilt.
+     *
+     * The statistics are a derived cache and may lag the corpus: stale values
+     * perturb scores slightly rather than making them wrong (measured: 20%
+     * corpus growth without a refresh left 99.2% of top-10 results unchanged),
+     * which is why nothing maintains them on the ingestion hot path. The
+     * refresh is a full read-only scan, so its cost scales with the corpus.
+     */
+    bm25StatsRefreshIntervalSeconds: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS,
+      3_600,
+      60,
+      86_400,
     ),
     // Liveness lease for connector sync runs. The owning worker renews the
     // lease every `heartbeatInterval`; a run whose lease is not renewed within
@@ -3005,19 +3393,22 @@ const config = {
       undefined,
   },
   /**
-   * Incognito chats: per-conversation encryption under a browser-held key.
+   * Locked chats: per-conversation encryption under a browser-held key.
    * Configuring `escrowPublicKey` is the whole switch — the feature is off
    * until one is set, and unsetting it turns the feature off again.
    */
-  chatIncognito: {
+  lockedChat: {
     /**
      * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
      * to for break-glass recovery; the private half stays offline with the
-     * customer's security team. Setting it enables incognito chats; an
+     * customer's security team. Setting it enables locked chats; an
      * unparseable or undersized key fails startup (see
-     * verifyIncognitoChatConfig).
+     * verifyLockedChatConfig).
      */
     escrowPublicKey:
+      process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
+      // Former name, still honored so an existing deployment does not silently
+      // lose the feature between the config rollout and the image rollout.
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -61,10 +67,21 @@ const MOCK_VAF_ADD_ON_DOWNLOAD_URL =
 // Both M-Files gates open by default: the suite exercises the M-Files form,
 // including its Application Account (OAuth) fields. The gate tests flip
 // individual flags through mockUseFeature.
-const mockUseFeature = vi.fn((_key: string): boolean => true);
+// biome-ignore lint/suspicious/noExplicitAny: a feature value is a boolean for most flags but an object for some (kbGoogleDriveOAuth)
+const mockUseFeature = vi.fn((_key: string): any => true);
+// Enterprise + auto-sync permission default OFF so the historical org-wide
+// default holds across the suite; the auto-sync-default tests flip them.
+const mockUseEnterpriseFeature = vi.fn((_key: string): boolean => false);
 vi.mock("@/lib/config/config.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
   useFeature: (key: string) => mockUseFeature(key),
+  useEnterpriseFeature: (key: string) => mockUseEnterpriseFeature(key),
+}));
+
+const mockHasPermissions = vi.fn((): { data: boolean } => ({ data: false }));
+vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
+  useHasPermissions: () => mockHasPermissions(),
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
@@ -653,6 +670,91 @@ describe("CreateConnectorDialog", () => {
     });
   });
 
+  describe("auto-sync default visibility", () => {
+    beforeEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(true);
+      mockHasPermissions.mockReturnValue({ data: true });
+    });
+    afterEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(false);
+      mockHasPermissions.mockReturnValue({ data: false });
+    });
+
+    const AUTO_SYNC_DESCRIPTION =
+      "Sync access from the source system's own permissions";
+    const ORG_WIDE_DESCRIPTION =
+      "Anyone in your org can access this knowledge source";
+
+    it("defaults a supported type to auto-sync permissions and lists it first", async () => {
+      const { user } = await renderConfigureStep(); // Jira supports auto-sync
+
+      // The collapsed selector shows the default selection.
+      expect(screen.getByText(AUTO_SYNC_DESCRIPTION)).toBeInTheDocument();
+
+      // Expanded, the enabled auto-sync option leads the list.
+      await user.click(screen.getByText(AUTO_SYNC_DESCRIPTION));
+      const autoSync = screen.getByText("Auto-sync permissions");
+      const orgWide = screen.getByText("Organization");
+      expect(
+        autoSync.compareDocumentPosition(orgWide) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("keeps org-wide for a type without permission-sync support", async () => {
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText("Web Crawler"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+    });
+
+    it("keeps org-wide when the auto-sync feature flag is off", async () => {
+      mockUseFeature.mockImplementation(
+        (key) => key !== "kbAutoSyncPermissionsEnabled",
+      );
+
+      await renderConfigureStep();
+      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+
+      mockUseFeature.mockImplementation(() => true);
+    });
+  });
+
+  describe("ServiceNow-specific flow", () => {
+    async function renderServiceNowConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("ServiceNow"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("supports auto-sync permissions and offers the article and role-audience config", async () => {
+      const { user } = await renderServiceNowConfigureStep();
+
+      expect(connectorSupportsAutoSync("servicenow", false)).toBe(true);
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText(/Include Knowledge Articles/),
+        ).toBeInTheDocument();
+      });
+      // One role-audience input per synced table, keyed by table label.
+      expect(screen.getByText(/Role audiences/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Incidents$/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Business Applications$/),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe("Perforce-specific flow", () => {
     async function renderPerforceConfigureStep() {
       const user = userEvent.setup();
@@ -671,6 +773,22 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByLabelText(/^Depot Paths$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Login Ticket$/)).toBeInTheDocument();
+      // The permission-sync section belongs to the auto-sync-permissions
+      // visibility only — the default org-wide selection must not show it.
+      expect(screen.queryByLabelText(/^P4 Port$/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/^Admin Username$/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/^Admin Password$/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("supports auto-sync permissions only when the K8s orchestrator feature is on", () => {
+      // Perforce permission sync runs from an in-cluster pod; without the
+      // orchestrator the type must behave as a non-perm-sync connector.
+      expect(connectorSupportsAutoSync("perforce", true)).toBe(true);
+      expect(connectorSupportsAutoSync("perforce", false)).toBe(false);
     });
 
     it("submits perforce payload with transformed depot paths and file types", async () => {
@@ -805,7 +923,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByLabelText(/^Token Audience$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Client ID$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Client Secret$/)).toBeInTheDocument();
-      expect(connectorSupportsAutoSync("mfiles")).toBe(true);
+      expect(connectorSupportsAutoSync("mfiles", false)).toBe(true);
     });
 
     it("shows the static parameterless VAF Add On install command", async () => {
@@ -1068,6 +1186,166 @@ describe("CreateConnectorDialog", () => {
       expect(
         screen.queryByLabelText(/^Windows Domain \(optional\)$/),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("auto-sync upstream requirements", () => {
+    beforeEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(true);
+      mockHasPermissions.mockReturnValue({ data: true });
+    });
+    afterEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(false);
+      mockHasPermissions.mockReturnValue({ data: false });
+      mockUseFeature.mockImplementation(() => true);
+    });
+
+    /**
+     * Every connector that offers auto-sync permissions, with the credential
+     * field an admin would fix when the mirrored audiences come back empty,
+     * and the docs section that spells the setup out. A connector missing
+     * from this table would ship a visibility whose upstream cost the form
+     * never states.
+     */
+    const CREDENTIAL_REQUIREMENTS: ReadonlyArray<
+      [connector: string, credentialField: string, docsAnchor: string]
+    > = [
+      ["Jira", "API Token", "jira-auto-sync-permissions"],
+      ["Confluence", "API Token", "confluence-auto-sync-permissions"],
+      ["GitHub", "Personal Access Token", "github-auto-sync-permissions"],
+      ["GitLab", "Personal Access Token", "gitlab-auto-sync-permissions"],
+      ["Linear", "Personal Access Token", "linear-auto-sync-permissions"],
+      ["ServiceNow", "Password", "servicenow-auto-sync-permissions"],
+      ["Notion", "Integration Token", "notion-auto-sync-permissions"],
+      ["SharePoint", "Client Secret", "sharepoint-auto-sync-permissions"],
+      [
+        "Google Drive",
+        "Service Account JSON Key",
+        "google-drive-auto-sync-permissions",
+      ],
+      ["Dropbox", "Access Token", "dropbox-auto-sync-permissions"],
+      ["Asana", "Personal Access Token", "asana-auto-sync-permissions"],
+      ["Outline", "API Key", "outline-auto-sync-permissions"],
+      ["OneDrive", "Client Secret", "onedrive-auto-sync-permissions"],
+      [
+        "Salesforce",
+        "Password + Security Token",
+        "salesforce-auto-sync-permissions",
+      ],
+      // Perforce's own credential is the *content* identity's login ticket;
+      // permission sync signs in as the admin account in its own section.
+      [
+        "Perforce (Helix Core)",
+        "Admin Password",
+        "perforce-auto-sync-permissions",
+      ],
+      ["M-Files", "Password", "m-files-auto-sync-permissions"],
+    ];
+
+    it.each(
+      CREDENTIAL_REQUIREMENTS,
+    )("points %s's %s field at its own setup docs", async (connector, credentialField, docsAnchor) => {
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText(connector));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+
+      const field = screen.getByLabelText(credentialField);
+      const formItem = field.closest('[data-slot="form-item"]');
+      expect(formItem).not.toBeNull();
+      // The dialog header carries a "Learn more" of its own, so the field's
+      // link is found by scoping to the field, and identified by its anchor.
+      expect(
+        within(formItem as HTMLElement).getByRole("link", {
+          name: /Learn more/,
+        }),
+      ).toHaveAttribute(
+        "href",
+        `https://archestra.ai/docs/platform-knowledge#${docsAnchor}`,
+      );
+    });
+
+    it("drops the requirement when the visibility is not auto-sync", async () => {
+      const { user } = await renderConfigureStep(); // Jira defaults to auto-sync
+
+      await user.click(
+        screen.getByText(
+          "Sync access from the source system's own permissions",
+        ),
+      );
+      await user.click(screen.getByText("Organization"));
+
+      const apiToken = screen.getByLabelText("API Token");
+      const formItem = apiToken.closest(
+        '[data-slot="form-item"]',
+      ) as HTMLElement;
+      expect(
+        within(formItem).queryByRole("link", { name: /Learn more/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("moves GitHub's requirement to the App picker when App auth is chosen", async () => {
+      const { user } = await renderGithubConfigureStep();
+
+      await user.click(
+        screen.getByRole("combobox", { name: /Authentication/ }),
+      );
+      await user.click(screen.getByRole("option", { name: "GitHub App" }));
+
+      // App credentials live in Settings → GitHub, so the token field — and
+      // with it the usual home for the requirement — is gone entirely.
+      await waitFor(() => {
+        expect(
+          screen.queryByLabelText("Personal Access Token"),
+        ).not.toBeInTheDocument();
+      });
+      const appConfigBlock = screen
+        .getByText("GitHub App Configuration")
+        .closest("div") as HTMLElement;
+      expect(
+        within(appConfigBlock).getByRole("link", { name: /Learn more/ }),
+      ).toHaveAttribute(
+        "href",
+        "https://archestra.ai/docs/platform-knowledge#github-auto-sync-permissions",
+      );
+    });
+
+    it("moves Google Drive's requirement to the mode picker when one account authorizes", async () => {
+      mockUseFeature.mockImplementation((key: string) =>
+        key === "kbGoogleDriveOAuth"
+          ? { configured: true, redirectUri: "https://archestra.test/callback" }
+          : true,
+      );
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText("Google Drive"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("combobox", { name: /reach Drive/ }));
+      await user.click(
+        screen.getByRole("option", { name: /One Google account/ }),
+      );
+
+      // Nothing is pasted in this mode — the account is granted through
+      // Google — so the mode picker is the closest thing to a credential.
+      await waitFor(() => {
+        expect(
+          screen.queryByLabelText("Service Account JSON Key"),
+        ).not.toBeInTheDocument();
+      });
+      const modeItem = screen
+        .getByRole("combobox", { name: /reach Drive/ })
+        .closest('[data-slot="form-item"]') as HTMLElement;
+      expect(
+        within(modeItem).getByRole("link", { name: /Learn more/ }),
+      ).toHaveAttribute(
+        "href",
+        "https://archestra.ai/docs/platform-knowledge#google-drive-auto-sync-permissions",
+      );
     });
   });
 });

@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,6 +33,18 @@ Viewing environments requires the `environment:read` permission — every predef
 
 Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. [MCP Apps](/docs/platform-apps) are the one exception — an app accepts Default-environment tools as a shared baseline. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
 
+## Where new resources land
+
+New resources go to Default unless you say otherwise. In **Settings → Environments**, the cog beside "Add environment" opens "Where new resources land", which sets a landing environment per kind of resource: MCP servers, MCP Apps, agents, MCP gateways, LLM proxies, and knowledge connectors are each configured on their own. A new MCP server can start in `explore` while a new MCP App starts in `launch`. The cog appears once you have at least one environment besides Default.
+
+The setting only applies when nobody picks an environment. Choosing one on the create form's **Configuration** step always wins, including choosing Default. Changing the setting never moves resources that already exist.
+
+A creator who lacks the `deploy-to-restricted` permission for a restricted landing environment gets Default instead, so the setting never blocks a resource they are otherwise allowed to create.
+
+### Use case
+
+Acme wants engineers to try MCP servers without touching production traffic. An admin points new MCP servers at `explore`, which allows egress only to package registries. Everything an engineer installs starts there. Once a server is ready, an admin reassigns it to `production`.
+
 ## Restricted environments
 
 An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
@@ -61,11 +73,11 @@ An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and 
 
 Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/platform-apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available. The [Advisor](/docs/platform-built-in-subagents#advisor) is the one delegation exception — the organization has a single Advisor, and agents in every environment can consult it. Its spend counts against the consulting agent's environment.
 
-An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. You can name a different environment explicitly when adding a server.
+An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. A new app created from the Apps page follows the same rule: it lands in the environment of the chat agent that opens with it. An agent with no environment of its own uses the landing environment configured for that kind of resource. You can name a different environment explicitly when adding a server.
 
 An agent also configures only its own environment. It can assign and remove tools on agents and gateways in that environment, and nowhere else.
 
-This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
+This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 
 ## Network egress policies
 

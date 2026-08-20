@@ -7,6 +7,7 @@ import {
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useCreateSkillShareLink } from "@/lib/skills/skill-share.query";
 import { downloadClaudeDesktopConfig } from "./claude-desktop-config";
 import { ConnectConfigPanel } from "./connect-config-panel";
@@ -110,6 +111,17 @@ function stubKeyProvisioning() {
     isPending: false,
   } as unknown as ReturnType<typeof useCreateConnectionVirtualKey>);
 }
+
+vi.mock("@/lib/organization.query");
+
+// The components under test resolve provider labels through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider visible under its built-in name.
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 describe("ConnectConfigPanel — Claude Desktop subscription note", () => {
   beforeEach(() => {

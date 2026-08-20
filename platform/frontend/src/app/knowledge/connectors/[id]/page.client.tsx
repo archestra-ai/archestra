@@ -23,7 +23,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorDocumentOcrNotice } from "@/app/knowledge/connectors/_parts/connector-document-ocr-notice";
 import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
+import { ConnectorEmbeddingModelNotice } from "@/app/knowledge/connectors/_parts/connector-embedding-model-notice";
 import { ConnectorMembersTable } from "@/app/knowledge/connectors/_parts/connector-members-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorUnassignedUsersAlert } from "@/app/knowledge/connectors/_parts/connector-unassigned-users-alert";
@@ -425,7 +427,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     );
   }
 
-  if (!connector) {
+  // The uploads-backed connector is deliberately not part of the connectors
+  // surface — it has no source to sync, no credentials and no schedule, and its
+  // documents are managed on the knowledge-files page. It is excluded from the
+  // list, so this page is only reachable by typing an id; same answer as an
+  // unknown one rather than a detail page of empty panels.
+  if (!connector || connector.connectorType === "file_upload") {
     return (
       <div className="p-6">
         <p className="text-muted-foreground">Connector not found.</p>
@@ -655,6 +662,11 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             )}
           </div>
         </div>
+
+        <ConnectorEmbeddingModelNotice
+          connectorType={connector.connectorType}
+        />
+        <ConnectorDocumentOcrNotice connectorType={connector.connectorType} />
 
         {/* Visible on EVERY tab: an admin landing anywhere on the page
             learns about unassigned users without drilling into the Users

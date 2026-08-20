@@ -7,9 +7,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   LlmProviderApiKeyForm,
@@ -122,6 +127,12 @@ beforeEach(() => {
   vi.mocked(useTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useTeams>);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
 });
 
 describe("LlmProviderApiKeyForm", () => {
@@ -436,6 +447,113 @@ describe("LlmProviderApiKeyForm", () => {
     });
   });
 
+  describe("vLLM endpoint", () => {
+    it("asks for the server URL up front", async () => {
+      // A vLLM key is a server, not an account: the endpoint decides which
+      // models the key can reach, and blank routes to api.openai.com.
+      renderForm({ defaults: { provider: "vllm" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole("button", { name: "Advanced settings" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Base URL").textContent).not.toContain(
+        "optional",
+      );
+    });
+
+    it("treats a server-wide vLLM endpoint as an overridable default", async () => {
+      vi.mocked(useProviderBaseUrls).mockReturnValue({
+        data: { vllm: "http://vllm:8000/v1" },
+      } as unknown as ReturnType<typeof useProviderBaseUrls>);
+
+      renderForm({ defaults: { provider: "vllm" }, progressive: true });
+
+      // The deployment's endpoint answers "where", so the field stops being
+      // required — but a second vLLM server is added by overriding it per key,
+      // so it stays visible with the inherited URL as its placeholder.
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Base URL").textContent).toContain("optional");
+      expect(
+        screen.getByLabelText(/Base URL/).getAttribute("placeholder"),
+      ).toBe("http://vllm:8000/v1");
+    });
+  });
+
+  describe("Base URL placement", () => {
+    /**
+     * A field rendered after the "Advanced settings" disclosure reads as part
+     * of it. For providers where the endpoint *is* the credential, that hid
+     * the one field the key cannot work without.
+     */
+    function baseUrlPrecedesAdvancedSettings(): boolean {
+      const baseUrl = screen.getByText("Base URL");
+      const advanced = screen.getByRole("button", {
+        name: /Advanced settings/,
+      });
+      return Boolean(
+        baseUrl.compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
+
+    it.each([
+      "vllm",
+      "ollama",
+      "ollama-native",
+      "archestra",
+    ] as const)("shows the endpoint above Advanced settings for %s", async (provider) => {
+      renderForm({ defaults: { provider }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Base URL")).toBeInTheDocument();
+      });
+      expect(baseUrlPrecedesAdvancedSettings()).toBe(true);
+    });
+
+    it("keeps the endpoint inside Advanced settings for a cloud provider", async () => {
+      const user = userEvent.setup();
+      renderForm({ defaults: { provider: "openai" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /Advanced settings/ }),
+      );
+      expect(baseUrlPrecedesAdvancedSettings()).toBe(false);
+    });
+
+    it("puts the Bedrock region above Advanced settings and its endpoint inside", async () => {
+      const user = userEvent.setup();
+      renderForm({ defaults: { provider: "bedrock" }, progressive: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Region")).toBeInTheDocument();
+      });
+      const advanced = screen.getByRole("button", {
+        name: /Advanced settings/,
+      });
+      expect(
+        screen.getByText("Region").compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      expect(screen.queryByText("Custom endpoint")).not.toBeInTheDocument();
+      await user.click(advanced);
+      expect(
+        screen.getByText("Custom endpoint").compareDocumentPosition(advanced) &
+          Node.DOCUMENT_POSITION_PRECEDING,
+      ).toBeTruthy();
+    });
+  });
+
   describe("Bedrock region", () => {
     it("asks for a region instead of requiring a base URL", async () => {
       renderForm({ defaults: { provider: "bedrock" } });
@@ -488,6 +606,48 @@ describe("LlmProviderApiKeyForm", () => {
       await waitFor(() => {
         expect(
           screen.getByText(/carries no recognizable region/),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Admins can rename a provider (see the model-provider settings dialog), and
+  // the form's own copy has to follow: a deployment that calls Bedrock
+  // something else should never read a sentence about "Bedrock".
+  describe("copy for a renamed provider", () => {
+    const renameBedrock = (displayName: string) =>
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { modelProviderOverrides: { bedrock: { displayName } } },
+      } as unknown as ReturnType<typeof useOrganization>);
+
+    it("names the provider the way the organization does", async () => {
+      renameBedrock("Northwind Model Cloud");
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/region to send Northwind Model Cloud requests to/),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("keeps the vendor's own name for the region itself", async () => {
+      renameBedrock("Northwind Model Cloud");
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // "AWS" is the vendor, not this provider: renaming it would point at
+      // something that does not exist.
+      await waitFor(() => {
+        expect(screen.getByText(/^The AWS region to send/)).toBeInTheDocument();
+      });
+    });
+
+    it("falls back to the built-in name when nothing is overridden", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/region to send AWS Bedrock requests to/),
         ).toBeInTheDocument();
       });
     });

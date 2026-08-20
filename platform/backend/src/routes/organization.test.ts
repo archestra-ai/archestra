@@ -5,8 +5,10 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import McpServerModel from "@/models/mcp-server";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
@@ -44,6 +46,12 @@ describe("organization routes", () => {
     });
 
     const { default: organizationRoutes } = await import("./organization");
+    // The audit hook is part of the route contract here: the OCR settings
+    // tests assert the organization.updated before/after diff.
+    const { registerAuditLogHook } = await import(
+      "@/middleware/audit-log-hook"
+    );
+    registerAuditLogHook(app);
     await app.register(organizationRoutes);
   });
 
@@ -249,6 +257,105 @@ describe("organization routes", () => {
       );
       expect(snapshot?.onlineMcpCatalogEnabled).toBe(false);
     });
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    describe("idle hibernation", () => {
+      test("defaults to off for a new organization", async () => {
+        // Hibernation trades first-call latency for idle compute. That is a
+        // decision to make deliberately, so it is never on by default.
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/organization",
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().mcpIdleHibernationEnabled).toBe(false);
+      });
+
+      test("enables idle hibernation and persists it", async () => {
+        enterpriseTier.setUserCountForTesting(0); // small-team tier = licensed
+        const grantIdleWindow = vi.spyOn(
+          McpServerModel,
+          "grantIdleWindowToAll",
+        );
+
+        const enable = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        expect(enable.statusCode).toBe(200);
+        expect(enable.json().mcpIdleHibernationEnabled).toBe(true);
+        expect(grantIdleWindow).toHaveBeenCalledTimes(1);
+
+        const afterEnable = await app.inject({
+          method: "GET",
+          url: "/api/organization",
+        });
+        expect(afterEnable.json().mcpIdleHibernationEnabled).toBe(true);
+      });
+
+      test("403s without an enterprise licence", async () => {
+        enterpriseTier.setUserCountForTesting(9999); // over the free threshold
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain("sales@archestra.ai");
+        // Refused, not silently dropped: the stored value is untouched.
+        const organization = await OrganizationModel.getById(organizationId);
+        expect(organization?.mcpIdleHibernationEnabled).toBe(false);
+      });
+
+      test("403s on an unlicensed attempt to turn it OFF too", async () => {
+        // Refusing only the "on" direction would let an unlicensed deployment
+        // believe it had disabled a feature it never had.
+        enterpriseTier.setUserCountForTesting(9999);
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: false },
+        });
+
+        expect(response.statusCode).toBe(403);
+      });
+
+      test("leaves the licensed catalog toggle alone when hibernation is absent", async () => {
+        enterpriseTier.setUserCountForTesting(9999);
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { onlineMcpCatalogEnabled: false },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+
+      test("captures the hibernation toggle in the audit snapshot", async () => {
+        enterpriseTier.setUserCountForTesting(0);
+        await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        const snapshot = await OrganizationModel.findByIdForAudit(
+          organizationId,
+          organizationId,
+        );
+        expect(snapshot?.mcpIdleHibernationEnabled).toBe(true);
+      });
+    });
+    // SPDX-SnippetEnd
   });
 
   describe("PATCH /api/organization/skills-settings - online catalog", () => {
@@ -1152,6 +1259,56 @@ describe("organization routes", () => {
         "reranker_validation_failed",
       );
     });
+
+    test("saves BM25 tuning overrides and clears them back to the deployment default", async () => {
+      // Set both. Fractional values must survive the round trip — an integer
+      // column or parser would silently collapse b=0.75 to 0.
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25K1: 1.5, kbBm25B: 0.3 },
+      });
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json().kbBm25K1).toBe(1.5);
+      expect(setResponse.json().kbBm25B).toBe(0.3);
+
+      const stored = await OrganizationModel.getById(organizationId);
+      expect(stored?.kbBm25K1).toBe(1.5);
+      expect(stored?.kbBm25B).toBe(0.3);
+
+      // A patch that does not mention a field leaves it alone; null clears it
+      // so the organization inherits the deployment default again.
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25B: null },
+      });
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json().kbBm25K1).toBe(1.5);
+      expect(clearResponse.json().kbBm25B).toBeNull();
+    });
+
+    test("rejects BM25 tuning outside the shared bounds", async () => {
+      // b is a mixing weight and only meaningful in [0, 1]; the same bounds
+      // gate the env-var parser and the settings UI.
+      const tooLarge = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25B: 1.5 },
+      });
+      expect(tooLarge.statusCode).toBe(400);
+
+      const negative = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbBm25K1: -1 },
+      });
+      expect(negative.statusCode).toBe(400);
+
+      const untouched = await OrganizationModel.getById(organizationId);
+      expect(untouched?.kbBm25K1).toBeNull();
+      expect(untouched?.kbBm25B).toBeNull();
+    });
   });
 
   describe("PATCH /api/organization/auth-settings", () => {
@@ -1411,6 +1568,186 @@ describe("organization routes", () => {
           dimensions: 3072,
         }),
       );
+    });
+  });
+
+  describe("knowledge-settings OCR configuration", () => {
+    async function makeOcrKey(
+      makeSecret: (over: object) => Promise<{ id: string }>,
+    ) {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      return LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "OCR Key",
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+      });
+    }
+
+    test("saves a validated OCR pair and audits the model name", async ({
+      makeSecret,
+    }) => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateOcrConfig")
+        .mockResolvedValue({ ok: true });
+      const ocrKey = await makeOcrKey(makeSecret);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ocrModel).toBe("claude-sonnet-5");
+      expect(response.json().ocrChatApiKeyId).toBe(ocrKey.id);
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId: ocrKey.id,
+        model: "claude-sonnet-5",
+        organizationId,
+      });
+
+      // Audit rows are written fire-and-forget, so poll rather than assert once.
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit).toBeDefined();
+        expect(audit.before).toMatchObject({ ocrModel: null });
+        expect(audit.after).toMatchObject({ ocrModel: "claude-sonnet-5" });
+      });
+    });
+
+    test("blocks a half-configured OCR pair", async ({ makeSecret }) => {
+      const ocrKey = await makeOcrKey(makeSecret);
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe("ocr_validation_failed");
+    });
+
+    test("blocks an OCR pair the live validation rejects", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: false, error: "The provider cannot send PDF pages." },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "text-only-model" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("cannot send PDF pages");
+    });
+
+    test("enabling OCR resets connector checkpoints; a later model swap does not", async ({
+      makeSecret,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: true },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const checkpoint = {
+        type: "jira" as const,
+        lastSyncedAt: "2026-03-10T15:30:00.000Z",
+      };
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+      expect(enable.statusCode).toBe(200);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.checkpoint,
+      ).toBeNull();
+
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+      const swap = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrModel: "claude-opus-5" },
+      });
+      expect(swap.statusCode).toBe(200);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.checkpoint,
+      ).toEqual(checkpoint);
+    });
+
+    test("clearing both OCR fields disables OCR", async ({ makeSecret }) => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: true },
+      );
+      const ocrKey = await makeOcrKey(makeSecret);
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: ocrKey.id, ocrModel: "claude-sonnet-5" },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { ocrChatApiKeyId: null, ocrModel: null },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ocrModel).toBeNull();
+      expect(response.json().ocrChatApiKeyId).toBeNull();
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/test-ocr", () => {
+    test("maps the candidate pair to the validator, scoped to the org", async () => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateOcrConfig")
+        .mockResolvedValue({ ok: true });
+      const keyId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-ocr",
+        payload: { ocrChatApiKeyId: keyId, ocrModel: "claude-sonnet-5" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId,
+        model: "claude-sonnet-5",
+        organizationId,
+      });
+    });
+
+    test("returns a sanitized failure reason", async () => {
+      vi.spyOn(knowledgeSettingsService, "validateOcrConfig").mockResolvedValue(
+        { ok: false, error: "Failed to verify the OCR model with a PDF page." },
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-ocr",
+        payload: {
+          ocrChatApiKeyId: crypto.randomUUID(),
+          ocrModel: "claude-sonnet-5",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        success: false,
+        error: "Failed to verify the OCR model with a PDF page.",
+      });
     });
   });
 

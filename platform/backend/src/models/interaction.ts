@@ -32,7 +32,7 @@ import {
   encryptInteractionContent,
   readInteractionRow,
 } from "@/content-encryption/audit-rows";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -355,14 +355,14 @@ class InteractionModel {
   }
 
   /**
-   * @param auditContext when present, this interaction belongs to an incognito
+   * @param auditContext when present, this interaction belongs to a locked-chat
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
    */
   static async create(
     data: InsertInteraction,
-    auditContext?: IncognitoAuditContext | null,
+    auditContext?: LockedChatAuditContext | null,
     opts?: {
       /**
        * Environment to stamp instead of the executing agent's own. The proxy
@@ -399,7 +399,7 @@ class InteractionModel {
     // whole conversation on every row (no-op for all other interactions, and
     // disabled entirely under content encryption — see isEligible).
     //
-    // Incognito rows are excluded outright. Today they could not qualify anyway
+    // LockedChat rows are excluded outright. Today they could not qualify anyway
     // (isEligible demands a Claude session source, and these are chat sources),
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
@@ -415,7 +415,7 @@ class InteractionModel {
       .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for incognito rows too: this caller
+    // callers never see envelopes. Safe for locked-chat rows too: this caller
     // supplied the very key that just encrypted them.
     decryptInteractionContent(interaction, audit);
 
@@ -1489,30 +1489,35 @@ class InteractionModel {
     // We filter in JS (much faster than SQL text scanning for the title/prompt checks)
     const INTERACTIONS_PER_SESSION = 20;
 
-    // Build the WHERE clause using Drizzle's sql template
-    const sessionCondition =
-      sessionKeys.length > 0
-        ? sql`session_id IN (${sql.join(
-            sessionKeys.map((k) => sql`${k}`),
-            sql`, `,
-          )})`
-        : null;
-
-    const uuidCondition =
+    // Per-key top-N via LATERAL instead of one `session_id IN (...) OR
+    // id IN (...)` query ranked with ROW_NUMBER(): the window form had to
+    // materialize and sort EVERY interaction of every listed session —
+    // request/response payloads included — before discarding all but the
+    // first N, which pushed busy organizations into statement timeout. The
+    // LATERAL branch is one (session_id, created_at DESC) index descent per
+    // key that stops after N rows; sessionless interaction ids are a separate
+    // primary-key lookup (each such row is its own "session", so N does not
+    // apply). A uuid key that matches a row owned by a *different* session is
+    // no longer fetched — the JS below grouped such rows under a key nobody
+    // asked for and never read them.
+    const sessionKeyList = sql.join(
+      sessionKeys.map((k) => sql`${k}`),
+      sql`, `,
+    );
+    const sessionlessBranch =
       uuidKeys.length > 0
-        ? sql`id IN (${sql.join(
-            uuidKeys.map((k) => sql`${k}::uuid`),
-            sql`, `,
-          )})`
-        : null;
+        ? sql`
+      UNION ALL
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             locked_chat_conversation_id
+      FROM interactions
+      WHERE id IN (${sql.join(
+        uuidKeys.map((k) => sql`${k}::uuid`),
+        sql`, `,
+      )})
+        AND session_id IS NULL`
+        : sql``;
 
-    const whereConditions = [sessionCondition, uuidCondition].filter(Boolean);
-    const whereClause =
-      whereConditions.length === 1
-        ? whereConditions[0]
-        : sql.join(whereConditions as SQL[], sql` OR `);
-
-    // Use ROW_NUMBER() to limit interactions per session.
     // thread_id is selected so the chosen tip can be reconstructed from deltas.
     const interactionsResult = await db.execute<{
       id: string;
@@ -1522,10 +1527,10 @@ class InteractionModel {
       response: unknown;
       type: string;
       created_at: Date;
-      // Selected so readInteractionRow can tell an incognito row from an
+      // Selected so readInteractionRow can tell a locked-chat row from an
       // ordinary one; without it the guard cannot fire and a DEK envelope
       // would be handed to the server-key decryptor.
-      incognito_conversation_id: string | null;
+      locked_chat_conversation_id: string | null;
     }>(sql`
       -- id DESC tiebreak: turns within one session commonly land on the same
       -- millisecond, and created_at alone leaves their order undefined — which
@@ -1533,18 +1538,18 @@ class InteractionModel {
       -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent).
-      WITH ranked AS (
-        SELECT
-          id, session_id, thread_id, request, response, type, created_at,
-          incognito_conversation_id,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
+      SELECT t.id, t.session_id, t.thread_id, t.request, t.response, t.type,
+             t.created_at, t.locked_chat_conversation_id
+      FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
+      CROSS JOIN LATERAL (
+        SELECT id, session_id, thread_id, request, response, type, created_at,
+               locked_chat_conversation_id
         FROM interactions
-        WHERE ${whereClause}
-      )
-      SELECT id, session_id, thread_id, request, response, type, created_at,
-             incognito_conversation_id
-      FROM ranked
-      WHERE rn <= ${INTERACTIONS_PER_SESSION}
+        WHERE session_id = keys.key
+        ORDER BY created_at DESC, id DESC
+        LIMIT ${INTERACTIONS_PER_SESSION}
+      ) t
+      ${sessionlessBranch}
       ORDER BY session_id, created_at DESC, id DESC
     `);
 

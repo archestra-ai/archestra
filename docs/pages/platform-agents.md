@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,29 +16,39 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
+- a **Tool connections** setting — missing MCP server connections are requested when needed, requested at chat start, or required before use
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
-## Load Tools When Needed
+## Creating and Editing an Agent
 
-By default, an agent exposes every assigned tool through MCP `tools/list`.
+**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its **Connect** tab, which shows how to reach it.
 
-For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+Every agent has its own page with an **Overview** tab and a **Connect** tab. The Overview repeats the wizard's own sections, read-only, so the page and the form describe the agent the same way. **Edit** in the page header reopens the wizard on the agent. **Save** on any step saves and returns to the Overview; **Save & Continue** saves and moves to the next step.
 
-- `search_tools` can still discover them
-- `run_tool` can still execute them
+## Tool Access Modes
 
-Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs on the agent's **Tools & Knowledge** step. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half.
 
-An agent's **Tools & Knowledge Sources** setting is **Auto** or **Custom** — tabs in the agent dialog. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half. In **Custom** mode the agent uses only its explicitly assigned tools; new agents get a default set assigned by the backend, and the create form pre-selects that same set. Custom assignments resolve credentials at call time by default; you can pin a specific connection per server instead. In **Auto** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Default credential** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills) reference tools without pre-assigning every tool to every agent.
+### Custom Mode
+
+In **Custom** mode the agent uses only its explicitly assigned tools. New agents get a default set assigned by the backend, and the **Tools & Knowledge** step pre-selects that same set. Assignments resolve credentials at call time by default; you can pin a specific connection per server instead.
+
+Sharing the agent shares its assigned tools. A teammate with agent access can call an assigned tool even when its MCP server is not shared with them — the server's own team assignment governs the [registry](/docs/platform-private-registry), not tool calls through the agent. [Credential resolution](/docs/mcp-authentication#credential-resolution) decides whose connection serves each call: a pinned connection serves every caller, and resolve-at-call-time looks for a connection the caller can reach.
+
+### Auto Mode
+
+In **Auto** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply, so each caller of a shared agent may reach a different toolset. Tools explicitly assigned to the agent stay available to every caller.
+
+`run_tool` executes a discovered tool directly with [credentials resolved at call time](/docs/mcp-authentication#resolve-at-call-time), following the MCP server's **Default credential** setting: on behalf of the user by default, or one shared account when the server is configured that way. A caller with no reachable connection gets an actionable prompt to connect — another person's personal connection is never used.
+
+Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills) reference tools without pre-assigning every tool to every agent.
 
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
-See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
-
 ### Excluding Servers and Tools
 
-**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent dialog (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
+**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
 
 While the tools setting is **Auto**, exclusions cover the agent's entire surface:
 
@@ -52,21 +62,51 @@ Only `search_tools` and `run_tool` can never be excluded; everything else can. A
 
 Exclusions are stored per agent and have no effect in **Custom** mode. Cloning an agent copies them. Agent export does not carry them — server and tool IDs are not portable across organizations — so an imported agent starts with no exclusions and they must be re-created. Exclusions track the specific tool record: if an MCP server renames a tool, the renamed tool counts as new and is no longer excluded.
 
+## Load Tools When Needed
+
+By default, an agent exposes every assigned tool through MCP `tools/list`.
+
+For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+
+- `search_tools` can still discover them
+- `run_tool` can still execute them
+
+Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
+
+## Tool Connections
+
+An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and someone who has not connected one of those servers finds out only when a tool from it runs.
+
+**Tool connections** sits in **Custom** mode, under Tools & Knowledge Sources. It sets how the agent treats an MCP server the person using it has not connected yet:
+
+- **Requested when needed** — the default. Nothing is shown up front; a connection is requested the moment a tool call needs one.
+- **Requested at chat start** — the chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.
+- **Required before use** — the agent is marked unavailable in the chat picker, and a run is refused wherever it is triggered from, until every server is connected.
+
+A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account. Servers that need no credentials never count as missing.
+
+The setting does nothing in [**Auto** mode](#auto-mode), where each caller's tools come from what they can already reach.
+
 ## Invocation Paths
 
 Agents can be triggered through:
 
-- Archestra Chat UI
+- [Archestra Chat UI](/docs/platform-chat)
 - [Webhook (A2A)](/docs/platform-agent-triggers-webhook-a2a)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
+- [Telegram](/docs/platform-telegram)
 
-Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
+Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
+
+Go to **Settings → Agents → Available messaging channels** to remove any channel your organization does not allow. A channel you remove disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
 
 ## Knowledge Sources
 
-Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** in the agent dialog). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
+Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** on the agent's **Tools & Knowledge** step). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
 
 Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run.
 
@@ -88,7 +128,7 @@ A skill that names an `agent` in its frontmatter runs in that subagent instead �
 
 ## Delegation
 
-An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under the **Subagents** tabs in the agent dialog.
+An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under **Subagents** on the agent's **Tools & Knowledge** step.
 
 In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
 
@@ -108,6 +148,27 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
+
+## Default Agents
+
+Which agent a new chat starts on — one opened from the composer, an app opened in chat, or any other chat reached without naming an agent — is decided in this order:
+
+1. the [project](/docs/platform-projects)'s pinned agent, inside that project
+2. the member's own **default agent**, if they pinned one
+3. the organization-wide **Default Agent**, set by an admin in **Settings → Agents**
+4. the member's own personal chat agent — **My Assistant**, created for them on first use
+
+A member can pin **any chat agent they can see** as their default — their own, a team's, or an organization-wide one. On the **Agents** page each one offers **Pin default** and **Unpin default**. There is at most one pin per member.
+
+Exactly one row in that list is badged, because exactly one agent starts a member's new chats: **default (me)** when it is their own pin, **default (org)** when the agent is the organization's default. The organization's default reads as the organization's even for a member who also pinned it — it starts their chats either way — and that row offers no pin or unpin, since neither would change anything they can see. Unpinning elsewhere moves the badge back to the organization default.
+
+A pin on the organization default is still kept: it is what keeps that agent theirs if an admin later points the organization default at a different one, and the row starts reading **default (me)** at that moment.
+
+A pin is only ever made deliberately. Nothing adopts an agent into that slot on a member's behalf — so the organization default reaches everyone who has not pinned one, which is most people.
+
+Every member still gets a personal **My Assistant** on first use, and it is what they chat with when no default is configured anywhere. Having one does not, by itself, override the organization default.
+
+Deleting an agent that someone had pinned clears the pin for them, and they fall back to the organization default. The delete is never refused for that reason. A pin also stops applying if the member loses access to the agent — they fall back the same way, without anything to clean up.
 
 ## Deleting an Agent
 

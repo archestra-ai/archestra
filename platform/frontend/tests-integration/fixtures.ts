@@ -28,7 +28,8 @@ type AutoFixtures = {
   // Auto-applied. Owns three checks at fixture teardown:
   //   1. Browser request to the real backend (localhost:9000) — direct leak.
   //   2. Browser unhandled API request — MSW worker had no matching handler.
-  //   3. Node unhandled API request — MSW server had no matching handler.
+  //   3. Server-side unhandled API request — the mock backend route that
+  //      answers SSR fetches had no matching handler.
   // Any of the three means MSW coverage has a gap and the test passed by luck.
   // biome-ignore lint/suspicious/noConfusingVoidType: Playwright auto-fixture convention is `void`.
   _backendLeakGuard: void;

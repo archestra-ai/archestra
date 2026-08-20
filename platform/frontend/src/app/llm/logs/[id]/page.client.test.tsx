@@ -22,7 +22,7 @@ const KB_EMBEDDING = {
   response: { object: "list", data: [], model: "text-embedding-3-small" },
 };
 
-describe("LogDetail incognito content", () => {
+describe("LogDetail locked-chat content", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -45,8 +45,8 @@ describe("LogDetail incognito content", () => {
   it("explains encrypted content instead of rendering the marker", async () => {
     renderInteraction({
       ...KB_EMBEDDING,
-      request: { __incognitoLocked: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
-      response: { __incognitoLocked: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
+      request: { __lockedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
+      response: { __lockedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
     });
 
     // Only the response accordion is open by default; the raw marker must
@@ -54,14 +54,14 @@ describe("LogDetail incognito content", () => {
     expect(
       await screen.findByText("Encrypted locked-chat content"),
     ).toBeVisible();
-    expect(screen.queryByText(/__incognitoLocked/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/__lockedChatSealed/)).not.toBeInTheDocument();
   });
 
   it("says content was never stored when it was redacted", async () => {
     renderInteraction({
       ...KB_EMBEDDING,
-      request: { __redacted: "incognito" },
-      response: { __redacted: "incognito" },
+      request: { __redacted: "locked_chat" },
+      response: { __redacted: "locked_chat" },
     });
 
     expect(await screen.findByText("Content not stored")).toBeVisible();

@@ -74,6 +74,12 @@ export const ChatCompletionRequestSchema = z
     stop: z.union([z.string(), z.array(z.string())]).optional(),
     seed: z.number().nullable().optional(),
     n: z.number().nullable().optional(),
+    /**
+     * Reasoning depth, which Ollama's `/v1` maps onto its own `think` field.
+     * Must be declared: inbound validation drops anything this schema does not
+     * name, so an undeclared field never reaches the adapter.
+     */
+    reasoning_effort: z.string().nullable().optional(),
   })
   .describe("Ollama chat completion request (OpenAI-compatible)");
 

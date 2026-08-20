@@ -7,9 +7,12 @@ import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import KbDirectoryModel from "@/models/kb-directory";
+import KbFileModel from "@/models/kb-file";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
@@ -91,6 +94,10 @@ export const AUDIT_DECISIONS = {
   environmentDefaultUserLimitsTable: {
     audited: true,
     model: EnvironmentDefaultUserLimitModel,
+  },
+  environmentResourceDefaultsTable: {
+    audited: true,
+    model: EnvironmentResourceDefaultModel,
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   githubPatsTable: { audited: true, model: GithubPatModel },
@@ -235,6 +242,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
+  },
+  mcpDeploymentLeasesTable: {
+    audited: false,
+    reason:
+      "Ephemeral cross-replica mutual-exclusion rows; the actions they serialize (hard resets) are audited themselves",
   },
   mcpHttpSessionsTable: {
     audited: false,
@@ -558,6 +570,16 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbBm25TermStatsTable: {
+    audited: false,
+    reason:
+      "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
+  },
+  kbBm25CorpusStatsTable: {
+    audited: false,
+    reason:
+      "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
+  },
   kbContainerAclsTable: {
     audited: false,
     reason:
@@ -566,6 +588,31 @@ export const AUDIT_DECISIONS = {
   kbDocumentsTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
+  },
+  kbDirectoriesTable: {
+    audited: true,
+    model: KbDirectoryModel,
+  },
+  kbDirectoryTeamsTable: {
+    audited: false,
+    reason: "join table; the directory's audit snapshot carries its team ids",
+  },
+  kbFilesTable: {
+    audited: true,
+    model: KbFileModel,
+  },
+  kbFileTeamsTable: {
+    audited: false,
+    reason: "join table; the file's audit snapshot carries its team ids",
+  },
+  kbFileDocumentsTable: {
+    audited: false,
+    reason:
+      "derived link between a repository file and the documents indexed from it",
+  },
+  kbUploadConnectorsTable: {
+    audited: false,
+    reason: "internal plumbing; one hidden upload connector per knowledge base",
   },
   kbExternalGroupsTable: {
     audited: false,

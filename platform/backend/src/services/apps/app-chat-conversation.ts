@@ -19,6 +19,7 @@ import {
   buildExternalAppRenderResult,
 } from "@/services/apps/app-render-result";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { chatAgentVisibilityFor } from "@/services/chat-agent-visibility";
 import { ApiError } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
@@ -42,8 +43,23 @@ export async function createSeededAppConversation(params: {
   appId: string;
   userId: string;
   organizationId: string;
+  /**
+   * The chat agent to bind the conversation to. Callers that had to resolve it
+   * before this call — app creation binds the new app to that agent's
+   * environment — pass it in so the app and the conversation cannot disagree
+   * about which agent is building the app. Omitted, it is resolved here.
+   */
+  agentId?: string;
+  /**
+   * This conversation is the app's own creation-time build chat, and its caller
+   * grants it the app's creation grace the moment it has an id. An app an
+   * organization default disabled at birth is therefore seeded rather than
+   * refused: the authoring tools will answer this one conversation. Deep links
+   * to an existing app never set it, and so still meet the T-980 refusal below.
+   */
+  creationBuildChat?: boolean;
 }): Promise<{ conversationId: string }> {
-  const { appId, userId, organizationId } = params;
+  const { appId, userId, organizationId, agentId } = params;
 
   const app = await AppModel.findByIdForCaller({
     id: appId,
@@ -54,8 +70,10 @@ export async function createSeededAppConversation(params: {
   // A disabled app does not exist for chat (T-980) — deep-link seeding
   // included, or the seeded render would hand the model the very app every
   // chat tool refuses to acknowledge. Its author previews it from the Apps
-  // page instead.
-  if (!app || !app.enabled) {
+  // page instead. The app's own build chat is the exception: there the tools
+  // do answer this conversation, so seeding it hands the model an app it can
+  // actually work on.
+  if (!app || (!app.enabled && !params.creationBuildChat)) {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 
@@ -73,6 +91,7 @@ export async function createSeededAppConversation(params: {
   return seedConversationWithRender({
     userId,
     organizationId,
+    agentId,
     title: app.name,
     part: {
       type: "dynamic-tool",
@@ -177,6 +196,80 @@ export async function createSeededExternalAppConversation(params: {
   return { conversationId, mode: "render" };
 }
 
+/**
+ * The chat agent a caller's app conversation binds to — the agent that builds
+ * an app opened from the Apps page. Exported because app creation needs it
+ * *before* the conversation exists: a new app is bound to this agent's
+ * environment, so the agent can assign the tools it discovers there.
+ *
+ * Mirrors the /chat page chain (resolveInitialAgentSelection); keep the two in
+ * sync. A project's pinned agent outranks everything here, but app chats are
+ * never started in a project, so this chain begins one rung lower.
+ */
+export async function resolveDefaultChatAgentId(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<string> {
+  const { userId, organizationId } = params;
+  // Both rungs below judge an agent by the same rule that granted the pin, so
+  // resolve the caller's visibility once and reuse it.
+  const visibility = await chatAgentVisibilityFor({ userId, organizationId });
+
+  // 1. The member's pinned default — a deliberate choice, so it outranks the
+  //    organization's. It is a bare FK, so re-check it still names something
+  //    this caller can chat with: the pin survives the agent being deleted or
+  //    the caller losing access to it, and either must fall through rather
+  //    than bind the conversation to an agent they cannot use. The check is
+  //    the one that granted the pin, so the two can never disagree.
+  const memberDefaultId = await MemberModel.getDefaultAgentId(
+    userId,
+    organizationId,
+  );
+  if (memberDefaultId) {
+    const memberDefault = await visibility.find(memberDefaultId);
+    if (memberDefault) return memberDefault.id;
+  }
+
+  // 2. The organization default, under the same visibility check — it only
+  //    counts when it would appear in the /chat picker for this caller.
+  const organization = await OrganizationModel.getById(organizationId);
+  if (organization?.defaultAgentId) {
+    const orgDefault = await visibility.find(organization.defaultAgentId);
+    if (orgDefault) return orgDefault.id;
+  }
+
+  // 3. The caller's own personal chat agent, seeded on first use. This is the
+  //    tail every member lands on before an admin configures anything, and it
+  //    must not be reached through `members.default_agent_id`: that column now
+  //    records only a deliberate choice (step 1) and is null for members who
+  //    never made one.
+  const personalAgentId = await AgentModel.ensurePersonalChatAgent({
+    userId,
+    organizationId,
+  });
+  if (personalAgentId) return personalAgentId;
+
+  // 4. Reached only by a member who authored personal chat agents and deleted
+  //    them all — seeding deliberately does not resurrect one — in an
+  //    organization with no default either. The /chat picker still offers them
+  //    every chat agent they can reach and starts on the first, so do the same
+  //    here rather than refusing an app chat the composer would have allowed.
+  const accessible = await AgentModel.findAll(userId, false, {
+    agentType: "agent",
+    excludeBuiltIn: true,
+  });
+  const [first] = accessible.sort(
+    (a, b) =>
+      a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+  );
+  if (first) return first.id;
+
+  throw new ApiError(
+    400,
+    "You have no default agent. Create a personal agent or ask an admin to set an organization default.",
+  );
+}
+
 // === internal ===
 
 /**
@@ -188,10 +281,14 @@ async function createAppChatConversation(params: {
   userId: string;
   organizationId: string;
   title: string;
+  /** Pre-resolved chat agent; resolved here when the caller has none. */
+  agentId?: string;
 }): Promise<{ conversationId: string }> {
   const { userId, organizationId, title } = params;
 
-  const agentId = await resolveDefaultChatAgentId({ userId, organizationId });
+  const agentId =
+    params.agentId ??
+    (await resolveDefaultChatAgentId({ userId, organizationId }));
   const agent = await AgentModel.findById(agentId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
@@ -239,13 +336,16 @@ async function seedConversationWithRender(params: {
   title: string;
   part: UIMessage["parts"][number];
   greeting?: string;
+  /** Pre-resolved chat agent; resolved downstream when the caller has none. */
+  agentId?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part, greeting } = params;
+  const { userId, organizationId, title, part, greeting, agentId } = params;
 
   const { conversationId } = await createAppChatConversation({
     userId,
     organizationId,
     title,
+    agentId,
   });
 
   const content: UIMessage = {
@@ -274,47 +374,6 @@ async function seedConversationWithRender(params: {
   }
 
   return { conversationId };
-}
-
-async function resolveDefaultChatAgentId(params: {
-  userId: string;
-  organizationId: string;
-}): Promise<string> {
-  const { userId, organizationId } = params;
-
-  // The org default outranks the member's personal default, mirroring the /chat
-  // page chain (resolveInitialAgentSelection). It only wins when it would appear
-  // in that page's picker for this caller: an internal (non-built-in) chat agent
-  // the caller can access — findById with a userId runs the access check and
-  // excludes soft-deleted rows. Anything else falls through.
-  const organization = await OrganizationModel.getById(organizationId);
-  if (organization?.defaultAgentId) {
-    const orgDefault = await AgentModel.findById(
-      organization.defaultAgentId,
-      userId,
-      false,
-    );
-    if (
-      orgDefault &&
-      orgDefault.organizationId === organizationId &&
-      orgDefault.agentType === "agent" &&
-      !orgDefault.builtIn
-    ) {
-      return orgDefault.id;
-    }
-  }
-
-  const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
-  if (existing) return existing;
-
-  // No default anywhere (e.g. the member's first chat): bootstrap their
-  // personal chat agent.
-  await AgentModel.ensurePersonalChatAgent({ userId, organizationId });
-  const created = await MemberModel.getDefaultAgentId(userId, organizationId);
-  if (!created) {
-    throw new ApiError(500, "Could not resolve a default chat agent.");
-  }
-  return created;
 }
 
 /**

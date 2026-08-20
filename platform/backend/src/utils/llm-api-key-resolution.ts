@@ -2,6 +2,7 @@ import {
   isProviderApiKeyOptional,
   isSubscriptionCredential,
   providerDisplayNames,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
@@ -12,8 +13,9 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, TeamModel } from "@/models";
+import { LlmProviderApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import type { LlmProviderApiKey } from "@/types";
 
 interface ResolvedProviderApiKey {
   apiKey: string | undefined;
@@ -43,6 +45,11 @@ interface ResolvedProviderApiKey {
  * only ever returned to its owner. When resolution lands on someone else's
  * subscription key, the acting user's own subscription key of the same kind is
  * substituted; without one, no key is returned and `authRequired` says why.
+ *
+ * `modelName` refines the endpoint, not the credential: for providers whose
+ * keys are servers rather than accounts (vLLM, Ollama, Azure, Archestra), a key
+ * only reaches the models its own server hosts, so a key that cannot serve the
+ * requested model is replaced by one that can. See `findKeyServingModel`.
  */
 export async function resolveProviderApiKey(params: {
   organizationId: string;
@@ -50,9 +57,17 @@ export async function resolveProviderApiKey(params: {
   provider: SupportedProvider;
   conversationId?: string | null;
   agentLlmApiKeyId?: string | null;
+  /** Model the caller is about to run, when known at resolution time. */
+  modelName?: string | null;
 }): Promise<ResolvedProviderApiKey> {
-  const { organizationId, userId, provider, conversationId, agentLlmApiKeyId } =
-    params;
+  const {
+    organizationId,
+    userId,
+    provider,
+    conversationId,
+    agentLlmApiKeyId,
+    modelName,
+  } = params;
 
   let resolvedApiKey: {
     id: string;
@@ -62,9 +77,10 @@ export async function resolveProviderApiKey(params: {
     baseUrl: string | null;
     inferenceBaseUrl: string | null;
   } | null = null;
+  let userTeamIds: string[] = [];
 
   if (userId) {
-    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+    userTeamIds = await TeamModel.getUserTeamIds(userId);
     resolvedApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
       organizationId,
       userId,
@@ -82,6 +98,16 @@ export async function resolveProviderApiKey(params: {
       "org",
     );
   }
+
+  resolvedApiKey = await preferKeyServingModel({
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+    modelName,
+    agentLlmApiKeyId,
+    resolved: resolvedApiKey,
+  });
 
   if (resolvedApiKey) {
     if (resolvedApiKey.secretId) {
@@ -196,6 +222,68 @@ export async function resolveProviderApiKey(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * Swap the ownership-ranked key for one whose endpoint actually serves the
+ * requested model, when the two disagree.
+ *
+ * Only applies to providers whose keys are servers rather than accounts
+ * (`providerHasEndpointLocalModels`): there, an endpoint that does not host the
+ * model cannot answer for it at all, so keeping the higher-ranked key is a
+ * guaranteed upstream 404. For credential-style providers every key reaches the
+ * same catalog, and swapping would silently move spend to another account — so
+ * they are left alone.
+ *
+ * Conservative in both directions: the ranked key is kept whenever it already
+ * serves the model, and also whenever nothing is known about which endpoints do
+ * (a model that was never synced, e.g. one discovered through the LLM proxy).
+ */
+async function preferKeyServingModel<
+  T extends { id: string; scope: string } | null,
+>(params: {
+  organizationId: string;
+  userId?: string;
+  userTeamIds: string[];
+  provider: SupportedProvider;
+  modelName?: string | null;
+  agentLlmApiKeyId?: string | null;
+  resolved: T;
+}): Promise<T | LlmProviderApiKey> {
+  const { provider, modelName, resolved } = params;
+
+  if (!modelName || !providerHasEndpointLocalModels(provider)) {
+    return resolved;
+  }
+
+  const model = await ModelModel.findByProviderAndModelId(provider, modelName);
+  if (!model) {
+    return resolved;
+  }
+
+  const servingKey = await LlmProviderApiKeyModel.findKeyServingModel({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    userTeamIds: params.userTeamIds,
+    provider,
+    modelDbId: model.id,
+    agentLlmApiKeyId: params.agentLlmApiKeyId,
+  });
+
+  if (!servingKey || servingKey.id === resolved?.id) {
+    return resolved;
+  }
+
+  logger.info(
+    {
+      provider,
+      model: modelName,
+      from: resolved?.id,
+      to: servingKey.id,
+    },
+    "Routing to the provider key whose endpoint serves the requested model",
+  );
+  return servingKey;
+}
 
 /**
  * Resolution landed on a subscription credential the acting user does not own

@@ -26,6 +26,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   Mistral,
+  StreamAccumulatorState,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -144,6 +145,11 @@ class MistralResponseAdapter implements LLMResponseAdapter<MistralResponse> {
   toRefusalResponse(refusalMessage: string, contentMessage: string) {
     return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
   }
+  withRewrittenToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  ) {
+    return this.delegate.withRewrittenToolCalls(toolCalls);
+  }
 }
 
 /**
@@ -177,6 +183,9 @@ class MistralStreamAdapter
   }
   formatCompleteTextSSE(text: string) {
     return this.delegate.formatCompleteTextSSE(text);
+  }
+  formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]) {
+    return this.delegate.formatToolCallsSSE(toolCalls);
   }
   formatEndSSE() {
     return this.delegate.formatEndSSE();

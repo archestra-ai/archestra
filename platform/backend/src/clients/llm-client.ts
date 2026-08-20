@@ -11,6 +11,7 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   ANTHROPIC_THINKING_OFF_HEADER,
+  APP_ID_HEADER,
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
@@ -63,7 +64,7 @@ import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
-import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
+import { LOCKED_CHAT_KEY_HEADER } from "@/content-encryption/locked-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import { ApiError } from "@/types";
@@ -186,17 +187,23 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   dualLlmProgressChannel?: string;
   /**
-   * Incognito conversation key. Forwarded so the proxy can store this
+   * Locked chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
    * proxy re-validates it against the conversation's stored fingerprint and
    * only honours it on its loopback chat path.
    */
-  incognitoKey?: Buffer | null;
+  lockedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing. Loopback-gated on the
    * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
    */
   delegationBillingEnvironmentId?: string | null;
+  /**
+   * MCP App whose runtime is making this call, so the interaction is attributed
+   * to it rather than only to the shared App Runtime agent. Loopback-gated on
+   * the proxy side; see APP_ID_HEADER.
+   */
+  appId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }): LLMModel {
@@ -213,8 +220,9 @@ export function createLLMModel(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    incognitoKey,
+    lockedChatKey,
     delegationBillingEnvironmentId,
+    appId,
     supportedEndpoints,
   } = params;
 
@@ -264,11 +272,16 @@ export function createLLMModel(params: {
     clientHeaders[DELEGATION_BILLING_ENVIRONMENT_HEADER] =
       delegationBillingEnvironmentId;
   }
+  // App runtime completions attribute their spend to the calling app; the proxy
+  // re-validates this against the executing agent's organization.
+  if (appId) {
+    clientHeaders[APP_ID_HEADER] = appId;
+  }
 
   // Never logged: the header name is on the logging redaction denylist and
   // OTel captures no request headers.
-  if (incognitoKey) {
-    clientHeaders[INCOGNITO_KEY_HEADER] = incognitoKey.toString("base64url");
+  if (lockedChatKey) {
+    clientHeaders[LOCKED_CHAT_KEY_HEADER] = lockedChatKey.toString("base64url");
   }
 
   const headers =
@@ -310,10 +323,10 @@ export async function createLLMModelForAgent(params: {
   /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
   dualLlmProgressChannel?: string;
   /**
-   * Incognito conversation key, forwarded to the proxy so this turn's
+   * Locked chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
    */
-  incognitoKey?: Buffer | null;
+  lockedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing; forwarded as a
    * loopback-gated proxy header. Set only by the A2A executor when the
@@ -367,6 +380,7 @@ export async function createLLMModelForAgent(params: {
     provider,
     conversationId,
     agentLlmApiKeyId,
+    modelName,
   });
 
   // Check if Gemini with Vertex AI (doesn't require API key)
@@ -445,7 +459,7 @@ export async function createLLMModelForAgent(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    incognitoKey: params.incognitoKey,
+    lockedChatKey: params.lockedChatKey,
     delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
     supportedEndpoints,
   });
@@ -953,6 +967,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       name: "vllm",
       missingBaseUrlMessage: "vLLM base URL is required.",
       keyless: true,
+      // vLLM implements OpenAI's `response_format: json_schema` by compiling
+      // the schema into a decoding grammar. Without this the compatible client
+      // downgrades generateObject flows (KB reranker, dual-LLM subagents) to a
+      // schema-less `json_object`, and since nothing else carries the schema to
+      // the model, the model is left to guess the shape — a reasoning model
+      // then answers with `<think>` text and a fenced object that no JSON
+      // parser accepts.
+      supportsStructuredOutputs: true,
     }),
     defaultBaseUrl: config.llm.vllm.baseUrl,
     // No apiKeyRequiredMessage — key is optional

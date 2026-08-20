@@ -86,6 +86,7 @@ import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
@@ -609,6 +610,13 @@ export function McpCatalogForm({
   // forbidden value is flagged inline and can't be saved. Passed to both
   // EnvironmentVariablesFormField instances below.
   const watchedEnvironmentId = form.watch("environmentId");
+  // A brand-new catalog item starts in the org's configured landing environment
+  // for MCP servers; editing an existing one keeps whatever it is bound to.
+  useDefaultEnvironmentSeed({
+    resource: "mcpRegistry",
+    enabled: !initialValues,
+    apply: (environmentId) => form.setValue("environmentId", environmentId),
+  });
   const boundEnvironment = watchedEnvironmentId
     ? environments?.find((e) => e.id === watchedEnvironmentId)
     : null;

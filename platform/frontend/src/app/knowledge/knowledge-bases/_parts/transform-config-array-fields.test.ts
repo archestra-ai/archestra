@@ -149,6 +149,34 @@ describe("transformConfigArrayFields", () => {
     });
   });
 
+  it("drops empty Perforce permission-sync fields and keeps filled ones", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: "//depot/docs",
+        p4Port: "",
+        adminUsername: "",
+      }),
+    ).toEqual({
+      type: "perforce",
+      serverUrl: "https://perforce.example.com:8080",
+      depotPaths: ["//depot/docs"],
+    });
+
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        p4Port: "ssl:perforce.example.com:1666",
+        adminUsername: "p4admin",
+      }),
+    ).toEqual({
+      type: "perforce",
+      p4Port: "ssl:perforce.example.com:1666",
+      adminUsername: "p4admin",
+    });
+  });
+
   it("trims whitespace and filters empty entries", () => {
     const config = {
       repos: " repo1 ,, repo2 , , repo3 ",
@@ -184,5 +212,36 @@ describe("transformConfigArrayFields", () => {
     expect(result.jiraBaseUrl).toBe("https://example.atlassian.net");
     expect(result.isCloud).toBe(true);
     expect(result.repos).toEqual(["repo1", "repo2"]);
+  });
+
+  it("converts ServiceNow role audiences and drops empty entries", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: {
+        incident: "itil, sn_incident_read",
+        problem: "",
+        change_request: ["itil"],
+      },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toEqual({
+      incident: ["itil", "sn_incident_read"],
+      change_request: ["itil"],
+    });
+  });
+
+  it("drops an all-empty ServiceNow role audience map", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: { incident: "", problem: " " },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toBeUndefined();
   });
 });

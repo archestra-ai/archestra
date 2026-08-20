@@ -39,15 +39,22 @@ import {
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
+import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
+import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import {
+  assertCanAssignEnvironment,
+  resolveDefaultEnvironmentForNewResource,
+} from "@/services/environments/environment";
 import {
   type Agent,
+  AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -361,6 +368,41 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agents/credential-readiness",
+    {
+      schema: {
+        operationId: RouteId.GetAgentCredentialReadiness,
+        description:
+          "For each internal agent that enforces a missing-credential behavior, the MCP servers the calling user has no usable connection to",
+        tags: ["Agents"],
+        response: constructResponseSchema(
+          z.array(AgentCredentialReadinessSchema),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      const agents = await AgentModel.findAll(
+        user.id,
+        checker.isAdmin("agent"),
+        {
+          agentTypes: ["agent"],
+          excludeBuiltIn: true,
+          onlyEnforcingMissingCredentials: true,
+        },
+      );
+
+      return reply.send(
+        await getAgentCredentialReadiness({ agents, userId: user.id }),
+      );
+    },
+  );
+
+  fastify.get(
     "/api/mcp-gateways/default",
     {
       schema: {
@@ -548,12 +590,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Always assert on create: a null/omitted environment still lands on the
-      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      const environmentId = await resolveNewAgentEnvironmentId({
+        userId: user.id,
+        organizationId,
+        agentType,
+        requested: body.environmentId,
+      });
+      // Always assert on create: a null environment still lands on the org
+      // default, which may itself be restricted (mirrors the MCP-catalog path).
       await assertEnvironmentAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentId,
         agentType,
       });
 
@@ -573,10 +621,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // environment exception), so a client-supplied value is dropped here.
       const createData = {
         ...body,
+        environmentId,
         builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
       };
-      const agent = await AgentModel.create(createData, user.id);
+      // Whether a new record starts out able to consult the Advisor is decided
+      // here, not by a follow-up write from the client: that second write
+      // forks another version and silently never happens for roles without
+      // `agent:read`.
+      const defaultExcludedSubagentIds =
+        await agentSubagentExclusionsService.getCreationDefaultExclusions({
+          organizationId: createData.organizationId ?? organizationId,
+          agentType,
+          accessAllSubagents: createData.accessAllSubagents === true,
+        });
+
+      const agent = await AgentModel.create(createData, user.id, {
+        defaultExcludedSubagentIds,
+      });
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
@@ -1578,6 +1640,33 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // A static tool assignment pins one installed connection, and a
+      // team-scoped connection is only assignable while the agent shares that
+      // team. Moving the agent's scope or teams therefore silently strips the
+      // right to a credential its tools still point at — the runtime trusts
+      // the persisted mcpServerId — so re-check the pins it already holds and
+      // refuse before anything is written (AgentModel.update syncs teams).
+      // The evaluated scope/team set is the merged one: the team-admin branch
+      // above may have rewritten body.teams to preserve teams it cannot touch.
+      // Known gap: an assignment or team-membership change racing this check
+      // can still land a stale pin; validating at call time is the follow-up.
+      const currentTeamIds = existingAgent.teams.map((team) => team.id);
+      await assertNoStaticPinsBrokenByTargetChange({
+        agentId: id,
+        currentTarget: {
+          organizationId: existingAgent.organizationId,
+          scope: existingAgent.scope,
+          authorId: existingAgent.authorId,
+          teamIds: currentTeamIds,
+        },
+        nextTarget: {
+          organizationId: existingAgent.organizationId,
+          scope: body.scope ?? existingAgent.scope,
+          authorId: existingAgent.authorId,
+          teamIds: body.teams ?? currentTeamIds,
+        },
+      });
+
       const agent = await AgentModel.update(id, updateData);
 
       if (!agent) {
@@ -1644,15 +1733,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be deleted");
       }
 
-      // Prevent deletion of an agent that is any member's default
-      const isDefault = await MemberModel.isAgentDefault(id);
-      if (isDefault) {
-        throw new ApiError(
-          403,
-          "Cannot delete a default agent. Set another agent as default first.",
-        );
-      }
-
       // Prevent deletion of a user's personal MCP gateway
       if (agent.isPersonalGateway) {
         throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
@@ -1664,9 +1744,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Projects pinning this agent are shown "no default" from here on, so
-      // clear the rows to match. Left set, restoring the agent would silently
-      // re-pin projects whose owners were last told the pin was gone.
+      // Members who chose this agent as their personal default, and projects
+      // pinning it, are shown "no default" from here on, so clear both sets of
+      // rows to match. Left set, restoring the agent would silently re-pin
+      // owners who were last told the pin was gone. Neither blocks the delete:
+      // every chat still resolves (organization default, then the member's own
+      // personal chat agent), which is what made the old "Cannot delete a
+      // default agent" refusal a dead end.
+      await MemberModel.clearDefaultAgent(id);
       await ProjectModel.clearDefaultAgent(id);
 
       return reply.send({ success: true });
@@ -1848,6 +1933,50 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       );
       return reply.send({ defaultAgentId });
+    },
+  );
+
+  fastify.put(
+    "/api/members/default-agent",
+    {
+      schema: {
+        operationId: RouteId.UpdateMemberDefaultAgent,
+        description:
+          "Set or clear the current user's default agent. Any chat agent the " +
+          "caller can see may be pinned — their own, a team's, or an " +
+          "organization-wide one — and it is preselected for their new chats " +
+          "ahead of the organization default. Null clears it, so the " +
+          "organization default applies. Nothing else writes this: a member " +
+          "who never pinned one has no personal default, and the " +
+          "organization default reaches them.",
+        tags: ["Members"],
+        body: z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        response: constructResponseSchema(
+          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+        ),
+      },
+    },
+    async ({ body, user, organizationId }, reply) => {
+      if (body.defaultAgentId) {
+        // Pinnable == visible: whatever the caller could start a chat with.
+        // A miss is one undifferentiated 404, so the route leaks nothing
+        // about agents they cannot see.
+        const agent = await findVisibleChatAgent({
+          agentId: body.defaultAgentId,
+          userId: user.id,
+          organizationId,
+        });
+        if (!agent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      await MemberModel.setDefaultAgent(
+        user.id,
+        organizationId,
+        body.defaultAgentId,
+      );
+      return reply.send({ defaultAgentId: body.defaultAgentId });
     },
   );
 
@@ -2074,6 +2203,33 @@ async function assertEnvironmentAssignable(params: {
     environmentId,
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
+  });
+}
+
+/**
+ * The environment a new agent binds to. An explicit value in the body wins
+ * (including a deliberate null, which means the default environment); omitting
+ * the field defers to the org's configured landing environment for the agent's
+ * type — agents, MCP gateways, and LLM proxies are configured separately.
+ */
+async function resolveNewAgentEnvironmentId(params: {
+  userId: string;
+  organizationId: string;
+  agentType: AgentType;
+  requested: string | null | undefined;
+}): Promise<string | null> {
+  const { userId, organizationId, agentType, requested } = params;
+  if (requested !== undefined) return requested;
+  const resource = getResourceForAgentType(agentType);
+  return resolveDefaultEnvironmentForNewResource({
+    organizationId,
+    resource,
+    canDeployToRestricted: await userHasPermission(
+      userId,
+      organizationId,
+      resource,
+      "deploy-to-restricted",
+    ),
   });
 }
 

@@ -73,6 +73,7 @@ import {
 } from "@/services/apps/app-ui-policy";
 import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -469,7 +470,7 @@ const registry = defineArchestraTools([
         "Authentication required to create an app.",
       );
       if ("error" in auth) return auth.error;
-      const { userId, organizationId } = auth;
+      const { userId, organizationId, sessionKey, interactionSessionId } = auth;
 
       const scope = args.scope ?? "personal";
       // Team scope needs explicit team assignment, which these chat tools can't
@@ -510,11 +511,22 @@ const registry = defineArchestraTools([
       // authoring agent's environment — the same environment search_tools
       // discovers in — so a tool the model just found is assignable and the
       // runtime gate agrees; an agent without one (or whose row is gone)
-      // falls back to the org Default environment. Resolution additionally
-      // accepts the Default baseline (toolInEnvironmentOrDefaultPredicate).
-      const environmentId = await AgentModel.findEnvironmentId(
-        context.agent.id,
-      );
+      // carries no signal, so the org's configured landing environment for new
+      // apps decides instead, and only then the Default one. Resolution
+      // additionally accepts the Default baseline
+      // (toolInEnvironmentOrDefaultPredicate).
+      const environmentId =
+        (await AgentModel.findEnvironmentId(context.agent.id)) ??
+        (await resolveDefaultEnvironmentForNewResource({
+          organizationId,
+          resource: "app",
+          canDeployToRestricted: await userHasPermission(
+            userId,
+            organizationId,
+            "app",
+            "deploy-to-restricted",
+          ),
+        }));
       const toolsResolution = await resolveToolsParam({
         agentId: context.agent.id,
         userId,
@@ -550,6 +562,18 @@ const registry = defineArchestraTools([
             templateId: DEFAULT_APP_TEMPLATE_ID,
             enabled: lifecycleDefaults.enabled,
             locked: lifecycleDefaults.locked,
+            // Born locked or disabled by an org default: this conversation
+            // still has to build the app it just scaffolded, so those defaults
+            // spare it (and it alone) until someone sets the lifecycle
+            // deliberately.
+            creationGraceSessionKey:
+              lifecycleDefaults.locked || !lifecycleDefaults.enabled
+                ? (sessionKey ?? null)
+                : null,
+            // The session that is building this app, so its build cost (the
+            // authoring turns' LLM spend) is reportable per app rather than
+            // vanishing into an unattributed conversation.
+            authoringSessionId: interactionSessionId ?? null,
           },
           payload,
         });
@@ -626,19 +650,24 @@ const registry = defineArchestraTools([
       const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(payload.html, "html")}`;
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
-      // The org's new-app defaults can make the app un-editable from chat the
-      // moment it exists (disabled = invisible to chat tools; locked = every
-      // modification refused). Say so in the result, or the model walks into
-      // refusals it has no way to explain to the user.
+      // The org's new-app defaults change what the app is the moment it exists
+      // (disabled = invisible to every other conversation and runnable by
+      // nobody; locked = every other conversation's modifications refused).
+      // Say so in the result, or the model either walks into refusals it has
+      // no way to explain or hands over an app the user cannot open.
       const lifecycleNotes: string[] = [];
       if (!lifecycleDefaults.enabled) {
         lifecycleNotes.push(
-          "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
+          sessionKey
+            ? "This organization creates new apps disabled: the app is invisible to every other conversation and nobody can run it yet, but this one may finish building it — keep going with edit_app/set_app_tools as usual. When you hand it over, tell the user to enable it in App settings on the Apps page before anyone can open it."
+            : "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
         );
       }
       if (lifecycleDefaults.locked) {
         lifecycleNotes.push(
-          "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
+          sessionKey
+            ? "This organization creates new apps locked: the app shows as Locked and every other conversation is refused, but this one may finish building it — keep going with edit_app/set_app_tools as usual, and do not unlock anything. Once you hand the app over, changing it later takes a user unlocking it in App settings."
+            : "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
         );
       }
       const lifecycleNote =
@@ -671,12 +700,7 @@ const registry = defineArchestraTools([
       );
       if ("error" in auth) return auth.error;
       const { userId, organizationId } = auth;
-      const gate = await loadApp({
-        userId,
-        organizationId,
-        appId: args.appId,
-        modify: true,
-      });
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
@@ -1498,12 +1522,7 @@ const registry = defineArchestraTools([
           "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
         );
       }
-      const gate = await loadApp({
-        userId,
-        organizationId,
-        appId: args.appId,
-        modify: true,
-      });
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
@@ -1719,7 +1738,27 @@ export const tools = registry.tools;
 // between them, keeping the narrow → guard → load → authorize order. Both return
 // a ready error result on failure.
 
-type AuthedCaller = { userId: string; organizationId: string };
+type AuthedCaller = {
+  userId: string;
+  organizationId: string;
+  /**
+   * The authoring session this call belongs to — the conversation in UI chat,
+   * the execution key in a headless run, undefined where neither exists (an
+   * external MCP client on the gateway). Carried alongside the caller's ids
+   * because an app's creation-time grace is granted to a session, not to a
+   * person: it rides every `loadApp` spread so no authoring tool can forget to
+   * present it.
+   */
+  sessionKey: string | undefined;
+  /**
+   * The LLM session the authoring turns were recorded under
+   * (`interactions.session_id`), stored on a newly scaffolded app so its build
+   * cost is reportable. Distinct from `sessionKey`, which is an opaque grace
+   * key: the two coincide in UI chat and diverge in a headless run, where the
+   * grace key is a per-execution id and this is the executor's session id.
+   */
+  interactionSessionId: string | undefined;
+};
 
 /** Narrow the caller to userId + organizationId, or a ready auth-required error. */
 function requireAuthed(
@@ -1729,7 +1768,37 @@ function requireAuthed(
   if (!context.userId || !context.organizationId) {
     return { error: errorResult(authMessage) };
   }
-  return { userId: context.userId, organizationId: context.organizationId };
+  return {
+    userId: context.userId,
+    organizationId: context.organizationId,
+    sessionKey: authoringSessionKey(context),
+    interactionSessionId: authoringInteractionSessionId(context),
+  };
+}
+
+/**
+ * The key identifying the session an app tool call is made from, for the
+ * creation-time grace (`apps.lock_grace_session_key`). `isolationKey` is
+ * the conversation id in UI chat and a per-execution id in headless runs, so
+ * one value covers both; it is stored as an opaque key and never read back as
+ * a conversation reference.
+ */
+function authoringSessionKey(context: ArchestraContext): string | undefined {
+  return context.isolationKey ?? context.conversationId;
+}
+
+/**
+ * The session id the authoring turns' interactions were recorded under, stored
+ * on a scaffolded app as `apps.authoring_session_id` so its build cost is a sum
+ * over that session. Prefers the explicit `sessionId` the caller was given
+ * (which is what the LLM proxy stamps on the interaction) and falls back the
+ * same way delegation does, so the value matches the recorded rows on every
+ * surface. Undefined where no session identifies the caller at all.
+ */
+function authoringInteractionSessionId(
+  context: ArchestraContext,
+): string | undefined {
+  return context.sessionId ?? context.conversationId ?? context.isolationKey;
 }
 
 /**
@@ -1822,6 +1891,12 @@ async function loadApp(params: {
   userId: string;
   organizationId: string;
   appId: string;
+  /**
+   * The calling session, from {@link requireAuthed}. Consulted only by the
+   * lifecycle checks, to recognize the session an app was created from when an
+   * organization new-app default is what locked or disabled it.
+   */
+  sessionKey?: string;
   modify?: boolean;
   /** set_app_lock's own escape: the unlock call must reach a locked app. */
   allowLocked?: boolean;
@@ -1832,12 +1907,24 @@ async function loadApp(params: {
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
+  // The session an app was created from keeps building it through the
+  // restrictions the organization's new-app defaults applied at that moment —
+  // otherwise those defaults turn on the very agent that just scaffolded the
+  // app, stranding it as an empty shell nobody asked to freeze (T-1089). The
+  // grace covers this one session; every other session meets the lock and the
+  // disable from the app's first moment, and a deliberate restriction ends it.
+  const graced =
+    !!app &&
+    params.sessionKey !== undefined &&
+    app.creationGraceSessionKey === params.sessionKey;
   // A disabled app does not exist as far as chat is concerned (T-980): every
   // id-scoped tool reports it exactly like a missing id — for its author too,
   // and for reads as much as writes, so a conversation holding a pre-disable
   // snapshot learns nothing and can do nothing. The author sees and manages
-  // it on the Apps page (REST), where re-enabling lives.
-  if (!app || !app.enabled) {
+  // it on the Apps page (REST), where re-enabling lives. The graced session is
+  // the one exception, and only ever for an app born disabled: it is building
+  // that app right now, and it is the only session that can see it at all.
+  if (!app || (!app.enabled && !graced)) {
     return { error: errorResult(`No app found with id ${params.appId}.`) };
   }
   if (params.modify) {
@@ -1854,6 +1941,11 @@ async function loadApp(params: {
           authorId: app.authorId,
           enabled: app.enabled,
         },
+        // Same exception, at the disabled-app freeze inside the assertion: the
+        // creating session may finish its build. Nothing else about the gate
+        // is relaxed — the caller still has to be someone who could author the
+        // app if it were live.
+        creationGraceSession: graced,
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {
@@ -1861,7 +1953,7 @@ async function loadApp(params: {
         return { error: errorResult(error.message) };
       throw error;
     }
-    if (app.locked && !params.allowLocked) {
+    if (app.locked && !params.allowLocked && !graced) {
       return {
         error: errorResult(
           `App "${escapeAppNameForModelText(app.name)}" is locked. Locked apps refuse every modification — edits, spec, tools, and deletion — until unlocked. Do not retry this call or route the change through another tool; this is the app lock. If, and only if, the user directly asked you to change or unlock this app, unlock it first with set_app_lock (locked: false); never unlock on your own initiative.`,

@@ -78,6 +78,12 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeBase.deleted",
   "knowledgeBase.restored",
   "knowledgeBase.purged",
+  "knowledgeDirectory.created",
+  "knowledgeDirectory.updated",
+  "knowledgeDirectory.deleted",
+  "knowledgeFile.created",
+  "knowledgeFile.updated",
+  "knowledgeFile.deleted",
   "limit.created",
   "limit.updated",
   "limit.deleted",
@@ -98,6 +104,7 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.deleted",
   "mcpServer.restored",
   "mcpServer.reinstalled",
+  "mcpServer.hardReset",
   // Retired with the MCP server installation request feature. Kept in the
   // vocabulary because audit rows written before its removal still carry these
   // names — dropping them would render that history as raw dotted keys. No

@@ -63,6 +63,10 @@ vi.mock("@/app/knowledge/connectors/_parts/connector-documents-table", () => ({
   ConnectorDocumentsTable: () => null,
 }));
 vi.mock(
+  "@/app/knowledge/connectors/_parts/connector-embedding-model-notice",
+  () => ({ ConnectorEmbeddingModelNotice: () => null }),
+);
+vi.mock(
   "@/app/knowledge/connectors/_parts/connector-user-groups-table",
   () => ({ ConnectorUserGroupsTable: () => <div>groups-table</div> }),
 );

@@ -1,8 +1,5 @@
 import { shouldEnableFrontendTelemetry } from "../sentry.shared";
 
-const MSW_ENABLED =
-  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
-  process.env.NODE_ENV !== "production";
 const ERROR_REPORTING_DSN =
   process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
 
@@ -40,11 +37,6 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     if (ERROR_REPORTING_DSN) {
       await import("../sentry.server.config");
-    }
-
-    if (MSW_ENABLED) {
-      const { ensureMswServerListening } = await import("./mocks/node");
-      ensureMswServerListening();
     }
   }
 

@@ -31,7 +31,12 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
-import { EventDedupMap, errorMessage } from "@/agents/chatops/utils";
+import {
+  buildAgentFooter,
+  EventDedupMap,
+  errorMessage,
+  stripDuplicateAgentFooter,
+} from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -46,6 +51,7 @@ import {
   UserModel,
 } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -1360,6 +1366,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { enabled, appId, appSecret, tenantId } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "ms-teams",
+      });
 
       // Merge new values with existing DB config (or defaults for first setup)
       const existing = await ChatOpsConfigModel.getMsTeamsConfig();
@@ -1516,6 +1526,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectionMode,
         appLevelToken,
       } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
 
       // Merge new values with existing DB config (or defaults for first setup)
       const existing = await ChatOpsConfigModel.getSlackConfig();
@@ -1593,6 +1607,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
         );
       }
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "telegram",
+      });
       const { enabled, botToken } = request.body;
 
       // Merge new values with existing DB config (or defaults for first setup)
@@ -2107,9 +2125,14 @@ async function handleAgentSelection(
       });
 
       if (result.success && result.agentResponse) {
-        // Send agent response via turn context (ensures correct thread)
+        // Send agent response via turn context (ensures correct thread).
+        // This path composes the reply itself instead of going through
+        // sendReply, so it owes the same "exactly one footer" guarantee: build
+        // the footer from the one helper that defines it, and drop the model's
+        // own sign-off before appending it.
+        const footer = buildAgentFooter(agent.name);
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n\n🤖 ${agent.name}`,
+          `${stripDuplicateAgentFooter(result.agentResponse, footer)}\n\n---\n\n${footer}`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

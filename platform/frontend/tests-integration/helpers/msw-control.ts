@@ -12,6 +12,7 @@ export type HandlerOverride = {
 
 export class MswControl {
   private readonly endpoint: string;
+  private readonly mockBackend: string;
 
   constructor(
     private readonly request: APIRequestContext,
@@ -19,6 +20,7 @@ export class MswControl {
     baseURL: string,
   ) {
     this.endpoint = `${baseURL}/internal-test/msw-handlers`;
+    this.mockBackend = `${baseURL}/internal-test/api`;
   }
 
   async use(override: HandlerOverride): Promise<void> {
@@ -54,6 +56,15 @@ export class MswControl {
       );
     }
     await this.resetBrowser();
+    await this.warmMockBackend();
+  }
+
+  // Server components reach their fixtures by calling the mock backend route
+  // over HTTP. Compile it here rather than inside the first server render,
+  // where the wait would land on a test's own visibility budget. A no-op after
+  // the first test.
+  private async warmMockBackend(): Promise<void> {
+    await this.request.get(`${this.mockBackend}/health`).catch(() => {});
   }
 
   // Push a single override into the browser worker. No-op if the page has

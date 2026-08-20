@@ -20,6 +20,7 @@ import {
   getAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
+import { isServiceAccountUserId } from "@/auth/utils";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -32,7 +33,7 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -310,11 +311,15 @@ export async function selectMCPGatewayToken(
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
   const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
 
+  // Synthetic principals ("system" for internal/public email security modes,
+  // "service-account:<id>" for service-account callers) have no users row, so
+  // they can never own a personal user token — attempting to create one fails
+  // on the user_id foreign key. They fall back to org/team tokens below.
+  const isSyntheticUser = userId === "system" || isServiceAccountUserId(userId);
+
   // 1. Always try to get/create a personal user token first
   // This ensures userId is available in the token for global catalog tools
-  // Skip when userId is "system" (e.g., internal/public email security modes)
-  // since "system" is not a real user and cannot have a user token
-  if (userId !== "system") {
+  if (!isSyntheticUser) {
     // Ensure user has a token (creates one if missing)
     const userToken = await UserTokenModel.ensureUserToken(
       userId,
@@ -343,9 +348,9 @@ export async function selectMCPGatewayToken(
   // Get all team tokens for this organization
   const tokens = await TeamTokenModel.findAll(organizationId);
 
-  // 2. System user has no team memberships so it can never match a team token.
-  //    Fall back to the organization token to preserve tool access.
-  if (userId === "system") {
+  // 2. Synthetic principals have no team memberships so they can never match a
+  //    team token. Fall back to the organization token to preserve tool access.
+  if (isSyntheticUser) {
     const orgToken = tokens.find((t) => t.isOrganizationToken);
     if (orgToken) {
       const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
@@ -833,7 +838,7 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
-  incognitoAudit,
+  lockedChatAudit,
 }: {
   agentName: string;
   agentId: string;
@@ -896,8 +901,8 @@ export async function getChatMcpTools({
    */
   repeatTracker?: ToolCallRepeatTracker;
   /**
-   * Incognito conversation: span content is suppressed and long calls never
-   * detach into durable tasks. Stable per scope key (the incognito flag is
+   * Locked chat: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the locked-chat flag is
    * immutable per conversation), so the cached tool context can safely retain
    * it.
    */
@@ -908,7 +913,7 @@ export async function getChatMcpTools({
    * has no escrow record. Stable per scope key for the same reason
    * `suppressContentLogging` is — escrow is settled at creation.
    */
-  incognitoAudit?: IncognitoAuditContext | null;
+  lockedChatAudit?: LockedChatAuditContext | null;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -1055,7 +1060,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
-      incognitoAudit,
+      lockedChatAudit,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,
@@ -1101,7 +1106,7 @@ export async function getChatMcpTools({
         ]);
 
         // Convert delegation tools to AI SDK Tool format.
-        // Incognito conversations exclude delegation entirely: a child-agent
+        // Locked chats exclude delegation entirely: a child-agent
         // run builds its own tool set and would log its tool calls with
         // content, outside the parent's suppression scope. Disable rather
         // than leak.

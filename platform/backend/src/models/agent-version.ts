@@ -175,6 +175,7 @@ class AgentVersionModel {
       systemPrompt: agent.systemPrompt ?? null,
       considerContextUntrusted: agent.considerContextUntrusted,
       toolExposureMode: agent.toolExposureMode,
+      missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,
       accessAllSubagents: agent.accessAllSubagents,
       // Header NAMES only (no values); order is not meaningful.

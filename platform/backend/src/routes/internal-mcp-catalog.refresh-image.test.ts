@@ -108,6 +108,9 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
         id: catalog.id,
         catalogReinstallRequired: false,
       }),
+      // Refreshing the image is the one path that must bypass the node's
+      // cached copy.
+      { freshImagePull: true },
     );
   });
 
@@ -137,6 +140,7 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       expect.objectContaining({
         id: catalog.id,
       }),
+      { freshImagePull: true },
     );
   });
 

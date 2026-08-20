@@ -82,6 +82,28 @@ export function useMcpServers(params?: McpServersParams) {
   });
 }
 
+/**
+ * The organization's auto-mode agents (implicit access to all tools). The set
+ * is org-wide — identical for every MCP server — so it is fetched once here
+ * rather than embedded on every row of the servers list.
+ */
+export function useAutoModeAgents(params?: { enabled?: boolean }) {
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+
+  return useQuery({
+    queryKey: ["mcp-servers", "auto-mode-agents"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getMcpServerAutoModeAgents();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: (params?.enabled ?? true) && !!canReadInstallations,
+  });
+}
+
 export function useMcpInstallationStatusCacheSync(enabled = true) {
   const queryClient = useQueryClient();
 
@@ -257,6 +279,11 @@ export function useInstallMcpServer() {
       }
       // Invalidate all chat MCP tools (new tools may be available)
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      // A new connection can be exactly the one an agent was waiting on, so the
+      // chat picker and composer notice have to re-ask what is still missing.
+      queryClient.invalidateQueries({
+        queryKey: ["agents", "credential-readiness"],
+      });
     },
     onError: (error, variables) => {
       // Thrown (non-API) failures, e.g. the request never reached the backend.

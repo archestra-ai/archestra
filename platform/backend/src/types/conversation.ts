@@ -32,8 +32,8 @@ export const ConversationOriginSchema = z.enum([
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
 /**
- * Versioned escrow record stored on incognito conversations (enterprise
- * break-glass recovery — see content-encryption/incognito-escrow.ts).
+ * Versioned escrow record stored on locked chats (enterprise
+ * break-glass recovery — see content-encryption/locked-chat-escrow.ts).
  * Union of the two escrow sinks:
  * The conversation key wrapped to the operator's RSA escrow public key, stored
  * inline on the row. Safe there: without the offline private half the blob is
@@ -42,16 +42,16 @@ export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
  *
  * Null only on a row written before escrow became mandatory.
  */
-export const IncognitoEscrowBlobSchema = z.object({
+export const LockedChatEscrowBlobSchema = z.object({
   v: z.literal(1),
   alg: z.literal("RSA-OAEP-256"),
   escrowKeyFingerprint: z.string(),
   wrappedDek: z.string(),
 });
-export type IncognitoEscrowBlob = z.infer<typeof IncognitoEscrowBlobSchema>;
+export type LockedChatEscrowBlob = z.infer<typeof LockedChatEscrowBlobSchema>;
 
 /**
- * Per-conversation content key for incognito conversations: the browser-held
+ * Per-conversation content key for locked chats: the browser-held
  * DEK presented on the current request plus the conversation it belongs to
  * (the AAD binds ciphertext to the conversation). Threaded explicitly through
  * every message read/write — never stored, never global.
@@ -92,16 +92,16 @@ export const SelectConversationSchema = createSelectSchema(
   // shared/project viewer. Keep it out of the response shape entirely — the
   // client only needs the derived `unread` flag — so it is stripped from every
   // response, while the model still reads the raw column to compute `unread`.
-  // The incognito escrow blob and key fingerprint are server-side bookkeeping
+  // The locked-chat escrow blob and key fingerprint are server-side bookkeeping
   // (break-glass recovery / wrong-key rejection) — clients only need the flag.
   .omit({
     lastReadAt: true,
-    incognitoDekFingerprint: true,
-    incognitoEscrow: true,
+    lockedChatDekFingerprint: true,
+    lockedChatEscrow: true,
   })
   .extend({
     /**
-     * Incognito conversations only: true when the response omits message
+     * Locked chats only: true when the response omits message
      * content because no (valid) conversation key accompanied the request —
      * the client renders the key-lost tombstone instead of a thread.
      */
@@ -111,7 +111,12 @@ export const SelectConversationSchema = createSelectSchema(
       .object({
         id: z.string(),
         name: z.string(),
-        systemPrompt: z.string().nullable(),
+        /**
+         * Only populated on detail reads (findById); list rows omit it so a
+         * roster of large custom prompts doesn't ride along on every sidebar
+         * refresh.
+         */
+        systemPrompt: z.string().nullable().optional(),
         agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
         toolExposureMode: ToolExposureModeSchema,
         llmApiKeyId: z.string().nullable(),

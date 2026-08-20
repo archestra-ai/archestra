@@ -1,4 +1,5 @@
 import { RouteId } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { UserTokenModel } from "@/models";
@@ -26,6 +27,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { user, organizationId } = request;
+      assertNotServiceAccount(request);
 
       // Ensure token exists (creates if not)
       const token = await UserTokenModel.ensureUserToken(
@@ -58,6 +60,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { user, organizationId } = request;
+      assertNotServiceAccount(request);
 
       const token = await UserTokenModel.findByUserAndOrg(
         user.id,
@@ -92,6 +95,7 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { user, organizationId } = request;
+      assertNotServiceAccount(request);
 
       const token = await UserTokenModel.findByUserAndOrg(
         user.id,
@@ -125,3 +129,18 @@ const userTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default userTokenRoutes;
+
+/**
+ * Personal user tokens are keyed to a real `users` row. Service-account
+ * callers authenticate with a synthetic principal that has no such row, so
+ * these endpoints can never apply to them -- fail fast with a clear error
+ * instead of surfacing a foreign-key violation from token auto-creation.
+ */
+function assertNotServiceAccount(request: FastifyRequest): void {
+  if (request.serviceAccount) {
+    throw new ApiError(
+      400,
+      "Service accounts do not have personal user tokens",
+    );
+  }
+}

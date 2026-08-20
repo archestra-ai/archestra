@@ -56,6 +56,11 @@ export type ConnectorCredentialConfig = {
   apiTokenLabel?: string;
   apiTokenPlaceholder?: string;
   apiTokenRequiredMessage?: string;
+  /**
+   * Inline content, not a block: the dialogs render it inside the credential
+   * field's single description, alongside the edit-mode note and the auto-sync
+   * requirement, so the field never stacks two lookalike paragraphs.
+   */
   apiTokenHelpText?: ReactNode;
   apiTokenMultiline?: boolean;
 };
@@ -333,28 +338,162 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+type AutoSyncConnectorRequirement = {
+  /** Anchor of this connector's "… Auto-Sync Permissions" docs section. */
+  docsAnchor: string;
+  /**
+   * One sentence naming the *kind* of upstream grant this connector's
+   * credential is missing when audiences come back empty — enough to tell an
+   * admin whether they can fix it and where to look, not enough to replace
+   * the docs. The exact roles, scopes, and tables belong there: they are long,
+   * they change with the source system, and a form is a bad place to keep
+   * either.
+   *
+   * Where the source has a stable page for making that credential — the one
+   * the docs section itself cites — the phrase naming it links straight there,
+   * so the admin lands on the console instead of hunting for it. Sources whose
+   * console lives on the customer's own instance get no link rather than a
+   * guessed one.
+   */
+  requirement: ReactNode;
+};
+
+function UpstreamConsoleLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <ExternalDocsLink href={href} className="underline" showIcon={false}>
+      {children}
+    </ExternalDocsLink>
+  );
+}
+
+const ATLASSIAN_API_TOKENS_URL =
+  "https://id.atlassian.com/manage-profile/security/api-tokens";
+
 /**
  * Connector types whose backend implementation supports auto-sync-permissions
  * (`supportsPermissionSync`). Keep in sync with the connectors that set
  * `supportsPermissionSync = true`; the backend re-validates on create/update
- * (400 otherwise), so this only gates the UI.
+ * (400 otherwise), so this only gates the UI. Deriving the allowlist from
+ * these keys keeps a connector from offering auto-sync permissions without
+ * saying what its credential needs first.
  */
-const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
-  "github",
-  "gitlab",
-  "confluence",
-  "jira",
-  "mfiles",
-  "gdrive",
-  "sharepoint",
-  "salesforce",
-  "onedrive",
-  "notion",
-  "asana",
-  "dropbox",
-]);
+const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
+  jira: {
+    docsAnchor: "jira-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a Jira Cloud admin account that can browse every synced project.",
+  },
+  confluence: {
+    docsAnchor: "confluence-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs an account that can view every synced space and its page restrictions.",
+  },
+  github: {
+    docsAnchor: "github-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs extra repository and organization read permissions on this credential.",
+  },
+  gitlab: {
+    docsAnchor: "gitlab-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a read_api token with Reporter access on every private project.",
+  },
+  linear: {
+    docsAnchor: "linear-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a read key from a member of every private team.",
+  },
+  servicenow: {
+    docsAnchor: "servicenow-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs extra roles, plus read ACLs on the user-criteria tables.",
+  },
+  notion: {
+    docsAnchor: "notion-auto-sync-permissions",
+    // No console link here: this field's help text already links the Notion
+    // Developer portal, and one description should not offer the same
+    // destination twice.
+    requirement:
+      "Auto-sync permissions needs the integration's capability to read user email addresses.",
+  },
+  sharepoint: {
+    docsAnchor: "sharepoint-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
+  },
+  gdrive: {
+    docsAnchor: "google-drive-auto-sync-permissions",
+    requirement: (
+      <>
+        Auto-sync permissions needs Workspace domain mode, with directory read
+        scopes authorized in the{" "}
+        <UpstreamConsoleLink href="https://admin.google.com/">
+          Admin console
+        </UpstreamConsoleLink>
+        {"."}
+      </>
+    ),
+  },
+  dropbox: {
+    docsAnchor: "dropbox-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs sharing scopes on the app, plus team scopes to expand groups.",
+  },
+  asana: {
+    docsAnchor: "asana-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a token from a user with access to every synced private project and team.",
+  },
+  outline: {
+    docsAnchor: "outline-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a key scoped to users, groups, collections and shares.",
+  },
+  onedrive: {
+    docsAnchor: "onedrive-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
+  },
+  salesforce: {
+    docsAnchor: "salesforce-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs view-all and share-table read permissions on this user.",
+  },
+  perforce: {
+    docsAnchor: "perforce-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs an account that can read the full protections table.",
+  },
+  mfiles: {
+    docsAnchor: "m-files-auto-sync-permissions",
+    requirement:
+      "Auto-sync permissions needs a vault account with full control of the vault.",
+  },
+} satisfies Partial<Record<ConnectorType, AutoSyncConnectorRequirement>>;
 
-export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set(
+  Object.keys(AUTO_SYNC_CONNECTOR_REQUIREMENTS) as ConnectorType[],
+);
+
+export function connectorSupportsAutoSync(
+  type: ConnectorType,
+  /**
+   * Value of the `orchestratorK8sRuntime` feature
+   * (`useFeature("orchestratorK8sRuntime")` in the calling component).
+   * Perforce permission sync runs the p4 client from an in-cluster pod, so
+   * its backend only sets `supportsPermissionSync` when the Kubernetes
+   * orchestrator is configured; without it Perforce must behave exactly like
+   * a non-perm-sync connector.
+   */
+  orchestratorK8sRuntime: boolean,
+): boolean {
+  if (type === "perforce" && !orchestratorK8sRuntime) return false;
   return AUTO_SYNC_CONNECTOR_TYPES.has(type);
 }
 
@@ -375,13 +514,14 @@ export function connectorSupportsAdminApiKey(type: ConnectorType): boolean {
  * how-to (creating a scopeless key in Atlassian administration).
  */
 export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
-  const label = getConnectorTypeLabel(type);
   return (
-    <>
-      Permissions auto-sync needs {label} user emails to work. Add a {label}{" "}
-      organization admin API key or set every {label} user&apos;s profile
-      visibility to &quot;Anyone&quot; to let this connector read {label} user
-      emails.{" "}
+    <span>
+      Create it in{" "}
+      <UpstreamConsoleLink href="https://admin.atlassian.com">
+        Atlassian administration
+      </UpstreamConsoleLink>
+      {"."} Auto-sync permissions needs it to read the email of any{" "}
+      {getConnectorTypeLabel(type)} user whose profile hides it.{" "}
       <ExternalDocsLink
         href={getFrontendDocsUrl(
           DocsPage.PlatformKnowledge,
@@ -392,45 +532,81 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
       >
         Learn more
       </ExternalDocsLink>
-      .
-    </>
+    </span>
   );
-}
-
-/**
- * What the credential must be able to see for auto-sync permissions to
- * resolve members to users (the email join). Shown under the credential field
- * when Auto-sync permissions is selected: each source hides emails behind a
- * specific, non-obvious visibility rule, and a credential without it produces
- * a snapshot full of unresolvable members. Atlassian says this on its admin
- * API key field instead, since that field is where the fix lives.
- */
-export function getPermissionSyncCredentialNote(
-  type: ConnectorType,
-): string | null {
-  switch (type) {
-    case "github":
-      return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
-    case "gitlab":
-      return "Auto-sync permissions matches project members by their public GitLab profile email. A non-admin token cannot read a private email, so members without a public profile email are recorded but stay unresolvable.";
-    case "asana":
-      return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
-    case "dropbox":
-      return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
-    default:
-      return null;
-  }
 }
 
 const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
   "atlassian-organization-admin-api-key";
 
 /**
+ * Points at the setup this connector's credential needs upstream, shown under
+ * the credential field only while Auto-sync permissions is the selected
+ * visibility. That visibility mirrors the source's own access control, which a
+ * credential can authenticate against — and pass Test connection — while still
+ * being unable to read, leaving an empty fail-closed snapshot. The roles,
+ * scopes, and modes themselves are the docs' job: a form is the wrong place to
+ * restate them, and they change with the source, not with us.
+ */
+export function AutoSyncCredentialRequirement({
+  type,
+}: {
+  type: ConnectorType;
+}) {
+  const entry = getAutoSyncConnectorRequirement(type);
+  if (!entry) return null;
+  // A span, not a fragment: this sits beside other conditional description
+  // slots, and React must move elements rather than bare text nodes there.
+  return (
+    <span>
+      {entry.requirement}{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(DocsPage.PlatformKnowledge, entry.docsAnchor)}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </span>
+  );
+}
+
+/**
+ * Which field on the form the requirement belongs under — the one an admin
+ * would change to fix it.
+ *
+ * - `credential` — the dialog's shared credential input, the usual case.
+ * - `connector-fields` — the connector's own fields, when the chosen
+ *   authentication mode pastes no credential here at all: a GitHub App's
+ *   credentials live in Settings → GitHub, and an individually authorized
+ *   Google account is granted through Google.
+ * - `permission-sync-fields` — Perforce, whose shared field holds the
+ *   *content* identity's login ticket while permission sync signs in as the
+ *   separate admin account in its own section.
+ */
+export function autoSyncRequirementSlot({
+  type,
+  authMethod,
+  authMode,
+}: {
+  type: ConnectorType;
+  authMethod?: string;
+  authMode?: string;
+}): "credential" | "connector-fields" | "permission-sync-fields" {
+  if (type === "perforce") return "permission-sync-fields";
+  if (type === "github" && authMethod === "github_app")
+    return "connector-fields";
+  if (type === "gdrive" && authMode === "oauth") return "connector-fields";
+  return "credential";
+}
+
+/**
  * Rendered under the visibility selector on the Notion create/edit forms when
  * Auto-sync permissions is selected. Notion's public API cannot report who
  * can see an individual page, so support is deliberately coarse ("Limited"
- * in the docs): the admin must know the audience model and scope what the
- * integration can see.
+ * in the docs): no credential fixes this, so it is an audience model the admin
+ * has to scope the integration's content access around. What the integration
+ * itself needs is on the Integration Token field.
  */
 export function NotionAutoSyncPermissionsNote() {
   return (
@@ -438,23 +614,38 @@ export function NotionAutoSyncPermissionsNote() {
       Notion&apos;s API cannot report who can see each page, so auto-sync makes
       every synced page visible to all workspace members matched by email, and
       never to guests. Share only workspace-appropriate teamspaces and pages
-      with the integration, and grant it the &quot;read user information
-      including email addresses&quot; capability.{" "}
-      <ExternalDocsLink
-        href={getFrontendDocsUrl(
-          DocsPage.PlatformKnowledge,
-          NOTION_AUTO_SYNC_DOC_ANCHOR,
-        )}
-        className="underline"
-        showIcon={false}
-      >
-        Learn more
-      </ExternalDocsLink>
+      with the integration.
     </p>
   );
 }
 
-const NOTION_AUTO_SYNC_DOC_ANCHOR = "notion-auto-sync-permissions";
+/**
+ * A settings page on the connector's own instance, or null when the form has
+ * no usable URL yet — a half-typed host must not become a broken link.
+ */
+function workspaceSettingsUrl(
+  instanceUrl: string | undefined,
+  path: string,
+): string | null {
+  if (!instanceUrl) return null;
+  try {
+    const { origin, protocol } = new URL(instanceUrl);
+    if (protocol !== "https:" && protocol !== "http:") return null;
+    return `${origin}${path}`;
+  } catch {
+    return null;
+  }
+}
+
+function getAutoSyncConnectorRequirement(
+  type: ConnectorType,
+): AutoSyncConnectorRequirement | undefined {
+  return (
+    AUTO_SYNC_CONNECTOR_REQUIREMENTS as Partial<
+      Record<ConnectorType, AutoSyncConnectorRequirement>
+    >
+  )[type];
+}
 // SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(
@@ -535,6 +726,13 @@ export function getConnectorCredentialConfig(params: {
   authMethod?: string;
   /** Google Drive's auth mode; decides whether a credential is pasted at all. */
   authMode?: string;
+  /** Whether this field's description also carries the auto-sync pointer. */
+  autoSyncRequirementShown?: boolean;
+  /**
+   * The connector's own instance URL, for sources whose credential is minted
+   * inside the customer's workspace rather than on a vendor-wide console.
+   */
+  instanceUrl?: string;
 }): ConnectorCredentialConfig {
   // In individual mode the credential arrives from Google, so there is nothing
   // to type — the field is dropped the same way web_crawler drops it.
@@ -664,6 +862,9 @@ export function getConnectorCredentialConfig(params: {
     mode: params.mode,
     authMethod: params.authMethod,
     authMode: params.authMode,
+    emailRequired: params.emailRequired,
+    autoSyncRequirementShown: params.autoSyncRequirementShown ?? false,
+    instanceUrl: params.instanceUrl,
   });
 
   return {
@@ -683,92 +884,199 @@ function getApiTokenHelpText(params: {
   mode: "create" | "edit";
   authMethod?: string;
   authMode?: string;
+  /** Atlassian Cloud, where the token has an address we can link to. */
+  emailRequired: boolean;
+  instanceUrl?: string;
+  /**
+   * Whether the auto-sync requirement pointer shares this description. When it
+   * does, sentences naming individual upstream grants stand down: the pointer
+   * sends the reader to the docs for exactly that, and a paragraph that names
+   * one permission and then defers the rest reads like two half-answers.
+   */
+  autoSyncRequirementShown: boolean;
 }): ReactNode | undefined {
-  if (params.type === "sharepoint") {
+  const { autoSyncRequirementShown: pointerShown, mode, type } = params;
+
+  if (type === "jira" || type === "confluence") {
+    // Server and Data Center mint their token on the customer's own instance,
+    // which has no address we can link to from here.
+    if (!params.emailRequired) return undefined;
     return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        The Azure AD app registration requires the <code>Sites.Read.All</code>{" "}
-        permission on Microsoft Graph.
-      </p>
+      <>
+        Create one in{" "}
+        <UpstreamConsoleLink href={ATLASSIAN_API_TOKENS_URL}>
+          Atlassian account security
+        </UpstreamConsoleLink>
+        {"."}
+      </>
     );
   }
 
-  if (params.type === "onedrive") {
+  if (type === "github") {
     return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        The Azure AD app registration requires the <code>Files.Read.All</code>{" "}
-        permission on Microsoft Graph.
-      </p>
+      <>
+        Fine-grained or classic — see{" "}
+        <UpstreamConsoleLink href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens">
+          managing your personal access tokens
+        </UpstreamConsoleLink>
+        {"."}
+      </>
     );
   }
 
-  if (params.type === "gdrive") {
+  if (type === "gitlab") {
     return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        The entire key file, including its <code>private_key</code>.{" "}
-        {params.authMode === "service_account_delegated"
-          ? "Its client ID must be authorized for domain-wide delegation with the drive.readonly and admin.directory.user.readonly scopes."
-          : "Grant it access by sharing each folder or shared drive with the key's own email address."}
-      </p>
+      <>
+        Create one under{" "}
+        <UpstreamConsoleLink href="https://docs.gitlab.com/user/profile/personal_access_tokens/">
+          Edit profile &rarr; Access tokens
+        </UpstreamConsoleLink>
+        {"."}
+      </>
     );
   }
 
-  if (params.mode === "edit") return undefined;
-
-  if (params.type === "perforce") {
+  if (type === "outline") {
+    const settingsUrl = workspaceSettingsUrl(
+      params.instanceUrl,
+      "/settings/api-and-apps",
+    );
+    const where = settingsUrl ? (
+      <UpstreamConsoleLink href={settingsUrl}>
+        Settings &rarr; API &amp; Apps
+      </UpstreamConsoleLink>
+    ) : (
+      <strong>Settings &rarr; API &amp; Apps</strong>
+    );
     return (
-      <p className="text-[0.8rem] text-muted-foreground">
+      <>
+        Create one under {where}
+        {"."} Keys start with <code>ol_api_</code>.
+      </>
+    );
+  }
+
+  if (type === "linear") {
+    return (
+      <>
+        Create one under{" "}
+        <UpstreamConsoleLink href="https://linear.app/docs/api-and-webhooks">
+          Settings &rarr; Security &amp; access
+        </UpstreamConsoleLink>
+        {"."}
+      </>
+    );
+  }
+
+  if (type === "asana") {
+    return (
+      <>
+        Create one in the{" "}
+        <UpstreamConsoleLink href="https://app.asana.com/0/my-apps">
+          Asana Developer Console
+        </UpstreamConsoleLink>
+        {"."}
+      </>
+    );
+  }
+
+  if (type === "sharepoint" || type === "onedrive") {
+    const contentPermission =
+      type === "sharepoint" ? "Sites.Read.All" : "Files.Read.All";
+    return (
+      <>
+        Create the app registration and its secret in the{" "}
+        <UpstreamConsoleLink href="https://entra.microsoft.com">
+          Microsoft Entra admin center
+        </UpstreamConsoleLink>
+        {"."}{" "}
+        {/* The pointer covers the fuller permission list for auto-sync. */}
+        {pointerShown ? null : (
+          <span>
+            It requires the <code>{contentPermission}</code> permission on
+            Microsoft Graph.
+          </span>
+        )}
+      </>
+    );
+  }
+
+  if (type === "gdrive") {
+    // What the file must contain is about the value being pasted, so it holds
+    // either way; what to grant the key upstream is the pointer's business.
+    const grantNote = pointerShown
+      ? null
+      : params.authMode === "service_account_delegated"
+        ? "Its client ID must be authorized for domain-wide delegation with the drive.readonly and admin.directory.user.readonly scopes."
+        : "Grant it access by sharing each folder or shared drive with the key's own email address.";
+    return (
+      <>
+        The entire key file, including its <code>private_key</code>, from the{" "}
+        <UpstreamConsoleLink href="https://console.cloud.google.com/">
+          Google Cloud console
+        </UpstreamConsoleLink>
+        {"."} {grantNote ? <span>{grantNote}</span> : null}
+      </>
+    );
+  }
+
+  if (type === "notion") {
+    return (
+      <>
+        Your Notion internal integration secret (starts with <code>ntn_</code>,
+        older <code>secret_</code> tokens keep working). Create one in the{" "}
+        <UpstreamConsoleLink href="https://app.notion.com/developers/connections">
+          Notion Developer portal
+        </UpstreamConsoleLink>
+        {"."}
+      </>
+    );
+  }
+
+  if (type === "dropbox") {
+    return (
+      <>
+        Your Dropbox access token. Generate one in the{" "}
+        <UpstreamConsoleLink href="https://www.dropbox.com/developers/apps">
+          Dropbox App Console
+        </UpstreamConsoleLink>
+        {"."}
+      </>
+    );
+  }
+
+  if (type === "mfiles") {
+    const usesOAuth =
+      (params.authMethod ?? "mfiles_password_token") ===
+      "oauth_client_credentials";
+    if (usesOAuth) {
+      return (
+        <>
+          The client secret of an{" "}
+          <UpstreamConsoleLink href="https://userguide.m-files.com/user-guide/manage/latest/eng/application_accounts.html">
+            M-Files Application Account
+          </UpstreamConsoleLink>
+          {"."}
+        </>
+      );
+    }
+    if (mode === "edit") return undefined;
+    return (
+      <>
+        Exchanged for short-lived MFWS tokens; never sent with content requests.
+      </>
+    );
+  }
+
+  if (mode === "edit") return undefined;
+
+  if (type === "perforce") {
+    return (
+      <>
         A login ticket valid for all hosts, generated with{" "}
         <code>p4 login -a -p</code>. For long-lived access, use a service
         account whose group has an unlimited ticket timeout.
-      </p>
-    );
-  }
-
-  if (params.type === "mfiles") {
-    const usesOAuth =
-      (params.authMethod ?? "oauth_client_credentials") ===
-      "oauth_client_credentials";
-    if (usesOAuth) return undefined;
-    return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        Exchanged for short-lived MFWS tokens; never sent with content requests.
-      </p>
-    );
-  }
-
-  if (params.type === "notion") {
-    return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        Your Notion internal integration secret (starts with <code>ntn_</code>,
-        older <code>secret_</code> tokens keep working). Create one in the{" "}
-        <ExternalDocsLink
-          href="https://app.notion.com/developers/connections"
-          className="underline"
-          showIcon={false}
-        >
-          Notion Developer portal
-        </ExternalDocsLink>
-        .
-      </p>
-    );
-  }
-
-  if (params.type === "dropbox") {
-    return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        Your Dropbox access token. Generate one in your Dropbox App Console.
-      </p>
-    );
-  }
-
-  if (params.type === "outline") {
-    return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        Your Outline API key. Create one under{" "}
-        <strong>Settings &rarr; API &amp; Apps</strong>. Keys start with{" "}
-        <code>ol_api_</code>.
-      </p>
+      </>
     );
   }
 
@@ -779,6 +1087,12 @@ type InlineConfigFieldsProps = {
   form: ConnectorForm;
   emailRequired: boolean;
   mode: "create" | "edit";
+  /**
+   * The auto-sync requirement line, passed only to the connectors whose
+   * credential is chosen here rather than in the dialog's shared credential
+   * field (see `autoSyncRequirementSlot`).
+   */
+  autoSyncRequirement?: ReactNode;
 };
 
 const INLINE_CONFIG_FIELDS: Record<
@@ -931,8 +1245,13 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  github: ({ form }) => (
-    <GithubConfigFields form={form} hideUrl hideRepositoryOptions />
+  github: ({ form, autoSyncRequirement }) => (
+    <GithubConfigFields
+      form={form}
+      hideUrl
+      hideRepositoryOptions
+      appConfigDescription={autoSyncRequirement}
+    />
   ),
   gitlab: () => null,
   linear: () => null,
@@ -1025,7 +1344,12 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  gdrive: ({ form }) => <GoogleDriveAuthFields form={form} />,
+  gdrive: ({ form, autoSyncRequirement }) => (
+    <GoogleDriveAuthFields
+      form={form}
+      authModeDescription={autoSyncRequirement}
+    />
+  ),
   dropbox: () => <></>,
   asana: ({ form, mode }) =>
     mode === "create" ? (
@@ -1262,12 +1586,16 @@ export function ConnectorInlineConfigFields({
   form,
   mode,
   emailRequired,
+  autoSyncRequirement,
 }: {
   connectorType: ConnectorType;
   form: ConnectorForm;
   mode: "create" | "edit";
   emailRequired: boolean;
+  autoSyncRequirement?: ReactNode;
 }) {
   const renderFields = INLINE_CONFIG_FIELDS[connectorType];
-  return <>{renderFields({ form, emailRequired, mode })}</>;
+  return (
+    <>{renderFields({ form, emailRequired, mode, autoSyncRequirement })}</>
+  );
 }

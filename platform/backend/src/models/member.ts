@@ -506,9 +506,6 @@ class MemberModel {
     return member?.defaultAgentId ?? null;
   }
 
-  /**
-   * Check if any member references the given agent as their default
-   */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -562,12 +559,24 @@ class MemberModel {
     };
   }
 
-  static async isAgentDefault(agentId: string): Promise<boolean> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(schema.membersTable)
+  /**
+   * Drop `agentId` as anyone's personal default. Called when the agent is
+   * deleted: the pointer records a deliberate choice, and the choice is no
+   * longer available. Those members fall back to the organization default (or
+   * their own personal chat agent) until they pick again.
+   *
+   * Mirrors {@link ProjectModel.clearDefaultAgent}: a restore does NOT bring
+   * the pointer back, for the same reason projects do not silently re-pin.
+   */
+  static async clearDefaultAgent(
+    agentId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    const executor = tx ?? db;
+    await executor
+      .update(schema.membersTable)
+      .set({ defaultAgentId: null })
       .where(eq(schema.membersTable.defaultAgentId, agentId));
-    return (result?.count ?? 0) > 0;
   }
 }
 

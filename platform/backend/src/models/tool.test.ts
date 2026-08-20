@@ -18,6 +18,7 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
@@ -4272,6 +4273,198 @@ describe("ToolModel", () => {
       expect(
         result.data.some((tool) => tool.name === brandedTodoToolName),
       ).toBe(false);
+    });
+
+    test("drops delegation tools whose target agent was deleted", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const liveTarget = await makeAgent({ name: "Live Target" });
+      const deletedTarget = await makeAgent({ name: "Deleted Target" });
+
+      const liveTool = await ToolModel.findOrCreateDelegationTool(
+        liveTarget.id,
+      );
+      const ghostTool = await ToolModel.findOrCreateDelegationTool(
+        deletedTarget.id,
+      );
+
+      await AgentModel.delete(deletedTarget.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const ids = result.data.map((tool) => tool.id);
+      expect(ids).toContain(liveTool.id);
+      expect(ids).not.toContain(ghostTool.id);
+
+      // Restoring the agent brings its delegation tool back — the tool row was
+      // never touched, only filtered.
+      await AgentModel.restore(deletedTarget.id);
+      const afterRestore = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+      expect(afterRestore.data.map((tool) => tool.id)).toContain(ghostTool.id);
+    });
+
+    test("attributes same-named delegation tools to their target's owner", async ({
+      makeAdmin,
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const kim = await makeUser({ email: "kim@example.com" });
+      const sam = await makeUser({ email: "sam@example.com" });
+
+      // Personal agents are seeded one per member under the same name, so both
+      // mint a delegation tool called `agent__my_assistant`.
+      const kimsAgent = await makeAgent({
+        name: "My Assistant",
+        scope: "personal",
+        organizationId: org.id,
+        authorId: kim.id,
+      });
+      const samsAgent = await makeAgent({
+        name: "My Assistant",
+        scope: "personal",
+        organizationId: org.id,
+        authorId: sam.id,
+      });
+
+      const kimsTool = await ToolModel.findOrCreateDelegationTool(kimsAgent.id);
+      const samsTool = await ToolModel.findOrCreateDelegationTool(samsAgent.id);
+      expect(kimsTool.name).toBe(samsTool.name);
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const listedKims = result.data.find((tool) => tool.id === kimsTool.id);
+      const listedSams = result.data.find((tool) => tool.id === samsTool.id);
+
+      expect(listedKims?.delegateToAgent).toEqual({
+        id: kimsAgent.id,
+        name: "My Assistant",
+        scope: "personal",
+        ownerEmail: "kim@example.com",
+      });
+      expect(listedSams?.delegateToAgent).toEqual({
+        id: samsAgent.id,
+        name: "My Assistant",
+        scope: "personal",
+        ownerEmail: "sam@example.com",
+      });
+    });
+
+    test("leaves delegateToAgent null for tools that delegate to nothing", async ({
+      makeAdmin,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const tool = await makeTool({ name: "Bash" });
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      expect(
+        result.data.find((entry) => entry.id === tool.id)?.delegateToAgent,
+      ).toBeNull();
+    });
+
+    test("counts only assignments to agents that still exist", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+      const liveAgent = await makeAgent({ name: "Live Agent" });
+      const deletedAgent = await makeAgent({ name: "Gone Agent" });
+      const tool = await ToolModel.create({
+        name: "shared-tool",
+        parameters: {},
+      });
+      await makeAgentTool(liveAgent.id, tool.id);
+      await makeAgentTool(deletedAgent.id, tool.id);
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        pagination: { limit: 100, offset: 0 },
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const listed = result.data.find((entry) => entry.id === tool.id);
+      // The count must agree with the embedded assignments, which only ever
+      // list live agents.
+      expect(listed?.assignmentCount).toBe(1);
+      expect(listed?.assignments.map((a) => a.agent.id)).toEqual([
+        liveAgent.id,
+      ]);
+    });
+
+    test("separates app launch tools from proxy-observed tools by origin", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Origin Agent" });
+
+      const appCatalog = await makeInternalMcpCatalog({
+        name: "Task Tracker",
+        serverType: "app",
+      });
+      const mcpCatalog = await makeInternalMcpCatalog({ name: "Some Server" });
+
+      const launchTool = await ToolModel.create({
+        name: ToolModel.slugifyName("task-tracker-abcd1234", "open"),
+        description: 'Open the "Task Tracker" app and render its UI.',
+        parameters: {},
+        catalogId: appCatalog.id,
+      });
+      const mcpTool = await ToolModel.create({
+        name: ToolModel.slugifyName(mcpCatalog.name, "search"),
+        parameters: {},
+        catalogId: mcpCatalog.id,
+      });
+      // A proxy-observed tool: no catalog, no delegation target.
+      const observedTool = await ToolModel.create({
+        name: "Bash",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, launchTool.id);
+      await makeAgentTool(agent.id, mcpTool.id);
+
+      const byOrigin = async (origin: string) =>
+        (
+          await ToolModel.findAllWithAssignments({
+            pagination: { limit: 100, offset: 0 },
+            filters: { origin },
+            userId: admin.id,
+            isAgentAdmin: true,
+          })
+        ).data.map((tool) => tool.id);
+
+      expect(await byOrigin("app")).toEqual([launchTool.id]);
+      // An app launch tool is catalog-backed, so it must not be reported as a
+      // tool observed in proxy traffic.
+      expect(await byOrigin("llm-proxy")).toEqual([observedTool.id]);
+      expect(await byOrigin(mcpCatalog.id)).toEqual([mcpTool.id]);
     });
   });
 });

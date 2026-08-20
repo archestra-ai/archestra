@@ -53,7 +53,12 @@ export default async function ToolGuardrailsPage() {
           includeKnowledgeSourcesTool: true,
         },
       }),
-      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      // App backings name the source of the app launch tools listed here; the
+      // backend drops them again for callers without `app:read`.
+      archestraApiSdk.getInternalMcpCatalog({
+        headers,
+        query: { includeApps: true },
+      }),
       archestraApiSdk.getToolInvocationPolicies({ headers }),
       archestraApiSdk.getTrustedDataPolicies({ headers }),
     ]);

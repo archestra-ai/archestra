@@ -3,6 +3,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
@@ -1650,6 +1651,133 @@ describe("ChatProvider title animation", () => {
       vi.advanceTimersByTime(3000);
     });
     expect(animatingTitleIds.has("conversation-1")).toBe(false);
+  });
+});
+
+describe("manual context compaction and the message queue", () => {
+  const conversationId = "conversation-compaction-queue";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatMessageQueue.clear(conversationId);
+    // resumeStream() resolves immediately here: the queued-message drain waits
+    // for the mount-time resume attempt to settle, and these tests have nothing
+    // to resume (no trailing user message).
+    mocks.resumeStream.mockResolvedValue(undefined);
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation((options) => {
+      void options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  afterEach(() => {
+    chatMessageQueue.clear(conversationId);
+  });
+
+  const renderSession = () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    return latestSessionRef;
+  };
+
+  // The point of queueing during compaction: the message waits for the rewrite
+  // instead of starting a turn against a thread that is being replaced.
+  it("holds a queued message while a manual compaction is in flight, then drains it", async () => {
+    const latestSessionRef = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      latestSessionRef.current?.beginManualContextCompaction();
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextCompaction.isCompacting).toBe(
+        true,
+      ),
+    );
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "after compaction" });
+    });
+
+    // The SDK reads "ready" throughout — only the compaction flag holds it back.
+    await waitFor(() =>
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1),
+    );
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    act(() => {
+      latestSessionRef.current?.endManualContextCompaction();
+    });
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage.mock.calls[0]?.[0]).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "after compaction" }],
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+  });
+
+  // Manual compaction is tracked apart from the stream-driven flag, so the
+  // stream-end cleanup cannot release the queue mid-rewrite.
+  it("keeps compacting through a stream finish that lands during the manual run", async () => {
+    const latestSessionRef = renderSession();
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      latestSessionRef.current?.beginManualContextCompaction();
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextCompaction.isCompacting).toBe(
+        true,
+      ),
+    );
+
+    act(() => {
+      // A compaction the stream reported, recorded while the manual run is
+      // still open (its finish clears only the stream-side flag).
+      latestSessionRef.current?.recordContextCompaction({
+        compactionId: "compaction-stream",
+        trigger: "auto",
+      });
+    });
+
+    expect(latestSessionRef.current?.contextCompaction.isCompacting).toBe(true);
+
+    act(() => {
+      latestSessionRef.current?.endManualContextCompaction();
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextCompaction.isCompacting).toBe(
+        false,
+      ),
+    );
   });
 });
 

@@ -169,6 +169,15 @@ interface ChatSession {
   contextWindow: ContextWindowBreakdown | null;
   contextCompaction: ContextCompactionState;
   recordContextCompaction: (compaction: ContextCompactionRecord) => void;
+  /**
+   * Bracket a manual (REST) compaction, which runs outside the stream and so
+   * has no compaction-start/finish data parts to flip `contextCompaction`.
+   * Between the two calls the conversation counts as compacting, which keeps
+   * composer submits queueing and parks the queued-message drain. Call `end`
+   * on every exit path — a missed one strands the queue.
+   */
+  beginManualContextCompaction: () => void;
+  endManualContextCompaction: () => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
   earlyToolUiStarts: Record<
     string,
@@ -466,12 +475,17 @@ function ChatSessionHook({
       responseProgressSequence: activity.responseProgressSequence + 1,
     }));
   }, []);
-  const [contextCompaction, setContextCompaction] =
+  const [streamContextCompaction, setContextCompaction] =
     useState<ContextCompactionState>({
       isCompacting: false,
       trigger: null,
       lastCompaction: null,
     });
+  // A manual `/compact` runs over REST with no stream attached, so none of the
+  // stream data parts above ever fire for it. Tracked separately (rather than
+  // folded into the state above) so the stream-end cleanup below cannot clear a
+  // manual run that is still in flight, and vice versa.
+  const [manualCompactionActive, setManualCompactionActive] = useState(false);
   const generateTitleMutation = useGenerateConversationTitle();
   const resolveMcpElicitationMutation = useResolveChatMcpElicitation();
   // Destructure the stable mutateAsync (not the whole mutation object, whose
@@ -556,6 +570,28 @@ function ChatSessionHook({
       trigger: null,
     }));
   }, []);
+
+  // Bracket a manual (REST) compaction so the rest of the session treats the
+  // conversation as busy for its whole duration: the composer keeps queueing
+  // instead of sending, and the queued-message drain below waits rather than
+  // firing a turn into a thread that is being rewritten under it. The caller
+  // owns the pairing — `end` must run on every exit path (including failures),
+  // or the queue would stay parked forever.
+  const beginManualContextCompaction = useCallback(() => {
+    setManualCompactionActive(true);
+  }, []);
+  const endManualContextCompaction = useCallback(() => {
+    setManualCompactionActive(false);
+  }, []);
+
+  // What every consumer sees: either source of compaction reads as "compacting".
+  const contextCompaction = useMemo<ContextCompactionState>(
+    () =>
+      manualCompactionActive && !streamContextCompaction.isCompacting
+        ? { ...streamContextCompaction, isCompacting: true, trigger: "manual" }
+        : streamContextCompaction,
+    [manualCompactionActive, streamContextCompaction],
+  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -1351,6 +1387,8 @@ function ChatSessionHook({
     contextWindow,
     contextCompaction,
     recordContextCompaction,
+    beginManualContextCompaction,
+    endManualContextCompaction,
     earlyToolUiStarts,
   };
 
@@ -1382,6 +1420,8 @@ function ChatSessionHook({
     contextWindow,
     contextCompaction,
     recordContextCompaction,
+    beginManualContextCompaction,
+    endManualContextCompaction,
     earlyToolUiStarts,
     sessionsRef,
     notifySessionUpdate,

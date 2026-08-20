@@ -35,6 +35,7 @@ import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { AgentModel } from "@/models";
+import { resolveA2ABaseUrl } from "@/routes/a2a/base-url";
 import {
   extractBearerToken,
   resolveTokenOrganizationId,
@@ -805,24 +806,6 @@ function buildA2ASecuritySchemes() {
       description: `Access token from an ${appName} OAuth client permitted to reach this agent.`,
     },
   };
-}
-
-/**
- * Base URL clients should dial, taken from the forwarded protocol. The spec
- * requires an absolute HTTPS URL outside local development, so a proxy that
- * forgot the header must not cause us to advertise a downgrade to http.
- */
-function resolveA2ABaseUrl(request: {
-  headers: Record<string, string | string[] | undefined>;
-}): string {
-  const host = (request.headers.host as string) || "localhost:9000";
-  const forwarded = request.headers["x-forwarded-proto"];
-  const proto = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (proto) {
-    return `${proto}://${host}`;
-  }
-  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
-  return `${isLocal ? "http" : "https"}://${host}`;
 }
 
 /** Card `version`, moved by anything that can change the card's content. */

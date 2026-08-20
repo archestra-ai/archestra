@@ -4,13 +4,17 @@ import { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
 import logger from "@/logging";
 
 /**
- * Return the public origin for a request — used to build the OAuth
- * protected-resource metadata URL. Scoping origin derivation to OAuth lets MCP
- * gateway OAuth work out of the box without the (too-broad) ARCHESTRA_TRUST_PROXY,
- * while always validating the forwarded host to prevent X-Forwarded-Host spoofing.
- * The origin-derivation logic is adapted from Fastify.
+ * Return the public origin for a request — the origin an external client
+ * reached us on, rather than the one our socket was accepted on. Deriving it
+ * here lets the MCP gateway and A2A work out of the box without the (too-broad)
+ * ARCHESTRA_TRUST_PROXY, while always validating the forwarded host against the
+ * configured-public-hosts allowlist to prevent X-Forwarded-Host spoofing. The
+ * origin-derivation logic is adapted from Fastify.
  *
- * MUST BE USED ONLY FOR MCP OAUTH (the MCP gateway and the shareable-App connector).
+ * MUST BE USED ONLY to build URLs we hand to external clients as "dial this":
+ * MCP OAuth metadata (the MCP gateway and the shareable-App connector) and the
+ * A2A AgentCard. It is deliberately not a general request-origin accessor —
+ * anything security-sensitive must not key off a client-supplied header.
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
   const result = computePublicRequestOrigin(request);

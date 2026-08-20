@@ -145,6 +145,44 @@ describe("a2a v2 AgentCard conformance", () => {
     expect(invalid.headers["www-authenticate"]).toContain("invalid_token");
   });
 
+  test("names the origin the caller reached, not the host we were dialed on", async () => {
+    // The public ingress terminates on the frontend, which reverse-proxies
+    // /v2 here — so `host` is the in-cluster backend address. A card built
+    // from it sends every discovery-driven client somewhere only the cluster
+    // can reach.
+    vi.stubEnv("ARCHESTRA_API_BASE_URL", "https://agents.example.com");
+
+    const card = (
+      await fetchCard({
+        host: "127.0.0.1:9000",
+        "x-forwarded-host": "agents.example.com",
+        "x-forwarded-proto": "https",
+      })
+    ).json();
+
+    expect(card.supportedInterfaces[0].url).toBe(
+      `https://agents.example.com/v2/a2a/${agentId}`,
+    );
+    expect(card.provider.url).toBe("https://agents.example.com");
+  });
+
+  test("ignores a forwarded host that is not a configured public host", async () => {
+    vi.stubEnv("ARCHESTRA_API_BASE_URL", "https://agents.example.com");
+
+    const card = (
+      await fetchCard({
+        host: "127.0.0.1:9000",
+        "x-forwarded-host": "attacker.example.com",
+        "x-forwarded-proto": "https",
+      })
+    ).json();
+
+    // Otherwise anyone who can reach the card endpoint could hand a third
+    // party a card pointing at a host they control.
+    expect(card.supportedInterfaces[0].url).toContain("127.0.0.1:9000");
+    expect(card.supportedInterfaces[0].url).not.toContain("attacker");
+  });
+
   test("advertises https for a non-local host without a forwarded proto", async () => {
     // A proxy that drops x-forwarded-proto must not make us publish a
     // downgrade in the artifact clients dial.

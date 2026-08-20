@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ConnectorDocumentOcrNotice } from "@/app/knowledge/connectors/_parts/connector-document-ocr-notice";
 import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
 import { ConnectorEmbeddingModelNotice } from "@/app/knowledge/connectors/_parts/connector-embedding-model-notice";
 import { ConnectorMembersTable } from "@/app/knowledge/connectors/_parts/connector-members-table";
@@ -665,6 +666,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         <ConnectorEmbeddingModelNotice
           connectorType={connector.connectorType}
         />
+        <ConnectorDocumentOcrNotice connectorType={connector.connectorType} />
 
         {/* Visible on EVERY tab: an admin landing anywhere on the page
             learns about unassigned users without drilling into the Users

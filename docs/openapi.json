@@ -322551,7 +322551,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images and real PDFs, so the browser can preview them; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {

@@ -49,7 +49,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetSkillSandboxArtifact,
         description:
           "Stream the raw bytes of a skill sandbox artifact. Inline for " +
-          "known-safe raster images; download for everything else.",
+          "known-safe raster images and real PDFs, so the browser can " +
+          "preview them; download for everything else.",
         tags: ["Skills"],
         // a row UUID, or an `obj_` ref for an untracked (hand-placed) object.
         params: z.object({ artifactId: ARTIFACT_REF }),

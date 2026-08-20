@@ -30,6 +30,9 @@ export const CODEX_CLIENT_LABEL = "Codex";
 /** Human-readable label for the Copilot CLI client id in the UI. */
 export const COPILOT_CLI_CLIENT_LABEL = "Copilot CLI";
 
+/** Human-readable label for the Cursor client id in the UI. */
+export const CURSOR_CLIENT_LABEL = "Cursor";
+
 /**
  * `external_agent_id` values for Claude clients:
  * - {@link CLAUDE_CLIENT_ID} — generic; recorded by auto-discovery when no
@@ -58,6 +61,14 @@ export const CODEX_CLIENT_ID = "openai_codex";
  * proxy), never to GitHub's own services.
  */
 export const COPILOT_CLI_CLIENT_ID = "github_copilot_cli";
+
+/**
+ * `external_agent_id` value for the Cursor IDE. There is no connect-page setup
+ * script for Cursor (its BYOK flow only takes an API key and base URL, no
+ * custom headers), so this id is only ever recorded by auto-discovery of the
+ * Cursor User-Agent (see {@link isCursorUserAgent}).
+ */
+export const CURSOR_CLIENT_ID = "cursor";
 
 /**
  * First-party Codex originators. Codex stamps its client identity on every
@@ -95,6 +106,21 @@ export function isCodexUserAgent(
   userAgent: string | null | undefined,
 ): boolean {
   return !!userAgent && isCodexOriginator(userAgent.split("/", 1)[0]);
+}
+
+/**
+ * Whether a User-Agent denotes the Cursor IDE. Cursor's BYOK requests are
+ * built and sent by Cursor's backend with `User-Agent: Cursor/1.0` — the UA is
+ * the only client-identity signal on the request (no originator-style header,
+ * no metadata body field). Matched on the leading product token so a version
+ * bump (`Cursor/2.3`) keeps matching.
+ */
+export function isCursorUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return (
+    !!userAgent && userAgent.split("/", 1)[0]?.trim().toLowerCase() === "cursor"
+  );
 }
 
 /**
@@ -198,6 +224,24 @@ export function isCopilotCliClientAgentId(
 }
 
 /**
+ * `external_agent_id` values for Cursor clients. Only the one auto-discovered
+ * id exists today, but this stays a set to mirror the other client families.
+ */
+export const CURSOR_CLIENT_AGENT_IDS = [CURSOR_CLIENT_ID] as const;
+
+const CURSOR_CLIENT_AGENT_ID_SET = new Set<string>(CURSOR_CLIENT_AGENT_IDS);
+
+/** Whether an `external_agent_id` value denotes the Cursor IDE. */
+export function isCursorClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return CURSOR_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
+/**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
  * (see {@link clientFilterToAgentIds}).
@@ -205,11 +249,13 @@ export function isCopilotCliClientAgentId(
 export const CLAUDE_CLIENT_FILTER = "claude";
 export const CODEX_CLIENT_FILTER = "codex";
 export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
+export const CURSOR_CLIENT_FILTER = "cursor";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
   CODEX_CLIENT_FILTER,
   COPILOT_CLI_CLIENT_FILTER,
+  CURSOR_CLIENT_FILTER,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -254,6 +300,15 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     provider: "github-copilot",
     agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
     isClientAgentId: isCopilotCliClientAgentId,
+  },
+  {
+    filter: CURSOR_CLIENT_FILTER,
+    label: CURSOR_CLIENT_LABEL,
+    // Cursor is not itself a provider; its BYOK requests reach the proxy as
+    // OpenAI traffic, so the OpenAI logo represents it (mirrors Codex).
+    provider: "openai",
+    agentIds: CURSOR_CLIENT_AGENT_IDS,
+    isClientAgentId: isCursorClientAgentId,
   },
 ];
 

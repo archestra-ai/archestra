@@ -276,14 +276,15 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request).
+  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
     utils.headers.clientApp.detectCodexClientId(
       headersForExtraction,
       bodyForExtraction,
-    );
+    ) ??
+    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (

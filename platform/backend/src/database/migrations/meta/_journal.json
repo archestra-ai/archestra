@@ -2976,6 +2976,13 @@
       "when": 1787177198298,
       "tag": "0424_naive_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 425,
+      "version": "7",
+      "when": 1787185607593,
+      "tag": "0425_kb_bm25_keyword_ranking",
+      "breakpoints": true
     }
   ]
 }

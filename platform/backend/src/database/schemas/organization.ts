@@ -9,6 +9,7 @@ import type {
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
 import {
   boolean,
+  doublePrecision,
   integer,
   jsonb,
   pgTable,
@@ -169,6 +170,21 @@ const organizationsTable = pgTable("organization", {
    * OCR is enabled exactly when both this and `ocrChatApiKeyId` are set.
    */
   ocrModel: text("ocr_model"),
+
+  /**
+   * BM25 tuning for the knowledge-base keyword ranker, adjustable from the
+   * Knowledge settings tab on a live installation. `null` means "use the
+   * deployment default" from `ARCHESTRA_KNOWLEDGE_BASE_BM25_K1` / `_B`, so an
+   * organization that never touched these follows whatever the operator set.
+   *
+   * `k1` is term-frequency saturation (0 = a term counts the same whether it
+   * appears once or fifty times); `b` is document-length normalization in
+   * [0, 1] (0 = ignore chunk length, which is what `ts_rank` does). Both take
+   * effect on the next query — no restart, no reindex, no statistics rebuild —
+   * because BM25 scores are computed at query time from stored statistics.
+   */
+  kbBm25K1: doublePrecision("kb_bm25_k1"),
+  kbBm25B: doublePrecision("kb_bm25_b"),
 
   /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
   defaultLlmModel: text("default_llm_model"),

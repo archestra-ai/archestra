@@ -6,8 +6,8 @@ import {
 import config from "@/config";
 import { isDbStatementTimeoutError } from "@/database/retry";
 import logger from "@/logging";
-import { KbChunkModel } from "@/models";
-import type { VectorSearchResult } from "@/models/kb-chunk";
+import { KbChunkModel, OrganizationModel } from "@/models";
+import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { expandChunkContext } from "./context-expansion";
@@ -114,6 +114,10 @@ class QueryService {
         : Promise.resolve([]),
     ]);
 
+    const bm25 = hybridEnabled
+      ? await this.resolveBm25(organizationId, searchLanguages, connectorIds)
+      : undefined;
+
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
         this.searchSingleQuery({
@@ -128,6 +132,7 @@ class QueryService {
           type: eq.type,
           hybridEnabled,
           searchLanguages,
+          bm25,
         }),
       ),
     );
@@ -262,6 +267,8 @@ class QueryService {
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
     searchLanguages: TextSearchLanguage[];
+    /** BM25 constants for the keyword lane; unset ranks it with ts_rank. */
+    bm25: Bm25Tuning | undefined;
   }): Promise<SingleQuerySearchResult> {
     const {
       queryText,
@@ -274,6 +281,7 @@ class QueryService {
       environmentId,
       type,
       hybridEnabled,
+      bm25,
       searchLanguages,
     } = params;
 
@@ -357,6 +365,7 @@ class QueryService {
               connectorIds,
               queryText,
               languages: searchLanguages,
+              bm25,
               limit,
               userAcl,
               bypassAcl,
@@ -402,6 +411,46 @@ class QueryService {
     });
 
     return { rows: fused.slice(0, limit), lanesAttempted, lanesTimedOut };
+  }
+
+  /**
+   * The BM25 constants the keyword lane scores with, or `undefined` while it
+   * must rank with `ts_rank` instead.
+   *
+   * BM25 scores by joining the corpus-statistics tables, so a text-search
+   * configuration with indexed chunks but no statistics contributes no rows at
+   * all — an empty keyword lane that reads like an empty corpus. The
+   * statistics are rebuilt on a schedule (`kb_bm25_stats_refresh`), so they
+   * can be missing right after the upgrade that introduced them, or for a
+   * language first indexed since the last rebuild. Until they exist, `ts_rank`
+   * ranks instead. A language with nothing indexed never triggers this (see
+   * {@link KbChunkModel.hasBm25Stats}).
+   *
+   * The constants are an organization's Knowledge-settings override where set,
+   * else the deployment default — resolved per query so a change saved in the
+   * settings tab applies to the very next search (scores are computed at query
+   * time from stored statistics, so nothing needs rebuilding).
+   */
+  private async resolveBm25(
+    organizationId: string,
+    searchLanguages: TextSearchLanguage[],
+    connectorIds: string[],
+  ): Promise<Bm25Tuning | undefined> {
+    const [statsReady, org] = await Promise.all([
+      KbChunkModel.hasBm25Stats(searchLanguages, connectorIds),
+      OrganizationModel.getById(organizationId),
+    ]);
+    if (!statsReady) {
+      logger.warn(
+        { organizationId, searchLanguages },
+        "[QueryService] BM25 corpus statistics are missing for a text-search configuration in this query; keyword search ranks with ts_rank until the kb_bm25_stats_refresh task has built them",
+      );
+      return undefined;
+    }
+    return {
+      k1: org?.kbBm25K1 ?? config.kb.bm25K1,
+      b: org?.kbBm25B ?? config.kb.bm25B,
+    };
   }
 
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {

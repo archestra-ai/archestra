@@ -1647,7 +1647,7 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge#reranking-configuration) for how to pick the key and model.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Search Ranking Configuration](/docs/platform-knowledge#search-ranking-configuration) for how to pick the key and model.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Max wall-clock time a single connector sync run works before it checkpoints and yields.
   - Default: `3300` (55 minutes)
@@ -1675,6 +1675,26 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_K1`** - Deployment default for the BM25 Term Saturation (`k1`), from `0` to `10`.
+  - Default: `1.2`
+  - Keyword ranking in knowledge search is BM25, computed in plain SQL from statistics tables — no PostgreSQL extension, no extra index, so it runs on managed PostgreSQL such as RDS, Aurora, Neon, and Cloud SQL. This factor is how much repeating a word keeps helping a passage: higher lets repetition keep adding weight, `0` counts a word the same whether it appears once or fifty times. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_B`** - Deployment default for the BM25 Length Normalization (`b`), from `0` to `1`.
+  - Default: `0.75`
+  - How much long passages are held back: `0` means length does not matter, `1` means short, focused passages pull well ahead of long ones that mention the same words. Lucene's default. An organization can override it under **Settings > Knowledge > Search Ranking Configuration**; this value applies where that is left empty.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_RECALL_CAP`** - How many candidate chunks BM25 rescores per query.
+  - Default: `2000`
+  - BM25 ranks, it does not index. The existing full-text index finds the candidates and this caps how many of them get scored. Cost grows roughly in step with the cap. A query matching more chunks than the cap can only reorder what `ts_rank` surfaced first, so raise this if broad queries matter more than latency.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS`** - How often the BM25 corpus statistics are rebuilt.
+  - Default: `3600`
+  - The first rebuild runs right after startup; until it has finished, keyword matches are ranked with PostgreSQL's built-in `ts_rank`. The refresh reads every chunk, so its cost grows with the corpus. It never blocks ingestion. Statistics that lag the corpus shift scores slightly rather than making them wrong, so a long interval is safe on a large deployment.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_TIMEOUT_MS`** - How long one statistics rebuild may run before PostgreSQL cancels it.
+  - Default: `900000` (15 minutes), from `30000` to `21600000`
+  - The rebuild reads the whole corpus on a timer, so it needs far longer than a request. Raise it if a rebuild on a very large corpus is cancelled — a rebuild that never finishes leaves keyword search on `ts_rank` for good, since the next attempt gets no further.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
   - Default: `8000`

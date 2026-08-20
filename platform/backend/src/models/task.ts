@@ -355,6 +355,63 @@ class TaskModel {
   }
 
   /**
+   * Where a periodic task stands: when its next run is due, whether a run is in
+   * flight, when it last succeeded, and the error of its latest finished
+   * attempt if that attempt failed (null once a later attempt succeeds). A
+   * periodic task has at most one pending/processing row at a time (see
+   * `tasks_unique_periodic_idx`), and finished rows stay, so all four facts are
+   * one index-range read over the task's rows. Knowledge settings reads this
+   * for the BM25 statistics refresh.
+   */
+  static async getPeriodicTaskStatus(taskType: TaskType): Promise<{
+    nextRunAt: Date | null;
+    running: boolean;
+    lastSucceededAt: Date | null;
+    lastAttemptError: string | null;
+  }> {
+    // The timestamp columns are naked (no time zone) and are written by
+    // drizzle in UTC, but a raw read hands them to the driver, which parses a
+    // naked timestamp in the HOST time zone — shifting every value by the
+    // host's UTC offset (same trap `resetStuckTasks` documents). Read them as
+    // text and parse as the UTC they are.
+    const { rows } = await db.execute<{
+      nextRunAt: string | null;
+      running: boolean;
+      lastSucceededAt: string | null;
+      lastAttemptError: string | null;
+    }>(sql`
+      SELECT
+        (
+          SELECT MIN(scheduled_for)::text FROM tasks
+          WHERE task_type = ${taskType} AND status = 'pending'
+        ) AS "nextRunAt",
+        EXISTS (
+          SELECT 1 FROM tasks
+          WHERE task_type = ${taskType} AND status = 'processing'
+        ) AS "running",
+        (
+          SELECT MAX(completed_at)::text FROM tasks
+          WHERE task_type = ${taskType} AND status = 'completed'
+        ) AS "lastSucceededAt",
+        (
+          SELECT CASE WHEN status = 'dead' THEN last_error END FROM tasks
+          WHERE task_type = ${taskType}
+            AND status IN ('completed', 'dead')
+            AND completed_at IS NOT NULL
+          ORDER BY completed_at DESC
+          LIMIT 1
+        ) AS "lastAttemptError"
+    `);
+    const row = rows[0];
+    return {
+      nextRunAt: utcTimestampToDate(row?.nextRunAt),
+      running: row?.running ?? false,
+      lastSucceededAt: utcTimestampToDate(row?.lastSucceededAt),
+      lastAttemptError: row?.lastAttemptError ?? null,
+    };
+  }
+
+  /**
    * Drop all queued (pending/processing) work belonging to a connector. The
    * tasks table has no FK to connectors, so deleting a connector otherwise
    * orphans its enqueued tasks — and since batch_embedding shares the content
@@ -389,3 +446,13 @@ class TaskModel {
 }
 
 export default TaskModel;
+
+/**
+ * Parse a naked `timestamp` column read as `::text` ("2026-08-20 10:00:00.123")
+ * as the UTC drizzle wrote it — the same convention drizzle's own reads use.
+ */
+function utcTimestampToDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(`${value.replace(" ", "T")}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}

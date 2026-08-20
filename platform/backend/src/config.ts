@@ -3,6 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+  BM25_B_DEFAULT,
+  BM25_B_MAX,
+  BM25_B_MIN,
+  BM25_K1_DEFAULT,
+  BM25_K1_MAX,
+  BM25_K1_MIN,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
@@ -951,6 +957,29 @@ export const parseClampedInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   if (Number.isNaN(parsed)) return defaultValue;
+  return Math.min(Math.max(parsed, min), max);
+};
+
+/**
+ * Like {@link parseClampedInt} for values that are genuinely fractional — the
+ * BM25 tuning constants, where `b` lives entirely in [0, 1] and rounding to an
+ * integer would collapse it to "off" or "full".
+ *
+ * Non-finite input (`Infinity`, `NaN`) falls back to the default rather than
+ * clamping, because clamping `NaN` silently yields `NaN` and would poison every
+ * score computed from it.
+ *
+ * @public — exported for testability
+ */
+export const parseClampedFloat = (
+  envValue: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseFloat(envValue);
+  if (!Number.isFinite(parsed)) return defaultValue;
   return Math.min(Math.max(parsed, min), max);
 };
 
@@ -3158,6 +3187,84 @@ const config = {
       8_000,
       0,
       120_000,
+    ),
+    /**
+     * Deployment default for BM25 term-frequency saturation. Higher means
+     * repeated terms keep earning score for longer; 0 makes a term's
+     * contribution binary (present/absent). 1.2 is the Lucene/Elasticsearch
+     * default. An organization can override it from Knowledge settings
+     * (`organization.kb_bm25_k1`); this applies where that is unset.
+     */
+    bm25K1: parseClampedFloat(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_K1,
+      BM25_K1_DEFAULT,
+      BM25_K1_MIN,
+      BM25_K1_MAX,
+    ),
+    /**
+     * Deployment default for BM25 document-length normalization. 0 ignores
+     * chunk length entirely (which is what `ts_rank` does today); 1 normalizes
+     * fully. 0.75 is the Lucene/Elasticsearch default. An organization can
+     * override it from Knowledge settings (`organization.kb_bm25_b`); this
+     * applies where that is unset.
+     */
+    bm25B: parseClampedFloat(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_B,
+      BM25_B_DEFAULT,
+      BM25_B_MIN,
+      BM25_B_MAX,
+    ),
+    /**
+     * How many candidates the BM25 ranker rescores per query.
+     *
+     * BM25 is a scoring function, not an index: the GIN index finds candidates
+     * and this bounds how many of them get scored. Cost is linear in the cap
+     * (~0.03 ms per candidate measured on a 60k-chunk corpus), so this trades
+     * latency against fidelity. Uncapped, the ranking is exactly BM25; capped,
+     * a query matching more chunks than the cap can only reorder what
+     * `ts_rank` surfaced first. 2000 keeps the rescoring near 60 ms while
+     * covering all but pathologically broad queries.
+     *
+     * It bounds the rescoring only. Choosing the candidates still ranks every
+     * matching chunk with `ts_rank`, which the GIN index cannot do for us, so
+     * a query whose terms match a large fraction of the corpus stays expensive
+     * however low this is set — the per-statement search timeout is what
+     * bounds that half.
+     */
+    bm25RecallCap: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_RECALL_CAP,
+      2_000,
+      10,
+      100_000,
+    ),
+    /**
+     * Statement timeout for one statistics rebuild.
+     *
+     * Deliberately far above the pool default: the rebuild is a full,
+     * read-only corpus scan on a timer, not a request, and a rebuild killed by
+     * the request-path timeout would leave keyword search on the `ts_rank`
+     * fallback indefinitely — it never gets further on the next attempt.
+     */
+    bm25StatsRefreshTimeoutMillis: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_TIMEOUT_MS,
+      15 * 60 * 1_000,
+      30_000,
+      6 * 60 * 60 * 1_000,
+    ),
+    /**
+     * How often the BM25 corpus statistics are rebuilt.
+     *
+     * The statistics are a derived cache and may lag the corpus: stale values
+     * perturb scores slightly rather than making them wrong (measured: 20%
+     * corpus growth without a refresh left 99.2% of top-10 results unchanged),
+     * which is why nothing maintains them on the ingestion hot path. The
+     * refresh is a full read-only scan, so its cost scales with the corpus.
+     */
+    bm25StatsRefreshIntervalSeconds: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS,
+      3_600,
+      60,
+      86_400,
     ),
     // Liveness lease for connector sync runs. The owning worker renews the
     // lease every `heartbeatInterval`; a run whose lease is not renewed within

@@ -33272,6 +33272,8 @@ export type GetConfigResponses = {
             kbAutoSyncPermissionsEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
+            kbBm25DefaultK1: number;
+            kbBm25DefaultB: number;
             kbGoogleDriveOAuth: {
                 configured: boolean;
                 redirectUri: string;
@@ -71952,6 +71954,8 @@ export type GetOrganizationResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -72266,6 +72270,8 @@ export type UpdateAppearanceSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -72463,6 +72469,8 @@ export type UpdateSecuritySettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -72655,6 +72663,8 @@ export type UpdateLlmSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -72847,6 +72857,8 @@ export type UpdateMcpSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -73038,6 +73050,8 @@ export type UpdateSkillsSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -73231,6 +73245,8 @@ export type UpdateAgentSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -73435,6 +73451,8 @@ export type UpdateConnectionSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -73641,6 +73659,8 @@ export type UpdateIntegrationSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -73843,6 +73863,8 @@ export type UpdateDefaultEnvironmentResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -74037,6 +74059,8 @@ export type UpdateAuthSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -74130,6 +74154,8 @@ export type UpdateKnowledgeSettingsData = {
         rerankerModel?: string | null;
         ocrChatApiKeyId?: string | null;
         ocrModel?: string | null;
+        kbBm25K1?: number | null;
+        kbBm25B?: number | null;
     };
     path?: never;
     query?: never;
@@ -74233,6 +74259,8 @@ export type UpdateKnowledgeSettingsResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -74422,6 +74450,8 @@ export type DropEmbeddingConfigResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;
@@ -74681,6 +74711,93 @@ export type TestRerankerConnectionResponses = {
 
 export type TestRerankerConnectionResponse = TestRerankerConnectionResponses[keyof TestRerankerConnectionResponses];
 
+export type GetKeywordRankingStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/keyword-ranking-status';
+};
+
+export type GetKeywordRankingStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKeywordRankingStatusError = GetKeywordRankingStatusErrors[keyof GetKeywordRankingStatusErrors];
+
+export type GetKeywordRankingStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'ready' | 'pending' | 'no_documents';
+        lastRefreshedAt: string | null;
+        nextRefreshAt: string | null;
+        refreshing: boolean;
+        lastRefreshFailed: boolean;
+    };
+};
+
+export type GetKeywordRankingStatusResponse = GetKeywordRankingStatusResponses[keyof GetKeywordRankingStatusResponses];
+
 export type TestOcrConnectionData = {
     body: {
         ocrChatApiKeyId: string;
@@ -74874,6 +74991,8 @@ export type CompleteOnboardingResponses = {
         rerankerModel: string | null;
         ocrChatApiKeyId: string | null;
         ocrModel: string | null;
+        kbBm25K1: number | null;
+        kbBm25B: number | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         defaultModelId: string | null;

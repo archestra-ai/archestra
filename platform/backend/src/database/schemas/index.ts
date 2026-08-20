@@ -111,6 +111,10 @@ export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
+export {
+  kbBm25CorpusStatsTable,
+  kbBm25TermStatsTable,
+} from "./kb-bm25-stats";
 export { default as kbChunksTable } from "./kb-chunk";
 export { default as kbContainerAclsTable } from "./kb-container-acl";
 export { default as kbDirectoriesTable } from "./kb-directory";

@@ -38,6 +38,8 @@ export function makeOrganization(
     rerankerModel: null,
     ocrChatApiKeyId: null,
     ocrModel: null,
+    kbBm25K1: null,
+    kbBm25B: null,
     defaultLlmModel: null,
     defaultLlmProvider: "openai",
     defaultLlmApiKeyId: null,

@@ -39,6 +39,7 @@ export const useDropEmbeddingConfig = vi.fn();
 export const useTestEmbeddingConnection = vi.fn();
 export const useTestRerankerConnection = vi.fn();
 export const useTestOcrConnection = vi.fn();
+export const useKeywordRankingStatus = vi.fn();
 export const useOrganizationMembers = vi.fn();
 export const useMemberSignupStatus = vi.fn();
 export const useDeletePendingSignupMember = vi.fn();

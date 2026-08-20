@@ -72,6 +72,21 @@ const kbChunksTable = pgTable(
     embedding384: vector384("embedding_384"),
     embedding3072: vector3072("embedding_3072"),
     searchVector: tsvector("search_vector"),
+    /**
+     * Chunk length in tokens — BM25's document-length normalization term.
+     *
+     * Not the same as `length(search_vector)`, which counts DISTINCT lexemes;
+     * BM25 needs total token count, so this sums the position arrays a
+     * `tsvector` already stores. Declared here as a plain column and made
+     * `GENERATED ALWAYS AS ... STORED` in SQL, exactly as `search_vector` is:
+     * Drizzle cannot express the generation expression, and a generated column
+     * may not reference another generated column, so the migration repeats
+     * `search_vector`'s expression rather than reusing it.
+     *
+     * Nullable because the column is only populated where the portable BM25
+     * ranker is in use; the `ts_rank` path never reads it.
+     */
+    tokLen: integer("tok_len"),
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
     /**

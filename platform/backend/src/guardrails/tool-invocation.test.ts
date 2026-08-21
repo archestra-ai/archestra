@@ -52,6 +52,40 @@ describe("evaluatePolicies", () => {
     expect(result).toBeNull();
   });
 
+  // Regression from a real dead-ended run. An external client decorates the
+  // gateway's tools with its own alias (`mcp__<alias>__<advertised name>`), so
+  // the declared list carries no recognizable dispatch pair and this takes the
+  // no-dispatch-pair path. The model, having lost its shell to an unrelated
+  // failure, reached for a client built-in this request never declared.
+  // Refusing dropped the call and ended the turn, and with no human present to
+  // type again, the run stopped there for hours.
+  test("hands back a client built-in the request never declared", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const declared = new Set([
+      "mcp__archestra__acme_gateway__run_tool",
+      "mcp__archestra__acme_gateway__search_tools",
+      "Bash",
+      "Skill",
+    ]);
+
+    const result = await evaluatePolicies(
+      [
+        {
+          toolCallName: "Grep",
+          toolCallArgs: JSON.stringify({ pattern: "x" }),
+        },
+      ],
+      agent.id,
+      { teamIds: [] },
+      true,
+      declared,
+    );
+
+    expect(result).toBeNull();
+  });
+
   test("still refuses an unassigned tool on the gateway surface", async ({
     makeAgent,
   }) => {

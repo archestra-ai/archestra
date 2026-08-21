@@ -367,6 +367,8 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         id: "duration",
         header: "Duration",
         size: 110,
+        // A running row counts up: the runs query polls every 3s while any run
+        // is in flight, so each poll re-renders this against the new now.
         cell: ({ row }) => {
           if (row.original.status === "queued") {
             return <span className="text-sm text-muted-foreground">-</span>;
@@ -405,7 +407,14 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           if (row.original.status === "queued") return null;
           return (
             <TableRowActions
-              itemName="sync run"
+              // Every row's button would otherwise be an identical "View
+              // logs" to a screen reader; the start time is what tells the
+              // rows apart.
+              itemName={
+                row.original.startedAt
+                  ? `for the run started ${formatDate({ date: row.original.startedAt })}`
+                  : undefined
+              }
               actions={[
                 {
                   icon: <Logs className="h-4 w-4" />,

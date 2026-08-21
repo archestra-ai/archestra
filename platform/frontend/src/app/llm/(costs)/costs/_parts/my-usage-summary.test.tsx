@@ -52,10 +52,14 @@ const baseStats: MyStatistics = {
   timeSeries: [],
 };
 
-const mockStats = (stats: MyStatistics | undefined, isPending = false) => {
+const mockStats = (
+  stats: MyStatistics | undefined,
+  { isPending = false, isLoadingError = false } = {},
+) => {
   vi.mocked(useMyStatistics).mockReturnValue({
     data: stats,
     isPending,
+    isLoadingError,
   } as unknown as ReturnType<typeof useMyStatistics>);
 };
 
@@ -101,6 +105,15 @@ describe("MyUsageSummary", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not report a failed request as a quiet timeframe", () => {
+    mockStats(undefined, { isLoadingError: true });
+
+    render(<MyUsageSummary timeframe="30d" />);
+
+    expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no recorded activity/i)).not.toBeInTheDocument();
+  });
+
   it("collapses the model mix past the badge limit rather than overflowing", () => {
     mockStats({
       ...baseStats,
@@ -124,7 +137,7 @@ describe("MyUsageSummary", () => {
   });
 
   it("holds the request until the page has resolved its timeframe", () => {
-    mockStats(undefined, true);
+    mockStats(undefined, { isPending: true });
 
     render(<MyUsageSummary timeframe="30d" enabled={false} />);
 

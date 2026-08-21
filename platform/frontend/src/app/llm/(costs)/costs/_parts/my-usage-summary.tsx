@@ -50,7 +50,11 @@ export function MyUsageSummary({
   /** Held false until the page has resolved which timeframe to ask for. */
   enabled?: boolean;
 }) {
-  const { data: stats, isPending } = useMyStatistics({ timeframe, enabled });
+  const {
+    data: stats,
+    isPending,
+    isLoadingError,
+  } = useMyStatistics({ timeframe, enabled });
 
   const spendChartData = (stats?.timeSeries ?? []).map((point) => ({
     label: format(new Date(point.timestamp), "MMM d, HH:mm"),
@@ -76,7 +80,14 @@ export function MyUsageSummary({
               <Skeleton key={tile} className="h-20 w-full" />
             ))}
           </div>
-        ) : !stats || stats.requests === 0 ? (
+        ) : isLoadingError || !stats ? (
+          // Distinct from the empty state on purpose: a failed request and a
+          // genuinely quiet timeframe are not the same answer, and reporting an
+          // outage as "no activity" is the more expensive mistake here.
+          <p className="text-muted-foreground py-6 text-center">
+            Your usage could not be loaded.
+          </p>
+        ) : stats.requests === 0 ? (
           <p className="text-muted-foreground py-6 text-center">
             No recorded activity for the selected timeframe.
           </p>

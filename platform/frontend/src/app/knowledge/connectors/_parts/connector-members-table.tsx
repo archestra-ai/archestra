@@ -7,9 +7,13 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { UserCog } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
-import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -304,11 +308,12 @@ export function ConnectorMembersTable({
   return (
     <div>
       {members.length > 0 && (
-        <TableFilters>
+        <FilterBar>
           <SearchInput
             value={search}
             syncQueryParams={false}
             placeholder={`Search by ID, email, name, or ${noun.singular}`}
+            className={filterSearchClass}
             onSearchChange={setSearch}
           />
           <Select
@@ -316,7 +321,8 @@ export function ConnectorMembersTable({
             onValueChange={(value) => setFilter(value as MemberFilter)}
           >
             <SelectTrigger
-              className="h-9 w-full text-sm sm:w-[200px]"
+              size="sm"
+              className={filterControlClass({ active: filter !== "all" })}
               aria-label="Filter users"
             >
               <SelectValue placeholder="All users" />
@@ -330,7 +336,8 @@ export function ConnectorMembersTable({
           </Select>
           <Select value={groupFilter} onValueChange={setGroupFilter}>
             <SelectTrigger
-              className="h-9 w-full text-sm sm:w-[200px]"
+              size="sm"
+              className={filterControlClass({ active: groupFilter !== "all" })}
               aria-label={`Filter by ${noun.singular}`}
             >
               <SelectValue placeholder={`All ${noun.plural}`} />
@@ -344,7 +351,7 @@ export function ConnectorMembersTable({
               ))}
             </SelectContent>
           </Select>
-        </TableFilters>
+        </FilterBar>
       )}
 
       {userGroups?.truncated && (

@@ -2,6 +2,7 @@
 
 import { ArrowDownUp, Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { filterControlClass } from "@/components/filter-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,7 +80,7 @@ export function RegistrySortMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="gap-2 font-normal">
+        <Button variant="outline" className={filterControlClass()}>
           <ArrowDownUp className="h-4 w-4" />
           {/* Inherits the button's foreground: muted-foreground dips below the
               4.5:1 contrast minimum on some themes (WCAG 1.4.3). */}
@@ -119,7 +120,10 @@ export function RegistryFilterDropdown({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="gap-1.5 font-normal">
+        <Button
+          variant="outline"
+          className={filterControlClass({ active: count > 0 })}
+        >
           {label}
           {count > 0 && (
             <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">

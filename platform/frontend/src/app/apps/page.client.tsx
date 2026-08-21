@@ -5,6 +5,11 @@ import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import {
   LabelFilterBadges,
   LabelKeyRowBase,
   LabelSelect,
@@ -148,11 +153,16 @@ export default function AppsPage() {
         </PermissionButton>
       }
     >
-      <div className="mb-6 flex flex-wrap items-center gap-2">
+      <FilterBar
+        className="mb-6"
+        actions={
+          <ListViewToggle value={viewMode} onChange={setViewMode} size="sm" />
+        }
+      >
         <SearchInput
           paramName="search"
           placeholder="Search apps"
-          className="relative mr-1 w-[280px]"
+          className={filterSearchClass}
         />
         <Select
           value={kind}
@@ -160,7 +170,11 @@ export default function AppsPage() {
             setParam("kind", value === "all" ? null : value)
           }
         >
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger
+            size="sm"
+            aria-label="Filter by kind"
+            className={filterControlClass({ active: kind !== "all" })}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
@@ -178,11 +192,9 @@ export default function AppsPage() {
         <LabelSelect
           labelKeys={labelKeys}
           LabelKeyRowComponent={AppLabelKeyRow}
+          className={filterControlClass({ active: Boolean(parsedLabels) })}
         />
-        <span className="ml-auto">
-          <ListViewToggle value={viewMode} onChange={setViewMode} />
-        </span>
-      </div>
+      </FilterBar>
 
       {parsedLabels && (
         <div className="mb-6">

@@ -18,13 +18,17 @@ import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
-import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -165,7 +169,9 @@ function TabButtons({
     <div
       role="tablist"
       aria-label="Users and invitations"
-      className="flex gap-1 rounded-lg bg-muted p-1"
+      // `h-8 p-0.5` keeps the switcher level with the filter bar's controls;
+      // the stock `p-1` around size-sm buttons stands 8px taller than the row.
+      className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5"
     >
       {USER_TABS.map((tab) => {
         const isActive = activeTab === tab.id;
@@ -186,7 +192,7 @@ function TabButtons({
                 selectTab(tab.id === "users" ? "invitations" : "users");
               }
             }}
-            className={cn("px-3", isActive && "shadow-sm")}
+            className={cn("h-7 px-3", isActive && "shadow-sm")}
           >
             {tab.label}
           </Button>
@@ -498,17 +504,17 @@ function MembersTab({
 
   return (
     <>
-      <TableFilters>
+      <FilterBar
+        actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
+      >
         <SearchInput
           objectNamePlural="users"
           searchFields={["name", "email"]}
           paramName="name"
+          className={filterSearchClass}
         />
         <RoleFilterDropdown />
-        <div className="ml-auto flex items-center gap-2">
-          <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
-        </div>
-      </TableFilters>
+      </FilterBar>
 
       <LoadingWrapper
         isPending={isPending}
@@ -601,7 +607,8 @@ function RoleFilterDropdown() {
   return (
     <Select value={currentRole} onValueChange={handleChange}>
       <SelectTrigger
-        className="w-[180px]"
+        size="sm"
+        className={filterControlClass({ active: currentRole !== "all" })}
         data-testid={E2eTestId.UsersRoleFilter}
       >
         {/*

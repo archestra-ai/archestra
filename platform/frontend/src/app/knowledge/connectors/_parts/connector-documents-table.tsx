@@ -8,9 +8,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AclBadges } from "@/app/knowledge/connectors/_parts/acl-badges";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { TableFilters } from "@/components/table-filters";
 import {
   type TableRowAction,
   TableRowActions,
@@ -247,11 +251,12 @@ export function ConnectorDocumentsTable({
 
   return (
     <div className="space-y-4">
-      <TableFilters>
+      <FilterBar>
         <SearchInput
           value={search}
           syncQueryParams={false}
           placeholder="Search documents by title"
+          className={filterSearchClass}
           onSearchChange={(nextValue) =>
             updateQueryParams({
               search: nextValue || null,
@@ -270,7 +275,8 @@ export function ConnectorDocumentsTable({
             }
           >
             <SelectTrigger
-              className="h-9 w-full text-sm sm:w-[200px]"
+              size="sm"
+              className={filterControlClass({ active: Boolean(group) })}
               aria-label={`Filter by ${noun.singular}`}
             >
               <SelectValue placeholder={`All ${noun.plural}`} />
@@ -285,7 +291,7 @@ export function ConnectorDocumentsTable({
             </SelectContent>
           </Select>
         )}
-      </TableFilters>
+      </FilterBar>
 
       <DataTable
         columns={columns}

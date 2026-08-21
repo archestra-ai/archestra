@@ -25,6 +25,7 @@ import { AgentVersionHistoryDialog } from "@/components/agent-version-history-di
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
@@ -537,11 +538,12 @@ function McpGateways({
         <div>
           <div>
             <div className="mb-6 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-4">
+              <FilterBar className="mb-0">
                 <SearchInput
                   objectNamePlural="gateways"
                   searchFields={["name"]}
                   paramName="name"
+                  className={filterSearchClass}
                 />
                 <ResourceScopeFilter
                   showLabels
@@ -551,7 +553,7 @@ function McpGateways({
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
-              </div>
+              </FilterBar>
               {!canReadTeams && (
                 <PermissionRequirementHint
                   message="Team-based filters and sharing details are unavailable without"

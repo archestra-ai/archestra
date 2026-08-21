@@ -29,6 +29,7 @@ import {
   resolveDefaultAgentBadge,
 } from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -543,11 +544,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         <div>
           <div>
             <div className="mb-6 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-4">
+              <FilterBar className="mb-0">
                 <SearchInput
                   objectNamePlural="agents"
                   searchFields={["name"]}
                   paramName="name"
+                  className={filterSearchClass}
                 />
                 <ResourceScopeFilter
                   showBuiltIn
@@ -558,7 +560,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 <ResourceDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
-              </div>
+              </FilterBar>
               {!canReadTeams && (
                 <PermissionRequirementHint
                   message="Team-based filters and sharing details are unavailable without"

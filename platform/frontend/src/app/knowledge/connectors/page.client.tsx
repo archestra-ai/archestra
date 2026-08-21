@@ -19,6 +19,11 @@ import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/cr
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
@@ -350,16 +355,19 @@ function ConnectorsList() {
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <SearchInput
-              paramName="search"
-              className="relative w-full sm:w-[330px]"
-            />
+          <FilterBar className="mb-0">
+            <SearchInput paramName="search" className={filterSearchClass} />
             <Select
               value={connectorTypeFilter}
               onValueChange={handleConnectorTypeChange}
             >
-              <SelectTrigger className="w-[220px]">
+              <SelectTrigger
+                size="sm"
+                aria-label="Filter by connector type"
+                className={filterControlClass({
+                  active: connectorTypeFilter !== "all",
+                })}
+              >
                 <SelectValue placeholder="Filter by connector type" />
               </SelectTrigger>
               <SelectContent>
@@ -377,7 +385,7 @@ function ConnectorsList() {
             <ResourceDeletedStatusFilter
               deletePermission={{ knowledgeSource: ["delete"] }}
             />
-          </div>
+          </FilterBar>
         </div>
 
         {isConnectorsLoadError ? (

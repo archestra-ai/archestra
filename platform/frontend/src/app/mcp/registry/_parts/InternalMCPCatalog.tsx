@@ -11,6 +11,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import {
   LabelFilterBadges,
   LabelKeyRowBase,
   LabelSelect,
@@ -947,6 +952,15 @@ export function InternalMCPCatalog({
   const hasActiveFilters = Boolean(
     searchQueryFromUrl.trim() || hasLabelFilters,
   );
+  // Status/environment/author live in component state rather than the URL, so
+  // the bar's Clear has to reset both halves.
+  const hasAdvancedFilters = (Object.keys(filters) as FilterGroup[]).some(
+    (group) => filters[group].size > 0,
+  );
+  const handleClearAllFilters = useCallback(() => {
+    handleClearFilters();
+    clearAdvancedFilters();
+  }, [handleClearFilters, clearAdvancedFilters]);
 
   const registryItems = (catalogItems ?? []).filter(
     (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
@@ -965,7 +979,24 @@ export function InternalMCPCatalog({
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterBar
+            onClearFilters={
+              hasActiveFilters || hasAdvancedFilters
+                ? handleClearAllFilters
+                : undefined
+            }
+            actions={
+              <>
+                <RegistrySortMenu value={sort} onChange={setSort} />
+                <ListViewToggle
+                  value={viewMode}
+                  onChange={setViewMode}
+                  order={["table", "cards"]}
+                  size="sm"
+                />
+              </>
+            }
+          >
             <SearchInput
               objectNamePlural="MCP servers"
               searchFields={["name"]}
@@ -973,9 +1004,10 @@ export function InternalMCPCatalog({
               onSearchChange={handleSearchChange}
               syncQueryParams={false}
               debounceMs={300}
+              className={filterSearchClass}
               inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
             />
-            <McpCatalogLabelFilter />
+            <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
             <RegistryFilterDropdown
               label="Status"
               options={STATUS_OPTIONS}
@@ -998,13 +1030,7 @@ export function InternalMCPCatalog({
                 onToggle={(value) => toggleFilter("author", value)}
               />
             )}
-            <RegistrySortMenu value={sort} onChange={setSort} />
-            <ListViewToggle
-              value={viewMode}
-              onChange={setViewMode}
-              order={["table", "cards"]}
-            />
-          </div>
+          </FilterBar>
           {hasLabelFilters && (
             <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
           )}
@@ -1257,12 +1283,13 @@ export function InternalMCPCatalog({
   );
 }
 
-function McpCatalogLabelFilter() {
+function McpCatalogLabelFilter({ active }: { active: boolean }) {
   const { data: labelKeys } = useMcpCatalogLabelKeys();
   return (
     <LabelSelect
       labelKeys={labelKeys}
       LabelKeyRowComponent={McpCatalogLabelKeyRow}
+      className={filterControlClass({ active })}
     />
   );
 }

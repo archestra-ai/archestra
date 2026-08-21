@@ -7,8 +7,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Clock, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { SearchInput } from "@/components/search-input";
-import { TableFilters } from "@/components/table-filters";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Select,
@@ -222,11 +226,12 @@ export function ConnectorUserGroupsTable({
   return (
     <div>
       {groups.length > 0 && (
-        <TableFilters>
+        <FilterBar>
           <SearchInput
             value={search}
             syncQueryParams={false}
             placeholder={`Search by ${noun.singular} or member name`}
+            className={filterSearchClass}
             onSearchChange={setSearch}
           />
           <Select
@@ -234,7 +239,8 @@ export function ConnectorUserGroupsTable({
             onValueChange={(value) => setFilter(value as GroupFilter)}
           >
             <SelectTrigger
-              className="h-9 w-full text-sm sm:w-[200px]"
+              size="sm"
+              className={filterControlClass({ active: filter !== "all" })}
               aria-label={`Filter ${noun.plural}`}
             >
               <SelectValue placeholder={`All ${noun.plural}`} />
@@ -249,7 +255,8 @@ export function ConnectorUserGroupsTable({
           </Select>
           <Select value={memberFilter} onValueChange={setMemberFilter}>
             <SelectTrigger
-              className="h-9 w-full text-sm sm:w-[200px]"
+              size="sm"
+              className={filterControlClass({ active: memberFilter !== "all" })}
               aria-label="Filter by member"
             >
               <SelectValue placeholder="All members" />
@@ -263,7 +270,7 @@ export function ConnectorUserGroupsTable({
               ))}
             </SelectContent>
           </Select>
-        </TableFilters>
+        </FilterBar>
       )}
 
       {userGroups?.truncated && (

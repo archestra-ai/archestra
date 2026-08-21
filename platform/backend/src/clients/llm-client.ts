@@ -60,6 +60,10 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import {
+  bedrockOrphanReasoningMiddleware,
+  createBedrockRedactedReasoningFetch,
+} from "@/clients/bedrock-redacted-reasoning";
+import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
@@ -1067,10 +1071,20 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   bedrock: {
+    // Redacted extended thinking needs both halves of the compatibility shim —
+    // the field rename before @ai-sdk/amazon-bedrock parses, the orphan-block
+    // repair after it emits. Wired on both the proxied and the direct path,
+    // since both parse with the same provider package.
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })(
-        modelName,
-      ),
+      wrapLanguageModel({
+        model: buildBedrockProvider({
+          apiKey,
+          baseUrl: baseURL,
+          headers,
+          fetch: createBedrockRedactedReasoningFetch(fetch),
+        })(modelName),
+        middleware: bedrockOrphanReasoningMiddleware(),
+      }),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()
       ? undefined

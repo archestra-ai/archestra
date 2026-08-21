@@ -209,6 +209,20 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getByText("agent")).toBeInTheDocument();
   });
 
+  it("keeps the per-connector actions the expandable sub-table used to own", async () => {
+    render(<KnowledgeBasesPage />);
+
+    await userEvent.click(screen.getByLabelText("Actions for Org Connector"));
+
+    expect(
+      screen.getByRole("menuitem", { name: /Edit connector/ }),
+    ).toBeEnabled();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: /Remove from knowledge base/ }),
+    );
+    expect(screen.getByText("Remove Connector")).toBeInTheDocument();
+  });
+
   it("ticking a knowledge base offers the bulk actions for it", async () => {
     render(<KnowledgeBasesPage />);
 

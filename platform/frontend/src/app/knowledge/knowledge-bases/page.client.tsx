@@ -6,8 +6,6 @@ import {
   ArchiveRestore,
   ArrowLeft,
   Check,
-  ChevronDown,
-  ChevronRight,
   Database,
   Link2,
   MessageSquare,
@@ -15,14 +13,11 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
-import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import { LoadingSpinner } from "@/components/loading";
@@ -56,7 +51,6 @@ import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnector,
-  useConnectors,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
@@ -71,8 +65,7 @@ import {
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { formatCronSchedule } from "@/lib/utils/format-cron";
-import { ConnectorStatusDot } from "./_parts/connector-enabled-dot";
+import { ConnectorChip } from "./_parts/connector-chip";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
@@ -163,6 +156,12 @@ function KnowledgeBasesList() {
     entityFromUrl: editingConnectorFromUrl ?? null,
   });
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
+  // Unassigning a connector is a per-connector action on a knowledge base, so
+  // the dialog is owned here and the chips in either view just name a target.
+  const [removingConnector, setRemovingConnector] = useState<{
+    connectorId: string;
+    knowledgeBaseId: string;
+  } | null>(null);
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
   const [viewMode, setViewMode] = useListViewMode("knowledge-bases-view");
 
@@ -302,6 +301,13 @@ function KnowledgeBasesList() {
         <KnowledgeBaseConnectorList
           connectors={row.original.connectors}
           connectorsById={connectorsById}
+          onEditConnector={openEditConnector}
+          onRemoveConnector={(connectorId) =>
+            setRemovingConnector({
+              connectorId,
+              knowledgeBaseId: row.original.id,
+            })
+          }
         />
       ),
     },
@@ -474,6 +480,8 @@ function KnowledgeBasesList() {
             onRowSelectionChange={setRowSelection}
             rowActions={rowActions}
             onAddConnector={setAddConnectorKbId}
+            onEditConnector={openEditConnector}
+            onRemoveConnector={setRemovingConnector}
             isLoading={isFetching && items.length === 0}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
@@ -592,6 +600,15 @@ function KnowledgeBasesList() {
           />
         )}
 
+        {removingConnector && (
+          <RemoveConnectorDialog
+            connectorId={removingConnector.connectorId}
+            knowledgeBaseId={removingConnector.knowledgeBaseId}
+            open
+            onOpenChange={(open) => !open && setRemovingConnector(null)}
+          />
+        )}
+
         {addConnectorKbId && (
           <AddConnectorDialog
             knowledgeBaseId={addConnectorKbId}
@@ -630,6 +647,8 @@ function KnowledgeBaseCardGrid({
   onRowSelectionChange,
   rowActions,
   onAddConnector,
+  onEditConnector,
+  onRemoveConnector,
   isLoading,
   hasActiveFilters,
   onClearFilters,
@@ -642,6 +661,11 @@ function KnowledgeBaseCardGrid({
   onRowSelectionChange: (selection: RowSelectionState) => void;
   rowActions: (kb: KnowledgeBaseItem) => TableRowAction[];
   onAddConnector: (knowledgeBaseId: string) => void;
+  onEditConnector: (connector: ConnectorItem) => void;
+  onRemoveConnector: (target: {
+    connectorId: string;
+    knowledgeBaseId: string;
+  }) => void;
   isLoading: boolean;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
@@ -694,6 +718,10 @@ function KnowledgeBaseCardGrid({
             }}
             actions={rowActions(kb)}
             onAddConnector={() => onAddConnector(kb.id)}
+            onEditConnector={onEditConnector}
+            onRemoveConnector={(connectorId) =>
+              onRemoveConnector({ connectorId, knowledgeBaseId: kb.id })
+            }
           />
         ))}
       </div>
@@ -714,9 +742,13 @@ function KnowledgeBaseCardGrid({
 function KnowledgeBaseConnectorList({
   connectors,
   connectorsById,
+  onEditConnector,
+  onRemoveConnector,
 }: {
   connectors: KnowledgeBaseItem["connectors"];
   connectorsById: Map<string, ConnectorItem>;
+  onEditConnector: (connector: ConnectorItem) => void;
+  onRemoveConnector: (connectorId: string) => void;
 }) {
   if (connectors.length === 0) {
     return <span className="text-sm text-muted-foreground">None</span>;
@@ -725,30 +757,15 @@ function KnowledgeBaseConnectorList({
   const hidden = connectors.slice(2);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {visible.map((connector) => {
-        const detail = connectorsById.get(connector.id);
-        return (
-          <Link
-            key={connector.id}
-            href={`/knowledge/connectors/${connector.id}?from=knowledge-bases`}
-            className="inline-flex max-w-[200px] items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
-            title={connector.name}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {detail && (
-              <ConnectorStatusDot
-                enabled={detail.enabled}
-                lastSyncStatus={detail.lastSyncStatus}
-              />
-            )}
-            <ConnectorTypeIcon
-              type={connector.connectorType}
-              className="h-3.5 w-3.5"
-            />
-            <span className="truncate">{connector.name}</span>
-          </Link>
-        );
-      })}
+      {visible.map((connector) => (
+        <ConnectorChip
+          key={connector.id}
+          connector={connector}
+          detail={connectorsById.get(connector.id)}
+          onEdit={onEditConnector}
+          onRemove={onRemoveConnector}
+        />
+      ))}
       {hidden.length > 0 && (
         <Tooltip>
           <TooltipTrigger asChild>

@@ -2,9 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Database, FileText, Plug, Plus } from "lucide-react";
-import Link from "next/link";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
+import { ConnectorChip } from "@/app/knowledge/knowledge-bases/_parts/connector-chip";
 import {
   type TableRowAction,
   TableRowActions,
@@ -44,6 +42,8 @@ export function KnowledgeBaseCard({
   onSelectedChange,
   actions,
   onAddConnector,
+  onEditConnector,
+  onRemoveConnector,
 }: {
   knowledgeBase: KnowledgeBaseItem;
   /** Full connector records, for sync status the KB payload does not carry. */
@@ -52,6 +52,8 @@ export function KnowledgeBaseCard({
   onSelectedChange: (selected: boolean) => void;
   actions: TableRowAction[];
   onAddConnector: () => void;
+  onEditConnector: (connector: ConnectorItem) => void;
+  onRemoveConnector: (connectorId: string) => void;
 }) {
   const { connectors, assignedAgents, totalDocsIndexed } = knowledgeBase;
   const visibleConnectors = connectors.slice(0, MAX_VISIBLE_CONNECTORS);
@@ -126,6 +128,8 @@ export function KnowledgeBaseCard({
                 key={connector.id}
                 connector={connector}
                 detail={connectorsById.get(connector.id)}
+                onEdit={onEditConnector}
+                onRemove={onRemoveConnector}
               />
             ))}
             {hiddenConnectors.length > 0 && (
@@ -168,40 +172,5 @@ function CardStat({
       <span className="font-medium text-foreground tabular-nums">{value}</span>
       <span>{label}</span>
     </span>
-  );
-}
-
-/**
- * A connector as it appears on its knowledge base: type glyph, name, and the
- * sync dot the connectors list uses, linking to the connector's own page.
- * `detail` is absent only until the connectors query settles (or for a
- * connector outside the page's fetched window), in which case the dot is left
- * off rather than guessed at.
- */
-function ConnectorChip({
-  connector,
-  detail,
-}: {
-  connector: KnowledgeBaseItem["connectors"][number];
-  detail: ConnectorItem | undefined;
-}) {
-  return (
-    <Link
-      href={`/knowledge/connectors/${connector.id}?from=knowledge-bases`}
-      className="inline-flex max-w-[220px] items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
-      title={connector.name}
-    >
-      {detail && (
-        <ConnectorStatusDot
-          enabled={detail.enabled}
-          lastSyncStatus={detail.lastSyncStatus}
-        />
-      )}
-      <ConnectorTypeIcon
-        type={connector.connectorType}
-        className="h-3.5 w-3.5"
-      />
-      <span className="truncate">{connector.name}</span>
-    </Link>
   );
 }

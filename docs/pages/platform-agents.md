@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -208,11 +208,12 @@ Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating.
 
 ### Variables
 
-| Variable         | Type     | Description                          |
-| ---------------- | -------- | ------------------------------------ |
-| `{{user.name}}`  | string   | Name of the user invoking the agent  |
-| `{{user.email}}` | string   | Email of the user invoking the agent |
-| `{{user.teams}}` | string[] | Team names the user belongs to       |
+| Variable         | Type     | Description                                      |
+| ---------------- | -------- | ------------------------------------------------ |
+| `{{user.name}}`  | string   | Name of the user invoking the agent              |
+| `{{user.email}}` | string   | Email of the user invoking the agent             |
+| `{{user.role}}`  | string   | Organization role of the user invoking the agent |
+| `{{user.teams}}` | string[] | Team names the user belongs to                   |
 
 ### Helpers
 
@@ -239,3 +240,9 @@ You are a helpful assistant for
   {{#each user.teams}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}.
 {{/if}}
 ```
+
+### Literal Braces
+
+Prefix an expression with a backslash to keep it as text: `\{{user.name}}` renders as `{{user.name}}`. This is useful when a prompt documents its own variables.
+
+An expression Handlebars cannot read is left as written, and the rest of the prompt still renders. The agent editor flags those expressions as you type, so you can see which ones reach the model as literal text.

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -104,6 +104,44 @@ describe("SystemPromptEditor", () => {
     );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getAllByTestId("editor")).toHaveLength(1);
+  });
+
+  it("warns about expressions Handlebars cannot parse", async () => {
+    mockGetFrontendDocsUrl.mockReturnValue(null);
+
+    render(
+      <SystemPromptEditor
+        value="Hi {{user.name}}, see {{user.*}} for the rest."
+        onChange={vi.fn()}
+      />,
+    );
+
+    // The parser is loaded lazily, so the warning arrives after a tick.
+    await waitFor(() =>
+      expect(screen.getByText("{{user.*}}")).toBeInTheDocument(),
+    );
+    // The valid expression is not flagged.
+    expect(screen.queryByText("{{user.name}}")).toBeNull();
+  });
+
+  it("clears the warning once the expression parses", async () => {
+    mockGetFrontendDocsUrl.mockReturnValue(null);
+
+    const { rerender } = render(
+      <SystemPromptEditor value="Hi {{user.*}}" onChange={vi.fn()} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("{{user.*}}")).toBeInTheDocument(),
+    );
+
+    // A valid template — block helpers included — leaves nothing flagged.
+    rerender(
+      <SystemPromptEditor
+        value={'Hi {{user.name}}. {{#includes user.teams "A"}}a{{/includes}}'}
+        onChange={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByText("{{user.*}}")).toBeNull());
   });
 
   it("leaves the full-screen editor read-only when the form is", async () => {

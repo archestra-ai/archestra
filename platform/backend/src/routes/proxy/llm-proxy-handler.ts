@@ -32,6 +32,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -1257,6 +1258,29 @@ export async function handleLLMProxy<
         .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
         .map(canonicalizeToolName),
     );
+
+    // A gateway tool name the client decorated with an alias the platform does
+    // not recognize survives canonicalization untouched, and every guardrail
+    // downstream then reasons about the decoration rather than the tool. That
+    // degradation is otherwise completely silent, which is why it can sit in a
+    // deployment indefinitely — so say so once per request, naming the tool, so
+    // it is greppable and the gateway can be re-registered under the name the
+    // connection-setup script derives (`toMcpClientServerName`).
+    const unrecognizedGatewayToolNames = [...enabledToolNames].filter(
+      (toolName) =>
+        archestraMcpBranding.isLikelyToolName(toolName) &&
+        !archestraMcpBranding.isToolName(toolName),
+    );
+    if (unrecognizedGatewayToolNames.length > 0) {
+      logger.warn(
+        {
+          agentId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          toolNames: unrecognizedGatewayToolNames,
+        },
+        `[${providerName}Proxy] Gateway tool names carry a client alias this organization does not know; guardrails cannot resolve the tools behind them`,
+      );
+    }
 
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};

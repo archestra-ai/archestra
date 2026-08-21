@@ -23,6 +23,7 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -332,15 +333,12 @@ function KnowledgeBasesList() {
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <SearchInput
-              paramName="search"
-              className="relative w-full sm:w-[370px]"
-            />
+          <FilterBar className="mb-0">
+            <SearchInput paramName="search" className={filterSearchClass} />
             <ResourceDeletedStatusFilter
               deletePermission={{ knowledgeSource: ["delete"] }}
             />
-          </div>
+          </FilterBar>
         </div>
 
         <DataTable

@@ -21,6 +21,12 @@ import {
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FilterBar,
+  FilterSelect,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
@@ -39,7 +45,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -467,13 +472,14 @@ export default function ModelsPage() {
     >
       <div className="space-y-4">
         {models.length > 0 && (
-          <div className="flex flex-wrap gap-4">
+          <FilterBar>
             <SearchInput
               objectNamePlural="models"
               searchFields={["model ID"]}
               value={search}
               onSearchChange={setSearch}
               syncQueryParams={false}
+              className={filterSearchClass}
             />
             <LlmProviderApiKeyDropdown
               availableKeys={apiKeys}
@@ -485,8 +491,10 @@ export default function ModelsPage() {
                 setApiKeyFilterOpen(false);
               }}
               triggerVariant="select"
-              triggerClassName="w-full sm:w-[280px] h-9 text-sm"
-              popoverClassName="w-[var(--radix-popover-trigger-width)]"
+              triggerClassName={filterControlClass({
+                active: apiKeyFilter !== "all",
+              })}
+              popoverClassName="w-[min(20rem,calc(100vw-2rem))]"
               allOptionLabel="All provider API keys"
               allOptionSelected={apiKeyFilter === "all"}
               onSelectAllOption={() => {
@@ -494,13 +502,12 @@ export default function ModelsPage() {
                 setApiKeyFilterOpen(false);
               }}
             />
-            <SearchableSelect
+            <FilterSelect
               value={modelTypeFilter}
               onValueChange={(v) =>
                 setModelTypeFilter(v as "all" | "chat" | "embedding")
               }
               placeholder="Model type"
-              className="w-full sm:w-[200px]"
               items={[
                 {
                   value: "all",
@@ -567,7 +574,7 @@ export default function ModelsPage() {
                 </Label>
               </div>
             )}
-          </div>
+          </FilterBar>
         )}
         <DataTable
           columns={columns}

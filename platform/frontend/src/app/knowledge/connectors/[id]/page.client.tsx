@@ -42,11 +42,7 @@ import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/conne
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
-import {
-  FilterBar,
-  filterControlClass,
-  filterSearchClass,
-} from "@/components/filter-bar";
+import { FilterBar, filterControlClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";

@@ -94,8 +94,10 @@ export function FilterBar({
             align="start"
             // The controls inside are the same compact triggers, stretched to
             // the popover width so they read as a small form rather than a
-            // second filter bar. Selector kept free of nested brackets —
-            // Tailwind's class extractor misses `[&_[data-slot=button]]:…`.
+            // second filter bar. Matched by element rather than by
+            // `[data-slot=button]`: these triggers reach their <button> through
+            // a Radix `asChild` wrapper, which overwrites Button's own
+            // `data-slot` with its own (`popover-trigger`, `select-trigger`).
             className="w-72 space-y-3 [&_button]:w-full [&_button]:max-w-none"
           >
             {tuckedAway.map((filter) => (

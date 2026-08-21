@@ -1,8 +1,12 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
+import type {
+  ColumnDef,
+  RowSelectionState,
+  SortingState,
+} from "@tanstack/react-table";
+import { ChevronDown, ChevronUp, Plus, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -44,11 +48,14 @@ import {
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useBulkDeleteProfiles,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
@@ -58,6 +65,7 @@ import {
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -273,9 +281,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   );
 
   const agents = agentsResponse?.data || [];
+
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
   const isDeletedView = statusFromUrl === "deleted";
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProfiles();
+
+  // Derived from what is on screen rather than read straight out of
+  // `rowSelection`: the table is server-paginated, so ids left behind by
+  // another page drop out of both the count and the request. The trash view
+  // renders no checkbox column, so it never surfaces a bar either.
+  const selectedAgents = isDeletedView
+    ? []
+    : agents.filter((agent) => rowSelection[agent.id]);
+  const clearSelection = useCallback(() => setRowSelection({}), []);
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
@@ -297,6 +318,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }, [updateQueryParams]);
 
   const columns: ColumnDef<AgentData>[] = [
+    // A deleted row can only be restored or purged, neither of which this
+    // selection drives, so the trash view keeps its rows unselectable.
+    ...(isDeletedView
+      ? []
+      : [
+          createSelectColumn<AgentData>({
+            rowLabel: (agent) => `Select ${agent.name}`,
+            allLabel: "Select all agents on this page",
+          }),
+        ]),
     {
       id: "icon",
       size: 40,
@@ -568,10 +599,32 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
             </div>
 
+            <BulkActionsBar
+              count={selectedAgents.length}
+              noun="agent"
+              onClear={clearSelection}
+              busy={bulkDelete.isPending}
+              className="mb-3"
+            >
+              <PermissionButton
+                permissions={{ agent: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActionsBar>
+
             <div data-testid={E2eTestId.AgentsTable}>
               <DataTable
                 columns={columns}
                 data={agents}
+                getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                hideSelectedCount
                 sorting={sorting}
                 onSortingChange={handleSortingChange}
                 manualSorting={true}
@@ -602,6 +655,36 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onClearFilters={clearFilters}
               />
             </div>
+
+            {bulkDeleteOpen && (
+              <DeleteConfirmDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title="Delete agents"
+                description={`Delete ${selectedAgents.length} ${
+                  selectedAgents.length === 1 ? "agent" : "agents"
+                }? This cannot be undone.`}
+                isPending={bulkDelete.isPending}
+                onConfirm={() => {
+                  bulkDelete.mutate(selectedAgents, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Deleted",
+                        failureVerb: "delete",
+                        noun: "agent",
+                      });
+                      setBulkDeleteOpen(false);
+                      // Rows that failed stay ticked so the selection can be
+                      // retried rather than rebuilt.
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  });
+                }}
+                confirmLabel="Delete agents"
+                pendingLabel="Deleting..."
+              />
+            )}
 
             {deletingAgentId && (
               <DeleteAgentDialog

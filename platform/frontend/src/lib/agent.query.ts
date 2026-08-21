@@ -6,8 +6,9 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { runBulkAction } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
-import { reportApiError, throwOnApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
   createAgent,
@@ -386,6 +387,36 @@ export function useDeleteProfile() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Deleting a member's personal default moves it to their next personal
       // agent (or clears it), so the cached value is stale.
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+    },
+  });
+}
+
+/**
+ * Deletes a selection of profiles — agents, LLM proxies and MCP gateways are
+ * all profiles, so all three tables share this.
+ *
+ * There is no bulk delete route, so this fans out over the single-item one.
+ * It deliberately does NOT go through `useDeleteProfile`: that reports each
+ * failure with its own toast, which for a selection means one toast per row.
+ * The caller reports the batch once instead, via `reportBulkOutcome`.
+ */
+export function useBulkDeleteProfiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (profiles: readonly { id: string; name: string }[]) =>
+      runBulkAction({
+        items: profiles,
+        describe: (profile) => profile.name,
+        run: async ({ id }) => {
+          const { error } = await deleteAgent({ path: { id } });
+          if (error) throw toApiError(error);
+        },
+      }),
+    // Settled rather than success: a partly applied batch still moved rows, so
+    // the list is stale either way.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
     },
   });

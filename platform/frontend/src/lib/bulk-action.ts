@@ -39,7 +39,10 @@ export async function runBulkAction<T>({
         await run(item);
         succeeded.push(describe(item));
       } catch (error) {
-        failed.push({ label: describe(item), error: getApiErrorMessage(error) });
+        failed.push({
+          label: describe(item),
+          error: getApiErrorMessage(error),
+        });
       }
     }
   }
@@ -72,7 +75,8 @@ export function reportBulkOutcome({
   plural?: string;
 }) {
   const { succeeded, failed } = outcome;
-  const count = (n: number) => `${n} ${n === 1 ? noun : (plural ?? `${noun}s`)}`;
+  const count = (n: number) =>
+    `${n} ${n === 1 ? noun : (plural ?? `${noun}s`)}`;
 
   if (failed.length === 0) {
     toast.success(`${verb} ${count(succeeded.length)}`);

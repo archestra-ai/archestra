@@ -114,6 +114,10 @@ export default function ModelsPage() {
     }
   }, [canFilterFreeModels, freeOnly]);
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const bulkVisibility = useBulkUpdateModelVisibility();
+  const clearSelection = useCallback(() => setRowSelection({}), []);
+
   const filteredModels = useMemo(
     () =>
       filterModelsForPage({
@@ -180,10 +184,6 @@ export default function ModelsPage() {
       {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
     </Button>
   );
-
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const bulkVisibility = useBulkUpdateModelVisibility();
-  const clearSelection = useCallback(() => setRowSelection({}), []);
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [

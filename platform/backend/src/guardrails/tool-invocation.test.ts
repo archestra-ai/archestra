@@ -31,10 +31,14 @@ describe("evaluatePolicies", () => {
     expect(result).toBeNull();
   });
 
-  test("returns block result when tool is not in enabledToolNames", async ({
+  test("hands an undeclared tool call back rather than ending the turn", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
+    // The caller declared `allowed_tool` and nothing else, so it will not run
+    // `disabled_tool` whatever the proxy says. Refusing here would drop the
+    // call and end the turn, stranding an unattended agent loop; handing it
+    // back lets the caller reject it and the model carry on.
     const enabledTools = new Set(["allowed_tool"]);
 
     const result = await evaluatePolicies(
@@ -43,6 +47,59 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  // Regression from a real dead-ended run. An external client decorates the
+  // gateway's tools with its own alias (`mcp__<alias>__<advertised name>`), so
+  // the declared list carries no recognizable dispatch pair and this takes the
+  // no-dispatch-pair path. The model, having lost its shell to an unrelated
+  // failure, reached for a client built-in this request never declared.
+  // Refusing dropped the call and ended the turn, and with no human present to
+  // type again, the run stopped there for hours.
+  test("hands back a client built-in the request never declared", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const declared = new Set([
+      "mcp__archestra__acme_gateway__run_tool",
+      "mcp__archestra__acme_gateway__search_tools",
+      "Bash",
+      "Skill",
+    ]);
+
+    const result = await evaluatePolicies(
+      [
+        {
+          toolCallName: "Grep",
+          toolCallArgs: JSON.stringify({ pattern: "x" }),
+        },
+      ],
+      agent.id,
+      { teamIds: [] },
+      true,
+      declared,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("still refuses an unassigned tool on the gateway surface", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    // On the gateway the enabled set is the agent's *assigned* tools, not a
+    // caller declaration, so a missing name is a real authorization miss and
+    // the gateway is the party that would otherwise execute it.
+    const result = await evaluatePolicies(
+      [{ toolCallName: "disabled_tool", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      new Set(["allowed_tool"]),
+      { surface: "mcp-gateway" },
     );
 
     expect(result).not.toBeNull();
@@ -157,6 +214,7 @@ describe("evaluatePolicies", () => {
     const agent = await makeAgent();
     // `full` exposure hides the meta tools, so a tool missing from the list
     // really was disabled for the conversation — run_tool is not the answer.
+    // Asserted on the gateway surface, the one that still refuses.
     const enabledTools = new Set(["github__list_repos"]);
 
     const result = await evaluatePolicies(
@@ -165,6 +223,7 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
+      { surface: "mcp-gateway" },
     );
 
     expect(result?.reason).toBe(
@@ -189,6 +248,7 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
+      { surface: "mcp-gateway" },
     );
 
     expect(result?.reason).toBe(
@@ -424,6 +484,7 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
+      { surface: "mcp-gateway" },
     );
 
     expect(result).not.toBeNull();

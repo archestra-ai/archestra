@@ -1278,10 +1278,11 @@ class StatisticsModel {
 
     const timeSeries = timeSeriesData.map((row) => {
       // `row.actualCost` is SUM(interactions.cost) over METERED rows only: the
-      // real billed spend. It already reflects every applied optimization — the
-      // cheaper model, TOON's reduced billed token count, and the prompt-cache
-      // discount — so it is the true "Actual Cost". Subscription-fulfilled
-      // traffic is excluded here and surfaced separately as `subscriptionCost`.
+      // real billed spend. It already reflects every applied saving — TOON's
+      // reduced billed token count, the prompt-cache discount, and on
+      // historical rows the cheaper model a rule swapped in — so it is the true
+      // "Actual Cost". Subscription-fulfilled traffic is excluded here and
+      // surfaced separately as `subscriptionCost`.
       const actualCost = Number(row.actualCost);
       // Would-be list-price cost of subscription-covered traffic (not billed).
       const subscriptionCost = Number(row.subscriptionCost);

@@ -15,15 +15,19 @@ import { useCallback, useMemo } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
+import {
+  FilterBar,
+  FilterSelect,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { SourceFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
-import { TableFilters } from "@/components/table-filters";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
   TooltipContent,
@@ -515,10 +519,10 @@ function SessionsTable() {
 
   return (
     <div className="space-y-4">
-      <TableFilters>
+      <FilterBar onClearFilters={hasFilters ? clearFilters : undefined}>
         {/* Anchor the "not a session ID" hint as a floating overlay under the
             input so toggling it never reflows the filter bar or the table. */}
-        <div className="relative w-full sm:w-[320px] sm:max-w-[320px]">
+        <div className={filterSearchClass}>
           <SearchInput
             objectNamePlural="logs"
             searchFields={["session ID"]}
@@ -538,6 +542,7 @@ function SessionsTable() {
         <AgentSelector
           mode="single"
           flat
+          compactTrigger
           agents={agents ?? []}
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -551,7 +556,7 @@ function SessionsTable() {
           placeholder="Filter by Agent"
           searchPlaceholder="Search agents and LLM proxies…"
           emptyMessage="No agents or LLM proxies found."
-          className="w-full sm:w-[200px]"
+          className={filterControlClass({ active: profileFilter !== "all" })}
         />
 
         {canSeeAllLogs ? (
@@ -564,7 +569,7 @@ function SessionsTable() {
           />
         ) : null}
 
-        <SearchableSelect
+        <FilterSelect
           value={sourceFilter}
           onValueChange={handleSourceFilterChange}
           placeholder="Filter by Source"
@@ -583,7 +588,6 @@ function SessionsTable() {
               }),
             ),
           ]}
-          className="w-full sm:w-[200px]"
         />
 
         <ClientFilterSelect
@@ -603,8 +607,11 @@ function SessionsTable() {
           onTempEndDateChange={dateTimePicker.setTempEndDate}
           onOpenDialog={dateTimePicker.openDateDialog}
           onApply={dateTimePicker.handleApplyDateRange}
+          className={filterControlClass({
+            active: dateTimePicker.startDate !== undefined,
+          })}
         />
-      </TableFilters>
+      </FilterBar>
 
       <DataTable
         columns={columns}

@@ -1,11 +1,11 @@
 "use client";
 
 import { CLIENT_FILTER_OPTIONS, type ClientFilter } from "@archestra/shared";
+import { FilterSelect } from "@/components/filter-bar";
 import {
   ClientFilterOption,
   UserFilterOption,
 } from "@/components/log-filter-option";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 
 /**
@@ -16,15 +16,13 @@ export function UserFilterSelect({
   value,
   onValueChange,
   users,
-  className = "w-full sm:w-[200px]",
 }: {
   value: string;
   onValueChange: (value: string) => void;
   users: Array<{ id: string; name: string }> | undefined;
-  className?: string;
 }) {
   return (
-    <SearchableSelect
+    <FilterSelect
       value={value}
       onValueChange={onValueChange}
       placeholder="Filter by User"
@@ -37,7 +35,6 @@ export function UserFilterSelect({
           selectedContent: <UserFilterOption name={user.name || user.id} />,
         })) || []),
       ]}
-      className={className}
     />
   );
 }
@@ -51,19 +48,17 @@ export function ClientFilterSelect({
   value,
   onValueChange,
   clients,
-  className = "w-full sm:w-[200px]",
 }: {
   value: string;
   onValueChange: (value: string) => void;
   clients?: ClientFilter[];
-  className?: string;
 }) {
   const options = clients
     ? CLIENT_FILTER_OPTIONS.filter((option) => clients.includes(option.value))
     : CLIENT_FILTER_OPTIONS;
 
   return (
-    <SearchableSelect
+    <FilterSelect
       value={value}
       onValueChange={onValueChange}
       placeholder="Filter by Client"
@@ -78,7 +73,6 @@ export function ClientFilterSelect({
           ),
         })),
       ]}
-      className={className}
     />
   );
 }

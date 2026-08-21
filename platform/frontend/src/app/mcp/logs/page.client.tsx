@@ -12,10 +12,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LockedChatContentUnavailableLabel } from "@/components/locked-chat-content-unavailable";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { TableFilters } from "@/components/table-filters";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -474,6 +478,9 @@ function McpToolCallsTable({
       onTempEndDateChange={dateTimePicker.setTempEndDate}
       onOpenDialog={dateTimePicker.openDateDialog}
       onApply={dateTimePicker.handleApplyDateRange}
+      className={filterControlClass({
+        active: dateTimePicker.startDate !== undefined,
+      })}
     />
   );
 
@@ -483,6 +490,7 @@ function McpToolCallsTable({
       objectNamePlural="tool calls"
       searchFields={["tool name", "server name"]}
       paramName="search"
+      className={filterSearchClass}
     />
   );
 
@@ -499,7 +507,7 @@ function McpToolCallsTable({
 
   return (
     <div className="space-y-4">
-      <TableFilters>
+      <FilterBar onClearFilters={hasFilters ? clearFilters : undefined}>
         {searchInputComponent}
         {/* Two people's personal gateways can both be called "My Gateway", so
             the picker carries each one's scope and owner email rather than a
@@ -507,6 +515,7 @@ function McpToolCallsTable({
         <AgentSelector
           mode="single"
           flat
+          compactTrigger
           agents={agents ?? []}
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
@@ -520,10 +529,10 @@ function McpToolCallsTable({
           placeholder="Filter by Agent"
           searchPlaceholder="Search agents and MCP gateways…"
           emptyMessage="No agents or MCP gateways found."
-          className="w-[200px]"
+          className={filterControlClass({ active: profileFilter !== "all" })}
         />
         {datePickerComponent}
-      </TableFilters>
+      </FilterBar>
 
       <DataTable
         columns={columns}

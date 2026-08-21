@@ -815,7 +815,7 @@ A key can also point at a custom endpoint instead, for a VPC or PrivateLink setu
 
 Bedrock can reuse the unchanging prefix of a request instead of reprocessing it every turn. That prefix is the system prompt, tool definitions, and earlier turns. Reuse needs an explicit cache marker, and who sets it depends on how the request reaches Bedrock:
 
-- Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote.
+- Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote. There is no setting to turn that off.
 - Every other path forwards the markers its caller set, unchanged. That covers your own clients on the LLM Proxy — Claude Code, for example — and agent runs over A2A.
 
 Bedrock only caches for Claude and the Nova text models. Other families reject a marked request outright, so Archestra marks none of them. An unfamiliar model forfeits the cache rather than failing.

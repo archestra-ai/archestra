@@ -251,25 +251,35 @@ export const evaluatePolicies = async (
   // disabled — so the model is told how to reach them through run_tool instead
   // of being told to stop. Mirrors the same discrimination the chat surface
   // makes for nonexistent-tool errors (`routes/chat/errors.ts`).
+  //
+  // The no-dispatch-pair case is handed back to the caller instead of refused —
+  // see `refusalWouldStrandTheCaller` for why refusing it ends the session.
   if (disabledToolNames.length > 0) {
     const dispatchPair = findDispatchToolNames(enabledToolNames);
-    const message = dispatchPair
-      ? toolsRequireRunToolMessage({
-          toolNames: disabledToolNames,
-          ...dispatchPair,
-        })
-      : disabledToolsNotRunMessage(disabledToolNames);
-    const reason = dispatchPair
-      ? TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON
-      : TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
-    return {
-      refusalMessage: message,
-      contentMessage: message,
-      reason,
-      blockedToolName: disabledToolNames[0],
-      toolInput: {},
-      allToolCallNames: disabledToolNames,
-    };
+    if (!dispatchPair && refusalWouldStrandTheCaller(enforcement.surface)) {
+      logger.info(
+        { undeclaredTools: disabledToolNames },
+        "[toolInvocation] evaluatePolicies: undeclared tool calls handed back to the caller",
+      );
+    } else {
+      const message = dispatchPair
+        ? toolsRequireRunToolMessage({
+            toolNames: disabledToolNames,
+            ...dispatchPair,
+          })
+        : disabledToolsNotRunMessage(disabledToolNames);
+      const reason = dispatchPair
+        ? TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON
+        : TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
+      return {
+        refusalMessage: message,
+        contentMessage: message,
+        reason,
+        blockedToolName: disabledToolNames[0],
+        toolInput: {},
+        allToolCallNames: disabledToolNames,
+      };
+    }
   }
 
   // If all tools were filtered out, nothing to evaluate
@@ -339,6 +349,45 @@ export const evaluatePolicies = async (
 const MCP_GATEWAY_ENFORCEMENT: PolicyEnforcementContext = {
   surface: "mcp-gateway",
 };
+
+/**
+ * Whether refusing a call to an undeclared tool would strand the caller.
+ *
+ * Refusing is terminal. The proxy drops the turn's tool calls and replaces the
+ * whole assistant message with the refusal text, so the turn carries no tool
+ * call at all — and every agent loop reads that as "the assistant is finished"
+ * and hands control back to a human. With a human watching that is invisible:
+ * they read the steer and type again. With nobody watching it is fatal. An
+ * unattended run — CI, a scheduled job, a chat-ops session, a delegated
+ * sub-agent — simply stops, with no error, no exit and nothing to retry. Every
+ * recovery instruction the refusal carries asks for a next model turn that, by
+ * construction, never happens.
+ *
+ * Nothing is bought in exchange. The names that reach this branch are the ones
+ * absent from the caller's own tool list, and no caller executes a tool it did
+ * not declare: an external client dispatches from the list it sent, and chat
+ * dispatches through the AI SDK, which raises `NoSuchToolError` for anything
+ * unregistered (`routes/chat/errors.ts` already turns that into a model-visible
+ * message). Handing the call back is therefore inert — the caller answers it
+ * the way it answers any unknown tool, with an error result the model reads and
+ * adapts to, and the loop keeps going. Enforcement that decides what may
+ * actually run — conversation tool selection, assignment, RBAC, invocation
+ * policies — lives on the execution path in `run_tool` and the gateway, and is
+ * untouched by this.
+ *
+ * Two cases deliberately keep the refusal. A request advertising the
+ * search_tools/run_tool dispatch pair does offer the model a real route to the
+ * tool, so its steer is actionable and worth ending the turn for (and
+ * `planDispatchModeToolCallRewrites` has already repaired the calls it safely
+ * can before reaching here). And on the gateway surface the enabled set is the
+ * agent's *assigned* tools rather than a caller declaration, so a missing name
+ * is a genuine authorization miss.
+ */
+function refusalWouldStrandTheCaller(
+  surface: ToolInvocationEnforcementSurface,
+): boolean {
+  return surface === "llm-proxy";
+}
 
 /**
  * The search_tools/run_tool pair as it appears in the request's tool list, or

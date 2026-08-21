@@ -160,6 +160,8 @@ export interface ChatToolContext {
    * carries no cross-run state.
    */
   repeatTracker: ToolCallRepeatTracker;
+  /** Keep rich UI media, but send it to the model only when its row allows it. */
+  modelAcceptsImageToolResults: boolean;
 }
 
 /**
@@ -420,7 +422,11 @@ export function buildMcpGatewayTool(params: {
     },
     // Strip UI-only fields (structuredContent, rawContent, _meta) so the LLM
     // only receives the plain-text `content` summary (SEP-1865).
-    toModelOutput: mcpToolToModelOutput,
+    toModelOutput: ({ output }) =>
+      mcpToolToModelOutput({
+        output,
+        includeImages: ctx.modelAcceptsImageToolResults,
+      }),
   };
 }
 
@@ -539,6 +545,7 @@ export function buildAgentDelegationTool(params: {
  */
 export function mcpToolToModelOutput({
   output,
+  includeImages = true,
 }: {
   output:
     | string
@@ -548,6 +555,7 @@ export function mcpToolToModelOutput({
         structuredContent?: unknown;
         rawContent?: unknown;
       };
+  includeImages?: boolean;
 }):
   | { type: "text"; value: string }
   | {
@@ -558,7 +566,9 @@ export function mcpToolToModelOutput({
       >;
     } {
   if (typeof output === "string") return { type: "text", value: output };
-  const images = extractModelOutputImages(output.rawContent);
+  const images = includeImages
+    ? extractModelOutputImages(output.rawContent)
+    : [];
   if (images.length === 0) return { type: "text", value: output.content };
   return {
     type: "content",

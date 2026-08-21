@@ -627,7 +627,129 @@ describe("Bedrock stream reasoning delta forwarding", () => {
   });
 });
 
+describe("Bedrock DeepSeek DSML sentinel filtering", () => {
+  test("strips the DSML marker from streamed text before a structured tool call", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: {
+            text: "Let me check the available tools:\n\n<｜DSML｜function_calls",
+          },
+        },
+        __rawBytes: new Uint8Array([1, 2, 3]),
+      }),
+    );
+
+    expect(result.sseData).not.toBeNull();
+    const decoded = decodeEventStreamJson(result.sseData as Uint8Array);
+    expect(decoded.body).toMatchObject({
+      contentBlockIndex: 0,
+      delta: { text: "Let me check the available tools:" },
+    });
+    expect(adapter.state.text).toBe("Let me check the available tools:");
+  });
+
+  test("strips a DSML marker split across streamed text deltas", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const first = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "Searching now.\n\n<｜DSML｜func" },
+        },
+      }),
+    );
+    const second = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "tion_calls" },
+        },
+      }),
+    );
+
+    expect(
+      decodeEventStreamJson(first.sseData as Uint8Array).body,
+    ).toMatchObject({ delta: { text: "Searching now." } });
+    expect(second.sseData).toBeNull();
+    expect(adapter.state.text).toBe("Searching now.");
+  });
+
+  test("strips the ASCII-spaced DSML marker variant", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "Calling.\n< | DSML | function_calls >" },
+        },
+      }),
+    );
+
+    expect(
+      decodeEventStreamJson(result.sseData as Uint8Array).body,
+    ).toMatchObject({ delta: { text: "Calling." } });
+  });
+
+  test("strips the DSML marker from non-streaming responses", async () => {
+    const request = createConverseRequest({ modelId: "deepseek.v3.2" });
+    const client = {
+      converse: async () => ({
+        $metadata: { requestId: "req_dsml" },
+        output: {
+          message: {
+            role: "assistant",
+            content: [
+              { text: "Calling now.\n\n<｜DSML｜function_calls" },
+              {
+                toolUse: {
+                  toolUseId: "tooluse_dsml",
+                  name: "test_tool",
+                  input: {},
+                },
+              },
+            ],
+          },
+        },
+        stopReason: "tool_use",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      }),
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+    const adapter = bedrockAdapterFactory.createResponseAdapter(response);
+
+    expect(adapter.getText()).toBe("Calling now.");
+    expect(adapter.getToolCalls()).toHaveLength(1);
+    expect(JSON.stringify(response)).not.toContain("DSML");
+  });
+});
+
 describe("Bedrock client creation", () => {
+  test("derives the standard regional endpoint when no custom URL is stored", () => {
+    const client = bedrockAdapterFactory.createClient("test-key", {
+      source: "chat",
+    }) as unknown as {
+      config: { baseUrl: string; region: string };
+    };
+
+    expect(client.config).toMatchObject({
+      baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      region: "us-east-1",
+    });
+  });
+
   test("uses the custom base URL override", () => {
     const customBaseUrl =
       "https://bedrock-runtime.ap-southeast-1.amazonaws.com/custom-path";

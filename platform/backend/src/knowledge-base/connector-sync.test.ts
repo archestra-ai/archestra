@@ -1255,6 +1255,50 @@ describe("ConnectorSyncService", () => {
     expect(repairedDoc?.embeddingStatus).toBe("pending");
   });
 
+  test("executeSync re-queues unchanged documents whose embedding failed", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const content = "Content of doc 1";
+    const contentHash = createHash("sha256").update(content).digest("hex");
+    const existingDoc = await KbDocumentModel.create({
+      organizationId: org.id,
+      sourceId: "ext-1",
+      connectorId: connector.id,
+      title: "Doc 1",
+      content,
+      contentHash,
+      embeddingStatus: "failed",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: existingDoc.id, content: "chunk 1", chunkIndex: 0 },
+      { documentId: existingDoc.id, content: "chunk 2", chunkIndex: 1 },
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue(
+      makeMockConnector([{ id: "ext-1", title: "Doc 1", content }]),
+    );
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsIngested).toBe(1);
+    expect(await KbChunkModel.findByDocument(existingDoc.id)).toHaveLength(2);
+    expect(
+      (await KbDocumentModel.findById(existingDoc.id))?.embeddingStatus,
+    ).toBe("pending");
+  });
+
   test("executeSync marks run as failed when sync generator throws", async ({
     makeOrganization,
     makeKnowledgeBase,

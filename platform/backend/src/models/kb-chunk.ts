@@ -195,7 +195,8 @@ class KbChunkModel {
         bool_or(c.embedding_1024 IS NOT NULL) AS "d1024",
         bool_or(c.embedding_768 IS NOT NULL) AS "d768",
         bool_or(c.embedding_384 IS NOT NULL) AS "d384",
-        bool_or(c.embedding_3072 IS NOT NULL) AS "d3072"
+        bool_or(c.embedding_3072 IS NOT NULL) AS "d3072",
+        bool_or(c.embedding_1408 IS NOT NULL) AS "d1408"
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       WHERE d.connector_id IN (${ids})
@@ -208,6 +209,7 @@ class KbChunkModel {
       if (row.d768) dimensions.add(768);
       if (row.d384) dimensions.add(384);
       if (row.d3072) dimensions.add(3072);
+      if (row.d1408) dimensions.add(1408);
     }
     return dimensions;
   }

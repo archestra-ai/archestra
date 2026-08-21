@@ -7,6 +7,7 @@ import {
   VERTEX_GLOBAL_LOCATION,
 } from "@/clients/gemini-client";
 import config from "@/config";
+import { VERTEX_MULTIMODAL_EMBEDDING_MODELS } from "@/knowledge-base/embedding-clients/vertex-models";
 import logger from "@/logging";
 import type { Gemini } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
@@ -86,9 +87,17 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
       !discoveredModels.some((model) => isPrimaryVertexGeminiModel(model.id)),
   });
 
+  const multimodalEmbeddingModels = await fetchVertexMultimodalEmbeddingModels({
+    clientForModel,
+    existingModelIds: new Set(
+      [...discoveredModels, ...fallbackModels].map((model) => model.id),
+    ),
+  });
+
   const candidateModels = dedupeModelsById([
     ...discoveredModels,
     ...fallbackModels,
+    ...multimodalEmbeddingModels,
   ]);
   const reachableModels = filterToConfiguredVertexLocations(candidateModels);
   const accessibleModels = await filterToAccessibleVertexModels({
@@ -298,6 +307,61 @@ async function fetchVertexGeminiFallbackModels(params: {
     "Validated Vertex AI Gemini fallback models",
   );
 
+  return validatedModels;
+}
+
+/**
+ * Probe the KB-supported Vertex multimodal embedding models
+ * (`multimodalembedding@001`, …) into the catalog. They are publisher models
+ * every Vertex project can invoke, but the Gemini catalog filter drops their
+ * unbranded ids (no `gemini-` prefix, no numeric generation), so discovery
+ * injects them by id — the same static-injection pattern Bedrock uses for its
+ * profile-less embedding models. The shared accessibility filter still applies
+ * afterward, so a project without access never sees them.
+ */
+async function fetchVertexMultimodalEmbeddingModels(params: {
+  clientForModel: VertexClientResolver;
+  existingModelIds: Set<string>;
+}): Promise<ModelInfo[]> {
+  const { clientForModel, existingModelIds } = params;
+  const candidates = VERTEX_MULTIMODAL_EMBEDDING_MODELS.filter(
+    (entry) => !existingModelIds.has(entry.modelId),
+  );
+
+  const results = await Promise.allSettled(
+    candidates.map(async (entry) => {
+      const model = await clientForModel(entry.modelId).models.get({
+        model: entry.modelId,
+      });
+      return model.name
+        ? {
+            id: entry.modelId,
+            displayName: model.displayName ?? entry.displayName,
+            provider: "gemini" as const,
+          }
+        : null;
+    }),
+  );
+
+  const validatedModels: ModelInfo[] = [];
+  for (const [index, result] of results.entries()) {
+    if (result.status === "fulfilled" && result.value) {
+      validatedModels.push(result.value);
+      continue;
+    }
+    if (result.status === "rejected") {
+      logger.debug(
+        {
+          modelId: candidates[index].modelId,
+          errorMessage:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        },
+        "Vertex AI multimodal embedding model unavailable",
+      );
+    }
+  }
   return validatedModels;
 }
 

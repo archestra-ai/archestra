@@ -3,6 +3,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { isConnectionErrno, isTimeoutErrno } from "@/utils/network-errors";
 import {
   KnowledgeBaseError,
@@ -14,7 +15,7 @@ import { BedrockEmbeddingError, BedrockPartialEmbeddingError } from "./bedrock";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
 import { CohereEmbeddingError, CoherePartialEmbeddingError } from "./cohere";
 import { findCohereEmbeddingModel } from "./cohere-models";
-import { GeminiEmbeddingError } from "./gemini";
+import { GeminiEmbeddingError, GeminiPartialEmbeddingError } from "./gemini";
 import { OpenAIEmbeddingError } from "./openai";
 import { EMBEDDING_ADAPTERS } from "./registry";
 import { PartialEmbeddingError } from "./shared";
@@ -23,6 +24,7 @@ import type {
   EmbeddingInput,
   EmbeddingPurpose,
 } from "./types";
+import { findVertexMultimodalEmbeddingModel } from "./vertex-models";
 import { VoyageEmbeddingError, VoyagePartialEmbeddingError } from "./voyage";
 import { findVoyageEmbeddingModel } from "./voyage-models";
 
@@ -36,6 +38,7 @@ export {
   CohereEmbeddingError,
   CoherePartialEmbeddingError,
   GeminiEmbeddingError,
+  GeminiPartialEmbeddingError,
   OpenAIEmbeddingError,
   VoyageEmbeddingError,
   VoyagePartialEmbeddingError,
@@ -135,15 +138,20 @@ function validateEmbeddingResponse(
  * connectors ingest images the embed call will reject. The Gemini client
  * forwards inline images for ANY model, so its image capability is allowlisted
  * per model — Gemini's text-only embedding models reject images at the API.
+ * Vertex AI's publisher embedding models (`multimodalembedding@001`) are
+ * image-capable only when Vertex AI mode is enabled — they do not exist on the
+ * Gemini API — so their gate follows the mode.
  */
 export function getEmbeddingClientInputModalities(
   provider: SupportedProvider,
   model: string,
 ): ModelInputModality[] | null {
   if (provider === "gemini") {
-    return GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(
-      model.replace(/^models\//, ""),
-    )
+    const normalized = model.replace(/^models\//, "");
+    if (findVertexMultimodalEmbeddingModel(normalized)) {
+      return isVertexAiEnabled() ? null : ["text"];
+    }
+    return GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(normalized)
       ? null
       : ["text"];
   }
@@ -165,9 +173,11 @@ export function getEmbeddingClientInputModalities(
 /**
  * Image MIME types the embedding client for `provider` can send to `model`, or
  * `null` for no per-format restriction. Only meaningful when the resolved
- * input modalities include "image": Bedrock's multimodal models and Gemini's
- * embedding API take JPEG/PNG only, Cohere's direct API and Voyage add WebP/GIF
- * (anything else is a provider error that fails the document). Connectors
+ * input modalities include "image": Bedrock's multimodal models take
+ * JPEG/PNG/WebP/GIF, Gemini's embedding API takes JPEG/PNG, Vertex's
+ * multimodalembedding@001 adds BMP/GIF/WebP, and Cohere direct/Voyage take
+ * WebP/GIF too (anything else is a provider error that fails the document).
+ * Connectors
  * skip other formats at ingestion and the embedder skips them at embed time.
  */
 export function getEmbeddingClientAcceptedImageMimeTypes(
@@ -192,11 +202,17 @@ export function getEmbeddingClientAcceptedImageMimeTypes(
       ? [...entry.acceptedImageMimeTypes]
       : null;
   }
-  if (
-    provider === "gemini" &&
-    GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(model.replace(/^models\//, ""))
-  ) {
-    return [...GEMINI_ACCEPTED_IMAGE_MIME_TYPES];
+  if (provider === "gemini") {
+    const normalized = model.replace(/^models\//, "");
+    const vertexEntry = findVertexMultimodalEmbeddingModel(normalized);
+    if (vertexEntry) {
+      return isVertexAiEnabled()
+        ? [...vertexEntry.acceptedImageMimeTypes]
+        : null;
+    }
+    if (GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(normalized)) {
+      return [...GEMINI_ACCEPTED_IMAGE_MIME_TYPES];
+    }
   }
   return null;
 }

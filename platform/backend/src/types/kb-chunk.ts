@@ -15,6 +15,7 @@ const extendedFields = {
   embedding768: z.array(z.number()).nullable(),
   embedding384: z.array(z.number()).nullable(),
   embedding3072: z.array(z.number()).nullable(),
+  embedding1408: z.array(z.number()).nullable(),
   ftsLanguage: TextSearchLanguageSchema,
 };
 
@@ -29,6 +30,7 @@ export const InsertKbChunkSchema = createInsertSchema(schema.kbChunksTable, {
   embedding768: z.array(z.number()).nullable().optional(),
   embedding384: z.array(z.number()).nullable().optional(),
   embedding3072: z.array(z.number()).nullable().optional(),
+  embedding1408: z.array(z.number()).nullable().optional(),
   ftsLanguage: TextSearchLanguageSchema.optional(),
 }).omit({ id: true, createdAt: true, searchVector: true });
 

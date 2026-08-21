@@ -189,7 +189,10 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   // The Default row is synthetic — it stands for "no environment" and has
   // nothing to delete, so it is never part of a selection.
   const selectedEnvironments = rows.filter(
-    (row) => row.kind === "environment" && rowSelection[row.id],
+    (row) =>
+      row.kind === "environment" &&
+      row.assignedCatalogCount === 0 &&
+      rowSelection[row.id],
   );
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
@@ -200,7 +203,12 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       createSelectColumn<EnvironmentTableRow>({
         rowLabel: (row) => `Select ${row.name}`,
         allLabel: "Select all environments on this page",
-        canSelect: (row) => row.kind === "environment",
+        // Matches what the row's own Delete allows: the Default row is
+        // synthetic, and the backend refuses (409) an environment that still
+        // has catalog items assigned. Offering those would build a selection
+        // guaranteed to come back as failures.
+        canSelect: (row) =>
+          row.kind === "environment" && row.assignedCatalogCount === 0,
       }),
       {
         accessorKey: "name",

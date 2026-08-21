@@ -1253,7 +1253,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the caller cannot see is a 404 for the whole request rather than N
       // identical per-document failures. This is also the ONLY authorization
       // filter mode gets, which is why it is done before either branch.
-      await findConnectorOrThrow({
+      const connector = await findConnectorOrThrow({
         id: connectorId,
         organizationId,
         userId: user.id,
@@ -1261,11 +1261,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const body = request.body;
       if ("all" in body) {
+        // `group` arrives as the bare upstream group id, exactly as it does on
+        // the listing, and has to be namespaced the same way before it can
+        // match a stored ACL entry. Skipping this would not fail loudly — the
+        // raw id simply matches nothing, and the delete would report success
+        // over zero rows while the user watched a filtered table survive.
         const affected = await KbDocumentModel.deleteByConnectorFilter({
           connectorId,
           organizationId,
           search: body.search,
-          groupToken: body.group,
+          groupToken: body.group
+            ? buildGroupToken({
+                connectorType: connector.connectorType,
+                groupId: body.group,
+              })
+            : undefined,
         });
         return reply.send({ affected, succeeded: [], failed: [] });
       }

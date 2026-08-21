@@ -1,5 +1,6 @@
 import config from "@/config";
 import db, { schema } from "@/database";
+import { buildGroupToken } from "@/knowledge-base/acl-tokens";
 import { KbDocumentModel, KnowledgeBaseConnectorModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -43,7 +44,11 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
     await app.close();
   });
 
-  const makeDocument = async (title: string, forConnectorId = connectorId) => {
+  const makeDocument = async (
+    title: string,
+    forConnectorId = connectorId,
+    acl: string[] = [],
+  ) => {
     const [row] = await db
       .insert(schema.kbDocumentsTable)
       .values({
@@ -53,6 +58,7 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
         title,
         content: "body",
         contentHash: `hash-${title}`,
+        acl,
       })
       .returning();
     return row;
@@ -286,6 +292,35 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
           organizationId,
         }),
       ).toBe(1);
+    });
+
+    /**
+     * `group` arrives as the bare upstream group id and has to be namespaced
+     * before it can match a stored ACL entry — the same transform the listing
+     * applies. Getting this wrong does not fail loudly: the raw id matches
+     * nothing, so the delete would report success over zero rows while the
+     * filtered table the user was looking at survived intact.
+     */
+    test("namespaces the group filter the same way the listing does", async () => {
+      const engineering = buildGroupToken({
+        connectorType: "jira",
+        groupId: "engineering",
+      });
+      const support = buildGroupToken({
+        connectorType: "jira",
+        groupId: "support",
+      });
+      const targeted = await makeDocument("eng-doc", connectorId, [
+        engineering,
+      ]);
+      const spared = await makeDocument("support-doc", connectorId, [support]);
+
+      const response = await bulkDeleteAll({ group: "engineering" });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().affected).toBe(1);
+      expect(await stillExists(targeted.id)).toBe(false);
+      expect(await stillExists(spared.id)).toBe(true);
     });
 
     test("reports zero rather than failing when nothing matches", async () => {

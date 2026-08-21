@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, MAX_BULK_IDS } from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
@@ -32,7 +32,6 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
-  useAllMatchingConnectorDocuments,
   useBulkDeleteConnectorDocuments,
   useConnectorDocument,
   useConnectorDocuments,

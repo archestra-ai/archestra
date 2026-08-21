@@ -161,6 +161,30 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   // an empty `output`, even though the text arrived in delta chunks. Persisting
   // that envelope verbatim dropped the assistant side of the interaction, so
   // LLM Logs had nothing to render for the turn.
+  // A refusal appends one more output-text delta, which clients concatenate —
+  // so the client holds the model's text AND the refusal. Recording the refusal
+  // alone deleted the model's own answer from the turn.
+  test("a refusal keeps the streamed output text", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: "msg_1",
+      output_index: 0,
+      content_index: 0,
+      sequence_number: 1,
+      delta: "let me check",
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    const message = response.output.find((item) => item.type === "message");
+    expect(
+      message && "content" in message ? message.content[0].text : undefined,
+    ).toBe("let me checkblocked message");
+  });
+
   test("restores accumulated output when the completed envelope is empty", () => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
 

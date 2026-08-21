@@ -708,7 +708,19 @@ class OpenAiResponsesStreamAdapter
   toProviderResponse(): OpenAiResponsesResponse {
     const outputItems: OpenAiResponsesResponse["output"] = [];
 
-    const messageText = this.replacedText ?? this.state.text;
+    // A refusal does not erase what the model already said: its text streamed
+    // as it arrived and the refusal was appended after it, so the client holds
+    // both. Recording the refusal alone deletes the model's own answer from the
+    // turn, leaving anything that reads it back — conversation history, a
+    // summarizer, a human debugging a run that died — a turn in which the model
+    // never spoke.
+    //
+    // The refusal ships as one more output-text delta, which clients
+    // concatenate, so the recorded message text is that concatenation.
+    const messageText =
+      this.replacedText === null
+        ? this.state.text
+        : `${this.state.text}${this.replacedText}`;
     if (messageText) {
       outputItems.push({
         id: `msg_${Date.now()}`,

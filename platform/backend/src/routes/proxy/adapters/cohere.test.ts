@@ -650,6 +650,33 @@ describe("CohereStreamAdapter", () => {
       expect(adapter.state.text).toBe("Hello, world!");
     });
 
+    // A refusal appends a further content block, so the client holds the
+    // model's text AND the refusal. Recording the refusal alone deleted the
+    // model's own answer from the turn.
+    test("a refusal keeps the streamed text and drops the withheld call", () => {
+      const adapter = cohereAdapterFactory.createStreamAdapter();
+
+      adapter.processChunk({
+        type: "content-delta",
+        index: 0,
+        delta: { message: { content: { text: "let me check" } } },
+      });
+      adapter.processChunk({
+        type: "tool-call-start",
+        tool_call: { id: "existing-id", function: { name: "test_tool" } },
+      });
+
+      adapter.formatCompleteTextSSE("blocked message");
+      const response = adapter.toProviderResponse();
+
+      expect(response.message.content).toEqual([
+        { type: "text", text: "let me check" },
+        { type: "text", text: "blocked message" },
+      ]);
+      expect(response.message.tool_calls).toBeUndefined();
+      expect(response.finish_reason).toBe("COMPLETE");
+    });
+
     test("handles tool-call-start with existing ID", () => {
       const adapter = cohereAdapterFactory.createStreamAdapter();
 

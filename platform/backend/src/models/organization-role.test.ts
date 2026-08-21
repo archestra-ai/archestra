@@ -79,12 +79,12 @@ describe("OrganizationRoleModel", () => {
       expect(
         OrganizationRoleModel.sanitizePermissions({
           log: ["read", "create", "update", "delete"],
-          optimizationRule: ["team-admin", "read"],
+          llmLimit: ["team-admin", "read"],
           unknownResource: ["read"],
         }),
       ).toEqual({
         log: ["read"],
-        optimizationRule: ["read"],
+        llmLimit: ["read"],
       });
     });
 

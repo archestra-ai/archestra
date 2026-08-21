@@ -97,7 +97,6 @@ export function makeUserPermissions(
     ac: [...ALL],
     identityProvider: [...ALL],
     secret: [...ALL],
-    optimizationRule: [...ALL],
     scheduledTask: [...ALL],
     ...overrides,
   };

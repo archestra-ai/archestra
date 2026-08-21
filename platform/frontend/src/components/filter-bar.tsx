@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { type ComponentProps, Fragment, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -76,7 +76,9 @@ export function FilterBar({
     >
       {children}
       {appliedOverflow.map((filter) => (
-        <span key={filter.key}>{filter.control}</span>
+        // Fragment rather than a wrapper element: the control has to be the
+        // bar's own flex item for its sizing to behave like the inline ones'.
+        <Fragment key={filter.key}>{filter.control}</Fragment>
       ))}
       {tuckedAway.length > 0 && (
         <Popover>
@@ -157,7 +159,13 @@ export function filterControlClass({
   );
 }
 
-/** Sizing for a {@link FilterBar}'s search box: it takes the leftover width. */
+/**
+ * Sizing for a {@link FilterBar}'s search box: it takes the leftover width.
+ *
+ * Carries `relative` because callers apply it either to `SearchInput` itself or
+ * to a wrapper around it — and `SearchInput` positions its magnifier, and the
+ * LLM logs page its "not a session ID" hint, against that positioned ancestor.
+ */
 export const filterSearchClass =
   "relative w-full min-w-[12rem] flex-1 sm:w-auto sm:max-w-[20rem]";
 

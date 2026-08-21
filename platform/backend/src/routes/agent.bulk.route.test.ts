@@ -8,6 +8,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import type { AuditEventName } from "@/types/audit-log";
 import agentRoutes from "./agent";
 
 /**
@@ -48,7 +49,7 @@ describe("agents bulk routes", () => {
   const bulkPatch = (payload: Record<string, unknown>) =>
     app.inject({ method: "PATCH", url: "/api/agents/bulk", payload });
 
-  const auditRows = (action: string) =>
+  const auditRows = (action: AuditEventName) =>
     db
       .select({
         before: schema.auditLogsTable.before,

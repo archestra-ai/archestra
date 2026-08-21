@@ -171,6 +171,38 @@ describe("evaluatePolicies", () => {
     expect(result).toBeNull();
   });
 
+  // Reported from production more than once: a `search_and_run_only` agent
+  // emits a third-party tool's raw name instead of wrapping it, the steer
+  // replaces the whole turn, and the run ends — including on scheduled agents
+  // with nobody there to read it. The steer is correct and still unusable: it
+  // asks the model to retry through run_tool in a turn that has just been
+  // ended. `planDispatchModeToolCallRewrites` has already repaired what it
+  // safely can upstream, so what reaches here is exactly the batch that could
+  // not be auto-corrected — hand it back and let the caller's own unknown-tool
+  // error keep the loop alive.
+  test("hands back a direct call even when the dispatch pair is advertised", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const enabledTools = new Set([
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+      archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME),
+    ]);
+
+    const result = await evaluatePolicies(
+      [{ toolCallName: "github__list_issues", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      enabledTools,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  // Asserted on the gateway surface: the LLM proxy no longer refuses these at
+  // all (it hands them back so the run can continue), so the gateway is where
+  // choosing correctly between the two steers still matters.
   test("steers to run_tool instead of 'not enabled' when the tool list advertises the dispatch pair", async ({
     makeAgent,
   }) => {
@@ -193,6 +225,7 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
+      { surface: "mcp-gateway" },
     );
 
     expect(result).not.toBeNull();
@@ -283,6 +316,7 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       new Set([brandedSearchTools, brandedRunTool]),
+      { surface: "mcp-gateway" },
     );
 
     // Naming the canonical `archestra__*` form would point the model at a tool

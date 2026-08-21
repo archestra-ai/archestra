@@ -128,9 +128,12 @@ describe("createBedrockRedactedReasoningFetch", () => {
     // The regression itself: @ai-sdk/amazon-bedrock's BedrockStreamSchema is a
     // closed union over {text} | {signature} | {data}, so Bedrock's own
     // `redactedContent` matches nothing and the turn dies before any content
-    // reaches the caller. This is the unwrapped control for the test below it —
-    // if it ever stops failing, the provider package has grown the field and
-    // the wrapper can go.
+    // reaches the caller.
+    //
+    // This is the unwrapped control, and it is the upgrade tripwire: 4.0.158
+    // fixes the field and the missing block start, so on that version this test
+    // fails and the whole shim (module, this file, and its two wiring lines in
+    // llm-client.ts) should be deleted rather than repaired.
     test("the provider package rejects Bedrock's redactedContent unwrapped", async () => {
       const { errors, text } = await collectStream(
         async () => eventStreamResponse(redactedReasoningFrames()),

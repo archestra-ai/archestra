@@ -253,6 +253,31 @@ describe("prepareMessagesForProvider — bedrock empty-content padding", () => {
     expect(message.parts?.[0]?.type).toBe("dynamic-tool");
   });
 
+  // A wholly redacted reasoning block has no text — only the encrypted blob in
+  // provider metadata — so whether it counts as content rests entirely on the
+  // metadata key. @ai-sdk/amazon-bedrock renamed that key from `redactedData`
+  // to the Converse API's own `redactedContent` in 4.0.158, and both spellings
+  // must keep the block alive across the upgrade.
+  it.each([
+    ["redactedData", { redactedData: "abc123==" }],
+    ["redactedContent", { redactedContent: "abc123==" }],
+  ])("does not pad an assistant message whose reasoning carries %s", (_name, bedrock) => {
+    const [message] = prepareMessagesForProvider({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "reasoning", text: "", providerMetadata: { bedrock } },
+            { type: "text", text: "Seven." },
+          ],
+        },
+      ] as unknown as ChatMessage[],
+      provider: "bedrock",
+    });
+
+    expect(hasNoContentPlaceholder(message)).toBe(false);
+  });
+
   it("still pads a genuinely empty assistant message with a placeholder", () => {
     // Regression guard: the dynamic-tool fix must not disable the workaround for
     // an assistant turn that really has no provider-visible content.

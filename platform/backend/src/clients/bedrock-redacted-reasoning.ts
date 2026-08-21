@@ -34,9 +34,20 @@ import type { LanguageModelMiddleware } from "ai";
  * `createAnthropicThinkingDisplayFetch` in `llm-client.ts` sit there. (2) is
  * about the parts the package emits, so it is middleware.
  *
- * Both are confined to Archestra's own client. The LLM proxy keeps emitting
- * the Converse API's own field name, so clients that read Bedrock's documented
- * shape still see it.
+ * TEMPORARY. Both bugs are fixed upstream in @ai-sdk/amazon-bedrock 4.0.158
+ * (published 2026-08-20): its stream schema accepts `redactedContent`, and
+ * every reasoning branch now opens the block before emitting a delta. That
+ * release clears this repo's 7-day `minimumReleaseAge` on 2026-08-27, and the
+ * exclusion list is reserved for HIGH-severity CVE fixes, so the upgrade could
+ * not ship here. On or after that date, bump the dependency and delete this
+ * file, its test, and the two lines wiring it into `providerModelConfigs`
+ * (nothing else imports it). `bedrock-redacted-reasoning.test.ts` keeps an
+ * unwrapped control that starts failing the moment the installed package
+ * handles the field, so the upgrade cannot land silently while this remains.
+ *
+ * Both halves are confined to Archestra's own client. The LLM proxy keeps
+ * emitting the Converse API's own field name, so clients that read Bedrock's
+ * documented shape still see it.
  *
  * The proxy carries the opposite rewrite for *requests*
  * (`normalizeRedactedReasoning` in `routes/proxy/adapters/bedrock.ts`), which

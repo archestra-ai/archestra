@@ -1,4 +1,6 @@
 import type {
+  ModelInputModality,
+  ModelOutputModality,
   SupportedProvider,
   SupportedProviderEndpoint,
 } from "@archestra/shared";
@@ -33,6 +35,16 @@ export function modelFetchError(
 export interface FetchedModelCapabilities {
   contextLength?: number | null;
   supportsToolCalling?: boolean | null;
+  /**
+   * What the model accepts / emits, when the provider publishes it per model
+   * (OpenRouter's `architecture` block). The provider is authoritative about
+   * its own catalog, so these outrank the registry during sync — and a
+   * non-text output modality is what tells the "free" badge that a model's
+   * zero per-token price is not the whole story. `undefined` means the
+   * provider said nothing.
+   */
+  inputModalities?: ModelInputModality[] | null;
+  outputModalities?: ModelOutputModality[] | null;
   promptPricePerToken?: string | null;
   completionPricePerToken?: string | null;
   /** Per-token cache-read price (USD), when the provider reports one. */

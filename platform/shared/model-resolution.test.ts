@@ -253,6 +253,53 @@ describe("isFreeModel", () => {
       isFreeModel({ promptPricePerToken: null, completionPricePerToken: "0" }),
     ).toBe(false);
   });
+
+  test("is false for zero-token models that emit non-text output", () => {
+    // OpenRouter's Lyria music models publish `prompt: "0", completion: "0"`
+    // because they are not billed per token — they are not free.
+    expect(
+      isFreeModel({
+        promptPricePerToken: "0",
+        completionPricePerToken: "0",
+        outputModalities: ["text", "audio"],
+      }),
+    ).toBe(false);
+    expect(
+      isFreeModel({
+        promptPricePerToken: "0",
+        completionPricePerToken: "0",
+        outputModalities: ["image"],
+      }),
+    ).toBe(false);
+  });
+
+  test("stays free for text-only or unknown output modalities", () => {
+    expect(
+      isFreeModel({
+        promptPricePerToken: "0",
+        completionPricePerToken: "0",
+        outputModalities: ["text"],
+      }),
+    ).toBe(true);
+    // Nothing published a modality for this model; zero prices still decide.
+    expect(
+      isFreeModel({
+        promptPricePerToken: "0",
+        completionPricePerToken: "0",
+        outputModalities: null,
+      }),
+    ).toBe(true);
+  });
+
+  test("a non-text output modality does not make a paid model free", () => {
+    expect(
+      isFreeModel({
+        promptPricePerToken: "0.0000015",
+        completionPricePerToken: "0.000006",
+        outputModalities: ["text", "audio"],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("compareModelsForDisplay", () => {

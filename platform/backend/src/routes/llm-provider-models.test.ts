@@ -181,6 +181,70 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models/available marks a zero-priced audio model as not free", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openrouter",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const freeModel = await ModelModel.create({
+      externalId: "openrouter/google/gemma-4-31b-it:free",
+      provider: "openrouter",
+      modelId: "google/gemma-4-31b-it:free",
+      description: "Gemma 4 31B (free)",
+      contextLength: 64_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    // OpenRouter publishes `prompt: "0", completion: "0"` for its Lyria music
+    // models because they are billed per second of audio, not per token. They
+    // must not carry the "Free" badge or survive the "Free models only" filter.
+    const audioModel = await ModelModel.create({
+      externalId: "openrouter/google/lyria-3-pro-preview",
+      provider: "openrouter",
+      modelId: "google/lyria-3-pro-preview",
+      description: "Lyria 3 Pro Preview",
+      contextLength: 1_048_576,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: false,
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [
+        { id: freeModel.id, modelId: freeModel.modelId },
+        { id: audioModel.id, modelId: audioModel.modelId },
+      ],
+      "openrouter",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const models: Array<{ id: string; isFree: boolean }> = response.json();
+    const freeById = (id: string) => models.find((m) => m.id === id)?.isFree;
+    expect(freeById("google/gemma-4-31b-it:free")).toBe(true);
+    expect(freeById("google/lyria-3-pro-preview")).toBe(false);
+  });
+
   test("GET /api/llm-models/available disambiguates stored names that still collide", async ({
     makeSecret,
     makeLlmProviderApiKey,

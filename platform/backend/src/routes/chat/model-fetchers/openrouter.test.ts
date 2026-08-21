@@ -159,11 +159,108 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 128000,
       supportsToolCalling: true,
+      inputModalities: null,
+      outputModalities: null,
       promptPricePerToken: "0.00000015",
       completionPricePerToken: "0.0000006",
       cacheReadPricePerToken: "0.000000075",
       cacheWritePricePerToken: "0.0000001875",
     });
+  });
+
+  test("captures architecture modalities, mapping OpenRouter's `file` to `pdf`", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "google/gemini-2.5-pro",
+                architecture: {
+                  // `video` has no output-side equivalent in our enum and is
+                  // dropped; `file` is our `pdf`.
+                  input_modalities: ["text", "image", "file", "video"],
+                  output_modalities: ["text"],
+                },
+                pricing: { prompt: "0.00000125", completion: "0.00001" },
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities?.inputModalities).toEqual([
+      "text",
+      "image",
+      "pdf",
+      "video",
+    ]);
+    expect(model.capabilities?.outputModalities).toEqual(["text"]);
+  });
+
+  test("reports audio output for zero-priced media models", async () => {
+    // Real shape of `google/lyria-3-pro-preview`: token prices are "0" only
+    // because the model is not billed per token. The output modality is what
+    // keeps it out of the "Free models only" filter downstream.
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "google/lyria-3-pro-preview",
+                name: "Google: Lyria 3 Pro Preview",
+                context_length: 1048576,
+                architecture: {
+                  input_modalities: ["text", "image"],
+                  output_modalities: ["text", "audio"],
+                },
+                pricing: { prompt: "0", completion: "0" },
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities?.outputModalities).toEqual(["text", "audio"]);
+    expect(model.capabilities?.promptPricePerToken).toBe("0");
+  });
+
+  test("returns capabilities for a model that only publishes architecture", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "some/model",
+                architecture: { output_modalities: ["image"] },
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities?.outputModalities).toEqual(["image"]);
+    expect(model.capabilities?.inputModalities).toBeNull();
   });
 
   test("marks :free models as zero-priced and detects missing tool calling", async () => {
@@ -192,6 +289,8 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 64000,
       supportsToolCalling: false,
+      inputModalities: null,
+      outputModalities: null,
       promptPricePerToken: "0",
       completionPricePerToken: "0",
       cacheReadPricePerToken: null,
@@ -225,6 +324,8 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 2000000,
       supportsToolCalling: true,
+      inputModalities: null,
+      outputModalities: null,
       promptPricePerToken: null,
       completionPricePerToken: null,
       cacheReadPricePerToken: null,

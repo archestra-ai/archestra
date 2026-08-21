@@ -15,14 +15,17 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
+import { LoadingSpinner } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -40,6 +43,12 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { TablePagination } from "@/components/ui/table-pagination";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -63,11 +72,13 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
+import { ConnectorStatusDot } from "./_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
 
 type KnowledgeBaseItem =
@@ -153,9 +164,21 @@ function KnowledgeBasesList() {
   });
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
+  const [viewMode, setViewMode] = useListViewMode("knowledge-bases-view");
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
+  // Cards are the browse view; the trash is a lifecycle queue and stays a
+  // table (its rows have no connectors left to show).
+  const showCards = viewMode === "cards" && !isDeletedView;
+  // One query for every connector on the page, rather than one per knowledge
+  // base as the expandable sub-table did. It also polls while any connector is
+  // syncing, so the status dots stay live.
+  const { data: allConnectorRecords } = useAllConnectors();
+  const connectorsById = useMemo(
+    () => new Map((allConnectorRecords ?? []).map((c) => [c.id, c])),
+    [allConnectorRecords],
+  );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [selectAllMatchingFor, setSelectAllMatchingFor] = useState<
@@ -188,6 +211,16 @@ function KnowledgeBasesList() {
     : allMatchingActive
       ? (allMatching ?? [])
       : items.filter((kb) => rowSelection[kb.id]);
+  const goToPage = useCallback(
+    (next: { pageIndex: number; pageSize: number }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(next.pageIndex + 1));
+      params.set("pageSize", String(next.pageSize));
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const hasActiveFilters = !!search || isDeletedView;
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -198,45 +231,62 @@ function KnowledgeBasesList() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
 
+  // Shared by the card grid and the table view, so an action behaves the same
+  // whichever one the user is looking at.
+  const rowActions = useCallback(
+    (kb: KnowledgeBaseItem): TableRowAction[] => {
+      const hasDocs = kb.totalDocsIndexed > 0;
+      return [
+        {
+          icon: <MessageSquare className="h-4 w-4" />,
+          label: "Talk to Knowledge Base",
+          onClick: () => startChat(kb),
+          disabled: isChatCreating || !hasDocs,
+          disabledTooltip: hasDocs
+            ? "Starting chat..."
+            : "Add a connector and index documents to chat with this knowledge base",
+        },
+        {
+          icon: <Plus className="h-4 w-4" />,
+          label: "Add connector",
+          onClick: () => setAddConnectorKbId(kb.id),
+        },
+        {
+          icon: <Pencil className="h-4 w-4" />,
+          label: "Edit",
+          onClick: () => openEditDialog(kb),
+        },
+        {
+          icon: <Trash2 className="h-4 w-4" />,
+          label: "Delete",
+          variant: "destructive",
+          onClick: () => setDeletingId(kb.id),
+        },
+      ];
+    },
+    [startChat, isChatCreating, openEditDialog],
+  );
+
+  // The table view is the same information in rows, for anyone scanning many
+  // knowledge bases at once. It has no expandable sub-table: the connectors
+  // are named in their own column here, exactly as on the cards.
   const columns: ColumnDef<KnowledgeBaseItem>[] = [
     createSelectColumn<KnowledgeBaseItem>({
       rowLabel: (kb) => `Select ${kb.name}`,
       allLabel: "Select all knowledge bases on this page",
     }),
     {
-      id: "expand",
-      size: 40,
-      header: () => null,
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={(e) => {
-            e.stopPropagation();
-            row.toggleExpanded();
-          }}
-          aria-label="Toggle row"
-        >
-          {row.getIsExpanded() ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-        </Button>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Name",
+      size: 320,
       cell: ({ row }) => {
         const kb = row.original;
         return (
-          <div>
-            <div className="font-medium">{kb.name}</div>
+          <div className="min-w-0">
+            <div className="truncate font-medium">{kb.name}</div>
             {kb.description && (
-              <div className="text-xs text-muted-foreground truncate max-w-md">
+              <div className="truncate text-xs text-muted-foreground">
                 {kb.description}
               </div>
             )}
@@ -247,48 +297,44 @@ function KnowledgeBasesList() {
     {
       id: "connectors",
       header: "Connectors",
-      cell: ({ row }) => <div>{row.original.connectors.length}</div>,
+      size: 420,
+      cell: ({ row }) => (
+        <KnowledgeBaseConnectorList
+          connectors={row.original.connectors}
+          connectorsById={connectorsById}
+        />
+      ),
     },
     {
       id: "docsIndexed",
-      header: "Docs Indexed",
-      cell: ({ row }) => <div>{row.original.totalDocsIndexed}</div>,
+      header: "Documents",
+      size: 130,
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.totalDocsIndexed.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      id: "agents",
+      header: "Agents",
+      size: 110,
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.assignedAgents.length}
+        </span>
+      ),
     },
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => {
-        const kb = row.original;
-        const hasDocs = kb.totalDocsIndexed > 0;
-        const actions: TableRowAction[] = [
-          {
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Talk to Knowledge Base",
-            onClick: () => startChat(kb),
-            disabled: isChatCreating || !hasDocs,
-            disabledTooltip: hasDocs
-              ? "Starting chat..."
-              : "Add a connector and index documents to chat with this knowledge base",
-          },
-          {
-            icon: <Plus className="h-4 w-4" />,
-            label: "Add connector",
-            onClick: () => setAddConnectorKbId(kb.id),
-          },
-          {
-            icon: <Pencil className="h-4 w-4" />,
-            label: "Edit",
-            onClick: () => openEditDialog(kb),
-          },
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: "Delete",
-            variant: "destructive",
-            onClick: () => setDeletingId(kb.id),
-          },
-        ];
-        return <TableRowActions actions={actions} itemName={kb.name} />;
-      },
+      size: 170,
+      cell: ({ row }) => (
+        <TableRowActions
+          actions={rowActions(row.original)}
+          itemName={row.original.name}
+        />
+      ),
     },
   ];
 
@@ -382,6 +428,11 @@ function KnowledgeBasesList() {
             <ResourceDeletedStatusFilter
               deletePermission={{ knowledgeSource: ["delete"] }}
             />
+            {!isDeletedView && (
+              <span className="ml-auto">
+                <ListViewToggle value={viewMode} onChange={setViewMode} />
+              </span>
+            )}
           </div>
         </div>
 
@@ -415,46 +466,52 @@ function KnowledgeBasesList() {
           </BulkActionsBar>
         )}
 
-        <DataTable
-          columns={isDeletedView ? deletedColumns : columns}
-          data={items}
-          rowSelection={isDeletedView ? undefined : rowSelection}
-          onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
-          hideSelectedCount
-          renderSubComponent={
-            isDeletedView
-              ? undefined
-              : ({ row }) => (
-                  <ExpandedConnectors
-                    knowledgeBaseId={row.original.id}
-                    onEditConnector={openEditConnector}
-                  />
-                )
-          }
-          // The deleted view always counts as filtered (see hasActiveFilters),
-          // so its empty state is the filtered one below.
-          emptyMessage="No knowledge bases found"
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage={
-            isDeletedView
-              ? "No deleted knowledge bases found."
-              : "No knowledge bases match your filters. Try adjusting your search."
-          }
-          onClearFilters={clearFilters}
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total: pagination?.total ?? 0,
-          }}
-          onPaginationChange={(newPagination) => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("page", String(newPagination.pageIndex + 1));
-            params.set("pageSize", String(newPagination.pageSize));
-            router.push(`${pathname}?${params.toString()}`, { scroll: false });
-          }}
-          isLoading={isFetching}
-        />
+        {showCards ? (
+          <KnowledgeBaseCardGrid
+            knowledgeBases={items}
+            connectorsById={connectorsById}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            rowActions={rowActions}
+            onAddConnector={setAddConnectorKbId}
+            isLoading={isFetching && items.length === 0}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={clearFilters}
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: pagination?.total ?? 0,
+            }}
+            onPaginationChange={goToPage}
+          />
+        ) : (
+          <DataTable
+            columns={isDeletedView ? deletedColumns : columns}
+            data={items}
+            getRowId={(row) => row.id}
+            rowSelection={isDeletedView ? undefined : rowSelection}
+            onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
+            hideSelectedCount
+            // The deleted view always counts as filtered (see hasActiveFilters),
+            // so its empty state is the filtered one below.
+            emptyMessage="No knowledge bases found"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage={
+              isDeletedView
+                ? "No deleted knowledge bases found."
+                : "No knowledge bases match your filters. Try adjusting your search."
+            }
+            onClearFilters={clearFilters}
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total: pagination?.total ?? 0,
+            }}
+            onPaginationChange={goToPage}
+            isLoading={isFetching}
+          />
+        )}
 
         {bulkDeleteOpen && (
           <DeleteConfirmDialog
@@ -555,136 +612,160 @@ function KnowledgeBasesList() {
 }
 
 // ===
-// Expanded connectors sub-row
+// Card grid
 // ===
 
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
-function ExpandedConnectors({
-  knowledgeBaseId,
-  onEditConnector,
+/**
+ * The knowledge bases themselves, one card each, with the same pagination bar
+ * the table view uses so switching views does not change where you are in the
+ * list.
+ */
+function KnowledgeBaseCardGrid({
+  knowledgeBases,
+  connectorsById,
+  rowSelection,
+  onRowSelectionChange,
+  rowActions,
+  onAddConnector,
+  isLoading,
+  hasActiveFilters,
+  onClearFilters,
+  pagination,
+  onPaginationChange,
 }: {
-  knowledgeBaseId: string;
-  onEditConnector: (connector: ConnectorItem) => void;
+  knowledgeBases: KnowledgeBaseItem[];
+  connectorsById: Map<string, ConnectorItem>;
+  rowSelection: RowSelectionState;
+  onRowSelectionChange: (selection: RowSelectionState) => void;
+  rowActions: (kb: KnowledgeBaseItem) => TableRowAction[];
+  onAddConnector: (knowledgeBaseId: string) => void;
+  isLoading: boolean;
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
+  pagination: { pageIndex: number; pageSize: number; total: number };
+  onPaginationChange: (next: { pageIndex: number; pageSize: number }) => void;
 }) {
-  const router = useRouter();
-  const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
-  const [removingConnectorId, setRemovingConnectorId] = useState<string | null>(
-    null,
-  );
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
-  const items = connectors ?? [];
-
-  const columns: ColumnDef<ConnectorItem>[] = [
-    {
-      id: "icon",
-      size: 40,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <ConnectorTypeIcon
-            type={row.original.connectorType}
-            className="h-5 w-5"
-          />
-        </div>
-      ),
-    },
-    {
-      id: "name",
-      accessorKey: "name",
-      header: "Connector",
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
-          {row.original.description && (
-            <div className="text-xs text-muted-foreground truncate">
-              {row.original.description}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: "status",
-      header: "Status",
-      cell: ({ row }) => (
-        <ConnectorStatusCell
-          lastSyncAt={row.original.lastSyncAt}
-          lastSyncStatus={row.original.lastSyncStatus}
-        />
-      ),
-    },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      cell: ({ row }) => (
-        <ConnectorAccessBadge
-          visibility={row.original.visibility}
-          teamIds={row.original.teamIds}
-        />
-      ),
-    },
-    {
-      id: "schedule",
-      header: "Schedule",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Database className="h-3.5 w-3.5" />
-          <span>{formatCronSchedule(row.original.schedule)}</span>
-        </div>
-      ),
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <TableRowActions
-          itemName={row.original.name}
-          actions={[
-            {
-              icon: <Pencil className="h-4 w-4" />,
-              label: "Edit connector",
-              onClick: () => onEditConnector(row.original),
-            },
-            {
-              icon: <Trash2 className="h-4 w-4" />,
-              label: "Remove from knowledge base",
-              variant: "destructive",
-              onClick: () => setRemovingConnectorId(row.original.id),
-            },
-          ]}
-        />
-      ),
-    },
-  ];
+  if (knowledgeBases.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
+        <Database className="h-8 w-8 opacity-50" />
+        <p>
+          {hasActiveFilters
+            ? "No knowledge bases match your filters. Try adjusting your search."
+            : "No knowledge bases found"}
+        </p>
+        {hasActiveFilters && (
+          <Button variant="outline" size="sm" onClick={onClearFilters}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className="p-4">
-        <DataTable
-          columns={columns}
-          data={items}
-          getRowId={(row) => row.id}
-          hideSelectedCount
-          isLoading={isPending}
-          emptyMessage="No connectors associated with this knowledge base"
-          onRowClick={(row) =>
-            router.push(`/knowledge/connectors/${row.id}?from=knowledge-bases`)
-          }
-          manualPagination
-        />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        {knowledgeBases.map((kb) => (
+          <KnowledgeBaseCard
+            key={kb.id}
+            knowledgeBase={kb}
+            connectorsById={connectorsById}
+            selected={!!rowSelection[kb.id]}
+            onSelectedChange={(selected) => {
+              const next = { ...rowSelection };
+              if (selected) {
+                next[kb.id] = true;
+              } else {
+                delete next[kb.id];
+              }
+              onRowSelectionChange(next);
+            }}
+            actions={rowActions(kb)}
+            onAddConnector={() => onAddConnector(kb.id)}
+          />
+        ))}
       </div>
+      <TablePagination
+        pageIndex={pagination.pageIndex}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPaginationChange={onPaginationChange}
+      />
+    </div>
+  );
+}
 
-      {removingConnectorId && (
-        <RemoveConnectorDialog
-          connectorId={removingConnectorId}
-          knowledgeBaseId={knowledgeBaseId}
-          open={!!removingConnectorId}
-          onOpenChange={(open) => !open && setRemovingConnectorId(null)}
-        />
+/**
+ * The connectors of one knowledge base, named rather than counted, for the
+ * table view's Connectors column.
+ */
+function KnowledgeBaseConnectorList({
+  connectors,
+  connectorsById,
+}: {
+  connectors: KnowledgeBaseItem["connectors"];
+  connectorsById: Map<string, ConnectorItem>;
+}) {
+  if (connectors.length === 0) {
+    return <span className="text-sm text-muted-foreground">None</span>;
+  }
+  const visible = connectors.slice(0, 2);
+  const hidden = connectors.slice(2);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {visible.map((connector) => {
+        const detail = connectorsById.get(connector.id);
+        return (
+          <Link
+            key={connector.id}
+            href={`/knowledge/connectors/${connector.id}?from=knowledge-bases`}
+            className="inline-flex max-w-[200px] items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
+            title={connector.name}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {detail && (
+              <ConnectorStatusDot
+                enabled={detail.enabled}
+                lastSyncStatus={detail.lastSyncStatus}
+              />
+            )}
+            <ConnectorTypeIcon
+              type={connector.connectorType}
+              className="h-3.5 w-3.5"
+            />
+            <span className="truncate">{connector.name}</span>
+          </Link>
+        );
+      })}
+      {hidden.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-default rounded-md border px-2 py-1 text-xs text-muted-foreground">
+              +{hidden.length} more
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="space-y-0.5">
+              {hidden.map((connector) => (
+                <div key={connector.id}>{connector.name}</div>
+              ))}
+            </div>
+          </TooltipContent>
+        </Tooltip>
       )}
-    </>
+    </div>
   );
 }
 

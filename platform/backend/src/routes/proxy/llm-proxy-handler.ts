@@ -21,7 +21,6 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
-  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -1299,6 +1298,11 @@ export async function handleLLMProxy<
         processedRequest: null,
         response: { error: errorMessage },
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        // Mirrors `model`, as every write path does now that nothing rewrites
+        // the model in flight. This row carries no cost either way.
+        baselineModel: stripClaudeContextVariantSuffix(
+          requestAdapter.getModel(),
+        ),
         inputTokens: 0,
         outputTokens: 0,
       };

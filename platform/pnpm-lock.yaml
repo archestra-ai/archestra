@@ -43,8 +43,8 @@ overrides:
   botframework-streaming>ws: '>=8.21.0'
   websocket-driver: '>=0.7.5'
   next@<16.3.0: '>=16.2.11 <16.3.0'
-  form-data@>=4: 4.0.6
-  form-data@<4: 3.0.5
+  form-data@>=4: '>=4.0.6'
+  form-data@<4: '>=3.0.5 <4'
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
   dompurify: 3.4.13
@@ -55,7 +55,7 @@ overrides:
   express: 5.2.0
   express-rate-limit: 8.3.1
   jws: 4.0.1
-  js-yaml: 4.3.1
+  js-yaml: '>=4.3.1 <5'
   qs: 6.15.2
   d3-path: 3.1.0
   hono: 4.12.25
@@ -64,7 +64,7 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  fast-uri: 3.1.5
+  fast-uri: '>=3.1.5'
   ajv: 8.18.0
   axios: '>=1.18.0'
   minimatch: '>=10.2.3'
@@ -77,12 +77,12 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  find-my-way: 9.7.0
+  find-my-way: '>=9.7.0'
   postcss: '>=8.5.18'
-  nanoid@<4: 3.3.18
+  nanoid@<4: '>=3.3.18 <4'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.3.1'
-  brace-expansion: 5.0.9
+  brace-expansion: '>=5.0.9'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -447,7 +447,7 @@ importers:
         specifier: ^6.2.0
         version: 6.2.1
       js-yaml:
-        specifier: 4.3.1
+        specifier: '>=4.3.1 <5'
         version: 4.3.1
       jsdom:
         specifier: ^29.0.0

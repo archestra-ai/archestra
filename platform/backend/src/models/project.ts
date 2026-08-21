@@ -444,6 +444,84 @@ class ProjectModel {
    * not `projects`) still produces a non-empty diff; its id lists are sorted so
    * an unchanged audience never reads as a change.
    */
+  /**
+   * The projects a bulk route was asked to act on, fenced to one organization
+   * and read in one query. Ids arrive straight from a request body, so the
+   * fence is what stops a foreign id being answered as anything but "not
+   * found". Soft-deleted rows are excluded, as the single-project reads
+   * exclude them.
+   */
+  static async findForBulk(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<Array<{ id: string; name: string }>> {
+    const { ids, organizationId } = params;
+    if (ids.length === 0) {
+      return [];
+    }
+    return await db
+      .select({
+        id: schema.projectsTable.id,
+        name: schema.projectsTable.name,
+      })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, organizationId),
+          inArray(schema.projectsTable.id, ids),
+          isNull(schema.projectsTable.deletedAt),
+        ),
+      );
+  }
+
+  /**
+   * Ids, names, share visibility and deletion state for a bulk route's audit
+   * record, on both sides of the write — much narrower than
+   * {@link findByIdForAudit} so it stays cheap for hundreds of rows. Deleted
+   * rows are included so a bulk delete's "after" side still names what it
+   * removed.
+   */
+  static async findVisibilityForBulkAudit(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      visibility: string | null;
+      deleted: boolean;
+    }>
+  > {
+    const { ids, organizationId } = params;
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await db
+      .select({
+        id: schema.projectsTable.id,
+        name: schema.projectsTable.name,
+        deletedAt: schema.projectsTable.deletedAt,
+      })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, organizationId),
+          inArray(schema.projectsTable.id, ids),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides.
+      .orderBy(schema.projectsTable.id);
+
+    return await Promise.all(
+      rows.map(async ({ deletedAt, ...row }) => ({
+        ...row,
+        visibility:
+          (await ProjectShareModel.findByProjectId(row.id))?.visibility ?? null,
+        deleted: deletedAt !== null,
+      })),
+    );
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

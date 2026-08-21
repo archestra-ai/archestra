@@ -754,6 +754,44 @@ class AppModel {
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
+  /**
+   * Ids, names, visibility and deletion state for a bulk route's audit record,
+   * used on both sides of the write. Deliberately much narrower than
+   * {@link findByIdForAudit}: a batch snapshot has to stay cheap for hundreds
+   * of rows, and carries only what a bulk route can actually change.
+   *
+   * Soft-deleted rows are included so a bulk delete's "after" side still names
+   * what it removed rather than going empty.
+   */
+  static async findVisibilityForBulkAudit(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<
+    Array<{ id: string; name: string; scope: string; deleted: boolean }>
+  > {
+    const { ids, organizationId } = params;
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await appWithCatalogQuery()
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, organizationId),
+          inArray(schema.appsTable.id, ids),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides and
+      // the audit diff stays empty; row order is unspecified.
+      .orderBy(schema.appsTable.id);
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      scope: row.scope,
+      deleted: row.deletedAt !== null,
+    }));
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

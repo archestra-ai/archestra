@@ -78,6 +78,12 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { externalAppLabel } from "@/utils/external-app-label";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "../bulk-route";
 
 // A comma-joined id list on the query string ("a,b,c" → ["a","b","c"]), for
 // the admin owner sub-filter on the list route. Mirrors the Projects list.
@@ -978,6 +984,202 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       await syncAppBacking(result);
       return reply.send(warnings.length > 0 ? { ...result, warnings } : result);
+    },
+  );
+
+  fastify.patch(
+    "/api/apps/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateApps,
+        description:
+          "Update several apps in one request. Today the only bulk-editable " +
+          "surface is visibility — `scope` with the `teamIds` or `userIds` it " +
+          "reaches — and every app in the batch is moved to the same one. " +
+          "Content is deliberately not editable here: replacing html forks a " +
+          "version and is authorized more strictly than re-scoping. Per-app " +
+          "problems are reported in `failed` and leave the rest applied.",
+        tags: ["Apps"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          scope: AppScopeSchema.describe(
+            "The visibility every app in the batch moves to.",
+          ),
+          teamIds: z
+            .array(z.string())
+            .optional()
+            .describe("Only meaningful for `scope = team`; required there."),
+          userIds: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "People to share with. Only meaningful for `scope = personal`; " +
+                "omitting it revokes existing grants rather than keeping " +
+                "them, since this sets one visibility across the selection.",
+            ),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { user, organizationId, body } = request;
+      const { scope } = body;
+
+      // Request-level: the destination is the same for every app, so an
+      // unusable one is a bad request rather than N identical failures.
+      if (scope === "team" && (body.teamIds ?? []).length === 0) {
+        throw new ApiError(
+          400,
+          "A team-scoped app requires at least one teamId.",
+        );
+      }
+      const teamIds =
+        scope === "team"
+          ? await resolveOrgTeams(body.teamIds ?? [], organizationId)
+          : [];
+      const userIds =
+        scope === "personal"
+          ? await resolveOrgUsers(body.userIds ?? [], organizationId)
+          : [];
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "apps bulk update",
+        notFoundMessage: "App not found",
+        unexpectedMessage: "Could not update this app",
+        // Reuses the single-app loader per id rather than reimplementing app
+        // visibility. That costs a query per app; the point of the bulk route
+        // is one HTTP round trip and one authorization pass, not one query.
+        load: async (ids) => {
+          const found = new Map<string, App>();
+          for (const appId of ids) {
+            const app = await loadViewableApp({
+              appId,
+              userId: user.id,
+              organizationId,
+            }).catch(() => null);
+            if (app) found.set(appId, app);
+          }
+          return found;
+        },
+        describe: (app) => app.name,
+        authorize: async (app) => {
+          const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
+          // Twice, as the single-app update does: the caller must be allowed
+          // to modify the app where it is, and to place it where it is going.
+          await assertCallerMayModifyApp({
+            userId: user.id,
+            organizationId,
+            scope: app.scope,
+            authorId: app.authorId,
+            resourceTeamIds,
+          });
+          await assertCallerMayModifyApp({
+            userId: user.id,
+            organizationId,
+            scope,
+            authorId: app.authorId,
+            resourceTeamIds: teamIds,
+          });
+        },
+        applyEach: async (app, appId) => {
+          const updated = await AppModel.update({
+            id: appId,
+            patch: { scope },
+            teamIds,
+            userIds,
+          });
+          if (!updated) {
+            throw new ApiError(404, `No app found with id ${appId}.`);
+          }
+          await syncAppBacking(updated);
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            apps: await AppModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/apps/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteApps,
+        description:
+          "Soft-delete several apps in one request. Each id is authorized " +
+          "exactly as the single-app delete authorizes its own, so an app the " +
+          "caller cannot see or administer — and a locked app, which is never " +
+          "deletable until unlocked — is reported in `failed` while the rest " +
+          "of the batch still applies.",
+        tags: ["Apps"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { user, organizationId } = request;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "apps bulk delete",
+        notFoundMessage: "App not found",
+        unexpectedMessage: "Could not delete this app",
+        load: async (ids) => {
+          const found = new Map<string, App>();
+          for (const appId of ids) {
+            const app = await loadViewableApp({
+              appId,
+              userId: user.id,
+              organizationId,
+            }).catch(() => null);
+            if (app) found.set(appId, app);
+          }
+          return found;
+        },
+        describe: (app) => app.name,
+        authorize: async (app) => {
+          await assertCallerMayModifyApp({
+            userId: user.id,
+            organizationId,
+            scope: app.scope,
+            authorId: app.authorId,
+            resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
+          });
+          if (app.locked) {
+            throw new ApiError(
+              409,
+              `App "${app.name}" is locked and cannot be deleted. Unlock it first.`,
+            );
+          }
+        },
+        applyEach: async (app, appId) => {
+          const deleted = await AppModel.delete(appId);
+          if (!deleted) {
+            throw new ApiError(404, `No app found with id ${appId}.`);
+          }
+          await deleteAppBacking(app);
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            apps: await AppModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

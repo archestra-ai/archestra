@@ -318,6 +318,7 @@ function ApiKeysCardContent() {
                     noun="API key"
                     onClear={clearSelection}
                     busy={bulkDelete.isPending}
+                    selectAllMatching={selectAllMatching}
                     className="mb-3"
                   >
                     <PermissionButton
@@ -349,6 +350,7 @@ function ApiKeysCardContent() {
                     getRowId={(row) => row.id}
                     rowSelection={rowSelection}
                     onRowSelectionChange={setRowSelection}
+                    onPageRowIdsChange={onPageRowIdsChange}
                     hideSelectedCount
                     emptyMessage="No API keys yet"
                     hasActiveFilters={search.trim().length > 0}

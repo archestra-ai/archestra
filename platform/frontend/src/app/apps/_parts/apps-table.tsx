@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
@@ -20,13 +21,19 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
+  useBulkDeleteApps,
   useOpenAppInChat,
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { AppTypeIcon } from "./app-card";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
@@ -55,6 +62,29 @@ export function AppsTable({
   // resets it.
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [deletingApp, setDeletingApp] = useState<OwnedApp | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteApps();
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: apps,
+    getId: rowKey,
+    // Only apps authored here can be deleted; the external ones are ui://
+    // resources belonging to an installed MCP server.
+    canSelect: (app) => app.source === "owned",
+    filterSignature: `apps:${apps.length}`,
+    matchDescription: "were built here",
+  });
+  // `canSelect` already keeps this to owned apps; the guard is what tells the
+  // union apart, since only those carry an id.
+  const selectedApps = selected
+    .filter((app): app is OwnedApp => app.source === "owned")
+    .map((app) => ({ id: app.id, name: app.name }));
 
   const handleOpen = async (app: AppListItem) => {
     if (openingKey) return;
@@ -99,6 +129,11 @@ export function AppsTable({
     });
 
   const columns: ColumnDef<AppListItem>[] = [
+    createSelectColumn<AppListItem>({
+      rowLabel: (app) => `Select ${app.name}`,
+      allLabel: "Select all apps on this page",
+      canSelect: (app) => app.source === "owned",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -241,14 +276,65 @@ export function AppsTable({
 
   return (
     <>
+      <BulkActionsBar
+        count={selectedApps.length}
+        noun="app"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending}
+        selectAllMatching={selectAllMatching}
+        className="mb-3"
+      >
+        <PermissionButton
+          permissions={{ app: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
       <DataTable
         columns={columns}
         data={apps}
         getRowId={rowKey}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        hideSelectedCount
         onRowClick={(app) => void handleOpen(app)}
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
       />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete apps"
+          description={`Delete ${selectedApps.length} ${
+            selectedApps.length === 1 ? "app" : "apps"
+          }? This cannot be undone.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectedApps, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "app",
+                });
+                setBulkDeleteOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete apps"
+          pendingLabel="Deleting..."
+        />
+      )}
 
       {deletingApp && (
         <AppDeleteDialog

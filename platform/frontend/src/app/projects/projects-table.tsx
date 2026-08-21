@@ -4,7 +4,9 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -13,13 +15,19 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   canDeleteProject,
   canManageProject,
 } from "@/lib/projects/project-permissions";
+import { useBulkDeleteProjects } from "@/lib/projects/projects.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
@@ -41,8 +49,27 @@ export function ProjectsTable({
   const router = useRouter();
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProjects();
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedProjects,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: projects,
+    getId: (project) => project.id,
+    filterSignature: `projects:${projects.length}`,
+    matchDescription: "are listed here",
+  });
 
   const columns: ColumnDef<ProjectListItem>[] = [
+    createSelectColumn<ProjectListItem>({
+      rowLabel: (project) => `Select ${project.name}`,
+      allLabel: "Select all projects on this page",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -157,14 +184,73 @@ export function ProjectsTable({
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={projects}
-      getRowId={(row) => row.id}
-      onRowClick={(row) => router.push(`/projects/${row.id}`)}
-      emptyMessage="No projects yet"
-      hidePaginationWhenSinglePage
-    />
+    <>
+      <BulkActionsBar
+        count={selectedProjects.length}
+        noun="project"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending}
+        selectAllMatching={selectAllMatching}
+        className="mb-3"
+      >
+        <PermissionButton
+          permissions={{ project: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
+      <DataTable
+        columns={columns}
+        data={projects}
+        getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        hideSelectedCount
+        onRowClick={(row) => router.push(`/projects/${row.id}`)}
+        emptyMessage="No projects yet"
+        hidePaginationWhenSinglePage
+      />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete projects"
+          description={`Delete ${selectedProjects.length} ${
+            selectedProjects.length === 1 ? "project" : "projects"
+          }? Their chats and files go with them.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(
+              selectedProjects.map((project) => ({
+                id: project.id,
+                name: project.name,
+              })),
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "project",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              },
+            );
+          }}
+          confirmLabel="Delete projects"
+          pendingLabel="Deleting..."
+        />
+      )}
+    </>
   );
 }
 

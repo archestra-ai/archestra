@@ -266,6 +266,7 @@ export default function ServiceAccountsSettingsPage() {
                   noun="service account"
                   onClear={clearSelection}
                   busy={bulkDelete.isPending}
+                  selectAllMatching={selectAllMatching}
                   className="mb-3"
                 >
                   <PermissionButton
@@ -284,6 +285,7 @@ export default function ServiceAccountsSettingsPage() {
                   getRowId={(row) => row.id}
                   rowSelection={rowSelection}
                   onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
                   hideSelectedCount
                   onRowClick={(account, event) => {
                     const target = event.target as HTMLElement;

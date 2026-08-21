@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { runBulkAction } from "@/lib/bulk-action";
 import {
   readFileAsBase64,
   summarizeUploadResults,
@@ -19,6 +20,7 @@ import {
   getApiErrorType,
   handleApiError,
   throwOnApiError,
+  toApiError,
 } from "@/lib/utils";
 
 const {
@@ -302,6 +304,23 @@ export function useSetProjectShare() {
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },
+  });
+}
+
+/** Deletes a selection of projects, fanning out over the single-project route. */
+export function useBulkDeleteProjects() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (projects: readonly { id: string; name: string }[]) =>
+      runBulkAction({
+        items: projects,
+        describe: (project) => project.name,
+        run: async ({ id }) => {
+          const { error } = await deleteProject({ path: { id } });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
 

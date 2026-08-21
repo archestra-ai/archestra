@@ -1,7 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { runBulkAction } from "@/lib/bulk-action";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -137,6 +139,43 @@ export function useUpdateRole() {
 /**
  * Hook to delete a custom role
  */
+/**
+ * Deletes a selection of custom roles. Predefined roles are immutable, so the
+ * table never offers them; this fans out over the single-role route.
+ */
+export function useBulkDeleteRoles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (roles: readonly { id: string; name: string }[]) =>
+      runBulkAction({
+        items: roles,
+        describe: (role) => role.name,
+        run: async ({ id }) => {
+          const response = await deleteRole({ path: { roleId: id } });
+          if (response.error) throw toApiError(response.error);
+        },
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: roleKeys.lists() }),
+  });
+}
+
+/** Every role matching the table's filters, not just the page in view. */
+export function useAllMatchingRoles(
+  params: { search?: string },
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: [...roleKeys.lists(), "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const response = await getRoles({ query: { ...params, limit, offset } });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data?.data ?? [];
+    },
+  });
+}
+
 export function useDeleteRole() {
   const queryClient = useQueryClient();
   return useMutation({

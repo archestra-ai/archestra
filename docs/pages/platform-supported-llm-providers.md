@@ -816,13 +816,13 @@ A key can also point at a custom endpoint instead, for a VPC or PrivateLink setu
 Bedrock can reuse the unchanging prefix of a request instead of reprocessing it every turn. That prefix is the system prompt, tool definitions, and earlier turns. Reuse needs an explicit cache marker, and who sets it depends on how the request reaches Bedrock:
 
 - Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote. There is no setting to turn that off.
-- Every other path forwards the markers its caller set, unchanged. That covers your own clients on the LLM Proxy — Claude Code, for example — and agent runs over A2A.
+- Every other path forwards the markers its caller set, unchanged. On the LLM Proxy that leaves the decision with your own client — Claude Code, for example, marks its own requests. Agent runs reached over A2A, including the Slack, Teams, and Telegram integrations, set no marker of their own, so they go uncached unless the caller adds one.
 
 Bedrock only caches for Claude and the Nova text models. Other families reject a marked request outright, so Archestra marks none of them. An unfamiliar model forfeits the cache rather than failing.
 
 A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
 
-Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
+Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
 
 ### Authentication Methods
 

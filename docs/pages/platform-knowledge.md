@@ -167,12 +167,12 @@ Connectors index image files only when the configured embedding model accepts im
 | ----------- | --------------------------------------------------------------------- | ---------------------------- |
 | Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
 | Gemini      | Multimodal Embedding (`multimodalembedding@001`, Vertex AI mode only)  | PNG, JPEG, BMP, GIF, WebP    |
-| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
-| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG, WebP, GIF         |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG, WebP, GIF         |
 | Cohere      | Cohere Embed v4 (`embed-v4.0`)                                        | JPEG, PNG, WebP, GIF         |
 | Cohere      | Cohere Embed English v3, Multilingual v3, and their Light variants    | JPEG, PNG, WebP, GIF         |
 
-Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
+Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — SVG, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
 
 Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 512 text tokens per input — on Bedrock, 2048 characters. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model, or Cohere Embed v4, when your corpus is mostly documents.
 

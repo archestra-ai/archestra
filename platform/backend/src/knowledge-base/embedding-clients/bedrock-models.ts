@@ -55,12 +55,20 @@ interface BedrockEmbeddingModel {
   maxInputTextChars?: number;
   /**
    * Image MIME types the model accepts, for models with an image modality.
-   * Both Titan Multimodal G1 and Cohere Embed v3 take JPEG/PNG only — a GIF or
-   * WebP reaching them is an opaque 400 — so connectors skip other formats at
-   * ingestion and the embedder skips them at embed time.
+   * Live InvokeModel probes confirm JPEG/PNG/WebP/GIF for Titan Multimodal G1
+   * and both Cohere Embed v3 models. AWS documentation lists a narrower subset,
+   * so this table records observed endpoint behavior rather than pre-filtering
+   * inputs the models actually accept.
    */
   acceptedImageMimeTypes?: readonly string[];
 }
+
+const BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
 
 export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
   {
@@ -86,7 +94,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     onRequestDimensions: [256, 384, 1024],
     inputModalities: ["text", "image"],
     maxInputTextTokens: 256,
-    acceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
   },
   {
     modelId: "cohere.embed-english-v3",
@@ -95,7 +103,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     staticInject: true,
     inputModalities: ["text", "image"],
     maxInputTextChars: 2048,
-    acceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
   },
   {
     modelId: "cohere.embed-multilingual-v3",
@@ -104,7 +112,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     staticInject: true,
     inputModalities: ["text", "image"],
     maxInputTextChars: 2048,
-    acceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
   },
 ];
 

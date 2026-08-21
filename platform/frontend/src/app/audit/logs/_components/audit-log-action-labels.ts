@@ -134,6 +134,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "member.role_updated": "Member role changed",
   "member.deleted": "Member removed",
   // Optimization rule
+  // Retired with the LLM optimization rules feature; retained so audit rows
+  // written before its removal still render with a readable label.
   "optimizationRule.created": "Optimization rule created",
   "optimizationRule.updated": "Optimization rule updated",
   "optimizationRule.deleted": "Optimization rule deleted",

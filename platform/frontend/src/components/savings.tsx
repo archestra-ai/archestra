@@ -35,13 +35,13 @@ export function Savings({
   tooltip?: "never" | "always" | "hover";
   className?: string;
   variant?: "default" | "session" | "interaction";
-  /** The original requested model before cost optimization */
+  /** The model the request asked for */
   baselineModel?: string | null;
-  /** The actual model used after cost optimization */
+  /** The model the request actually ran on */
   actualModel?: string | null;
 }) {
   const {
-    costOptimizationSavings,
+    modelSwapSavings,
     toonSavings: toonCostSavingsNum,
     toonTokensSaved,
     totalSavings,
@@ -114,17 +114,18 @@ export function Savings({
               </div>
             ) : (
               <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
-                {costOptimizationSavings > 0 ? (
+                {/* Only historical interactions can carry a model swap: the
+                    rules that produced one are gone, so the line renders for
+                    that history and is absent otherwise. */}
+                {modelSwapSavings > 0 && (
                   <div>
-                    Model optimization: -{formatCost(costOptimizationSavings)}
+                    Model swap: -{formatCost(modelSwapSavings)}
                     {baselineModel &&
                     actualModel &&
                     baselineModel !== actualModel
                       ? ` (${baselineModel} \u2192 ${actualModel})`
                       : ""}
                   </div>
-                ) : (
-                  <div>Model optimization: No matching rule</div>
                 )}
 
                 {toonCostSavingsNum > 0 ? (

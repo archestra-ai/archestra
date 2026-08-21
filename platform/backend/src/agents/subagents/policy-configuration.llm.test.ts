@@ -13,11 +13,7 @@
  */
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
-import {
-  type LlmProviderApiKey,
-  LlmProviderApiKeyModelLinkModel,
-  ModelModel,
-} from "@/models";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
@@ -80,11 +76,11 @@ describe("PolicyConfigurationService.resolveLlm (real resolution)", () => {
     });
     const secret = await makeSecret({ secret: { apiKey: credential } });
     // A connected subscription is always a personal key owned by one user.
-    const key: LlmProviderApiKey = await makeLlmProviderApiKey(
-      org.id,
-      secret.id,
-      { provider: "openai", scope: "personal", userId: user.id },
-    );
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
     const model = await makeOpenAiModel("gpt-5-codex");
     await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
       model.id,

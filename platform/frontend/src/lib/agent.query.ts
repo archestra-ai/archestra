@@ -8,6 +8,7 @@ import {
 } from "@/consts";
 import { runBulkAction } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { reportApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
@@ -401,6 +402,72 @@ export function useDeleteProfile() {
  * failure with its own toast, which for a selection means one toast per row.
  * The caller reports the batch once instead, via `reportBulkOutcome`.
  */
+/**
+ * Every profile matching the table's filters, not just the page in view —
+ * what backs "select all N agents that match this search query".
+ *
+ * Shared by the agents, LLM proxy and MCP gateway tables; `agentTypes` is what
+ * keeps each one to its own rows.
+ */
+/**
+ * Sets one visibility across a selection of profiles.
+ *
+ * There is no bulk route, so this fans out over the single-profile PUT. The
+ * wire names differ from skills — `teams`/`users` rather than
+ * `teamIds`/`userIds` — which is why the shared dialog hands over a neutral
+ * shape and each resource maps it.
+ */
+export function useBulkUpdateProfileVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      profiles,
+      scope,
+      teamIds,
+      userIds,
+    }: {
+      profiles: readonly { id: string; name: string }[];
+      scope: "personal" | "team" | "org";
+      teamIds: string[];
+      userIds: string[];
+    }) =>
+      runBulkAction({
+        items: profiles,
+        describe: (profile) => profile.name,
+        run: async ({ id }) => {
+          const { error } = await updateAgent({
+            path: { id },
+            body: { scope, teams: teamIds, users: userIds },
+          });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useAllMatchingProfiles(
+  params: Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["agents", "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getAgents({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+  });
+}
+
 export function useBulkDeleteProfiles() {
   const queryClient = useQueryClient();
   return useMutation({

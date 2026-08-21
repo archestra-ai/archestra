@@ -6,7 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -55,7 +56,9 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useAllMatchingProfiles,
   useBulkDeleteProfiles,
+  useBulkUpdateProfileVisibility,
   useDeleteProfile,
   usePermanentlyDeleteProfile,
   useProfilesPaginated,
@@ -143,7 +146,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteProfiles();
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkVisibility = useBulkUpdateProfileVisibility();
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
@@ -153,10 +161,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       ? ["llm_proxy"]
       : ["llm_proxy", "profile"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
-    initialData: initialData?.agents ?? undefined,
-    limit: pageSize,
-    offset,
+  /** Everything narrowing the table, shared by the page query and
+      the "all matching" walk behind it. */
+  const listFilters = {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
@@ -168,6 +175,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+  } satisfies Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >;
+
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
+    limit: pageSize,
+    offset,
+    initialData: initialData?.agents ?? undefined,
+    ...listFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -253,9 +270,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request.
-  const selectedProxies = isDeletedView
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
+
+  const pageSelection = isDeletedView
     ? []
     : agents.filter((row) => rowSelection[row.id]);
+  const selectedProxies =
+    allMatchingSelected && allMatching ? allMatching : pageSelection;
 
   const columns: ColumnDef<ProxyData>[] = [
     // A deleted row can only be restored or purged, neither of which this
@@ -544,6 +569,39 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 }
               />
             </div>
+
+            {bulkVisibilityOpen && (
+              <BulkVisibilityDialog
+                items={selectedProxies.map((profile) => ({
+                  ...profile,
+                  teams: profile.teams ?? [],
+                  users: profile.users ?? [],
+                }))}
+                noun="proxy"
+                plural="proxies"
+                open={bulkVisibilityOpen}
+                onOpenChange={setBulkVisibilityOpen}
+                isPending={bulkVisibility.isPending}
+                onApply={async (change) => {
+                  const outcome = await bulkVisibility.mutateAsync({
+                    profiles: selectedProxies,
+                    scope: change.scope,
+                    teamIds: change.teamIds,
+                    userIds: change.userIds,
+                  });
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Updated",
+                    failureVerb: "update",
+                    noun: "proxy",
+                    plural: "proxies",
+                  });
+                  if (outcome.succeeded.length === 0) return false;
+                  if (outcome.failed.length === 0) clearSelection();
+                  return true;
+                }}
+              />
+            )}
 
             {bulkDeleteOpen && (
               <DeleteConfirmDialog

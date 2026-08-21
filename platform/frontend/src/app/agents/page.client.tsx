@@ -6,7 +6,14 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Trash2, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +33,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -55,7 +63,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useAllMatchingProfiles,
   useBulkDeleteProfiles,
+  useBulkUpdateProfileVisibility,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
@@ -152,15 +162,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const {
-    data: agentsResponse,
-    isPending,
-    isLoadingError: isAgentsLoadError,
-    refetch: refetchAgents,
-  } = useProfilesPaginated({
-    initialData: initialData?.agents ?? undefined,
-    limit: pageSize,
-    offset,
+  /** Everything narrowing the table, shared by the page query and
+      the "all matching" walk behind it. */
+  const listFilters = {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
@@ -172,6 +176,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+  } satisfies Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >;
+
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isAgentsLoadError,
+    refetch: refetchAgents,
+  } = useProfilesPaginated({
+    limit: pageSize,
+    offset,
+    initialData: initialData?.agents ?? undefined,
+    ...listFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -288,15 +307,28 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteProfiles();
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkVisibility = useBulkUpdateProfileVisibility();
 
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request. The trash view
   // renders no checkbox column, so it never surfaces a bar either.
-  const selectedAgents = isDeletedView
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
+
+  const pageSelection = isDeletedView
     ? []
     : agents.filter((agent) => rowSelection[agent.id]);
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const selectedAgents =
+    allMatchingSelected && allMatching ? allMatching : pageSelection;
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
@@ -603,9 +635,28 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               count={selectedAgents.length}
               noun="agent"
               onClear={clearSelection}
-              busy={bulkDelete.isPending}
+              busy={bulkDelete.isPending || isFetchingAllMatching}
+              selectAllMatching={{
+                total: pagination?.total ?? 0,
+                pageFullySelected:
+                  agents.length > 0 && pageSelection.length === agents.length,
+                active: allMatchingSelected,
+                onSelectAll: () => setEscalatedFor(filterSignature),
+                matchDescription: nameFilter
+                  ? "match this search query"
+                  : "match the current filters",
+              }}
               className="mb-3"
             >
+              <PermissionButton
+                permissions={{ agent: ["update"] }}
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkVisibilityOpen(true)}
+              >
+                <Pencil className="h-4 w-4" />
+                <span>Edit visibility</span>
+              </PermissionButton>
               <PermissionButton
                 permissions={{ agent: ["delete"] }}
                 variant="destructive"
@@ -655,6 +706,39 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onClearFilters={clearFilters}
               />
             </div>
+
+            {bulkVisibilityOpen && (
+              <BulkVisibilityDialog
+                items={selectedAgents.map((profile) => ({
+                  ...profile,
+                  teams: profile.teams ?? [],
+                  users: profile.users ?? [],
+                }))}
+                noun="agent"
+                plural="agents"
+                open={bulkVisibilityOpen}
+                onOpenChange={setBulkVisibilityOpen}
+                isPending={bulkVisibility.isPending}
+                onApply={async (change) => {
+                  const outcome = await bulkVisibility.mutateAsync({
+                    profiles: selectedAgents,
+                    scope: change.scope,
+                    teamIds: change.teamIds,
+                    userIds: change.userIds,
+                  });
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Updated",
+                    failureVerb: "update",
+                    noun: "agent",
+                    plural: "agents",
+                  });
+                  if (outcome.succeeded.length === 0) return false;
+                  if (outcome.failed.length === 0) clearSelection();
+                  return true;
+                }}
+              />
+            )}
 
             {bulkDeleteOpen && (
               <DeleteConfirmDialog

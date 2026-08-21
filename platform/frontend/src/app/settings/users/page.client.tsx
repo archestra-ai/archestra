@@ -56,6 +56,7 @@ import {
 import {
   type Invitation,
   type Member,
+  useAllMatchingMembers,
   useCancelInvitationMutation,
   useInvitationsPaginated,
   useMembersPaginated,
@@ -319,7 +320,10 @@ function MembersTab({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   const rowKey = (row: Member | PendingSignupMember) =>
     "provider" in row ? `pending-${row.userId}` : row.id;
@@ -331,9 +335,22 @@ function MembersTab({
   const isSelf = (row: Member | PendingSignupMember) =>
     row.userId === currentUserId;
 
-  const selectedMembers = tableRows.filter(
+  const filterSignature = JSON.stringify({ nameFilter, roleFilter });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatchingMembers, isFetching: isFetchingAllMatching } =
+    useAllMatchingMembers(
+      { name: nameFilter || undefined, role: roleFilter || undefined },
+      { enabled: allMatchingSelected },
+    );
+
+  const pageSelection = tableRows.filter(
     (row) => !isSelf(row) && rowSelection[rowKey(row)],
   );
+  const selectedMembers =
+    allMatchingSelected && allMatchingMembers
+      ? allMatchingMembers.filter((row) => !isSelf(row))
+      : pageSelection;
 
   // Two removal routes behind one action: an accepted member leaves the
   // organization, a pending one has their invitation withdrawn.
@@ -562,7 +579,21 @@ function MembersTab({
           count={selectedMembers.length}
           noun="user"
           onClear={clearSelection}
-          busy={bulkRemove.isPending}
+          busy={bulkRemove.isPending || isFetchingAllMatching}
+          selectAllMatching={{
+            // Members only: the pending-signup rows come from a separate,
+            // unpaginated source shown on page one alone.
+            total: pagination?.total ?? 0,
+            pageFullySelected:
+              tableRows.length > 0 &&
+              pageSelection.length ===
+                tableRows.filter((row) => !isSelf(row)).length,
+            active: allMatchingSelected,
+            onSelectAll: () => setEscalatedFor(filterSignature),
+            matchDescription: nameFilter
+              ? "match this search query"
+              : "match the current filters",
+          }}
           className="mb-3"
         >
           <PermissionButton

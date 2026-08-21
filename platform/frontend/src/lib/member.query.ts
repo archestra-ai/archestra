@@ -8,6 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { UserSelectOption } from "@/components/user-select-option";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { throwOnApiError } from "@/lib/utils";
 import { useActiveOrganization } from "./organization.query";
@@ -61,6 +62,29 @@ type RawInvitation = NonNullable<
 /**
  * Paginated members hook with search and role filter support
  */
+/**
+ * Every member matching the table's filters, not just the page in view.
+ *
+ * Members only. The pending-signup rows the table prepends come from a
+ * separate, unpaginated source and are shown on page one alone, so an
+ * escalation that promised "every user matching these filters" could not
+ * honestly include them.
+ */
+export function useAllMatchingMembers(
+  query: Pick<MembersQuery, "name" | "role">,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: [...memberKeys.all, "all-matching", query],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const response = await getMembers({ query: { ...query, limit, offset } });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data?.data ?? [];
+    },
+  });
+}
+
 export function useMembersPaginated(
   query: Required<Pick<MembersQuery, "limit" | "offset">> &
     Pick<MembersQuery, "name" | "role">,

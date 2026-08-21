@@ -331,72 +331,7 @@ function prepareProviderMessages(params: {
   isNova: boolean;
 }): BedrockMessages | undefined {
   const messagesWithEncodedToolNames = encodeProviderMessageToolNames(params);
-  return normalizeRedactedReasoning(
-    sanitizeProviderDocumentNames(messagesWithEncodedToolNames),
-  );
-}
-
-// Rewrites `reasoningContent: { redactedReasoning: { data } }` — the spelling
-// @ai-sdk/amazon-bedrock uses when it echoes a prior redacted thinking block
-// back on the next turn — to the Converse API's own
-// `reasoningContent: { redactedContent }`. `ReasoningContentBlock` has no
-// `redactedReasoning` member, so forwarding the SDK's spelling verbatim risks a
-// 400 on exactly the multi-turn requests that carry redacted thinking. Blocks
-// already using the API's spelling, and plain `reasoningText` blocks, are
-// returned by reference.
-//
-// Kept even though the pinned @ai-sdk/amazon-bedrock now sends the API's own
-// spelling: clients on older versions of it — or on any other SDK that copied
-// the `redactedReasoning` shape — still send the legacy one, and the proxy
-// speaking the Converse API correctly does not depend on what any one client
-// happens to send.
-function normalizeRedactedReasoning(
-  messages: BedrockMessages | undefined,
-): BedrockMessages | undefined {
-  if (!messages) {
-    return messages;
-  }
-
-  return messages.map((message) => {
-    if (!Array.isArray(message.content)) {
-      return message;
-    }
-
-    let changed = false;
-    const content = message.content.map((contentBlock) => {
-      const data = redactedReasoningData(contentBlock);
-      if (data === null) {
-        return contentBlock;
-      }
-
-      changed = true;
-      return { reasoningContent: { redactedContent: data } };
-    });
-
-    return changed ? { ...message, content } : message;
-  }) as BedrockMessages;
-}
-
-// The base64 blob of a `redactedReasoning` block, or null for anything else.
-function redactedReasoningData(contentBlock: unknown): string | null {
-  if (typeof contentBlock !== "object" || contentBlock === null) {
-    return null;
-  }
-
-  const { reasoningContent } = contentBlock as { reasoningContent?: unknown };
-  if (typeof reasoningContent !== "object" || reasoningContent === null) {
-    return null;
-  }
-
-  const { redactedReasoning } = reasoningContent as {
-    redactedReasoning?: unknown;
-  };
-  if (typeof redactedReasoning !== "object" || redactedReasoning === null) {
-    return null;
-  }
-
-  const { data } = redactedReasoning as { data?: unknown };
-  return typeof data === "string" ? data : null;
+  return sanitizeProviderDocumentNames(messagesWithEncodedToolNames);
 }
 
 // Walks message content blocks and normalizes document names so Bedrock does

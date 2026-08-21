@@ -833,49 +833,6 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
     expect(result.success).toBe(true);
   });
 
-  // ReasoningContentBlock has no `redactedReasoning` member — that spelling is
-  // @ai-sdk/amazon-bedrock's — so it is normalized to the API's own before the
-  // request leaves the proxy.
-  test("rewrites redactedReasoning to redactedContent for Bedrock", () => {
-    const request = createConverseRequest({
-      messages: [
-        { role: "user", content: [{ text: "hi" }] },
-        {
-          role: "assistant",
-          content: [
-            { reasoningContent: { redactedReasoning: { data: "abc123==" } } },
-            { text: "hello" },
-          ],
-        },
-        { role: "user", content: [{ text: "again" }] },
-      ] as never,
-    });
-
-    const commandInput = getCommandInput(request);
-
-    expect(commandInput.messages?.[1]?.content).toEqual([
-      { reasoningContent: { redactedContent: "abc123==" } },
-      { text: "hello" },
-    ]);
-  });
-
-  test("leaves a redactedContent block untouched", () => {
-    const redactedBlock = {
-      reasoningContent: { redactedContent: "abc123==" },
-    };
-    const request = createConverseRequest({
-      messages: [
-        { role: "user", content: [{ text: "hi" }] },
-        { role: "assistant", content: [redactedBlock] },
-        { role: "user", content: [{ text: "again" }] },
-      ] as never,
-    });
-
-    const commandInput = getCommandInput(request);
-
-    expect(commandInput.messages?.[1]?.content?.[0]).toEqual(redactedBlock);
-  });
-
   test("forwards the reasoningContent block to Bedrock unchanged", () => {
     const request = createConverseRequest({
       messages: [

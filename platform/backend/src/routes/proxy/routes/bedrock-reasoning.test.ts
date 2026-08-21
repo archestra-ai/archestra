@@ -4,8 +4,8 @@
  * Reasoning reaches the proxy in both directions: Bedrock returns a
  * `reasoningContent` block (or streams one as a delta), and the next request
  * echoes it back. These pin the shapes the route must carry, including the
- * *redacted* variant, whose union member the Converse API spells
- * `redactedContent` and @ai-sdk/amazon-bedrock spells `redactedReasoning.data`.
+ * *redacted* variant, which the Converse API spells `redactedContent` and
+ * @ai-sdk/amazon-bedrock spelled `redactedReasoning.data` before 4.0.158.
  */
 
 import { EventStreamCodec } from "@smithy/eventstream-codec";
@@ -205,7 +205,7 @@ describe("Bedrock Converse proxy — reasoning content", () => {
     });
   });
 
-  test("sends redacted reasoning upstream under the Converse API's name", async ({
+  test("forwards an echoed redacted reasoning block upstream unchanged", async ({
     makeAgent,
   }) => {
     const captured: Record<string, unknown>[] = [];
@@ -243,8 +243,9 @@ describe("Bedrock Converse proxy — reasoning content", () => {
           {
             role: "assistant",
             content: [
-              // What @ai-sdk/amazon-bedrock echoes back; ReasoningContentBlock
-              // has no such member, so the proxy renames it.
+              // The spelling @ai-sdk/amazon-bedrock echoed back before
+              // 4.0.158, and what other clients may still send. The proxy
+              // forwards it as received — Bedrock decides what it accepts.
               {
                 reasoningContent: {
                   redactedReasoning: { data: REDACTED_BLOB },
@@ -263,7 +264,7 @@ describe("Bedrock Converse proxy — reasoning content", () => {
     expect(
       (captured[0].messages as { content: unknown[] }[])[1].content,
     ).toEqual([
-      { reasoningContent: { redactedContent: REDACTED_BLOB } },
+      { reasoningContent: { redactedReasoning: { data: REDACTED_BLOB } } },
       { text: "Seven." },
     ]);
   });

@@ -147,10 +147,10 @@ const CachePointContentBlockSchema = z.object({
 // optional so a text variant without one still validates and passes through.
 //
 // The redacted variant has two spellings on the wire. `redactedContent` is the
-// Converse API's own (`ReasoningContentBlock`); `redactedReasoning.data` is
-// what @ai-sdk/amazon-bedrock sends. Both are accepted here and normalized to
-// the API's spelling before the request leaves the proxy — see
-// `normalizeRedactedReasoning` in the Bedrock adapter.
+// Converse API's own (`ReasoningContentBlock`) and what the pinned
+// @ai-sdk/amazon-bedrock echoes back; `redactedReasoning.data` is what it sent
+// before 4.0.158 and what other clients may still send. Both are accepted and
+// forwarded as received — Bedrock is the one that decides.
 const ReasoningContentBlockSchema = z.object({
   reasoningContent: z.union([
     z.object({

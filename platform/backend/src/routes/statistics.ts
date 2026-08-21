@@ -19,6 +19,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   ModelStatisticsSchema,
+  MyStatisticsSchema,
   OverviewStatisticsSchema,
   SKILL_STATISTICS_SORT_BY,
   SkillStatisticsSchema,
@@ -200,6 +201,28 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
     },
+  );
+
+  fastify.get(
+    "/api/statistics/me",
+    {
+      schema: {
+        operationId: RouteId.GetMyStatistics,
+        description:
+          "Get the calling user's own cost and usage for a timeframe: requests, tokens, billed and subscription-covered spend, active days and model mix. Reports only the caller's own activity, so unlike the other statistics endpoints it requires no permission over organization-wide cost data.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(MyStatisticsSchema),
+      },
+    },
+    async ({ query: { timeframe }, user, organizationId }, reply) =>
+      reply.send(
+        await StatisticsModel.getMyStatistics({
+          timeframe,
+          userId: user.id,
+          organizationId,
+        }),
+      ),
   );
 
   fastify.get(

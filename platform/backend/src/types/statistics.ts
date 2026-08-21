@@ -89,6 +89,39 @@ export const UserStatisticsSchema = z.object({
 });
 
 /**
+ * The caller's own cost and usage — the personal summary that leads the Costs
+ * page.
+ *
+ * Deliberately a separate shape from {@link UserStatisticsSchema} rather than a
+ * one-row page of it: this is the only statistics view that carries no
+ * permission over other people's data, so it names no other user, exposes no
+ * organization totals, and cannot be widened by a query parameter.
+ *
+ * Cost is split the same way as everywhere else — `billedCost` is money spent,
+ * `subscriptionCost` is the list-price estimate of flat-rate-covered traffic
+ * that was never billed — so a heavy subscription user is not reported as
+ * costing nothing.
+ */
+export const MyStatisticsSchema = z.object({
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Billed spend: list-price `cost` of metered rows only. */
+  billedCost: z.number(),
+  /** Would-be list-price cost of subscription-covered rows — not billed. */
+  subscriptionCost: z.number(),
+  /** Distinct UTC days with at least one request in the timeframe. */
+  activeDays: z.number(),
+  lastActiveAt: z.string().nullable(),
+  /** The caller's model mix, heaviest first. */
+  models: z.array(UserModelUsageSchema),
+  /** Billed spend over the timeframe, bucketed like the other cost charts. */
+  timeSeries: z.array(StatisticsTimeSeriesPointSchema),
+});
+
+/**
  * Sortable columns for the per-user view. Defaults to `totalTokens` because
  * adoption is measured in usage, not spend.
  */
@@ -325,6 +358,7 @@ export type AgentStatistics = z.infer<typeof AgentStatisticsSchema>;
 export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type UserStatistics = z.infer<typeof UserStatisticsSchema>;
 export type UserModelUsage = z.infer<typeof UserModelUsageSchema>;
+export type MyStatistics = z.infer<typeof MyStatisticsSchema>;
 export type UserStatisticsSortBy = z.infer<typeof UserStatisticsSortBySchema>;
 export type AppStatistics = z.infer<typeof AppStatisticsSchema>;
 export type AppStatisticsSortBy = z.infer<typeof AppStatisticsSortBySchema>;

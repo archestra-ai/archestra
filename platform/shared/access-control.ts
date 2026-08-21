@@ -1582,6 +1582,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
   },
+  // Deliberately open to any authenticated user: it reports only the caller's
+  // own usage, so it needs no permission over other people's data. This is what
+  // keeps the Costs page useful to someone without `llmCost:read`, who sees the
+  // personal summary and none of the organization-wide charts.
+  [RouteId.GetMyStatistics]: {},
   // Per-app and per-skill cost additionally narrow to what the caller can see:
   // the routes resolve the same visibility the Apps page and the skills list use,
   // so cost reporting never lists an app or skill the caller has no access to.

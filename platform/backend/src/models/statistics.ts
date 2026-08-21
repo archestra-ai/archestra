@@ -32,6 +32,7 @@ import type {
   ChatCostBaseline,
   CostSavingsStatistics,
   ModelStatistics,
+  MyStatistics,
   OverviewStatistics,
   SkillStatistics,
   SkillStatisticsSortBy,
@@ -790,6 +791,96 @@ class StatisticsModel {
   }
 
   /**
+   * The caller's own cost and usage.
+   *
+   * Separate from {@link getUserStatistics} rather than a self-scoped call into
+   * it, for two reasons:
+   *
+   * - **Permission surface.** This is the one statistics view that requires no
+   *   permission over other people's data, so its scope is a fixed
+   *   `user_id = :me` predicate with no parameter that can widen it. Reusing the
+   *   paginated per-user query would make "may I see everyone?" a runtime
+   *   argument on the endpoint that exists precisely because the caller may not.
+   * - **Scope.** `getUserStatistics` narrows to agents the caller can see, which
+   *   is right when reading other people's usage through an agent-shaped lens.
+   *   Applied to your own row it silently drops your own spend on an agent you
+   *   have since lost access to, which reads as usage going missing. Your own
+   *   interactions are yours regardless of which agent served them.
+   *
+   * Restricted to one organization, so a member of several sees this
+   * organization's usage on this organization's page. Interactions whose agent
+   * has been deleted (`profile_id` is ON DELETE SET NULL) name no organization
+   * and are kept: they are still the caller's own spend, and dropping them would
+   * under-report it.
+   */
+  static async getMyStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    userId: string;
+    organizationId: string;
+  }): Promise<MyStatistics> {
+    const { timeframe, userId, organizationId } = params;
+
+    const whereClause = and(
+      ...StatisticsModel.timeframeConditions(timeframe),
+      eq(schema.interactionsTable.userId, userId),
+      ...StatisticsModel.organizationScopeSubqueryConditions(organizationId),
+    );
+
+    const totalTokensExpr = sql<number>`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`;
+
+    const [totals, timeSeriesByUser, modelsByUser] = await Promise.all([
+      db
+        .select({
+          requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+          outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+          cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+          totalTokens: sql<number>`CAST(${totalTokensExpr} AS DOUBLE PRECISION)`,
+          billedCost: billedSum(
+            schema.interactionsTable.cost,
+            "DOUBLE PRECISION",
+          ),
+          subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+          activeDays: sql<number>`CAST(COUNT(DISTINCT DATE(${schema.interactionsTable.createdAt})) AS INTEGER)`,
+          lastActiveAt: sql<
+            string | null
+          >`MAX(${schema.interactionsTable.createdAt})`,
+        })
+        .from(schema.interactionsTable)
+        .where(whereClause),
+      StatisticsModel.getUserTimeSeries({
+        timeframe,
+        userIds: [userId],
+        whereClause,
+      }),
+      StatisticsModel.getUserModelBreakdown({
+        userIds: [userId],
+        whereClause,
+      }),
+    ]);
+
+    // An aggregate with no GROUP BY always returns exactly one row, even over
+    // zero interactions — the empty case is that row's zeros, not a missing row.
+    const row = totals[0];
+
+    return {
+      requests: Number(row?.requests) || 0,
+      inputTokens: Number(row?.inputTokens) || 0,
+      outputTokens: Number(row?.outputTokens) || 0,
+      cacheReadTokens: Number(row?.cacheReadTokens) || 0,
+      totalTokens: Number(row?.totalTokens) || 0,
+      billedCost: Number(row?.billedCost) || 0,
+      subscriptionCost: Number(row?.subscriptionCost) || 0,
+      activeDays: Number(row?.activeDays) || 0,
+      lastActiveAt: row?.lastActiveAt
+        ? new Date(row.lastActiveAt).toISOString()
+        : null,
+      models: modelsByUser.get(userId) ?? [],
+      timeSeries: timeSeriesByUser.get(userId) ?? [],
+    };
+  }
+
+  /**
    * Per-MCP-App cost: what each app cost to build, and what it costs to run.
    *
    * Neither half is derivable from an interaction row alone, so each comes from
@@ -1411,6 +1502,34 @@ class StatisticsModel {
     return [
       or(
         eq(schema.agentsTable.organizationId, organizationId),
+        isNull(schema.interactionsTable.profileId),
+      ) as SQL,
+    ];
+  }
+
+  /**
+   * The same organization restriction as {@link organizationScopeConditions},
+   * expressed as a subquery on `interactions.profile_id` instead of a join.
+   *
+   * The join form puts `agents` columns in the WHERE clause, which makes the
+   * condition unusable by any query that doesn't also join that table — the
+   * shared per-user helpers select from `interactions` alone. This form is a
+   * plain predicate on `interactions`, so one WHERE clause can be handed to all
+   * of them. It carries the same deliberate `IS NULL` escape for interactions
+   * whose agent has been deleted.
+   */
+  private static organizationScopeSubqueryConditions(
+    organizationId: string,
+  ): SQL[] {
+    return [
+      or(
+        inArray(
+          schema.interactionsTable.profileId,
+          db
+            .select({ id: schema.agentsTable.id })
+            .from(schema.agentsTable)
+            .where(eq(schema.agentsTable.organizationId, organizationId)),
+        ),
         isNull(schema.interactionsTable.profileId),
       ) as SQL,
     ];

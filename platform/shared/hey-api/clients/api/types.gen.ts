@@ -89407,6 +89407,112 @@ export type GetUserStatisticsResponses = {
 
 export type GetUserStatisticsResponse = GetUserStatisticsResponses[keyof GetUserStatisticsResponses];
 
+export type GetMyStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/me';
+};
+
+export type GetMyStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyStatisticsError = GetMyStatisticsErrors[keyof GetMyStatisticsErrors];
+
+export type GetMyStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        totalTokens: number;
+        billedCost: number;
+        subscriptionCost: number;
+        activeDays: number;
+        lastActiveAt: string | null;
+        models: Array<{
+            model: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+        }>;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    };
+};
+
+export type GetMyStatisticsResponse = GetMyStatisticsResponses[keyof GetMyStatisticsResponses];
+
 export type GetAppStatisticsData = {
     body?: never;
     path?: never;

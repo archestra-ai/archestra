@@ -22,7 +22,8 @@ import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
 const MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0";
-const REDACTED_BLOB = "cnNuXzVaVnJpZjRKMGJYSXFtV2RsZWRqN1FJRmVBQmw2UGVH";
+const REDACTED_BLOB =
+  "cnNuX0VYQU1QTEVfcmVkYWN0ZWRfcmVhc29uaW5nX3BsYWNlaG9sZGVyX25vdF9hX3JlYWxfYmxvYg==";
 
 const HEADERS = {
   "content-type": "application/json",

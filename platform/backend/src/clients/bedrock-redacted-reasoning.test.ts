@@ -9,8 +9,9 @@ import {
 } from "./bedrock-redacted-reasoning";
 
 // A real Bedrock redacted-reasoning payload is a KMS-encrypted blob, base64'd
-// onto the JSON wire. Only its shape matters here.
-const REDACTED_BLOB = "cnNuXzVaVnJpZjRKMGJYSXFtV2RsZWRqN1FJRmVBQmw2UGVH";
+// onto the JSON wire. Only its shape matters here, so this is invented.
+const REDACTED_BLOB =
+  "cnNuX0VYQU1QTEVfcmVkYWN0ZWRfcmVhc29uaW5nX3BsYWNlaG9sZGVyX25vdF9hX3JlYWxfYmxvYg==";
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8);
 

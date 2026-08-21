@@ -194,11 +194,21 @@ function createOrphanReasoningRepair(): TransformStream<
 // INTERNAL — wire rewriting
 // =============================================================================
 
+/**
+ * Response init for a body we rebuilt. `content-length` describes the bytes
+ * Bedrock sent, which a rewrite invalidates, and `content-encoding` describes
+ * a compression `fetch` has already undone — both would misdescribe what the
+ * caller now reads.
+ */
 function responseInitFrom(response: Response): ResponseInit {
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+
   return {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   };
 }
 

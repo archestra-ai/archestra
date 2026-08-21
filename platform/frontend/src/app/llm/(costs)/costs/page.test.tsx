@@ -255,7 +255,6 @@ describe("StatisticsPage", () => {
           timestamp,
           baselineCost: 2,
           actualCost: 1,
-          optimizationSavings: 1,
           toonSavings: 0,
           cacheSavings: 0,
           subscriptionCost: 0,

@@ -125,7 +125,7 @@ export function reportBulkOutcome({
   );
 }
 
-interface BulkOutcome {
+export interface BulkOutcome {
   succeeded: string[];
   failed: { label: string; error: string }[];
 }

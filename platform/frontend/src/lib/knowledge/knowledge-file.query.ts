@@ -1,11 +1,15 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { runBulkAction } from "@/lib/bulk-action";
+import { type BulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
+  bulkDeleteKnowledgeDirectories,
+  bulkDeleteKnowledgeFiles,
+  bulkUpdateKnowledgeDirectories,
+  bulkUpdateKnowledgeFiles,
   getKnowledgeFiles,
   uploadKnowledgeFile,
   promoteAttachmentToKnowledgeFile,
@@ -87,18 +91,9 @@ export function useBulkDeleteKnowledgeItems() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (items: readonly KnowledgeSelectionItem[]) =>
-      runBulkAction({
-        items,
-        describe: (item) => item.name,
-        run: async (item) => {
-          const { error } =
-            item.kind === "directory"
-              ? await deleteKnowledgeDirectory({
-                  path: { directoryId: item.id },
-                })
-              : await deleteKnowledgeFile({ path: { fileId: item.id } });
-          if (error) throw toApiError(error);
-        },
+      dispatchByKind(items, {
+        files: (ids) => bulkDeleteKnowledgeFiles({ body: { ids } }),
+        directories: (ids) => bulkDeleteKnowledgeDirectories({ body: { ids } }),
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [FILES_KEY] });
@@ -119,23 +114,13 @@ export function useBulkUpdateKnowledgeVisibility() {
       visibility: "org-wide" | "team-scoped" | "private";
       teamIds: string[];
     }) =>
-      runBulkAction({
-        items,
-        describe: (item) => item.name,
-        run: async (item) => {
-          const body = { visibility, teamIds };
-          const { error } =
-            item.kind === "directory"
-              ? await updateKnowledgeDirectory({
-                  path: { directoryId: item.id },
-                  body,
-                })
-              : await updateKnowledgeFile({
-                  path: { fileId: item.id },
-                  body,
-                });
-          if (error) throw toApiError(error);
-        },
+      dispatchByKind(items, {
+        files: (ids) =>
+          bulkUpdateKnowledgeFiles({ body: { ids, visibility, teamIds } }),
+        directories: (ids) =>
+          bulkUpdateKnowledgeDirectories({
+            body: { ids, visibility, teamIds },
+          }),
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [FILES_KEY] });
@@ -352,4 +337,53 @@ export function useDeleteKnowledgeDirectory() {
       toast.success("Directory deleted. Its files moved to All files.");
     },
   });
+}
+
+/**
+ * A repository selection mixes documents with the directories holding them,
+ * and each is its own resource with its own bulk route. So a mixed selection
+ * costs two requests rather than one per row, and their outcomes are merged
+ * into the single report the bulk bar shows.
+ *
+ * A kind with nothing selected is skipped rather than sent as an empty batch,
+ * which the routes reject.
+ */
+async function dispatchByKind(
+  items: readonly KnowledgeSelectionItem[],
+  run: {
+    files: (ids: string[]) => Promise<{
+      data?: {
+        succeeded: Array<{ name: string }>;
+        failed: Array<{ name: string | null; error: string }>;
+      };
+      error?: unknown;
+    }>;
+    directories: (ids: string[]) => Promise<{
+      data?: {
+        succeeded: Array<{ name: string }>;
+        failed: Array<{ name: string | null; error: string }>;
+      };
+      error?: unknown;
+    }>;
+  },
+): Promise<BulkOutcome> {
+  const merged: BulkOutcome = { succeeded: [], failed: [] };
+
+  for (const [kind, call] of [
+    ["file", run.files],
+    ["directory", run.directories],
+  ] as const) {
+    const ids = items
+      .filter((item) => item.kind === kind)
+      .map((item) => item.id);
+    if (ids.length === 0) continue;
+
+    const { data, error } = await call(ids);
+    throwOnApiError(error, { toastOnError: false });
+    const outcome = toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    merged.succeeded.push(...outcome.succeeded);
+    merged.failed.push(...outcome.failed);
+  }
+
+  return merged;
 }

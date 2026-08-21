@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -27,6 +28,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useBulkDeleteApps,
+  useBulkUpdateAppVisibility,
   useOpenAppInChat,
   useOpenExternalAppInChat,
   usePinApp,
@@ -63,7 +65,9 @@ export function AppsTable({
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [deletingApp, setDeletingApp] = useState<OwnedApp | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteApps();
+  const bulkVisibility = useBulkUpdateAppVisibility();
   const {
     rowSelection,
     setRowSelection,
@@ -82,9 +86,13 @@ export function AppsTable({
   });
   // `canSelect` already keeps this to owned apps; the guard is what tells the
   // union apart, since only those carry an id.
-  const selectedApps = selected
-    .filter((app): app is OwnedApp => app.source === "owned")
-    .map((app) => ({ id: app.id, name: app.name }));
+  const selectedOwnedApps = selected.filter(
+    (app): app is OwnedApp => app.source === "owned",
+  );
+  const selectedApps = selectedOwnedApps.map((app) => ({
+    id: app.id,
+    name: app.name,
+  }));
 
   const handleOpen = async (app: AppListItem) => {
     if (openingKey) return;
@@ -285,6 +293,14 @@ export function AppsTable({
         className="mb-3"
       >
         <PermissionButton
+          permissions={{ app: ["update"] }}
+          variant="outline"
+          size="sm"
+          onClick={() => setBulkVisibilityOpen(true)}
+        >
+          <span>Edit visibility</span>
+        </PermissionButton>
+        <PermissionButton
           permissions={{ app: ["delete"] }}
           variant="destructive"
           size="sm"
@@ -333,6 +349,41 @@ export function AppsTable({
           }}
           confirmLabel="Delete apps"
           pendingLabel="Deleting..."
+        />
+      )}
+
+      {bulkVisibilityOpen && (
+        <BulkVisibilityDialog
+          open={bulkVisibilityOpen}
+          onOpenChange={setBulkVisibilityOpen}
+          noun="app"
+          isPending={bulkVisibility.isPending}
+          items={selectedOwnedApps.map((app) => ({
+            id: app.id,
+            scope: app.scope,
+            // The list row carries the scope but not the teams or people an
+            // app reaches, so a team-scoped selection opens asking for them
+            // rather than seeding an audience it cannot see.
+            teams: [],
+            users: [],
+          }))}
+          onApply={async (change) => {
+            const outcome = await bulkVisibility.mutateAsync({
+              apps: selectedApps,
+              scope: change.scope,
+              teamIds: change.teamIds,
+              userIds: change.userIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated",
+              failureVerb: "update",
+              noun: "app",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
         />
       )}
 

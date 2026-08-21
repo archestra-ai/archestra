@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceVisibilityScope,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -7,6 +11,7 @@ import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   bulkDeleteApps,
+  bulkUpdateApps,
   getApps,
   getApp,
   getExternalApp,
@@ -425,6 +430,36 @@ export function useSetAppLocked() {
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
       toast.success(variables.locked ? "App locked" : "App unlocked");
     },
+  });
+}
+
+/**
+ * Sets one visibility across a selection of apps, in one request.
+ *
+ * Only visibility: an app's html is versioned and authorized more strictly
+ * than its scope, so it is not part of what a batch can change.
+ */
+export function useBulkUpdateAppVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      apps,
+      scope,
+      teamIds,
+      userIds,
+    }: {
+      apps: readonly { id: string }[];
+      scope: ResourceVisibilityScope;
+      teamIds: string[];
+      userIds: string[];
+    }) =>
+      bulkUpdateApps({
+        body: { ids: apps.map((app) => app.id), scope, teamIds, userIds },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["apps"] }),
   });
 }
 

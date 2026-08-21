@@ -25,6 +25,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useAllMatchingKnowledgeBases: () => ({ data: [] }),
+  useBulkDeleteKnowledgeBases: () => ({ mutate: vi.fn(), isPending: false }),
   useRestoreKnowledgeBase: () => ({
     mutate: mockRestoreMutate,
     isPending: false,

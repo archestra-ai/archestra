@@ -3,6 +3,7 @@ import {
   type archestraApiTypes,
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
+  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ import {
 
 const {
   bulkDeleteProjects,
+  bulkUpdateProjects,
   createProject,
   createProjectFromConversation,
   deleteProject,
@@ -272,6 +274,54 @@ export function usePinProject() {
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },
+  });
+}
+
+/**
+ * Sets one audience across a selection of projects, in one request.
+ *
+ * Projects say "who can see this" in their own vocabulary — organization,
+ * team, named people, or nobody — while the shared visibility dialog speaks in
+ * scopes. The mapping happens here rather than in the dialog: a `personal`
+ * scope with named people is a `user` share, and the same scope with nobody
+ * named is `none`, which is what "private to its owner" means for a project.
+ */
+export function useBulkUpdateProjectVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      projects,
+      scope,
+      teamIds,
+      userIds,
+    }: {
+      projects: readonly { id: string }[];
+      scope: ResourceVisibilityScope;
+      teamIds: string[];
+      userIds: string[];
+    }) => {
+      const visibility =
+        scope === "org"
+          ? "organization"
+          : scope === "team"
+            ? "team"
+            : userIds.length > 0
+              ? "user"
+              : "none";
+
+      return bulkUpdateProjects({
+        body: {
+          ids: projects.map((project) => project.id),
+          visibility,
+          teamIds,
+          userIds,
+        },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
 

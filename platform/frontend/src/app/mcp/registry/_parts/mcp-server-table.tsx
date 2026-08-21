@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
@@ -27,9 +28,14 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import {
+  useBulkUninstallMcpServers,
+  useMcpServers,
+} from "@/lib/mcp/mcp-server.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
@@ -78,20 +84,39 @@ export function McpServerTable({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
+  const bulkUninstall = useBulkUninstallMcpServers();
+
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: items,
+    getId: (item) => item.id,
+    // An install in flight is neither installable nor uninstallable yet.
+    canSelect: (item) => !getServerInfo(item).isInstallInProgress,
+    filterSignature: `mcp-registry:${items.length}`,
+    matchDescription: "match the current filters",
+  });
 
   /**
-   * Only entries that are not already installed. Install is the one bulk-safe
-   * operation this table exposes — uninstall and reinstall each open their own
-   * per-server dialog, so they stay row actions.
+   * One selection, two actions: each button acts on the part of it the action
+   * can apply to. Reinstall stays a row action — it carries per-server options
+   * the bar has nowhere to ask about.
    */
-  const selectedToInstall = items.filter(
-    (item) =>
-      rowSelection[item.id] &&
-      !getServerInfo(item).installedServer &&
-      !getServerInfo(item).isInstallInProgress,
+  const selectedToInstall = selected.filter(
+    (item) => !getServerInfo(item).installedServer,
   );
+  const selectedToUninstall = selected
+    .filter((item) => getServerInfo(item).installedServer)
+    .map((item) => ({
+      id: getServerInfo(item).installedServer?.id ?? item.id,
+      name: item.name,
+    }));
 
   const columns: ColumnDef<CatalogItem>[] = [
     createSelectColumn<CatalogItem>({
@@ -212,22 +237,49 @@ export function McpServerTable({
   return (
     <>
       <BulkActionsBar
-        count={selectedToInstall.length}
+        count={selected.length}
         noun="server"
         onClear={clearSelection}
+        busy={bulkUninstall.isPending}
+        selectAllMatching={selectAllMatching}
         className="mb-3"
       >
         <PermissionButton
           permissions={{ mcpServerInstallation: ["create"] }}
           variant="outline"
           size="sm"
+          disabled={selectedToInstall.length === 0}
+          tooltip={
+            selectedToInstall.length === 0
+              ? "Every selected server is already installed."
+              : undefined
+          }
           onClick={() => {
             for (const item of selectedToInstall) onInstall(item);
             clearSelection();
           }}
         >
           <Download className="h-4 w-4" />
-          <span>Install</span>
+          <span>
+            Install{countSuffix(selectedToInstall.length, selected.length)}
+          </span>
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ mcpServerInstallation: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          disabled={selectedToUninstall.length === 0}
+          tooltip={
+            selectedToUninstall.length === 0
+              ? "None of the selected servers are installed."
+              : undefined
+          }
+          onClick={() => setBulkUninstallOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>
+            Uninstall{countSuffix(selectedToUninstall.length, selected.length)}
+          </span>
         </PermissionButton>
       </BulkActionsBar>
 
@@ -237,11 +289,40 @@ export function McpServerTable({
         getRowId={(row) => row.id}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
         hideSelectedCount
         onRowClick={(row) => router.push(`/mcp/registry/${row.id}`)}
         emptyMessage="No MCP servers found."
         hidePaginationWhenSinglePage
       />
+
+      {bulkUninstallOpen && (
+        <DeleteConfirmDialog
+          open={bulkUninstallOpen}
+          onOpenChange={setBulkUninstallOpen}
+          title="Uninstall MCP servers"
+          description={`Uninstall ${selectedToUninstall.length} ${
+            selectedToUninstall.length === 1 ? "server" : "servers"
+          }? Agents using their tools lose access.`}
+          isPending={bulkUninstall.isPending}
+          onConfirm={() => {
+            bulkUninstall.mutate(selectedToUninstall, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Uninstalled",
+                  failureVerb: "uninstall",
+                  noun: "server",
+                });
+                setBulkUninstallOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Uninstall servers"
+          pendingLabel="Uninstalling..."
+        />
+      )}
     </>
   );
 }
@@ -454,3 +535,11 @@ function McpServerRowActions({
 // with a docs link; tooltips on table action buttons only take strings).
 const LOCAL_MCP_DISABLED_TOOLTIP =
   "Unable to connect to Kubernetes cluster. Ensure K8s is running and the orchestrator configuration is correct.";
+
+/**
+ * " (3)" when an action applies to only part of the selection, so each button
+ * says which part rather than both claiming the whole count.
+ */
+function countSuffix(applicable: number, selected: number): string {
+  return applicable > 0 && applicable < selected ? ` (${applicable})` : "";
+}

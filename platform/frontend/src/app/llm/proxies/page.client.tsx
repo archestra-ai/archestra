@@ -498,9 +498,28 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 noun="proxy"
                 plural="proxies"
                 onClear={clearSelection}
-                busy={bulkDelete.isPending}
+                busy={bulkDelete.isPending || isFetchingAllMatching}
+                selectAllMatching={{
+                  total: pagination?.total ?? 0,
+                  pageFullySelected:
+                    agents.length > 0 && pageSelection.length === agents.length,
+                  active: allMatchingSelected,
+                  onSelectAll: () => setEscalatedFor(filterSignature),
+                  matchDescription: nameFilter
+                    ? "match this search query"
+                    : "match the current filters",
+                }}
                 className="mb-3"
               >
+                <PermissionButton
+                  permissions={{ agent: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
                 <PermissionButton
                   permissions={{ agent: ["delete"] }}
                   variant="destructive"

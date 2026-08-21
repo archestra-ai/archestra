@@ -166,6 +166,7 @@ Connectors index image files only when the configured embedding model accepts im
 | Provider    | Model                                                                 | Image formats                |
 | ----------- | --------------------------------------------------------------------- | ---------------------------- |
 | Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
+| Gemini      | Multimodal Embedding (`multimodalembedding@001`, Vertex AI mode only)  | PNG, JPEG, BMP, GIF, WebP    |
 | AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
 | AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
 | Cohere      | Cohere Embed v4 (`embed-v4.0`)                                        | JPEG, PNG, WebP, GIF         |
@@ -174,6 +175,8 @@ Connectors index image files only when the configured embedding model accepts im
 Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
 
 Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 512 text tokens per input — on Bedrock, 2048 characters. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model, or Cohere Embed v4, when your corpus is mostly documents.
+
+Vertex AI's `multimodalembedding@001` is available when [Vertex AI mode](/docs/platform-supported-llm-providers#using-vertex-ai) is enabled. It embeds at 1408 dimensions. Archestra trims text above the API's 1024-byte cap, then the model shortens text past 32 tokens internally. It also embeds one input per request under a per-project rate limit, which makes large document backfills slower than with `gemini-embedding-2`.
 
 Cohere embedding models come from the Cohere key's model list in **LLM Providers > Models** with their dimensions preset — Embed v4 at 1536 (256, 512, or 1024 on request), v3 at 1024, and the Light variants at 384.
 

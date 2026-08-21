@@ -27,7 +27,6 @@ import {
   extractErrorMessage,
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
-import { buildDocumentContext } from "./contextual-retrieval";
 import { toKnowledgeBaseUserMessage } from "./errors";
 import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
 import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
@@ -997,6 +996,28 @@ class ConnectorSyncService {
               existingDocId: existing.id,
             },
             "Document had no chunks despite unchanged content, repaired and re-queued",
+          );
+          return { ingested: true, documentId: existing.id };
+        }
+
+        // A provider failure leaves the source text and chunks intact so a
+        // later connector run can retry without re-fetching/re-chunking. The
+        // content hash still matches, but treating that row as an ordinary
+        // unchanged document would make the failure permanent.
+        if (existing.embeddingStatus === "failed") {
+          await KbDocumentModel.update(existing.id, {
+            title,
+            sourceUrl: doc.sourceUrl ?? null,
+            metadata: doc.metadata,
+            embeddingStatus: "pending",
+          });
+
+          log.warn(
+            {
+              documentId: doc.id,
+              existingDocId: existing.id,
+            },
+            "Document embedding previously failed, re-queued unchanged chunks",
           );
           return { ingested: true, documentId: existing.id };
         }

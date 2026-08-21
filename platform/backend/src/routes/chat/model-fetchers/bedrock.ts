@@ -1,6 +1,7 @@
 import { AwsV4Signer } from "aws4fetch";
 import {
   decodeBedrockSigV4Marker,
+  getBedrockBaseUrl,
   getBedrockCredentialProvider,
   getBedrockRegion,
 } from "@/clients/bedrock-credentials";
@@ -18,11 +19,7 @@ export async function fetchBedrockModels(
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
-  const baseUrl = baseUrlOverride || config.llm.bedrock.baseUrl;
-  if (!baseUrl) {
-    logger.error("Bedrock base URL not configured");
-    throw new Error("Bedrock base URL not configured");
-  }
+  const baseUrl = getBedrockBaseUrl(baseUrlOverride);
 
   const controlPlaneUrl = baseUrl.replace("-runtime", "");
 
@@ -43,12 +40,7 @@ export async function fetchBedrockModels(
 }
 
 export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
-  const baseUrl = config.llm.bedrock.baseUrl;
-  if (!baseUrl) {
-    logger.warn("Bedrock base URL not configured");
-    return [];
-  }
-
+  const baseUrl = getBedrockBaseUrl();
   const controlPlaneUrl = baseUrl.replace("-runtime", "");
   const region = getBedrockRegion(baseUrl);
   const creds = await getBedrockCredentialProvider()();

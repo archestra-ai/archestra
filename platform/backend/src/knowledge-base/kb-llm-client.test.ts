@@ -297,7 +297,12 @@ describe("resolveEmbeddingConfig", () => {
     expect(result?.inputModalities).toEqual(["text", "image"]);
     // The client's accepted image formats ride along so connectors and the
     // embedder can gate on them.
-    expect(result?.acceptedImageMimeTypes).toEqual(["image/jpeg", "image/png"]);
+    expect(result?.acceptedImageMimeTypes).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ]);
   });
 
   test("resolves a Cohere direct key to the KB's Cohere client with its image formats", async ({

@@ -40,6 +40,27 @@ const quotes = [
 ];
 
 describe("KnowledgeGraphCitations quote expansion", () => {
+  it("renders identical image payloads only once across repeated tool calls", () => {
+    const image = {
+      type: "image",
+      data: "UklGRg==",
+      mimeType: "image/webp",
+    };
+    const parts = ["call-1", "call-2"].map((toolCallId) => ({
+      type: "tool-archestra__run_tool",
+      toolCallId,
+      state: "output-available",
+      input: { tool_name: "archestra__query_knowledge_sources" },
+      output: { content: "[image]", rawContent: [image] },
+    }));
+
+    render(<KnowledgeGraphCitations parts={parts as never} />);
+
+    expect(
+      screen.getAllByAltText("Image retrieved from the knowledge base"),
+    ).toHaveLength(1);
+  });
+
   it("toggles the verbatim quotes behind a chip", async () => {
     const user = userEvent.setup();
     render(<KnowledgeGraphCitations parts={[kbPart]} citedQuotes={quotes} />);

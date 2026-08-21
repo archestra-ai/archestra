@@ -143,7 +143,10 @@ function extractRetrievedImages(
   parts: KnowledgeGraphCitationsProps["parts"],
 ): RetrievedImage[] {
   const images: RetrievedImage[] = [];
-  const seen = new Set<string>();
+  // A model may call the knowledge tool repeatedly with related queries. The
+  // same retrieved image then arrives under different toolCallIds; dedupe by
+  // payload, not call identity, while keeping genuinely distinct images.
+  const seenPayloads = new Set<string>();
 
   for (const part of parts) {
     if (!isKnowledgeBaseQueryPart(part) || part.state !== "output-available") {
@@ -167,11 +170,10 @@ function extractRetrievedImages(
       ) {
         return;
       }
-      const key = `${getToolCallId(part) ?? "kb"}#${index}`;
-      if (seen.has(key)) return;
-      seen.add(key);
+      if (seenPayloads.has(data)) return;
+      seenPayloads.add(data);
       images.push({
-        key,
+        key: `${getToolCallId(part) ?? "kb"}#${index}`,
         src: `data:${mimeType};base64,${data}`,
         alt: "Image retrieved from the knowledge base",
       });

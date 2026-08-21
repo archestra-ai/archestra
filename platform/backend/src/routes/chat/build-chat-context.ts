@@ -30,6 +30,8 @@ export async function buildChatContext(params: {
   };
   user: { id: string; email: string; name: string };
   organizationId: string;
+  /** Whether tool-result images may be forwarded into this model's context. */
+  modelAcceptsImageToolResults: boolean;
   /** Context injected by SessionStart hooks, appended to the system prompt. */
   hookSessionContext: string | undefined;
   /** The project's instructions, when this chat belongs to a project. */
@@ -75,6 +77,7 @@ export async function buildChatContext(params: {
     agent,
     user,
     organizationId,
+    modelAcceptsImageToolResults,
     hookSessionContext,
     projectInstructions,
     openedApp,
@@ -111,6 +114,7 @@ export async function buildChatContext(params: {
       // external apps have no owned namespace, so only "owned" threads an id.
       openedAppId: openedApp?.kind === "owned" ? openedApp.id : undefined,
       organizationId,
+      modelAcceptsImageToolResults,
       // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
       sessionId: conversationId,
       // Pass agentId as initial delegation chain (will be extended by delegated agents)

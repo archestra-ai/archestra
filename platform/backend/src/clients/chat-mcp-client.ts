@@ -839,6 +839,7 @@ export async function getChatMcpTools({
   repeatTracker,
   suppressContentLogging,
   lockedChatAudit,
+  modelAcceptsImageToolResults,
 }: {
   agentName: string;
   agentId: string;
@@ -914,6 +915,11 @@ export async function getChatMcpTools({
    * `suppressContentLogging` is — escrow is settled at creation.
    */
   lockedChatAudit?: LockedChatAuditContext | null;
+  /**
+   * Whether media returned by a tool may enter the selected model's context.
+   * Omitted by headless/legacy callers to preserve their current behavior.
+   */
+  modelAcceptsImageToolResults?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -938,6 +944,8 @@ export async function getChatMcpTools({
     // caller owns the tracker, bind that instance so its stop condition reads the
     // same streak the breaker records into.
     cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
+    cached.context.modelAcceptsImageToolResults =
+      modelAcceptsImageToolResults ?? true;
     logger.info(
       {
         agentId,
@@ -1061,6 +1069,7 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       suppressContentLogging,
       lockedChatAudit,
+      modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,

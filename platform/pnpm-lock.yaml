@@ -431,6 +431,9 @@ importers:
       fastify-type-provider-zod:
         specifier: ^6.0.0
         version: 6.1.0(@fastify/swagger@9.7.0)(fastify@5.8.5)(openapi-types@12.1.3)(zod@4.3.6)
+      google-auth-library:
+        specifier: ^10.5.0
+        version: 10.5.0
       googleapis:
         specifier: ^171.4.0
         version: 171.4.0

@@ -31,6 +31,14 @@ export type OptimisticToolCall = {
   input: unknown;
 };
 
+/** Remove provider-internal tool protocol sentinels from visible/copy text. */
+export function stripAssistantProtocolMarkers(text: string): string {
+  return text.replace(
+    /(?:[ \t]*\r?\n){0,2}[ \t]*<\s*[|｜]\s*DSML\s*[|｜]\s*function_calls\s*>?/gi,
+    "",
+  );
+}
+
 export type CompactToolGroupEntry =
   | {
       kind: "tool";

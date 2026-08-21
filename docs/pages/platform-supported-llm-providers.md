@@ -160,6 +160,8 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`         | No       | GCP region (default: `us-central1`)    |
 | `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` | No       | Path to service account JSON key file  |
 
+Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/platform-knowledge#image-embedding).
+
 #### GKE with Workload Identity (Recommended)
 
 For GKE deployments, we recommend using [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity) which provides secure, keyless authentication. This eliminates the need for service account JSON key files.
@@ -894,7 +896,7 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 
 | Variable                                 | Required | Description                                                                          |
 | ---------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `ARCHESTRA_BEDROCK_BASE_URL`             | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_BASE_URL`             | No       | Optional custom Bedrock runtime endpoint. Without it, Archestra derives `https://bedrock-runtime.<region>.amazonaws.com` from the selected/configured region. |
 | `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`    | No       | Comma-separated list of provider prefixes to include. When empty (default), all profiles are returned. |
 | `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` | No | Comma-separated list of inference region prefixes (e.g., `us,global`). When empty (default), all regions are returned. |
 
@@ -915,7 +917,7 @@ When IAM auth is enabled, Archestra uses the [AWS credential chain](https://docs
 
 #### `ARCHESTRA_BEDROCK_BASE_URL`
 
-**Required** to enable the Bedrock provider. The URL format follows AWS regional endpoints:
+Optional custom endpoint override. Without it, Archestra builds the standard AWS runtime endpoint from the key's selected region, `ARCHESTRA_BEDROCK_REGION`, or `us-east-1` when neither is set:
 
 ```
 https://bedrock-runtime.{region}.amazonaws.com

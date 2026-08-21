@@ -34,6 +34,7 @@ const vector1024 = createVectorType(1024);
 const vector768 = createVectorType(768);
 const vector384 = createVectorType(384);
 const vector3072 = createVectorType(3072);
+const vector1408 = createVectorType(1408);
 
 const tsvector = customType<{ data: string; driverParam: string }>({
   dataType() {
@@ -71,6 +72,7 @@ const kbChunksTable = pgTable(
     embedding768: vector768("embedding_768"),
     embedding384: vector384("embedding_384"),
     embedding3072: vector3072("embedding_3072"),
+    embedding1408: vector1408("embedding_1408"),
     searchVector: tsvector("search_vector"),
     /**
      * Chunk length in tokens — BM25's document-length normalization term.

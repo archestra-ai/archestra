@@ -5,6 +5,36 @@ import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/**
+ * Lets a selection escalate past the page it was made on: tick every row on
+ * screen and the bar offers the whole matching set instead.
+ *
+ * The caller decides what "matching" means and how to act on it — this only
+ * owns the offer and the state it reports.
+ */
+interface SelectAllMatching {
+  /** Rows matching the current filters across every page. */
+  total: number;
+  /** True when every row on the current page is ticked. */
+  pageFullySelected: boolean;
+  /** True once the caller has escalated to the whole matching set. */
+  active: boolean;
+  /** Escalate to every matching row. */
+  onSelectAll: () => void;
+  /**
+   * Completes "…that {matchDescription}." Defaults to "match the current
+   * filters"; pass "match this search query" when a search term is what
+   * narrowed the table.
+   */
+  matchDescription?: string;
+  /**
+   * Largest set the caller's action can actually express — for skills the bulk
+   * endpoints take at most 500 ids. Above it the offer is withheld rather than
+   * promising a batch that would be refused.
+   */
+  max?: number;
+}
+
 interface BulkActionsBarProps {
   /**
    * How many rows are ticked. The bar is hidden entirely at 0, so a table
@@ -26,6 +56,8 @@ interface BulkActionsBarProps {
   /** Shows a spinner beside the count while a bulk mutation is in flight. */
   busy?: boolean;
   countTestId?: string;
+  /** Omit to keep the selection confined to the current page. */
+  selectAllMatching?: SelectAllMatching;
   /** The bar carries no outer spacing of its own; place it in the caller's flow. */
   className?: string;
   /** The actions themselves, laid out at the end of the bar. */
@@ -48,11 +80,26 @@ export function BulkActionsBar({
   onClear,
   busy,
   countTestId,
+  selectAllMatching,
   className,
   children,
 }: BulkActionsBarProps) {
-  const text =
-    label ?? `${count} ${count === 1 ? noun : (plural ?? `${noun}s`)} selected`;
+  const pluralize = (n: number) => (n === 1 ? noun : (plural ?? `${noun}s`));
+
+  const allMatchingActive = selectAllMatching?.active ?? false;
+  const text = allMatchingActive
+    ? `All ${selectAllMatching?.total} ${pluralize(selectAllMatching?.total ?? 0)} selected`
+    : (label ?? `${count} ${pluralize(count)} selected`);
+
+  // Offered only once the page is exhausted and there is genuinely more behind
+  // it — and only when the caller's action could carry the whole set.
+  const offerSelectAll =
+    selectAllMatching !== undefined &&
+    !selectAllMatching.active &&
+    selectAllMatching.pageFullySelected &&
+    selectAllMatching.total > count &&
+    (selectAllMatching.max === undefined ||
+      selectAllMatching.total <= selectAllMatching.max);
 
   return (
     <>
@@ -68,26 +115,58 @@ export function BulkActionsBar({
       {count > 0 && (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2",
+            "rounded-md border bg-muted/40",
+            // The offer is a second row, so the padding moves inside to let it
+            // span the full width with its own separator.
+            offerSelectAll ? "" : "px-3 py-2",
             className,
           )}
         >
-          <span
-            aria-hidden="true"
-            data-testid={countTestId}
-            className="text-sm font-medium"
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-2",
+              offerSelectAll && "px-3 py-2",
+            )}
           >
-            {text}
-          </span>
-          {busy && <LoadingSpinner className="h-4 w-4 text-muted-foreground" />}
-          {onClear && (
-            <Button variant="ghost" size="sm" onClick={onClear}>
-              <span>Clear</span>
-            </Button>
-          )}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {children}
+            <span
+              aria-hidden="true"
+              data-testid={countTestId}
+              className="text-sm font-medium"
+            >
+              {text}
+            </span>
+            {busy && (
+              <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
+            )}
+            {onClear && (
+              <Button variant="ghost" size="sm" onClick={onClear}>
+                <span>Clear</span>
+              </Button>
+            )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {children}
+            </div>
           </div>
+
+          {offerSelectAll && selectAllMatching && (
+            <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2 text-sm">
+              <span className="text-muted-foreground">
+                {count} {pluralize(count)} on this page selected.
+              </span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-sm"
+                onClick={selectAllMatching.onSelectAll}
+              >
+                Select all {selectAllMatching.total}{" "}
+                {pluralize(selectAllMatching.total)} that{" "}
+                {selectAllMatching.matchDescription ??
+                  "match the current filters"}
+                .
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </>

@@ -59,6 +59,46 @@ test.describe("Bulk actions bar", () => {
     ).toBeHidden();
   });
 
+  test("offers the whole matching set once the page is exhausted", async ({
+    page,
+    mswControl,
+  }) => {
+    // A page that holds less than what matches, which is the only situation
+    // where reaching past the page means anything.
+    await mswControl.use({
+      method: "get",
+      url: "/api/skills",
+      body: {
+        ...shareableSkillsSeed,
+        pagination: {
+          ...shareableSkillsSeed.pagination,
+          limit: 2,
+          total: 7,
+          totalPages: 4,
+          hasNext: true,
+        },
+      },
+    });
+    await page.goto("/skills");
+
+    await page
+      .getByRole("checkbox", { name: "Select all skills on this page" })
+      .click();
+
+    const offer = page.getByRole("button", { name: /^Select all/ });
+    await expect(offer).toHaveText(
+      "Select all 7 skills that match the current filters.",
+    );
+
+    await offer.click();
+
+    await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
+      "All 7 skills selected",
+    );
+    // The offer has nothing left to escalate to.
+    await expect(offer).toBeHidden();
+  });
+
   test("ticking a row selects it instead of opening the row's editor", async ({
     page,
   }) => {

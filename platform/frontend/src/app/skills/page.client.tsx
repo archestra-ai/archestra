@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  MAX_BULK_SKILL_IDS,
+} from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -68,6 +72,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  useAllMatchingSkills,
   useBulkDeleteSkills,
   usePermanentlyDeleteSkill,
   useRestoreSkill,
@@ -127,6 +132,23 @@ function SkillsList() {
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
 
+  /**
+   * Everything that narrows the table, with the page itself left out — the
+   * visible page and "every matching skill" differ only by limit/offset.
+   */
+  const listFilters = {
+    search: search || undefined,
+    sourceRepo: sourceRepo || undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+    status: isDeletedView ? ("deleted" as const) : undefined,
+    sortBy,
+    sortDirection,
+  };
+
   const {
     data: skills,
     isPending,
@@ -137,16 +159,7 @@ function SkillsList() {
     {
       limit: pageSize,
       offset: pageIndex * pageSize,
-      search: search || undefined,
-      sourceRepo: sourceRepo || undefined,
-      scope: scopeFilter.scope,
-      teamIds: scopeFilter.teamIds,
-      authorIds: scopeFilter.authorIds,
-      excludeAuthorIds: scopeFilter.excludeAuthorIds,
-      excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
-      status: isDeletedView ? "deleted" : undefined,
-      sortBy,
-      sortDirection,
+      ...listFilters,
     },
     { toastOnError: false },
   );
@@ -225,10 +238,32 @@ function SkillsList() {
   // simply drop out here — including in the trash view, which renders no
   // checkbox column and so must never surface a bar for a skill that was
   // ticked while active and deleted from under the selection.
-  const selectedSkills = isDeletedView
+  const pageSelection = isDeletedView
     ? []
     : items.filter((skill) => rowSelection[skill.id]);
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+
+  /**
+   * An escalation is remembered as the filters it was made under, so changing
+   * a filter drops it rather than silently re-pointing "all 203 skills" at a
+   * different 203. It also keeps the offer honest: it is only ever shown when
+   * the whole matching set fits in one bulk request, so an escalation that
+   * survived a filter change could otherwise claim more than it can act on.
+   */
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+
+  const { data: allMatchingSkills, isFetching: isFetchingAllMatching } =
+    useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
+
+  const selectedSkills = allMatchingSelected
+    ? (allMatchingSkills ?? pageSelection)
+    : pageSelection;
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
@@ -602,6 +637,18 @@ function SkillsList() {
               noun="skill"
               countTestId={E2eTestId.SkillsBulkSelectionCount}
               onClear={clearSelection}
+              busy={isFetchingAllMatching}
+              selectAllMatching={{
+                total: totalSkills,
+                pageFullySelected:
+                  items.length > 0 && pageSelection.length === items.length,
+                active: allMatchingSelected,
+                onSelectAll: () => setEscalatedFor(filterSignature),
+                matchDescription: search
+                  ? "match this search query"
+                  : "match the current filters",
+                max: MAX_BULK_SKILL_IDS,
+              }}
               className="mb-3"
             >
               <PermissionButton

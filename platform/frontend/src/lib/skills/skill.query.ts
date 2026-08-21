@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  MAX_BULK_SKILL_IDS,
+} from "@archestra/shared";
 import {
   useInfiniteQuery,
   useMutation,
@@ -83,6 +87,53 @@ export function useSkillsPaginated(
       const { data, error } = await getSkills({ query: params });
       throwOnApiError(error, { toastOnError });
       return data;
+    },
+  });
+}
+
+/**
+ * Every skill matching `params`, not just the page in view — what backs the
+ * table's "select all N skills that match this search query".
+ *
+ * The list route caps a page at 100, so this walks the offsets. It stops at
+ * `MAX_BULK_SKILL_IDS` because that is the largest batch a bulk route accepts:
+ * collecting more would only build a selection the action must refuse. Pass
+ * `enabled` so the walk happens on escalation rather than on every render of a
+ * table nobody has selected anything in.
+ */
+export function useAllMatchingSkills(
+  params: Omit<SkillsPaginatedParams, "limit" | "offset">,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ["skills", "all-matching", params],
+    enabled: options?.enabled ?? true,
+    queryFn: async () => {
+      const collected: NonNullable<
+        Awaited<ReturnType<typeof getSkills>>["data"]
+      >["data"] = [];
+
+      for (
+        let offset = 0;
+        offset < MAX_BULK_SKILL_IDS;
+        offset += ALL_MATCHING_PAGE_SIZE
+      ) {
+        const { data, error } = await getSkills({
+          query: {
+            ...params,
+            limit: ALL_MATCHING_PAGE_SIZE,
+            offset,
+          },
+        });
+        throwOnApiError(error);
+
+        const page = data?.data ?? [];
+        collected.push(...page);
+
+        if (page.length < ALL_MATCHING_PAGE_SIZE) break;
+      }
+
+      return collected.slice(0, MAX_BULK_SKILL_IDS);
     },
   });
 }
@@ -703,3 +754,6 @@ const BULK_FAILURE_NAMES_SHOWN = 3;
 function isSkillVersionConflict(error: unknown): boolean {
   return getApiErrorInternalCode(error) === "skill_version_conflict";
 }
+
+/** The list route's per-page ceiling, so the walk takes as few requests as it can. */
+const ALL_MATCHING_PAGE_SIZE = 100;

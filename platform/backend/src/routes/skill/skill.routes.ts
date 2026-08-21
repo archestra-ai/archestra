@@ -1,6 +1,7 @@
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  MAX_BULK_SKILL_IDS,
   PaginationQuerySchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -282,14 +283,6 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
         "owes nothing to a prior read of the skill.",
     ),
 }).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
-
-/**
- * Ceiling on one bulk request. Comfortably above the largest page the skills
- * table offers, which is where a selection is made, while keeping a single
- * request's work bounded — the visibility route writes one transaction per
- * skill.
- */
-const MAX_BULK_SKILL_IDS = 500;
 
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)

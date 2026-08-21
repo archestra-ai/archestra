@@ -41,3 +41,10 @@ export function isSpecCompliantSkillCompatibility(
 ): boolean {
   return [...(compatibility ?? "")].length <= MAX_SKILL_COMPATIBILITY_LENGTH;
 }
+
+/**
+ * Most skill ids one bulk request may carry. The bulk routes cap the array so
+ * a single call cannot fan out unboundedly; the Skills page reads the same
+ * number to decide whether it can offer "select every matching skill" at all.
+ */
+export const MAX_BULK_SKILL_IDS = 500;

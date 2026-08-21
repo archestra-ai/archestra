@@ -18,7 +18,7 @@ export function getManageTokenLink(params: {
   if (isPersonalTokenSelected) {
     return {
       label: "Manage your personal token",
-      href: "/account?highlight=personal-token",
+      href: "/account/gateway-token?highlight=personal-token",
     };
   }
   if (selectedTeamToken?.isOrganizationToken) {
@@ -35,6 +35,6 @@ export function getManageTokenLink(params: {
   }
   return {
     label: "Manage your tokens",
-    href: "/account?highlight=personal-token",
+    href: "/account/gateway-token?highlight=personal-token",
   };
 }

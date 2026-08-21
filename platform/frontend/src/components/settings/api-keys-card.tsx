@@ -1,10 +1,10 @@
 "use client";
 
 import { API_KEY_MAX_NAME_LENGTH } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -18,6 +18,8 @@ import { SearchInput } from "@/components/search-input";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -28,10 +30,12 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import {
   type UserApiKey,
   useApiKeys,
+  useBulkDeleteApiKeys,
   useCreateApiKey,
   useDeleteApiKey,
 } from "@/lib/api-key.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
@@ -77,6 +81,9 @@ function ApiKeysCardContent() {
   const { data: canDeleteApiKeys } = useHasPermissions({ apiKey: ["delete"] });
   const createApiKeyMutation = useCreateApiKey();
   const deleteApiKeyMutation = useDeleteApiKey();
+  const bulkDelete = useBulkDeleteApiKeys();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const clearSelection = useCallback(() => setRowSelection({}), []);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
@@ -101,8 +108,21 @@ function ApiKeysCardContent() {
     );
   }, [apiKeys, search]);
 
+  // A key's name is nullable, so the failure toast falls back to the visible
+  // prefix rather than naming nothing.
+  const selectedApiKeys = filteredApiKeys
+    .filter((key) => rowSelection[key.id])
+    .map((key) => ({
+      id: key.id,
+      name: key.name ?? key.start ?? "Unnamed key",
+    }));
+
   const columns: ColumnDef<UserApiKey>[] = useMemo(() => {
     const baseColumns: ColumnDef<UserApiKey>[] = [
+      createSelectColumn<UserApiKey>({
+        rowLabel: (key) => `Select ${key.name ?? key.start ?? "API key"}`,
+        allLabel: "Select all API keys on this page",
+      }),
       {
         accessorKey: "name",
         header: "Name",
@@ -281,16 +301,52 @@ function ApiKeysCardContent() {
                   onRetry={() => refetchApiKeys()}
                 />
               ) : (
-                <DataTable
-                  columns={columns}
-                  data={filteredApiKeys}
-                  emptyMessage="No API keys yet"
-                  hasActiveFilters={search.trim().length > 0}
-                  filteredEmptyMessage="No API keys match your search. Try adjusting your search."
-                  onClearFilters={() =>
-                    updateQueryParams({ search: null, page: "1" })
-                  }
-                />
+                <>
+                  <BulkActionsBar
+                    count={selectedApiKeys.length}
+                    noun="API key"
+                    onClear={clearSelection}
+                    busy={bulkDelete.isPending}
+                    className="mb-3"
+                  >
+                    <PermissionButton
+                      permissions={{ apiKey: ["delete"] }}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        bulkDelete.mutate(selectedApiKeys, {
+                          onSuccess: (outcome) => {
+                            reportBulkOutcome({
+                              outcome,
+                              verb: "Deleted",
+                              failureVerb: "delete",
+                              noun: "API key",
+                            });
+                            if (outcome.failed.length === 0) clearSelection();
+                          },
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </PermissionButton>
+                  </BulkActionsBar>
+
+                  <DataTable
+                    columns={columns}
+                    data={filteredApiKeys}
+                    getRowId={(row) => row.id}
+                    rowSelection={rowSelection}
+                    onRowSelectionChange={setRowSelection}
+                    hideSelectedCount
+                    emptyMessage="No API keys yet"
+                    hasActiveFilters={search.trim().length > 0}
+                    filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+                    onClearFilters={() =>
+                      updateQueryParams({ search: null, page: "1" })
+                    }
+                  />
+                </>
               )}
             </div>
           </LoadingWrapper>

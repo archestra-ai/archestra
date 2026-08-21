@@ -1,46 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { resolveAccountSection } from "./account-sections";
+import { resolveLegacyAccountHref } from "./account-sections";
 
-describe("resolveAccountSection", () => {
-  it("defaults to the profile section", () => {
-    expect(resolveAccountSection({ section: null, highlight: null })).toBe(
-      "profile",
-    );
-  });
-
-  it("honours a deep-linked section", () => {
+describe("resolveLegacyAccountHref", () => {
+  it("leaves a plain /account visit alone", () => {
     expect(
-      resolveAccountSection({ section: "sessions", highlight: null }),
-    ).toBe("sessions");
+      resolveLegacyAccountHref({ section: null, highlight: null }),
+    ).toBeNull();
   });
 
-  it("falls back to profile for an unknown section", () => {
-    expect(resolveAccountSection({ section: "nope", highlight: null })).toBe(
-      "profile",
-    );
+  it("sends an old ?section= link to the route that replaced it", () => {
+    expect(
+      resolveLegacyAccountHref({ section: "sessions", highlight: null }),
+    ).toBe("/account/sessions");
   });
 
-  it("opens the gateway-token section for the personal-token highlight", () => {
+  it("leaves an unknown section on the profile page rather than redirecting", () => {
+    expect(
+      resolveLegacyAccountHref({ section: "nope", highlight: null }),
+    ).toBeNull();
+  });
+
+  it("routes the personal-token highlight to the gateway token page", () => {
     // The token dialog lives inside that card, so the card has to mount.
     expect(
-      resolveAccountSection({ section: null, highlight: "personal-token" }),
-    ).toBe("gateway-token");
+      resolveLegacyAccountHref({ section: null, highlight: "personal-token" }),
+    ).toBe("/account/gateway-token");
   });
 
   it("lets an explicit section win over the highlight", () => {
     expect(
-      resolveAccountSection({
+      resolveLegacyAccountHref({
         section: "api-keys",
         highlight: "personal-token",
       }),
-    ).toBe("api-keys");
+    ).toBe("/account/api-keys");
   });
 
-  it("leaves the change-password highlight on the default section", () => {
-    // Its button and dialog both sit on the page above the sections, so it
+  it("does not redirect the change-password highlight", () => {
+    // Its button and dialog both sit in the layout, above the sections, so it
     // opens from whichever section is showing.
     expect(
-      resolveAccountSection({ section: null, highlight: "change-password" }),
-    ).toBe("profile");
+      resolveLegacyAccountHref({ section: null, highlight: "change-password" }),
+    ).toBeNull();
   });
 });

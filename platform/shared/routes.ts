@@ -659,6 +659,7 @@ export const RouteId = {
   RestoreConnector: "restoreConnector",
   PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
+  BulkDeleteConnectorDocuments: "bulkDeleteConnectorDocuments",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",
   GetPermissionSyncCoverage: "getPermissionSyncCoverage",

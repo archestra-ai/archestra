@@ -1736,6 +1736,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same gates as the knowledge-base pair above.
   [RouteId.RestoreConnector]: { knowledgeSource: ["delete"] },
   [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.BulkDeleteConnectorDocuments]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },

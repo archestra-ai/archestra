@@ -1,11 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import { type archestraApiTypes, MAX_BULK_IDS } from "@archestra/shared";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AclBadges } from "@/app/knowledge/connectors/_parts/acl-badges";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -15,7 +15,10 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -23,11 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
+  useAllMatchingConnectorDocuments,
+  useBulkDeleteConnectorDocuments,
   useConnectorDocument,
   useConnectorDocuments,
   useDeleteConnectorDocument,
@@ -129,6 +135,12 @@ export function ConnectorDocumentsTable({
     },
   });
   const deleteDocumentMutation = useDeleteConnectorDocument();
+  const bulkDelete = useBulkDeleteConnectorDocuments();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectAllMatchingFor, setSelectAllMatchingFor] = useState<
+    string | null
+  >(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const hasLoadError = isError;
 
@@ -137,11 +149,39 @@ export function ConnectorDocumentsTable({
     documentsResponse?.pagination ?? null;
   const totalDocuments = paginationMeta?.total ?? 0;
 
+  // Changing a filter invalidates an escalation rather than silently
+  // re-pointing "all N" at a different N.
+  const filterSignature = `${connectorId}|${search}|${group}`;
+  const allMatchingActive = selectAllMatchingFor === filterSignature;
+  const { data: allMatchingDocuments } = useAllMatchingConnectorDocuments(
+    {
+      connectorId,
+      query: {
+        ...(search ? { search } : {}),
+        ...(group ? { group } : {}),
+      },
+    },
+    { enabled: allMatchingActive },
+  );
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setSelectAllMatchingFor(null);
+  }, []);
+
+  const selectedDocuments = allMatchingActive
+    ? (allMatchingDocuments ?? [])
+    : documents.filter((document) => rowSelection[document.id]);
+
   // The shared Table is `table-fixed`: without explicit sizes every column
   // gets an equal width and the natural-width Access badges overflow under
   // the Last Updated column.
   const columns = useMemo<ColumnDef<KnowledgeBaseDocumentListItem>[]>(
     () => [
+      createSelectColumn<KnowledgeBaseDocumentListItem>({
+        rowLabel: (document) => `Select ${document.title}`,
+        allLabel: "Select all documents on this page",
+      }),
       {
         id: "title",
         accessorKey: "title",
@@ -287,9 +327,41 @@ export function ConnectorDocumentsTable({
         )}
       </TableFilters>
 
+      <BulkActionsBar
+        count={selectedDocuments.length}
+        noun="document"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending}
+        selectAllMatching={{
+          total: totalDocuments,
+          pageFullySelected:
+            documents.length > 0 &&
+            documents.every((document) => rowSelection[document.id]),
+          active: allMatchingActive,
+          onSelectAll: () => setSelectAllMatchingFor(filterSignature),
+          matchDescription: "match this search",
+          max: MAX_BULK_IDS,
+        }}
+        className="mb-3"
+      >
+        <PermissionButton
+          permissions={{ knowledgeSource: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
       <DataTable
         columns={columns}
         data={documents}
+        getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        hideSelectedCount
         isLoading={isPending}
         manualPagination
         pagination={{
@@ -369,6 +441,45 @@ export function ConnectorDocumentsTable({
         confirmLabel="Delete Document"
         pendingLabel="Deleting..."
       />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete documents"
+          description={`Delete ${selectedDocuments.length} ${
+            selectedDocuments.length === 1 ? "document" : "documents"
+          }? They stop being searchable straight away. The next sync brings back anything still present at the source — to keep them out, remove them there or narrow this connector's scope.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(
+              { connectorId, documents: selectedDocuments },
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "document",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                  // Emptying the last page would otherwise leave the table on a
+                  // page that no longer exists.
+                  if (
+                    outcome.succeeded.length >= documents.length &&
+                    pageIndex > 0
+                  ) {
+                    setPagination({ pageIndex: pageIndex - 1, pageSize });
+                  }
+                },
+              },
+            );
+          }}
+          confirmLabel="Delete documents"
+          pendingLabel="Deleting..."
+        />
+      )}
     </div>
   );
 }

@@ -3,10 +3,16 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { deleteConnectorDocument, getConnectorDocument, getConnectorDocuments } =
-  archestraApiSdk;
+const {
+  bulkDeleteConnectorDocuments,
+  deleteConnectorDocument,
+  getConnectorDocument,
+  getConnectorDocuments,
+} = archestraApiSdk;
 
 export type KnowledgeBaseDocumentListItem =
   archestraApiTypes.GetConnectorDocumentsResponses["200"]["data"][number];
@@ -70,6 +76,68 @@ export function useConnectorDocument(params: ConnectorDocumentParams) {
       Boolean(params.path.id) &&
       Boolean(params.path.docId) &&
       (params.enabled ?? true),
+  });
+}
+
+/**
+ * Every document matching the table's filters, not just the page in view —
+ * what backs "select all N that match this search".
+ */
+export function useAllMatchingConnectorDocuments(
+  params: {
+    connectorId: string;
+    query: Omit<
+      NonNullable<archestraApiTypes.GetConnectorDocumentsData["query"]>,
+      "limit" | "offset"
+    >;
+  },
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["connector-documents", "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getConnectorDocuments({
+        path: { id: params.connectorId },
+        query: { ...params.query, limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+  });
+}
+
+/**
+ * Deletes a selection of a connector's synced documents in one request.
+ *
+ * Deliberately not `useDeleteConnectorDocument`, which toasts per call and so
+ * would fire one toast per row.
+ */
+export function useBulkDeleteConnectorDocuments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      connectorId,
+      documents,
+    }: {
+      connectorId: string;
+      documents: readonly { id: string }[];
+    }) =>
+      bulkDeleteConnectorDocuments({
+        path: { id: connectorId },
+        body: { ids: documents.map((document) => document.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: (_data, _error, { connectorId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["connector-documents", connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connector-documents", "all-matching"],
+      });
+    },
   });
 }
 

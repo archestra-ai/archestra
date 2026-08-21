@@ -928,6 +928,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
+  // A batch of documents is still a mutation of the connector that owns them,
+  // exactly as the single-document delete is, so it keeps connector.updated
+  // and the connector's own snapshot rather than inventing a document-level
+  // resource type for rows that are never audited individually.
+  "/api/connectors/:id/documents/bulk": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
   "/api/connectors/:id/documents/:docId": {
     resourceType: "connector",
     action: "connector.updated",

@@ -1201,6 +1201,67 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
+    "/api/connectors/:id/documents/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteConnectorDocuments,
+        description:
+          "Delete several of a connector's synced documents in one request. " +
+          "Ids belonging to a different connector — or to no document at all " +
+          "— are reported in `failed` as not found and leave the rest of the " +
+          "batch applied. Deleting a synced document removes it until the " +
+          "next sync brings it back; to stop it returning, remove it at the " +
+          "source or narrow the connector's scope.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user } = request;
+      const connectorId = request.params.id;
+
+      // Request-level: the connector is the same for every id, so one that the
+      // caller cannot see is a 404 for the whole request rather than N
+      // identical per-document failures.
+      await findConnectorOrThrow({
+        id: connectorId,
+        organizationId,
+        userId: user.id,
+      });
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "connector documents bulk delete",
+        notFoundMessage: "Document not found",
+        unexpectedMessage: "Could not delete this document",
+        load: async (ids) =>
+          new Map(
+            (
+              await KbDocumentModel.findForBulkByConnector({
+                documentIds: ids,
+                connectorId,
+                organizationId,
+              })
+            ).map((doc) => [doc.id, doc]),
+          ),
+        describe: (doc) => doc.title,
+        // The return value is deliberately not checked, as the single-document
+        // delete does not check it either: `load` has already established that
+        // this row exists and belongs to this connector, so a delete affecting
+        // no rows means it went away concurrently — which is the outcome the
+        // caller asked for anyway.
+        applyEach: async (_doc, id) => {
+          await KbDocumentModel.delete(id);
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
     "/api/connectors/:id/documents/:docId",
     {
       schema: {

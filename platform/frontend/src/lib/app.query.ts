@@ -2,10 +2,11 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { runBulkAction } from "@/lib/bulk-action";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  bulkDeleteApps,
   getApps,
   getApp,
   getExternalApp,
@@ -427,18 +428,16 @@ export function useSetAppLocked() {
   });
 }
 
-/** Deletes a selection of apps, fanning out over the single-app route. */
+/** Deletes a selection of apps in one request; a locked app comes back in `failed`. */
 export function useBulkDeleteApps() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (apps: readonly { id: string; name: string }[]) =>
-      runBulkAction({
-        items: apps,
-        describe: (app) => app.name,
-        run: async ({ id }) => {
-          const { error } = await deleteApp({ path: { appId: id } });
-          if (error) throw toApiError(error);
-        },
+      bulkDeleteApps({
+        body: { ids: apps.map((app) => app.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["apps"] }),
   });

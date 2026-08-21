@@ -6,9 +6,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { runBulkAction } from "@/lib/bulk-action";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { resolveDefaultEnvironmentId } from "@/lib/resolve-default-environment";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -197,23 +197,23 @@ export function useDeleteEnvironment() {
 }
 
 /**
- * Deletes a selection of environments. Fans out over the single-item route,
- * bypassing `useDeleteEnvironment` so a batch reports once rather than per row.
+ * Deletes a selection of environments in one request, bypassing
+ * `useDeleteEnvironment` so a batch reports once rather than per row. An
+ * environment still holding catalog items comes back in `failed` with that
+ * reason while the rest are deleted.
  */
 export function useBulkDeleteEnvironments() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (environments: readonly { id: string; name: string }[]) =>
-      runBulkAction({
-        items: environments,
-        describe: (environment) => environment.name,
-        run: async ({ id }) => {
-          const { error } = await archestraApiSdk.deleteEnvironment({
-            path: { id },
-          });
-          if (error) throw toApiError(error);
-        },
-      }),
+      archestraApiSdk
+        .bulkDeleteEnvironments({
+          body: { ids: environments.map((environment) => environment.id) },
+        })
+        .then(({ data, error }) => {
+          throwOnApiError(error, { toastOnError: false });
+          return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+        }),
     // Resources in a deleted environment fall back to Default by FK, so the
     // catalog and agent lists are stale too.
     onSettled: () => {

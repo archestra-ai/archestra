@@ -14,11 +14,16 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { runBulkAction } from "@/lib/bulk-action";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
-  archestraApiSdk;
+const {
+  getLlmModels,
+  getModelsWithApiKeys,
+  updateModel,
+  syncLlmModels,
+  bulkUpdateModels,
+} = archestraApiSdk;
 type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
 type LlmModelsParams = Partial<LlmModelsQuery> & {
   enabled?: boolean;
@@ -155,8 +160,8 @@ export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
  */
 /**
  * Hides or shows a selection of models at once — the models table's bulk
- * action. Fans out over the single-item PATCH, bypassing `useUpdateModel`
- * so a batch reports once rather than per row.
+ * action. One request, bypassing `useUpdateModel` so a batch reports once
+ * rather than per row.
  */
 export function useBulkUpdateModelVisibility() {
   const queryClient = useQueryClient();
@@ -168,16 +173,11 @@ export function useBulkUpdateModelVisibility() {
       models: readonly { id: string; modelId: string }[];
       ignored: boolean;
     }) =>
-      runBulkAction({
-        items: models,
-        describe: (model) => model.modelId,
-        run: async ({ id }) => {
-          const { error } = await updateModel({
-            path: { id },
-            body: { ignored },
-          });
-          if (error) throw toApiError(error);
-        },
+      bulkUpdateModels({
+        body: { ids: models.map((model) => model.id), ignored },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });

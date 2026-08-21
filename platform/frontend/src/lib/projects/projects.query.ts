@@ -7,7 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { runBulkAction } from "@/lib/bulk-action";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import {
   readFileAsBase64,
   summarizeUploadResults,
@@ -20,10 +20,10 @@ import {
   getApiErrorType,
   handleApiError,
   throwOnApiError,
-  toApiError,
 } from "@/lib/utils";
 
 const {
+  bulkDeleteProjects,
   createProject,
   createProjectFromConversation,
   deleteProject,
@@ -307,18 +307,16 @@ export function useSetProjectShare() {
   });
 }
 
-/** Deletes a selection of projects, fanning out over the single-project route. */
+/** Deletes a selection of projects in one request, reporting per-project outcomes. */
 export function useBulkDeleteProjects() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (projects: readonly { id: string; name: string }[]) =>
-      runBulkAction({
-        items: projects,
-        describe: (project) => project.name,
-        run: async ({ id }) => {
-          const { error } = await deleteProject({ path: { id } });
-          if (error) throw toApiError(error);
-        },
+      bulkDeleteProjects({
+        body: { ids: projects.map((project) => project.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });

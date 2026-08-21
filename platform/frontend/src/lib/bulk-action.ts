@@ -55,6 +55,26 @@ export async function runBulkAction<T>({
 }
 
 /**
+ * The outcome a `/bulk` route answers with, in the terms the toast below
+ * speaks. Server and client disagree only in shape: the route identifies rows
+ * by id as well as name, because it has to report an id that resolved to
+ * nothing the caller can see — which reads as "Unknown" here, since a name is
+ * the only thing worth showing someone.
+ */
+export function toBulkOutcome(result: {
+  succeeded: Array<{ name: string }>;
+  failed: Array<{ name: string | null; error: string }>;
+}): BulkOutcome {
+  return {
+    succeeded: result.succeeded.map((entry) => entry.name),
+    failed: result.failed.map((entry) => ({
+      label: entry.name ?? "Unknown",
+      error: entry.error,
+    })),
+  };
+}
+
+/**
  * One toast for a whole batch, naming what failed rather than claiming a clean
  * sweep. Mirrors how the skills bulk routes report themselves, so a partly
  * applied batch reads the same wherever it happens.

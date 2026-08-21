@@ -6,12 +6,14 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
-import { runBulkAction } from "@/lib/bulk-action";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { reportApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  bulkDeleteAgents,
+  bulkUpdateAgents,
   createAgent,
   cloneAgent,
   convertAgentToSkill,
@@ -412,7 +414,7 @@ export function useDeleteProfile() {
 /**
  * Sets one visibility across a selection of profiles.
  *
- * There is no bulk route, so this fans out over the single-profile PUT. The
+ * One request to the agents bulk route, which reports per-agent outcomes. The
  * wire names differ from skills — `teams`/`users` rather than
  * `teamIds`/`userIds` — which is why the shared dialog hands over a neutral
  * shape and each resource maps it.
@@ -431,16 +433,16 @@ export function useBulkUpdateProfileVisibility() {
       teamIds: string[];
       userIds: string[];
     }) =>
-      runBulkAction({
-        items: profiles,
-        describe: (profile) => profile.name,
-        run: async ({ id }) => {
-          const { error } = await updateAgent({
-            path: { id },
-            body: { scope, teams: teamIds, users: userIds },
-          });
-          if (error) throw toApiError(error);
+      bulkUpdateAgents({
+        body: {
+          ids: profiles.map((profile) => profile.id),
+          scope,
+          teams: teamIds,
+          users: userIds,
         },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -472,13 +474,11 @@ export function useBulkDeleteProfiles() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (profiles: readonly { id: string; name: string }[]) =>
-      runBulkAction({
-        items: profiles,
-        describe: (profile) => profile.name,
-        run: async ({ id }) => {
-          const { error } = await deleteAgent({ path: { id } });
-          if (error) throw toApiError(error);
-        },
+      bulkDeleteAgents({
+        body: { ids: profiles.map((profile) => profile.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     // Settled rather than success: a partly applied batch still moved rows, so
     // the list is stale either way.

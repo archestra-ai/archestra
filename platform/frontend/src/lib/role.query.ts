@@ -1,12 +1,18 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { runBulkAction } from "@/lib/bulk-action";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { getRoles, createRole, getRole, updateRole, deleteRole } =
-  archestraApiSdk;
+const {
+  getRoles,
+  createRole,
+  getRole,
+  updateRole,
+  deleteRole,
+  bulkDeleteRoles,
+} = archestraApiSdk;
 
 type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
 type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
@@ -140,20 +146,19 @@ export function useUpdateRole() {
  * Hook to delete a custom role
  */
 /**
- * Deletes a selection of custom roles. Predefined roles are immutable, so the
- * table never offers them; this fans out over the single-role route.
+ * Deletes a selection of custom roles in one request. Predefined roles are
+ * immutable, so the table never offers them; a role somebody still holds comes
+ * back in `failed` with that reason while the rest are deleted.
  */
 export function useBulkDeleteRoles() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (roles: readonly { id: string; name: string }[]) =>
-      runBulkAction({
-        items: roles,
-        describe: (role) => role.name,
-        run: async ({ id }) => {
-          const response = await deleteRole({ path: { roleId: id } });
-          if (response.error) throw toApiError(response.error);
-        },
+      bulkDeleteRoles({
+        body: { ids: roles.map((role) => role.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
       }),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() }),

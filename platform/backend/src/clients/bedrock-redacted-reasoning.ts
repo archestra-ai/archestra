@@ -39,11 +39,15 @@ import type { LanguageModelMiddleware } from "ai";
  * every reasoning branch now opens the block before emitting a delta. That
  * release clears this repo's 7-day `minimumReleaseAge` on 2026-08-27, and the
  * exclusion list is reserved for HIGH-severity CVE fixes, so the upgrade could
- * not ship here. On or after that date, bump the dependency and delete this
- * file, its test, and the two lines wiring it into `providerModelConfigs`
- * (nothing else imports it). `bedrock-redacted-reasoning.test.ts` keeps an
- * unwrapped control that starts failing the moment the installed package
- * handles the field, so the upgrade cannot land silently while this remains.
+ * not ship here. On or after that date: bump the dependency, delete this file
+ * and its test, and unwind `providerModelConfigs.bedrock` in `llm-client.ts`
+ * back to a plain `buildBedrockProvider(...)(modelName)` — the
+ * `wrapLanguageModel` wrapper exists only for the middleware below.
+ * `llm-client.ts` is the sole importer; the two references in the proxy
+ * adapter and its test are comments pointing here and want a sentence trimmed.
+ * `bedrock-redacted-reasoning.test.ts` keeps an unwrapped control that starts
+ * failing the moment the installed package handles the field, so the upgrade
+ * cannot land silently while this remains.
  *
  * Both halves are confined to Archestra's own client. The LLM proxy keeps
  * emitting the Converse API's own field name, so clients that read Bedrock's

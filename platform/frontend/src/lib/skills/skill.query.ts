@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorInternalCode,
@@ -105,35 +106,18 @@ export function useAllMatchingSkills(
   params: Omit<SkillsPaginatedParams, "limit" | "offset">,
   options?: { enabled?: boolean },
 ) {
-  return useQuery({
+  return useAllMatching({
     queryKey: ["skills", "all-matching", params],
-    enabled: options?.enabled ?? true,
-    queryFn: async () => {
-      const collected: NonNullable<
-        Awaited<ReturnType<typeof getSkills>>["data"]
-      >["data"] = [];
-
-      for (
-        let offset = 0;
-        offset < MAX_BULK_SKILL_IDS;
-        offset += ALL_MATCHING_PAGE_SIZE
-      ) {
-        const { data, error } = await getSkills({
-          query: {
-            ...params,
-            limit: ALL_MATCHING_PAGE_SIZE,
-            offset,
-          },
-        });
-        throwOnApiError(error);
-
-        const page = data?.data ?? [];
-        collected.push(...page);
-
-        if (page.length < ALL_MATCHING_PAGE_SIZE) break;
-      }
-
-      return collected.slice(0, MAX_BULK_SKILL_IDS);
+    enabled: options?.enabled,
+    // The bulk routes take at most this many ids, so a longer walk could only
+    // build a selection they would refuse.
+    max: MAX_BULK_SKILL_IDS,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getSkills({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error);
+      return data?.data ?? [];
     },
   });
 }
@@ -754,6 +738,3 @@ const BULK_FAILURE_NAMES_SHOWN = 3;
 function isSkillVersionConflict(error: unknown): boolean {
   return getApiErrorInternalCode(error) === "skill_version_conflict";
 }
-
-/** The list route's per-page ceiling, so the walk takes as few requests as it can. */
-const ALL_MATCHING_PAGE_SIZE = 100;

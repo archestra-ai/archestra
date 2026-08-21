@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * The caller decides what "matching" means and how to act on it — this only
  * owns the offer and the state it reports.
  */
-interface SelectAllMatching {
+export interface SelectAllMatching {
   /** Rows matching the current filters across every page. */
   total: number;
   /** True when every row on the current page is ticked. */

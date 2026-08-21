@@ -4,7 +4,10 @@ import { Loader2, Wand2 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import {
+  BulkActionsBar,
+  type SelectAllMatching,
+} from "@/components/ui/bulk-actions-bar";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -44,9 +47,14 @@ import {
 export function ToolPolicyBulkActionsBar({
   selectedToolIds,
   onClear,
+  selectAllMatching,
+  busy,
 }: {
   selectedToolIds: readonly string[];
   onClear: () => void;
+  selectAllMatching?: SelectAllMatching;
+  /** Set while the caller is resolving a "select all matching" escalation. */
+  busy?: boolean;
 }) {
   const bulkCallPolicyMutation = useBulkCallPolicyMutation();
   const bulkResultPolicyMutation = useBulkResultPolicyMutation();
@@ -230,8 +238,9 @@ export function ToolPolicyBulkActionsBar({
     <BulkActionsBar
       count={selectedToolIds.length}
       noun="tool"
-      busy={isBulkUpdating}
+      busy={isBulkUpdating || busy}
       onClear={onClear}
+      selectAllMatching={selectAllMatching}
     >
       {policySelect({
         label: "Call policy:",

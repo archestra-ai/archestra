@@ -65,6 +65,7 @@ import {
 } from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
+  useAllMatchingTools,
   useToolObservers,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
@@ -197,30 +198,34 @@ export function AssignedToolsTable({
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
+  /** Shared by the page query and the "all matching" walk behind it. */
+  const listSorting = {
+    sortBy: (sorting[0]?.id as ToolsSortByValues) || "createdAt",
+    sortDirection: sorting[0]?.desc ? ("desc" as const) : ("asc" as const),
+  };
+  const listFilters = {
+    search: searchFromUrl || undefined,
+    origin: originFilter !== "all" ? originFilter : undefined,
+    observedByUserId:
+      observationFiltersActive && observedByFilter !== DEFAULT_FILTER_ALL
+        ? observedByFilter
+        : undefined,
+    observedByClient:
+      observationFiltersActive && parsedClientFilter.success
+        ? parsedClientFilter.data
+        : undefined,
+    excludeArchestraTools: true,
+    includeKnowledgeSourcesTool: true,
+  };
+
   const { data: toolsData, isLoading } = useToolsWithAssignments({
     initialData: useInitialData ? initialData?.toolsWithAssignments : undefined,
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
     },
-    sorting: {
-      sortBy: (sorting[0]?.id as ToolsSortByValues) || "createdAt",
-      sortDirection: sorting[0]?.desc ? "desc" : "asc",
-    },
-    filters: {
-      search: searchFromUrl || undefined,
-      origin: originFilter !== "all" ? originFilter : undefined,
-      observedByUserId:
-        observationFiltersActive && observedByFilter !== DEFAULT_FILTER_ALL
-          ? observedByFilter
-          : undefined,
-      observedByClient:
-        observationFiltersActive && parsedClientFilter.success
-          ? parsedClientFilter.data
-          : undefined,
-      excludeArchestraTools: true,
-      includeKnowledgeSourcesTool: true,
-    },
+    sorting: listSorting,
+    filters: listFilters,
   });
 
   const { data: toolObservers } = useToolObservers();
@@ -235,7 +240,27 @@ export function AssignedToolsTable({
   const clearSelection = useCallback(() => {
     setRowSelection({});
     setSelectedTools([]);
+    setEscalatedFor(null);
   }, []);
+
+  /**
+   * An escalation is remembered as the filters it was made under, so changing
+   * one drops it rather than silently re-pointing "all 203 tools" at a
+   * different 203.
+   */
+  const filterSignature = JSON.stringify({ listFilters, listSorting });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+
+  const { data: allMatchingTools, isFetching: isFetchingAllMatching } =
+    useAllMatchingTools({
+      filters: listFilters,
+      sorting: listSorting,
+      enabled: allMatchingSelected,
+    });
+
+  const bulkTools =
+    allMatchingSelected && allMatchingTools ? allMatchingTools : selectedTools;
 
   // Helper to update URL params
   const handlePaginationChange = useCallback(
@@ -899,8 +924,19 @@ export function AssignedToolsTable({
       </div>
 
       <ToolPolicyBulkActionsBar
-        selectedToolIds={selectedTools.map((tool) => tool.id)}
+        selectedToolIds={bulkTools.map((tool) => tool.id)}
         onClear={clearSelection}
+        busy={isFetchingAllMatching}
+        selectAllMatching={{
+          total: toolsData?.pagination?.total ?? 0,
+          pageFullySelected:
+            tools.length > 0 && selectedTools.length === tools.length,
+          active: allMatchingSelected,
+          onSelectAll: () => setEscalatedFor(filterSignature),
+          matchDescription: searchFromUrl
+            ? "match this search query"
+            : "match the current filters",
+        }}
       />
 
       <DataTable

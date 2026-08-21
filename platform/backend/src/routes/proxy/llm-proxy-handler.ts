@@ -1008,10 +1008,18 @@ export async function handleLLMProxy<
     // before any guardrail evaluation — trusted-data and tool-invocation
     // lookups otherwise miss the real tool behind the decoration and the
     // dispatch wrapper.
+    // The request's own tool list is passed in so the canonicalizer can learn
+    // the client's label for the gateway when it is not a name this
+    // organization knows — the label is free text typed at `claude mcp add`
+    // time, and a label nothing matches used to leave every decorated name
+    // untouched.
     const canonicalizeToolName =
-      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer(
-        resolvedAgent.organizationId,
-      );
+      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer({
+        organizationId: resolvedAgent.organizationId,
+        declaredToolNames: utils.collectDeclaredToolNames(
+          requestAdapter.getOriginalRequest(),
+        ),
+      });
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       canonicalizeToolName,

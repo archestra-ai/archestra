@@ -29,6 +29,7 @@ import {
   useRevokeSessionMutation,
 } from "@/lib/auth/sessions.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type AccountSession = NonNullable<
@@ -55,19 +56,30 @@ export function SessionsCard() {
   const revokeSession = useRevokeSessionMutation();
   const bulkRevoke = useBulkRevokeSessions();
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const clearSelection = useCallback(() => setRowSelection({}), []);
-
   const currentSessionId = session?.session?.id;
   const isCurrent = (row: AccountSession) => row.id === currentSessionId;
 
   const rows = sessions ?? [];
-  const selectedSessions = rows
-    .filter((row) => !isCurrent(row) && rowSelection[row.id])
-    .map((row) => ({
-      token: row.token,
-      label: row.ipAddress ?? describeUserAgent(row.userAgent).label,
-    }));
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows,
+    getId: (row) => row.id,
+    canSelect: (row) => !isCurrent(row),
+    // Sessions carry no filters, so the escalation never needs invalidating.
+    filterSignature: "sessions",
+    matchDescription: "your account is signed in to",
+  });
+
+  const selectedSessions = selected.map((row) => ({
+    token: row.token,
+    label: row.ipAddress ?? describeUserAgent(row.userAgent).label,
+  }));
 
   const columns: ColumnDef<AccountSession>[] = [
     createSelectColumn<AccountSession>({
@@ -194,6 +206,7 @@ export function SessionsCard() {
               count={selectedSessions.length}
               noun="session"
               onClear={clearSelection}
+              selectAllMatching={selectAllMatching}
               busy={bulkRevoke.isPending}
               className="mb-3"
             >
@@ -224,6 +237,7 @@ export function SessionsCard() {
               getRowId={(row) => row.id}
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
+              onPageRowIdsChange={onPageRowIdsChange}
               hideSelectedCount
               isLoading={isPending}
               emptyMessage="No active sessions."

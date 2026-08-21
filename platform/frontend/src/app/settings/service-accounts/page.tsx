@@ -29,6 +29,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type ServiceAccount,
@@ -70,10 +71,8 @@ export default function ServiceAccountsSettingsPage() {
   } = useServiceAccounts();
   const createMutation = useCreateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteServiceAccounts();
-  const clearSelection = useCallback(() => setRowSelection({}), []);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
@@ -111,9 +110,19 @@ export default function ServiceAccountsSettingsPage() {
     );
   }, [serviceAccounts, search]);
 
-  const selectedAccounts = filteredServiceAccounts.filter(
-    (account) => rowSelection[account.id],
-  );
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedAccounts,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredServiceAccounts,
+    getId: (account) => account.id,
+    filterSignature: search,
+    matchDescription: search ? "match this search" : "exist",
+  });
 
   const columns: ColumnDef<ServiceAccount>[] = useMemo(() => {
     const baseColumns: ColumnDef<ServiceAccount>[] = [

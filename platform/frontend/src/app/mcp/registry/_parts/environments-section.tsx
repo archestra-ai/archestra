@@ -45,6 +45,7 @@ import {
   useK8sCapabilities,
   useUpdateEnvironment,
 } from "@/lib/environment.query";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useDefaultEnvironment,
   useOrganization,
@@ -185,18 +186,26 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  // The Default row is synthetic — it stands for "no environment" and has
-  // nothing to delete, so it is never part of a selection.
-  const selectedEnvironments = rows.filter(
-    (row) =>
-      row.kind === "environment" &&
-      row.assignedCatalogCount === 0 &&
-      rowSelection[row.id],
-  );
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedEnvironments,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows,
+    getId: (row) => row.id,
+    // The Default row is synthetic — it stands for "no environment" — and the
+    // delete route refuses one that still has catalog items assigned.
+    canSelect: (row) =>
+      row.kind === "environment" && row.assignedCatalogCount === 0,
+    filterSignature: "environments",
+    matchDescription: "can be deleted",
+  });
 
   const columns: ColumnDef<EnvironmentTableRow>[] = useMemo(
     () => [
@@ -294,6 +303,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         count={selectedEnvironments.length}
         noun="environment"
         onClear={clearSelection}
+        selectAllMatching={selectAllMatching}
         busy={bulkDelete.isPending}
       >
         <PermissionButton
@@ -313,6 +323,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         getRowId={(row) => row.id}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
         hideSelectedCount
         isLoading={isLoading}
         emptyMessage="No environments"

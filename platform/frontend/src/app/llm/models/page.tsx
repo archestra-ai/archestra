@@ -51,6 +51,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
@@ -114,9 +115,7 @@ export default function ModelsPage() {
     }
   }, [canFilterFreeModels, freeOnly]);
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const bulkVisibility = useBulkUpdateModelVisibility();
-  const clearSelection = useCallback(() => setRowSelection({}), []);
 
   const filteredModels = useMemo(
     () =>
@@ -148,9 +147,23 @@ export default function ModelsPage() {
     }
   }, [syncModelsMutation, refetch]);
 
-  const selectedModels = filteredModels.filter(
-    (model) => rowSelection[model.id],
-  );
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedModels,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredModels,
+    getId: (model) => model.id,
+    filterSignature: JSON.stringify({
+      search,
+      apiKeyFilter,
+      modelTypeFilter,
+    }),
+    matchDescription: "match the current filters",
+  });
 
   // Hiding keeps a model out of the pickers without deleting anything, so the
   // bar offers both directions rather than a single toggle whose meaning would
@@ -609,6 +622,7 @@ export default function ModelsPage() {
           count={selectedModels.length}
           noun="model"
           onClear={clearSelection}
+          selectAllMatching={selectAllMatching}
           busy={bulkVisibility.isPending}
           className="mb-3"
         >
@@ -638,6 +652,7 @@ export default function ModelsPage() {
           getRowId={(row) => row.id}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
+          onPageRowIdsChange={onPageRowIdsChange}
           getRowClassName={(row) =>
             row.ignored ? "opacity-60 [&_td]:text-muted-foreground" : undefined
           }

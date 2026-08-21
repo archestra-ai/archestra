@@ -31,6 +31,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -138,10 +139,20 @@ export function TeamsList() {
     },
   });
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const clearSelection = useCallback(() => setRowSelection({}), []);
-  const selectedTeams = (teams ?? []).filter((team) => rowSelection[team.id]);
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedTeams,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: teams ?? [],
+    getId: (team) => team.id,
+    filterSignature: JSON.stringify({ search, hasLabelFilters }),
+    matchDescription: search || hasLabelFilters ? "match the filters" : "exist",
+  });
 
   // Fans out over the single-item route. Deliberately separate from
   // `deleteMutation` above, which toasts per call — for a selection that would
@@ -303,6 +314,7 @@ export function TeamsList() {
           count={selectedTeams.length}
           noun="team"
           onClear={clearSelection}
+          selectAllMatching={selectAllMatching}
           busy={bulkDelete.isPending}
           className="mb-3"
         >
@@ -323,6 +335,7 @@ export function TeamsList() {
           getRowId={(row) => row.id}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
+          onPageRowIdsChange={onPageRowIdsChange}
           isLoading={isLoading}
           hasActiveFilters={Boolean(search) || hasLabelFilters}
           onClearFilters={() =>

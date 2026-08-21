@@ -37,6 +37,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
 import {
@@ -82,8 +83,6 @@ function ApiKeysCardContent() {
   const createApiKeyMutation = useCreateApiKey();
   const deleteApiKeyMutation = useDeleteApiKey();
   const bulkDelete = useBulkDeleteApiKeys();
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const clearSelection = useCallback(() => setRowSelection({}), []);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
@@ -108,14 +107,26 @@ function ApiKeysCardContent() {
     );
   }, [apiKeys, search]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredApiKeys,
+    getId: (key) => key.id,
+    filterSignature: search,
+    matchDescription: search ? "match this search" : "you have",
+  });
+
   // A key's name is nullable, so the failure toast falls back to the visible
   // prefix rather than naming nothing.
-  const selectedApiKeys = filteredApiKeys
-    .filter((key) => rowSelection[key.id])
-    .map((key) => ({
-      id: key.id,
-      name: key.name ?? key.start ?? "Unnamed key",
-    }));
+  const selectedApiKeys = selected.map((key) => ({
+    id: key.id,
+    name: key.name ?? key.start ?? "Unnamed key",
+  }));
 
   const columns: ColumnDef<UserApiKey>[] = useMemo(() => {
     const baseColumns: ColumnDef<UserApiKey>[] = [

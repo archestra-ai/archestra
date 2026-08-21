@@ -552,14 +552,16 @@ describe("Bedrock stream reasoning delta forwarding", () => {
     expect(adapter.state.text).toBe("");
   });
 
-  test("forwards reasoning signature and redacted-data deltas", () => {
+  // `redactedContent` is the Converse API's own name for the encrypted-reasoning
+  // delta, and the proxy forwards it under that name unchanged.
+  test("forwards reasoning signature and redacted-content deltas", () => {
     const adapter = bedrockAdapterFactory.createStreamAdapter(
       createConverseRequest(),
     );
 
     for (const reasoningContent of [
       { signature: "sig_abc123" },
-      { data: "cmVkYWN0ZWQ=" },
+      { redactedContent: "cmVkYWN0ZWQ=" },
     ]) {
       const result = adapter.processChunk(
         asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
@@ -924,6 +926,25 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
           role: "assistant",
           content: [
             { reasoningContent: { redactedReasoning: { data: "abc123==" } } },
+            { text: "hello" },
+          ],
+        },
+        { role: "user", content: [{ text: "again" }] },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts the Converse API's own redactedContent spelling", () => {
+    const result = Bedrock.API.ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      messages: [
+        { role: "user", content: [{ text: "hi" }] },
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { redactedContent: "abc123==" } },
             { text: "hello" },
           ],
         },

@@ -528,6 +528,29 @@ function isToolUseBlock(block: unknown): block is {
   );
 }
 
+/** An extended-thinking block as it appears in a Converse response. */
+type BedrockReasoningContentBlock = Extract<
+  NonNullable<
+    NonNullable<BedrockResponse["output"]>["message"]
+  >["content"][number],
+  { reasoningContent: unknown }
+>;
+
+/**
+ * Check if a content block is an extended-thinking block, in either of the
+ * Converse API's variants (`reasoningText` or `redactedContent`).
+ */
+function isReasoningContentBlock(
+  block: unknown,
+): block is BedrockReasoningContentBlock {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "reasoningContent" in block &&
+    (block as { reasoningContent: unknown }).reasoningContent !== undefined
+  );
+}
+
 /**
  * Check if a content block is a tool result block.
  * Works with both AWS SDK ContentBlock and our internal Zod types.
@@ -1980,7 +2003,10 @@ export const bedrockAdapterFactory: LLMProvider<
       run: (input) => bedrockClient.converse(request.modelId, input),
     });
 
-    // Convert response to our internal format with decoded tool names
+    // Convert response to our internal format with decoded tool names.
+    // Reasoning blocks are carried by reference: only tool names need decoding,
+    // and dropping them would strip extended thinking from the answer and cost
+    // the client the signature it has to echo back on the next turn.
     const outputContent: Array<
       | { text: string }
       | {
@@ -1990,6 +2016,7 @@ export const bedrockAdapterFactory: LLMProvider<
             input: Record<string, unknown>;
           };
         }
+      | BedrockReasoningContentBlock
     > = [];
     if (response.output?.message?.content) {
       for (const c of response.output.message.content) {
@@ -2006,6 +2033,8 @@ export const bedrockAdapterFactory: LLMProvider<
               input: (c.toolUse.input ?? {}) as Record<string, unknown>,
             },
           });
+        } else if (isReasoningContentBlock(c)) {
+          outputContent.push(c);
         }
       }
     }

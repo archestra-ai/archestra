@@ -26035,6 +26035,8 @@ export type BedrockConverseWithDefaultAgentData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -26229,6 +26231,19 @@ export type BedrockConverseWithDefaultAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26371,6 +26386,8 @@ export type BedrockConverseWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26568,6 +26585,19 @@ export type BedrockConverseWithAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26710,6 +26740,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26918,6 +26950,8 @@ export type BedrockConverseStreamWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -27129,6 +27163,8 @@ export type BedrockConverseWithAgentAndModelData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -27326,6 +27362,19 @@ export type BedrockConverseWithAgentAndModelResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -27468,6 +27517,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -41472,6 +41523,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41656,6 +41709,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41763,6 +41818,19 @@ export type GetInteractionsResponses = {
                                 name: string;
                                 input: {
                                     [key: string]: unknown;
+                                };
+                            };
+                        } | {
+                            reasoningContent: {
+                                reasoningText: {
+                                    text: string;
+                                    signature?: string;
+                                };
+                            } | {
+                                redactedContent: string;
+                            } | {
+                                redactedReasoning: {
+                                    data: string;
                                 };
                             };
                         }>;
@@ -48360,6 +48428,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -48544,6 +48614,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -48651,6 +48723,19 @@ export type GetInteractionResponses = {
                             name: string;
                             input: {
                                 [key: string]: unknown;
+                            };
+                        };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedContent: string;
+                        } | {
+                            redactedReasoning: {
+                                data: string;
                             };
                         };
                     }>;

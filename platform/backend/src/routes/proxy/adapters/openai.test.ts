@@ -826,6 +826,31 @@ describe("OpenAIStreamAdapter", () => {
     return (JSON.parse(firstData) as { usage?: unknown }).usage;
   }
 
+  // The refusal is emitted as a further delta, which clients concatenate onto
+  // the content they have accumulated — so the client holds the model's text
+  // AND the refusal. Reporting the refusal alone dropped the model's own answer
+  // from the record, leaving later readers a turn in which it never spoke.
+  test("toProviderResponse keeps streamed content and appends the refusal", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        { index: 0, delta: { content: "let me check" }, finish_reason: null },
+      ],
+    } as Chunk);
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.choices[0].message.content).toBe(
+      "let me checkblocked message",
+    );
+    expect(response.choices[0].finish_reason).toBe("stop");
+  });
+
   test("carries the trailing usage chunk into the final SSE (net of cache)", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({

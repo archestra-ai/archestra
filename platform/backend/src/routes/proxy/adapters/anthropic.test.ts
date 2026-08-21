@@ -1210,7 +1210,12 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     ).toMatchObject([{ id: "toolu_1", name: "list" }]);
   });
 
-  test("toProviderResponse persists the refusal, not the blocked tool call", () => {
+  // The record has to describe the turn the CLIENT saw. "let me check" was
+  // streamed live and the refusal was appended after it as a further block, so
+  // both belong. Keeping only the refusal deleted the model's own answer from
+  // history — a later reader (conversation replay, a summarizer, a human
+  // debugging the run) then saw a turn in which the model never spoke.
+  test("toProviderResponse keeps the streamed text and appends the refusal", () => {
     const adapter = streamBlockedToolTurn();
 
     adapter.formatCompleteTextSSE("blocked message");
@@ -1218,8 +1223,10 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 
     expect(response.stop_reason).toBe("end_turn");
     expect(response.content).toEqual([
+      { type: "text", text: "let me check", citations: null },
       { type: "text", text: "blocked message", citations: null },
     ]);
+    // The blocked call was never delivered, so it must not appear in the record.
     expect(response.content.some((block) => block.type === "tool_use")).toBe(
       false,
     );

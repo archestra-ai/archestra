@@ -1,7 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
-  MAX_BULK_SKILL_IDS,
+  MAX_BULK_IDS,
 } from "@archestra/shared";
 import {
   useInfiniteQuery,
@@ -97,7 +97,7 @@ export function useSkillsPaginated(
  * table's "select all N skills that match this search query".
  *
  * The list route caps a page at 100, so this walks the offsets. It stops at
- * `MAX_BULK_SKILL_IDS` because that is the largest batch a bulk route accepts:
+ * `MAX_BULK_IDS` because that is the largest batch a bulk route accepts:
  * collecting more would only build a selection the action must refuse. Pass
  * `enabled` so the walk happens on escalation rather than on every render of a
  * table nobody has selected anything in.
@@ -111,7 +111,7 @@ export function useAllMatchingSkills(
     enabled: options?.enabled,
     // The bulk routes take at most this many ids, so a longer walk could only
     // build a selection they would refuse.
-    max: MAX_BULK_SKILL_IDS,
+    max: MAX_BULK_IDS,
     fetchPage: async ({ limit, offset }) => {
       const { data, error } = await getSkills({
         query: { ...params, limit, offset },

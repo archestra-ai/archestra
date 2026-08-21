@@ -10,6 +10,8 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  BulkUpdateAgents: "bulkUpdateAgents",
+  BulkDeleteAgents: "bulkDeleteAgents",
   RestoreAgent: "restoreAgent",
   PermanentlyDeleteAgent: "permanentlyDeleteAgent",
   GetAgentVersions: "getAgentVersions",
@@ -97,6 +99,7 @@ export const RouteId = {
   InspectMcpServer: "inspectMcpServer",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
@@ -148,6 +151,7 @@ export const RouteId = {
   GetRole: "getRole",
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
+  BulkDeleteRoles: "bulkDeleteRoles",
 
   // Tool Routes
   GetTool: "getTool",
@@ -423,6 +427,7 @@ export const RouteId = {
   GetApiKey: "getApiKey",
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
+  BulkDeleteApiKeys: "bulkDeleteApiKeys",
 
   // Service Account Routes
   GetServiceAccounts: "getServiceAccounts",
@@ -430,6 +435,7 @@ export const RouteId = {
   CreateServiceAccount: "createServiceAccount",
   UpdateServiceAccount: "updateServiceAccount",
   DeleteServiceAccount: "deleteServiceAccount",
+  BulkDeleteServiceAccounts: "bulkDeleteServiceAccounts",
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
@@ -459,6 +465,7 @@ export const RouteId = {
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
+  BulkUpdateModels: "bulkUpdateModels",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -522,6 +529,7 @@ export const RouteId = {
   CreateEnvironment: "createEnvironment",
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
+  BulkDeleteEnvironments: "bulkDeleteEnvironments",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
   UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
   GetK8sCapabilities: "getK8sCapabilities",
@@ -632,6 +640,7 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  BulkDeleteKnowledgeBases: "bulkDeleteKnowledgeBases",
   RestoreKnowledgeBase: "restoreKnowledgeBase",
   PermanentlyDeleteKnowledgeBase: "permanentlyDeleteKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
@@ -644,6 +653,8 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  BulkUpdateConnectors: "bulkUpdateConnectors",
+  BulkDeleteConnectors: "bulkDeleteConnectors",
   RestoreConnector: "restoreConnector",
   PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
@@ -673,11 +684,15 @@ export const RouteId = {
   GetKnowledgeFileContent: "getKnowledgeFileContent",
   DeleteKnowledgeFile: "deleteKnowledgeFile",
   UpdateKnowledgeFile: "updateKnowledgeFile",
+  BulkUpdateKnowledgeFiles: "bulkUpdateKnowledgeFiles",
+  BulkDeleteKnowledgeFiles: "bulkDeleteKnowledgeFiles",
   IndexKnowledgeFiles: "indexKnowledgeFiles",
   GetKnowledgeDirectories: "getKnowledgeDirectories",
   CreateKnowledgeDirectory: "createKnowledgeDirectory",
   UpdateKnowledgeDirectory: "updateKnowledgeDirectory",
   DeleteKnowledgeDirectory: "deleteKnowledgeDirectory",
+  BulkUpdateKnowledgeDirectories: "bulkUpdateKnowledgeDirectories",
+  BulkDeleteKnowledgeDirectories: "bulkDeleteKnowledgeDirectories",
   PromoteAttachmentToKnowledgeFile: "promoteAttachmentToKnowledgeFile",
 
   // Invitation Routes
@@ -722,6 +737,8 @@ export const RouteId = {
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
+  BulkUpdateProjects: "bulkUpdateProjects",
+  BulkDeleteProjects: "bulkDeleteProjects",
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
@@ -771,6 +788,8 @@ export const RouteId = {
   LockApp: "lockApp",
   UnlockApp: "unlockApp",
   DeleteApp: "deleteApp",
+  BulkUpdateApps: "bulkUpdateApps",
+  BulkDeleteApps: "bulkDeleteApps",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",
   GetAppTools: "getAppTools",

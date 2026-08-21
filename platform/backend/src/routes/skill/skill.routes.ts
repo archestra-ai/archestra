@@ -1,7 +1,7 @@
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
-  MAX_BULK_SKILL_IDS,
+  MAX_BULK_IDS,
   PaginationQuerySchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -287,7 +287,7 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
 const BulkSkillIdsSchema = z
   .array(UuidIdSchema)
   .min(1)
-  .max(MAX_BULK_SKILL_IDS)
+  .max(MAX_BULK_IDS)
   .describe("Skills to act on. Duplicates are collapsed.");
 
 /**

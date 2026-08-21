@@ -3,7 +3,7 @@
 import {
   type archestraApiTypes,
   E2eTestId,
-  MAX_BULK_SKILL_IDS,
+  MAX_BULK_IDS,
 } from "@archestra/shared";
 import type {
   ColumnDef,
@@ -647,7 +647,7 @@ function SkillsList() {
                 matchDescription: search
                   ? "match this search query"
                   : "match the current filters",
-                max: MAX_BULK_SKILL_IDS,
+                max: MAX_BULK_IDS,
               }}
               className="mb-3"
             >

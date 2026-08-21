@@ -102,6 +102,123 @@ class AgentModel {
     AgentModel.resolveIdCache.clear();
   }
 
+  /**
+   * The agents a bulk route was asked to act on, fenced to one organization
+   * and read in two queries rather than one per id.
+   *
+   * The organization fence is load-bearing rather than tidy: ids arrive
+   * straight from a request body and `requireAgentModifyPermission`
+   * short-circuits for an admin — an admin of the CALLER's organization — so
+   * an unfenced read would let a foreign id sail past the scope checks.
+   * Dropping such an id here makes it indistinguishable from one that never
+   * existed, which is what the single-agent routes answer too.
+   *
+   * Only the fields a bulk route authorizes or reports on are selected, so
+   * this stays cheap for a 500-id batch. Soft-deleted rows are excluded, as
+   * `findById` excludes them.
+   */
+  static async findForBulk(params: {
+    organizationId: string;
+    agentIds: string[];
+  }): Promise<
+    Array<
+      Pick<
+        Agent,
+        "id" | "name" | "agentType" | "scope" | "authorId" | "isPersonalGateway"
+      > & { isBuiltIn: boolean; teamIds: string[] }
+    >
+  > {
+    const { organizationId, agentIds } = params;
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+        isPersonalGateway: schema.agentsTable.isPersonalGateway,
+        isBuiltIn: schema.agentsTable.builtIn,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          inArray(schema.agentsTable.id, agentIds),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    const teamsByAgent = await AgentTeamModel.getTeamDetailsForAgents(
+      rows.map((row) => row.id),
+    );
+
+    return rows.map(({ isBuiltIn, ...row }) => ({
+      ...row,
+      // `built_in` is a generated column, so drizzle types it nullable even
+      // though the expression it computes never is.
+      isBuiltIn: isBuiltIn === true,
+      teamIds: (teamsByAgent.get(row.id) ?? []).map((team) => team.id),
+    }));
+  }
+
+  /**
+   * Visibility snapshot for a bulk route's audit record, used for both the
+   * before and after side. Ids, names, scope and team assignment only: enough
+   * to see what the batch moved, with nothing secret in it.
+   *
+   * Soft-deleted rows are included so a bulk delete's "after" side still names
+   * what it removed rather than going empty.
+   */
+  static async findVisibilityForBulkAudit(params: {
+    organizationId: string;
+    agentIds: string[];
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      scope: AgentScope;
+      deleted: boolean;
+      teamIds: string[];
+    }>
+  > {
+    const { organizationId, agentIds } = params;
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        scope: schema.agentsTable.scope,
+        deletedAt: schema.agentsTable.deletedAt,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          inArray(schema.agentsTable.id, agentIds),
+        ),
+      )
+      // Sorted so two reads of an unchanged batch produce an identical
+      // snapshot and the audit diff stays empty; row order is unspecified.
+      .orderBy(schema.agentsTable.id);
+
+    const teamsByAgent = await AgentTeamModel.getTeamDetailsForAgents(
+      rows.map((row) => row.id),
+    );
+
+    return rows.map(({ deletedAt, ...row }) => ({
+      ...row,
+      deleted: deletedAt !== null,
+      teamIds: (teamsByAgent.get(row.id) ?? []).map((team) => team.id).sort(),
+    }));
+  }
+
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];

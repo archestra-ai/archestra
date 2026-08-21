@@ -36,6 +36,8 @@ type TableRowAction = {
   tooltip?: string;
   variant?: "default" | "destructive";
   href?: string;
+  /** The href leaves the app: open it in a new tab, as a link out should. */
+  external?: boolean;
   testId?: string;
 };
 
@@ -140,7 +142,9 @@ function ActionButton({
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           data-testid={action.testId}
         >
-          <Link href={action.href}>{icon}</Link>
+          <Link href={action.href} {...externalLinkProps(action)}>
+            {icon}
+          </Link>
         </PermissionButton>
       );
     }
@@ -175,7 +179,9 @@ function ActionButton({
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         data-testid={action.testId}
       >
-        <Link href={action.href}>{icon}</Link>
+        <Link href={action.href} {...externalLinkProps(action)}>
+          {icon}
+        </Link>
       </Button>
     ) : (
       <Button
@@ -255,7 +261,7 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
       asChild={!!action.href && !isDisabled}
     >
       {action.href && !isDisabled ? (
-        <Link href={action.href}>
+        <Link href={action.href} {...externalLinkProps(action)}>
           {icon}
           {action.label}
         </Link>
@@ -295,6 +301,12 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
   }
 
   return content;
+}
+
+function externalLinkProps(action: TableRowAction) {
+  return action.external
+    ? ({ target: "_blank", rel: "noreferrer" } as const)
+    : {};
 }
 
 function accessibleActionLabel(label: string, itemName?: string) {

@@ -299,6 +299,7 @@ describe("renderSystemPrompt", () => {
     user: {
       name: "Alice Smith",
       email: "alice@example.com",
+      role: "member",
       teams: ["Engineering", "Platform"],
     },
   };
@@ -351,6 +352,85 @@ describe("renderSystemPrompt", () => {
     );
   });
 
+  test("renders user.role variable", () => {
+    const template = "Role: {{user.role}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe("Role: member");
+  });
+
+  test("renders user.role in a conditional", () => {
+    const template =
+      '{{#equals user.role "admin"}}admin tools{{else}}standard tools{{/equals}}';
+    expect(renderSystemPrompt(template, baseContext)).toBe("standard tools");
+  });
+
+  test("keeps rendering the valid variables around an unparseable expression", () => {
+    // `*` is not a legal Handlebars identifier, so this aborts compilation of
+    // the whole template — which used to ship every other variable to the model
+    // as literal text.
+    const template =
+      "Hi {{user.name}} ({{user.email}}). Variables: {{user.*}} are available.";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hi Alice Smith (alice@example.com). Variables: {{user.*}} are available.",
+    );
+  });
+
+  test("preserves multi-line block helpers alongside an unparseable expression", () => {
+    const template = [
+      "Operating for {{user.name}} ({{user.email}}).",
+      "Docs: {{user.*}}, {{currentDate}}.",
+      '{{#includes user.teams "Engineering"}}',
+      "  Engineering scope applies.",
+      "{{/includes}}",
+    ].join("\n");
+
+    const result = renderSystemPrompt(template, baseContext);
+
+    expect(result).toContain("Operating for Alice Smith (alice@example.com).");
+    // The block still evaluates rather than degrading to literal text.
+    expect(result).toContain("Engineering scope applies.");
+    expect(result).not.toContain("{{#includes");
+    // Only the expression Handlebars cannot parse stays as written.
+    expect(result).toContain("{{user.*}}");
+    expect(result).not.toContain("{{user.name}}");
+    expect(result).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  test("renders variables when the prompt calls a block helper that does not exist", () => {
+    const template =
+      "Hi {{user.name}}. {{#notAHelper user.teams}}scoped{{/notAHelper}}";
+    const result = renderSystemPrompt(template, baseContext);
+
+    expect(result).toContain("Hi Alice Smith.");
+    expect(result).toContain("scoped");
+  });
+
+  test("renders variables when a block is left unclosed", () => {
+    const template = "Hi {{user.name}}. {{#if user.teams}}scoped";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Hi Alice Smith. {{#if user.teams}}scoped",
+    );
+  });
+
+  test("leaves author-escaped expressions literal without adding a backslash", () => {
+    const template = "Literal \\{{user.name}} vs rendered {{user.name}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "Literal {{user.name}} vs rendered Alice Smith",
+    );
+  });
+
+  test("keeps an unparseable triple-stache literal", () => {
+    const template = "{{{user.*}}} then {{user.name}}";
+    expect(renderSystemPrompt(template, baseContext)).toBe(
+      "{{{user.*}}} then Alice Smith",
+    );
+  });
+
+  test("does not substitute expressions inside a quoted helper argument", () => {
+    const template =
+      '{{#includes user.teams "}}"}}odd{{else}}normal{{/includes}}';
+    expect(renderSystemPrompt(template, baseContext)).toBe("normal");
+  });
+
   test("renders empty string for missing variables", () => {
     const template = "Hello {{user.nonexistent}}!";
     expect(renderSystemPrompt(template, baseContext)).toBe("Hello !");
@@ -369,7 +449,7 @@ Current date: {{currentDate}}.`;
 
   test("handles empty teams array", () => {
     const context = {
-      user: { name: "Bob", email: "bob@test.com", teams: [] },
+      user: { name: "Bob", email: "bob@test.com", role: "member", teams: [] },
     };
     const template =
       "{{#if user.teams}}Teams: {{#each user.teams}}{{this}}{{/each}}{{else}}No teams{{/if}}";
@@ -400,7 +480,12 @@ Current date: {{currentDate}}.`;
 
   test("does not HTML-escape apostrophes in variable values", () => {
     const context = {
-      user: { name: "O'Brien", email: "obrien@test.com", teams: [] },
+      user: {
+        name: "O'Brien",
+        email: "obrien@test.com",
+        role: "member",
+        teams: [],
+      },
     };
     const template = "Hello {{user.name}}";
     expect(renderSystemPrompt(template, context)).toBe("Hello O'Brien");
@@ -408,7 +493,12 @@ Current date: {{currentDate}}.`;
 
   test("does not HTML-escape ampersands in variable values", () => {
     const context = {
-      user: { name: "Alice", email: "alice@test.com", teams: ["R&D"] },
+      user: {
+        name: "Alice",
+        email: "alice@test.com",
+        role: "member",
+        teams: ["R&D"],
+      },
     };
     const template = "Teams: {{#each user.teams}}{{this}}{{/each}}";
     expect(renderSystemPrompt(template, context)).toBe("Teams: R&D");
@@ -419,6 +509,7 @@ Current date: {{currentDate}}.`;
       user: {
         name: "use `tool` here",
         email: "test@test.com",
+        role: "member",
         teams: [],
       },
     };
@@ -430,7 +521,12 @@ Current date: {{currentDate}}.`;
 
   test("does not HTML-escape angle brackets in variable values", () => {
     const context = {
-      user: { name: "<admin>", email: "admin@test.com", teams: [] },
+      user: {
+        name: "<admin>",
+        email: "admin@test.com",
+        role: "member",
+        teams: [],
+      },
     };
     const template = "User: {{user.name}}";
     expect(renderSystemPrompt(template, context)).toBe("User: <admin>");
@@ -441,6 +537,7 @@ Current date: {{currentDate}}.`;
       user: {
         name: "O'Brien",
         email: "obrien@test.com",
+        role: "member",
         teams: ["R&D"],
       },
     };
@@ -492,6 +589,7 @@ describe("renderSystemPrompt with null handling", () => {
     user: {
       name: "Alice",
       email: "alice@test.com",
+      role: "member",
       teams: ["Engineering"],
     },
   };

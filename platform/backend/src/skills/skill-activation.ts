@@ -7,7 +7,7 @@ import {
   type UserSystemPromptContext,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { TeamModel, UserModel } from "@/models";
+import { MemberModel, TeamModel, UserModel } from "@/models";
 import { renderSystemPrompt } from "@/templating";
 import type { Skill, SkillFile } from "@/types";
 
@@ -127,7 +127,7 @@ export function formatSkillActivation({
 
 /**
  * Build the user context for rendering a `templated` skill body, mirroring the
- * agent system-prompt path (name, email, team names). Team names are scoped to
+ * agent system-prompt path (name, email, org role, team names). Team names are scoped to
  * the activating organization so a skill never sees the user's teams from other
  * orgs. Returns `null` when there is no user/org to resolve, so callers skip the
  * lookups for non-templated skills.
@@ -138,13 +138,15 @@ export async function buildSkillActivationPromptContext(params: {
 }): Promise<UserSystemPromptContext | null> {
   const { userId, organizationId } = params;
   if (!userId || !organizationId) return null;
-  const [user, teams] = await Promise.all([
+  const [user, teams, member] = await Promise.all([
     UserModel.getById(userId),
     TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
+    MemberModel.getByUserId(userId, organizationId),
   ]);
   return buildUserSystemPromptContext({
     userName: user?.name ?? "",
     userEmail: user?.email ?? "",
+    userRole: member?.role,
     userTeams: teams.map((team) => team.name),
   });
 }

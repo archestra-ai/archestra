@@ -16,6 +16,7 @@ export * from "./docs";
 export * from "./e2e-test-ids";
 export * from "./environment-defaults";
 export * from "./gemini-models";
+export * from "./handlebars-expressions";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";
 export * as archestraApiSdk from "./hey-api/clients/api/sdk.gen";
 export * as archestraApiTypes from "./hey-api/clients/api/types.gen";

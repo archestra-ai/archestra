@@ -3,12 +3,14 @@
 
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const MAX_VISIBLE_ITEMS = 2;
 
@@ -18,6 +20,10 @@ type CollapsedBadgeItem = {
   label: string;
   /** Hover title on the visible badge. Defaults to the label. */
   title?: string;
+  /** Leading glyph, so the kind of entry reads before the text does. */
+  icon?: LucideIcon;
+  /** Badge palette — e.g. one of the shared scope styles. */
+  className?: string;
 };
 
 /**
@@ -34,13 +40,14 @@ export function CollapsedBadgeList({ items }: { items: CollapsedBadgeItem[] }) {
 
   return (
     <div className="flex flex-wrap gap-1">
-      {visible.map(({ id, label, title }) => (
+      {visible.map(({ id, label, title, icon: Icon, className }) => (
         <Badge
           key={id}
           variant="outline"
-          className="max-w-full text-xs"
+          className={cn("max-w-full gap-1 text-xs", className)}
           title={title ?? label}
         >
+          {Icon && <Icon className="h-3 w-3 shrink-0" />}
           <span className="truncate">{label}</span>
         </Badge>
       ))}

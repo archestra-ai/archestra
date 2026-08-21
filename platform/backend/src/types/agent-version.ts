@@ -9,8 +9,8 @@ import { schema } from "@/database";
  * - sharing: scope, teams, labels
  * - identity/singletons: slug, isDefault, isPersonalGateway, isPersonalProxy
  * - ownership/lifecycle: organizationId, authorId, timestamps, deletedAt
- * - limits, optimization rules, and per-tool policies (separate entities
- *   keyed by agent/tool id, not owned by the agent's config surface)
+ * - limits and per-tool policies (separate entities keyed by agent/tool id,
+ *   not owned by the agent's config surface)
  *
  * Enum-ish fields are plain strings on purpose: snapshots are immutable
  * historical data and must keep parsing after an enum gains or loses values.

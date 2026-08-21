@@ -7,7 +7,7 @@ lastUpdated: 2026-08-21
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
+Archestra tracks LLM usage costs, enforces usage limits, and records savings from tool-result compression and prompt caching. These controls work together: pricing defines cost, logs and statistics show what happened, and limits stop or shape usage.
 
 ## Statistics
 
@@ -15,7 +15,7 @@ The statistics view is the rollup layer for LLM traffic. It aggregates usage by 
 
 - which teams are driving spend
 - which models are responsible for the largest share of cost
-- whether optimization rules or TOON compression are reducing spend over time
+- whether TOON compression and prompt caching are reducing spend over time
 
 For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 
@@ -23,7 +23,6 @@ This page depends on model pricing being configured correctly. If a model has no
 
 Archestra stores both raw spend and savings. Savings can come from:
 
-- optimization rules that reroute requests to lower-cost models
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
@@ -114,24 +113,12 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 
 - statistics use it to convert token counts into spend
 - token-cost limits use it to decide when a budget is reached
-- optimization reports use it to calculate savings
+- savings reporting uses it to price what a request would otherwise have cost
 - TOON compression savings are reported in dollars using the configured model price
 
 When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly. Archestra maps them back to the underlying vendor model to recover real prices — cache prices included — and the context window.
 
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
-
-## Optimization Rules
-
-Optimization rules reduce cost before a request is sent to an LLM. They evaluate request context and can switch the request to a lower-cost model when the rule conditions match.
-
-Typical uses:
-
-- route short prompts to a cheaper model
-- use a less expensive model when tool use is not required
-- apply time-based policies for predictable traffic patterns
-
-Rules are applied by priority order. This makes them useful for layered policies, where a specific exception should win over a general fallback.
 
 ## TOON Compression
 

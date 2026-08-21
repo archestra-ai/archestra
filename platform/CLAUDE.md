@@ -52,7 +52,6 @@ Load these project skills when the task matches their domain:
 - **Cost Statistics**: <http://localhost:3000/llm/cost/statistics> (Usage analytics with time series charts and custom date ranges)
 - **Cost Limits**: <http://localhost:3000/llm/cost/limits> (Token usage limits management with per-profile configuration)
 - **Token Price**: <http://localhost:3000/llm/cost/token-price> (Model pricing configuration)
-- **Optimization Rules**: <http://localhost:3000/llm/cost/optimization-rules> (Cost optimization policies)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (GET for discovery, POST for JSON-RPC stateless mode, requires Bearer archestra_token auth)

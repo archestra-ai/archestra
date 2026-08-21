@@ -35,6 +35,7 @@ import {
   type KnowledgeDirectory,
   type KnowledgeFile,
   ROOT_DIRECTORY,
+  useAllMatchingKnowledgeFiles,
   useDeleteKnowledgeDirectory,
   useDeleteKnowledgeFile,
   useKnowledgeDirectories,
@@ -184,8 +185,44 @@ export default function KnowledgeFilesPage() {
       0,
     );
 
+  /**
+   * An escalation is remembered as the view it was made in, so opening a
+   * different directory or changing the search drops it rather than silently
+   * re-pointing "all 40 documents" at a different 40.
+   */
+  const viewSignature = JSON.stringify({ openDirectoryId, search });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === viewSignature;
+
+  const { data: allMatchingFiles, isFetching: isFetchingAllMatching } =
+    useAllMatchingKnowledgeFiles(
+      {
+        directoryId: openDirectoryId ?? ROOT_DIRECTORY,
+        search: search || undefined,
+      },
+      { enabled: allMatchingSelected },
+    );
+
+  /**
+   * What the action actually runs on. An escalation promised "every document
+   * in this view", so it resolves to those documents alone — the ticked
+   * directories are dropped rather than added on top, which would act on more
+   * than the offer named.
+   */
+  const escalatedFileIds = allMatchingSelected
+    ? (allMatchingFiles ?? []).map((file) => file.id)
+    : null;
+  const actionFileIds = escalatedFileIds ?? selectedFileIds;
+  const actionDirectoryIds = escalatedFileIds ? [] : selectedDirectoryIds;
+  const actionDocumentCount = escalatedFileIds
+    ? escalatedFileIds.length
+    : selectedFileCount;
+
   // Stable so the columns memo can depend on it without rebuilding every render.
-  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   const columns: ColumnDef<Row>[] = useMemo(
     () => [
@@ -457,12 +494,25 @@ export default function KnowledgeFilesPage() {
             an empty directory selects something the bar has to be able to
             report on and clear, even though it resolves to no documents. */}
         <BulkActionsBar
-          count={selectedIds.length}
+          count={allMatchingSelected ? actionDocumentCount : selectedIds.length}
           noun="document"
-          label={`${selectedFileCount} ${
-            selectedFileCount === 1 ? "document" : "documents"
+          label={`${actionDocumentCount} ${
+            actionDocumentCount === 1 ? "document" : "documents"
           } selected`}
           onClear={clearSelection}
+          busy={isFetchingAllMatching}
+          selectAllMatching={{
+            // Documents only. Directories arrive whole rather than a page at a
+            // time, so none of them are hidden behind this offer.
+            total: data?.pagination?.total ?? 0,
+            pageFullySelected:
+              rows.length > 0 && selectedIds.length === rows.length,
+            active: allMatchingSelected,
+            onSelectAll: () => setEscalatedFor(viewSignature),
+            matchDescription: search
+              ? "match this search query"
+              : "are in this view",
+          }}
         >
           <PermissionButton
             permissions={{ knowledgeSource: ["update"] }}
@@ -470,9 +520,9 @@ export default function KnowledgeFilesPage() {
             // An empty directory resolves to nothing, so the action is
             // refused here rather than by an error that contradicts the
             // "selected" count next to it.
-            disabled={selectedFileCount === 0}
+            disabled={actionDocumentCount === 0}
             tooltip={
-              selectedFileCount === 0
+              actionDocumentCount === 0
                 ? "The selected directories have no documents in them yet."
                 : undefined
             }
@@ -543,9 +593,9 @@ export default function KnowledgeFilesPage() {
       <AddToKnowledgeBaseDialog
         open={addToKbOpen}
         onOpenChange={setAddToKbOpen}
-        fileIds={selectedFileIds}
-        directoryIds={selectedDirectoryIds}
-        documentCount={selectedFileCount}
+        fileIds={actionFileIds}
+        directoryIds={actionDirectoryIds}
+        documentCount={actionDocumentCount}
         onIndexed={clearSelection}
       />
     </KnowledgePageLayout>

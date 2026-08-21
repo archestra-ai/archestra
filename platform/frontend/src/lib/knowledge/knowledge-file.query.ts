@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
@@ -46,6 +47,30 @@ export function useKnowledgeFiles(params: {
       return data ?? null;
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * Every document matching the current directory and search, not just the page
+ * in view — what backs "select all N documents that match this search query".
+ *
+ * Directories are not walked: they arrive whole from `useKnowledgeDirectories`,
+ * so nothing about them is hidden behind a page.
+ */
+export function useAllMatchingKnowledgeFiles(
+  params: { directoryId?: string; search?: string },
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: [FILES_KEY, "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getKnowledgeFiles({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error);
+      return data?.data ?? [];
+    },
   });
 }
 

@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { runBulkAction } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ServiceAccount =
@@ -162,6 +163,28 @@ export function useCreateServiceAccountToken() {
         queryKey: ["service-account", variables.id],
       });
     },
+  });
+}
+
+/**
+ * Deletes a selection of service accounts. Fans out over the single-item
+ * route; deliberately not `useDeleteServiceAccount`, which toasts per call and
+ * so would fire one toast per row.
+ */
+export function useBulkDeleteServiceAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (accounts: readonly { id: string; name: string }[]) =>
+      runBulkAction({
+        items: accounts,
+        describe: (account) => account.name,
+        run: async ({ id }) => {
+          const { error } = await deleteServiceAccount({ path: { id } });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] }),
   });
 }
 

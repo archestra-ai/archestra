@@ -6,8 +6,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { runBulkAction } from "@/lib/bulk-action";
 import { resolveDefaultEnvironmentId } from "@/lib/resolve-default-environment";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -191,6 +192,35 @@ export function useDeleteEnvironment() {
       // environment by the same FK.
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success("Environment deleted");
+    },
+  });
+}
+
+/**
+ * Deletes a selection of environments. Fans out over the single-item route,
+ * bypassing `useDeleteEnvironment` so a batch reports once rather than per row.
+ */
+export function useBulkDeleteEnvironments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (environments: readonly { id: string; name: string }[]) =>
+      runBulkAction({
+        items: environments,
+        describe: (environment) => environment.name,
+        run: async ({ id }) => {
+          const { error } = await archestraApiSdk.deleteEnvironment({
+            path: { id },
+          });
+          if (error) throw toApiError(error);
+        },
+      }),
+    // Resources in a deleted environment fall back to Default by FK, so the
+    // catalog and agent lists are stale too.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["internal-mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

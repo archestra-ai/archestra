@@ -116,6 +116,12 @@ import {
   SelectKnowledgeBaseSchema,
   UserSelectableConnectorTypeSchema,
 } from "@/types";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "./bulk-route";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -415,6 +421,77 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(updated);
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-bases/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteKnowledgeBases,
+        description:
+          "Soft-delete several knowledge bases in one request, removing their " +
+          "connector assignments. Ids the caller cannot see are reported in " +
+          "`failed` and leave the rest of the batch applied. There is no " +
+          "matching PATCH: a knowledge base has no visibility of its own — it " +
+          "is reached through the connectors and documents assigned to it — " +
+          "so its only editable fields are its name and description, which " +
+          "are per-row by nature.",
+        tags: ["Knowledge Bases"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user } = request;
+      const snapshot = async (ids: string[]) => {
+        const rows = await Promise.all(
+          ids.map((id) => KnowledgeBaseModel.findById(id).catch(() => null)),
+        );
+        return {
+          knowledgeBases: rows
+            .filter(
+              (row): row is NonNullable<typeof row> =>
+                row !== null && row.organizationId === organizationId,
+            )
+            .map((row) => ({ id: row.id, name: row.name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "knowledge bases bulk delete",
+        notFoundMessage: "Knowledge base not found",
+        unexpectedMessage: "Could not delete this knowledge base",
+        // Reuses the single-resource finder per id rather than restating who
+        // may see a knowledge base.
+        load: async (ids) => {
+          const found = new Map<
+            string,
+            Awaited<ReturnType<typeof findKnowledgeBaseOrThrow>>
+          >();
+          for (const id of ids) {
+            const kb = await findKnowledgeBaseOrThrow({
+              id,
+              organizationId,
+              userId: user.id,
+            }).catch(() => null);
+            if (kb) found.set(id, kb);
+          }
+          return found;
+        },
+        describe: (kb) => kb.name,
+        applyEach: async (_kb, id) => {
+          const success = await deleteKnowledgeBase(id);
+          if (!success) {
+            throw new ApiError(404, "Knowledge base not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 
@@ -1466,6 +1543,241 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetEnd
 
       return reply.send(updated);
+    },
+  );
+
+  fastify.patch(
+    "/api/connectors/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateConnectors,
+        description:
+          "Change who can see several connectors in one request. Every " +
+          "connector in the batch moves to the same audience, and the ACL " +
+          "refresh each one needs runs per connector exactly as the single " +
+          "update runs it. `auto-sync-permissions` is deliberately not " +
+          "accepted here: switching a connector to it fail-closes its whole " +
+          "corpus until a permission pass completes, and it is gated on the " +
+          "connector's own type, so it stays a per-connector decision.",
+        tags: ["Connectors"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          visibility: z
+            .enum(["org-wide", "team-scoped"])
+            .describe("The audience every connector in the batch moves to."),
+          teamIds: z
+            .array(z.string())
+            .optional()
+            .describe("Only meaningful for `team-scoped`; required there."),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const visibility = body.visibility;
+      const teamIds =
+        visibility === "team-scoped" ? [...new Set(body.teamIds ?? [])] : [];
+
+      // Request-level: the audience is the same for every connector, so an
+      // unusable one is a bad request rather than N identical failures.
+      if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
+        throw new ApiError(
+          400,
+          "At least one team must be selected for team-scoped connectors",
+        );
+      }
+
+      const snapshot = async (ids: string[]) => {
+        const rows = await Promise.all(
+          ids.map((id) =>
+            KnowledgeBaseConnectorModel.findById(id).catch(() => null),
+          ),
+        );
+        return {
+          connectors: rows
+            .filter(
+              (row): row is NonNullable<typeof row> =>
+                row !== null && row.organizationId === organizationId,
+            )
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              visibility: row.visibility,
+              teamIds: [...(row.teamIds ?? [])].sort(),
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "connectors bulk update",
+        notFoundMessage: "Connector not found",
+        unexpectedMessage: "Could not update this connector",
+        load: async (ids) => {
+          const found = new Map<
+            string,
+            Awaited<ReturnType<typeof findConnectorOrThrow>>
+          >();
+          for (const id of ids) {
+            const connector = await findConnectorOrThrow({
+              id,
+              organizationId,
+              userId: user.id,
+            }).catch(() => null);
+            if (connector) found.set(id, connector);
+          }
+          return found;
+        },
+        describe: (connector) => connector.name,
+        authorize: async (connector) => {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (
+            connector.visibility !== "team-scoped" &&
+            visibility === "team-scoped" &&
+            !enterpriseTier.isKnowledgeBaseActive()
+          ) {
+            throw new ApiError(
+              403,
+              "Team-scoped connectors require an enterprise license",
+            );
+          }
+          // Moving a connector AWAY from auto-sync is a mutation of an
+          // auto-sync connector, so it needs the dedicated grant — viewing
+          // rights are not enough, exactly as on the single update.
+          if (connector.visibility === "auto-sync-permissions") {
+            const violation = await checkHasAutoSyncConnectorPermission({
+              userId: user.id,
+              organizationId,
+              action: "update",
+            });
+            if (violation) {
+              throw violation;
+            }
+          }
+          // SPDX-SnippetEnd
+        },
+        applyEach: async (connector, id) => {
+          const updated = await KnowledgeBaseConnectorModel.update(id, {
+            visibility,
+            teamIds,
+          });
+          if (!updated) {
+            throw new ApiError(404, "Connector not found");
+          }
+
+          if (
+            didKnowledgeSourceAclInputsChange({
+              current: connector,
+              updates: { visibility, teamIds },
+            })
+          ) {
+            // Same fencing the single update performs: bump the epoch so an
+            // in-flight ACL write computed against the old audience no-ops,
+            // then run the authoritative refresh. Skipping it would leave
+            // documents readable under the audience the batch just replaced.
+            await KnowledgeBaseConnectorModel.bumpAclConfigEpoch(id);
+            await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
+              id,
+            );
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteConnectors,
+        description:
+          "Soft-delete several connectors in one request. As with the single " +
+          "delete, each one's queued syncs are cancelled and its stored " +
+          "credential is destroyed — a restored connector comes back disabled " +
+          "and re-authenticates. A connector the caller may not delete is " +
+          "reported in `failed` while the rest of the batch still applies.",
+        tags: ["Connectors"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user } = request;
+      const snapshot = async (ids: string[]) => {
+        const rows = await Promise.all(
+          ids.map((id) =>
+            KnowledgeBaseConnectorModel.findById(id).catch(() => null),
+          ),
+        );
+        return {
+          connectors: rows
+            .filter(
+              (row): row is NonNullable<typeof row> =>
+                row !== null && row.organizationId === organizationId,
+            )
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              visibility: row.visibility,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "connectors bulk delete",
+        notFoundMessage: "Connector not found",
+        unexpectedMessage: "Could not delete this connector",
+        load: async (ids) => {
+          const found = new Map<
+            string,
+            Awaited<ReturnType<typeof findConnectorOrThrow>>
+          >();
+          for (const id of ids) {
+            const connector = await findConnectorOrThrow({
+              id,
+              organizationId,
+              userId: user.id,
+            }).catch(() => null);
+            if (connector) found.set(id, connector);
+          }
+          return found;
+        },
+        describe: (connector) => connector.name,
+        authorize: async (connector) => {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          if (connector.visibility === "auto-sync-permissions") {
+            const violation = await checkHasAutoSyncConnectorPermission({
+              userId: user.id,
+              organizationId,
+              action: "delete",
+            });
+            if (violation) {
+              throw violation;
+            }
+          }
+          // SPDX-SnippetEnd
+        },
+        applyEach: async (_connector, id) => {
+          const success = await deleteConnector(id);
+          if (!success) {
+            throw new ApiError(404, "Connector not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

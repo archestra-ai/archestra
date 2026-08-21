@@ -2051,6 +2051,12 @@ describe("buildArchestraToolOutput", () => {
       { type: "media", data: base64, mediaType: "image/jpeg" },
     ]);
     expect(textParts[0].text).not.toContain(base64);
+
+    // The UI still retains `built.rawContent`, but a text-only selected model
+    // receives only the descriptor text on its next tool turn.
+    expect(
+      mcpToolToModelOutput({ output: built, includeImages: false }),
+    ).toEqual({ type: "text", value: "App rendered clean.\n[image]" });
   });
 
   test("does not re-forward a history-stripped image placeholder as media", () => {

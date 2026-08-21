@@ -5,7 +5,7 @@ import {
   E2eTestId,
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Eye, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,9 +25,12 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -36,6 +39,7 @@ import {
   useTeamLabelValues,
   useTeams,
 } from "@/lib/teams/team.query";
+import { toApiError } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamManagementDialog } from "./team-management-dialog";
 
@@ -134,6 +138,30 @@ export function TeamsList() {
     },
   });
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const clearSelection = useCallback(() => setRowSelection({}), []);
+  const selectedTeams = (teams ?? []).filter((team) => rowSelection[team.id]);
+
+  // Fans out over the single-item route. Deliberately separate from
+  // `deleteMutation` above, which toasts per call — for a selection that would
+  // be one toast per row instead of one for the batch.
+  const bulkDelete = useMutation({
+    mutationFn: async (selection: readonly Team[]) =>
+      runBulkAction({
+        items: selection,
+        describe: (team) => team.name,
+        run: async ({ id }) => {
+          const { error } = await archestraApiSdk.deleteTeam({ path: { id } });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+    },
+  });
+
   const handleDeleteTeam = () => {
     if (teamToDelete) {
       deleteMutation.mutate(teamToDelete.id);
@@ -155,6 +183,10 @@ export function TeamsList() {
   }, [setActionButton]);
 
   const columns: ColumnDef<Team>[] = [
+    createSelectColumn<Team>({
+      rowLabel: (team) => `Select ${team.name}`,
+      allLabel: "Select all teams on this page",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -267,9 +299,30 @@ export function TeamsList() {
           <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
         )}
 
+        <BulkActionsBar
+          count={selectedTeams.length}
+          noun="team"
+          onClear={clearSelection}
+          busy={bulkDelete.isPending}
+          className="mb-3"
+        >
+          <PermissionButton
+            permissions={{ team: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </PermissionButton>
+        </BulkActionsBar>
+
         <DataTable
           columns={columns}
           data={teams ?? []}
+          getRowId={(row) => row.id}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
           isLoading={isLoading}
           hasActiveFilters={Boolean(search) || hasLabelFilters}
           onClearFilters={() =>
@@ -286,6 +339,39 @@ export function TeamsList() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
       />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete teams"
+          description={`Delete ${selectedTeams.length} ${
+            selectedTeams.length === 1 ? "team" : "teams"
+          }? Members stay in the organization; only the teams go.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectedTeams, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+
+                  verb: "Deleted",
+
+                  failureVerb: "delete",
+
+                  noun: "team",
+                });
+
+                setBulkDeleteOpen(false);
+
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete teams"
+          pendingLabel="Deleting..."
+        />
+      )}
 
       <DeleteConfirmDialog
         open={deleteDialogOpen}

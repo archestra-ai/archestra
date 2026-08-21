@@ -13,6 +13,7 @@ beforeEach(() => {
 
 describe("fetchBedrockModels", () => {
   const originalBaseUrl = config.llm.bedrock.baseUrl;
+  const originalRegion = config.llm.bedrock.region;
 
   // The fetcher now surfaces embedding models too (tagged with a dimension) and
   // statically injects Titan (which has no inference profile). These chat-model
@@ -30,6 +31,7 @@ describe("fetchBedrockModels", () => {
 
   afterEach(() => {
     config.llm.bedrock.baseUrl = originalBaseUrl;
+    config.llm.bedrock.region = originalRegion;
   });
 
   test("returns only ACTIVE inference profiles", async () => {
@@ -300,13 +302,29 @@ describe("fetchBedrockModels", () => {
     }
   });
 
-  test("throws error when baseUrl is not configured", async () => {
+  test("derives the default regional endpoint when baseUrl is not configured", async () => {
     config.llm.bedrock.baseUrl = "";
+    config.llm.bedrock.region = "";
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ inferenceProfileSummaries: [] }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ modelSummaries: [] }),
+    });
 
-    await expect(fetchBedrockModels("test-api-key")).rejects.toThrow(
-      "Bedrock base URL not configured",
+    await expect(fetchBedrockModels("test-api-key")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "amazon.titan-embed-image-v1" }),
+      ]),
     );
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "https://bedrock.us-east-1.amazonaws.com/inference-profiles",
+      ),
+      expect.anything(),
+    );
   });
 
   test("keeps static embedding models when inference-profile discovery is denied", async () => {

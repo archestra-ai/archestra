@@ -1188,7 +1188,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
 
 - **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
-  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`, then to `us-east-1`
   - Example: `us-east-1`
 
 - **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.

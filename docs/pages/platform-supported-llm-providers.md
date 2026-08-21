@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -810,6 +810,19 @@ Archestra fetches the model list from the upstream's `{base-url}/models` endpoin
 Each Bedrock key carries an AWS region. Amazon enables models per region, so the region decides which models the key can use — pick the one where your models are turned on.
 
 A key can also point at a custom endpoint instead, for a VPC or PrivateLink setup. Archestra reads the region back out of that endpoint, and falls back to `us-east-1` when the endpoint carries no region.
+
+### Prompt Caching
+
+Bedrock can reuse the unchanging prefix of a request — the system prompt, tool definitions, and earlier turns — instead of reprocessing it every turn. Reuse needs an explicit cache marker in the request. Who sets that marker depends on how the request reaches Bedrock:
+
+- Agents running inside Archestra, including chat, are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses the last one.
+- Requests from your own clients through the LLM Proxy, Claude Code for example, keep the markers the client sends. Archestra forwards them unchanged and never adds its own.
+
+Bedrock only caches for Claude and Nova models. Other families reject a request that carries a marker outright, so Archestra marks none of them — an unfamiliar model forfeits the cache rather than failing.
+
+A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
+
+Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
 
 ### Authentication Methods
 

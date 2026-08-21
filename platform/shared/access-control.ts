@@ -1006,6 +1006,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateTeam]: {
     team: ["read"],
   },
+  [RouteId.BulkDeleteTeams]: { team: ["delete"] },
   [RouteId.DeleteTeam]: {
     team: ["delete"],
   },

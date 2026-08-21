@@ -1046,6 +1046,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "role.bulk_deleted" },
   },
+  "/api/teams/bulk": {
+    resourceType: "team",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "team.bulk_deleted" },
+  },
   "/api/mcp_server/bulk": {
     resourceType: "mcpServer",
     resourceIdSource: "organizationContext",

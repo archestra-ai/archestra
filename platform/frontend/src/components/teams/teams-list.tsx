@@ -30,7 +30,7 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
+import { reportBulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -40,7 +40,7 @@ import {
   useTeamLabelValues,
   useTeams,
 } from "@/lib/teams/team.query";
-import { toApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamManagementDialog } from "./team-management-dialog";
 
@@ -159,14 +159,12 @@ export function TeamsList() {
   // be one toast per row instead of one for the batch.
   const bulkDelete = useMutation({
     mutationFn: async (selection: readonly Team[]) =>
-      runBulkAction({
-        items: selection,
-        describe: (team) => team.name,
-        run: async ({ id }) => {
-          const { error } = await archestraApiSdk.deleteTeam({ path: { id } });
-          if (error) throw toApiError(error);
-        },
-      }),
+      archestraApiSdk
+        .bulkDeleteTeams({ body: { ids: selection.map((team) => team.id) } })
+        .then(({ data, error }) => {
+          throwOnApiError(error, { toastOnError: false });
+          return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+        }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });

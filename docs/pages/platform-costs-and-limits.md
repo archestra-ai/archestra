@@ -26,6 +26,16 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
+## Your Own Usage
+
+The Costs page opens with a summary of your own activity: what you spent, how many requests you made, how many tokens they used, and how many days you were active. It also shows the models you reach for and how your spend moved over the selected timeframe.
+
+Everyone sees this summary. The Costs page stays reachable without permission to read organization-wide costs — a reader without it sees their own figures and none of the other charts.
+
+The same data is available from the API at `GET /api/statistics/me`. It reports only the calling user's activity, so it needs no cost permission.
+
+Your summary counts every request Archestra attributed to you in the current organization, whichever agent served it.
+
 ## Per-User Usage
 
 The People section of the statistics view breaks usage down by person. For each user it shows requests, tokens, the models they use, how many days they were active, and their cost. Use it to see who has adopted AI, and which models they reach for.

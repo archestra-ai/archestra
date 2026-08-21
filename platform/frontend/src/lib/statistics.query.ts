@@ -13,11 +13,36 @@ const {
   getAgentStatistics,
   getModelStatistics,
   getUserStatistics,
+  getMyStatistics,
   getAppStatistics,
   getSkillStatistics,
   getOverviewStatistics,
   getCostSavingsStatistics,
 } = archestraApiSdk;
+
+/**
+ * The signed-in user's own cost and usage. The one statistics hook that needs
+ * no `llmCost:read`, so it stays enabled on the Costs page for people who see
+ * none of the organization-wide charts.
+ */
+export function useMyStatistics({
+  timeframe = "24h",
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "me", timeframe],
+    queryFn: async () => {
+      const { data, error } = await getMyStatistics({ query: { timeframe } });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
 
 /**
  * Per-user usage. Unlike the sibling statistics hooks this one is paginated —

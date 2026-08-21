@@ -1,7 +1,8 @@
 import type { StatisticsTimeFrame } from "@archestra/shared";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import StatisticsPage from "./page";
 
 const mockRouterPush = vi.fn();
@@ -15,9 +16,11 @@ const mockUseCostSavingsStatistics = vi.fn();
 const mockUseUserStatistics = vi.fn();
 const mockUseAppStatistics = vi.fn();
 const mockUseSkillStatistics = vi.fn();
+const mockUseMyStatistics = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/app/llm/(costs)/layout", () => ({
   useSetCostsAction: () => mockSetCostsAction,
@@ -43,6 +46,8 @@ vi.mock("@/lib/statistics.query", () => ({
     mockUseAppStatistics(params),
   useSkillStatistics: (params: StatisticsHookParams) =>
     mockUseSkillStatistics(params),
+  useMyStatistics: (params: StatisticsHookParams) =>
+    mockUseMyStatistics(params),
 }));
 
 vi.mock("recharts", () => ({
@@ -94,6 +99,13 @@ vi.mock("@/components/ui/custom-date-time-range-dialog", () => ({
   CustomDateTimeRangeDialog: () => null,
 }));
 
+/** Grants or denies `llmCost:read`, which decides what the page renders. */
+const setCanReadOrganizationCosts = (canRead: boolean) => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: canRead,
+  } as unknown as ReturnType<typeof useHasPermissions>);
+};
+
 describe("StatisticsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -124,6 +136,87 @@ describe("StatisticsPage", () => {
     });
     mockUseSkillStatistics.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
+    });
+    mockUseMyStatistics.mockReturnValue({
+      data: {
+        requests: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 0,
+        billedCost: 0,
+        subscriptionCost: 0,
+        activeDays: 0,
+        lastActiveAt: null,
+        models: [],
+        timeSeries: [],
+      },
+      isPending: false,
+    });
+    setCanReadOrganizationCosts(true);
+  });
+
+  it("keeps the personal summary for a caller who cannot read organization-wide costs", async () => {
+    setCanReadOrganizationCosts(false);
+
+    render(<StatisticsPage />);
+
+    // The whole reason the page is reachable without `llmCost:read`.
+    await waitFor(() => {
+      expect(screen.getByTestId("my-usage-summary")).toBeInTheDocument();
+    });
+    // ...and nothing that reports on anyone else.
+    expect(screen.queryAllByText("People")).toHaveLength(0);
+    expect(screen.queryAllByText("Teams")).toHaveLength(0);
+    expect(screen.queryAllByText("Cost Savings")).toHaveLength(0);
+  });
+
+  it("does not request organization-wide statistics it may not read", async () => {
+    setCanReadOrganizationCosts(false);
+
+    render(<StatisticsPage />);
+
+    await waitFor(() => {
+      expect(mockUseMyStatistics).toHaveBeenCalled();
+    });
+
+    // Those endpoints would answer 403, so the queries stay disabled rather
+    // than firing a round of requests whose only outcome is a rejection.
+    for (const hook of [
+      mockUseTeamStatistics,
+      mockUseProfileStatistics,
+      mockUseModelStatistics,
+      mockUseCostSavingsStatistics,
+      mockUseUserStatistics,
+      mockUseAppStatistics,
+      mockUseSkillStatistics,
+    ]) {
+      expect(
+        hook.mock.calls.every(([params]) => params.enabled === false),
+      ).toBe(true);
+    }
+  });
+
+  it("shows the organization-wide charts alongside the summary when permitted", async () => {
+    render(<StatisticsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("my-usage-summary")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("People").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
+  });
+
+  it("asks for the caller's own usage on the same timeframe as the rest of the page", async () => {
+    mockSearchParams = new URLSearchParams([["timeframe", "7d"]]);
+
+    render(<StatisticsPage />);
+
+    await waitFor(() => {
+      expect(mockUseMyStatistics).toHaveBeenLastCalledWith({
+        timeframe: "7d",
+        enabled: true,
+      });
     });
   });
 

@@ -11,6 +11,7 @@ import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { MyUsageSummary } from "@/app/llm/(costs)/costs/_parts/my-usage-summary";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { BilledCost } from "@/components/billed-cost";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppStatistics,
@@ -146,35 +148,46 @@ export default function StatisticsPage() {
   const [customTo, setCustomTo] = useState<Date | undefined>();
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
 
+  // Everything below the personal summary reports on the whole organization, so
+  // it is gated on `llmCost:read` — the page itself is not (see the Costs entry
+  // in `requiredPagePermissionsMap`). Without it there is nothing to fetch: the
+  // endpoints would answer 403, so the queries stay disabled rather than firing
+  // a round of requests whose only outcome is a rejection.
+  const { data: canReadOrganizationCosts = false } = useHasPermissions({
+    llmCost: ["read"],
+  });
+  const organizationStatisticsEnabled =
+    isTimeframeResolved && canReadOrganizationCosts;
+
   // Statistics data fetching hooks
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: userStatisticsPage } = useUserStatistics({
     timeframe,
     limit: USER_STATISTICS_PAGE_SIZE,
     includeModels: true,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const userStatistics = userStatisticsPage?.data ?? [];
   const userStatisticsTotal = userStatisticsPage?.pagination?.total ?? 0;
   const { data: appStatisticsPage } = useAppStatistics({
     timeframe,
     limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const appStatistics = appStatisticsPage?.data ?? [];
   const appStatisticsTotal = appStatisticsPage?.pagination?.total ?? 0;
@@ -184,7 +197,7 @@ export default function StatisticsPage() {
   const { data: skillStatisticsPage } = useSkillStatistics({
     timeframe,
     limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const skillStatistics = skillStatisticsPage?.data ?? [];
   const skillStatisticsTotal = skillStatisticsPage?.pagination?.total ?? 0;
@@ -596,910 +609,945 @@ export default function StatisticsPage() {
         description="Set a custom time period for the statistics view."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Costs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainerWrapper
-              config={costSavingsChartConfig}
-              data={costSavingsChartData}
-            >
-              <LineChart
-                accessibilityLayer
-                data={costSavingsChartData}
-                margin={{ top: 12, left: 12, right: 12 }}
-              >
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <ChartTooltip content={CostChartTooltip} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Line
-                  dataKey="nonOptimized"
-                  type="monotone"
-                  stroke="var(--color-nonOptimized)"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 0,
-                    r: 3,
-                    fill: "var(--color-nonOptimized)",
-                  }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
-                <Line
-                  dataKey="actual"
-                  type="monotone"
-                  stroke="var(--color-actual)"
-                  strokeWidth={2}
-                  dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
-                {hasSubscriptionCost && (
-                  <Line
-                    dataKey="subscription"
-                    type="monotone"
-                    stroke="var(--color-subscription)"
-                    strokeWidth={2}
-                    strokeDasharray="4 4"
-                    dot={{
-                      strokeWidth: 0,
-                      r: 3,
-                      fill: "var(--color-subscription)",
-                    }}
-                    activeDot={{ strokeWidth: 0, r: 5 }}
-                  />
-                )}
-              </LineChart>
-            </ChartContainerWrapper>
-          </CardContent>
-        </Card>
+      <MyUsageSummary timeframe={timeframe} enabled={isTimeframeResolved} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Cost Savings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainerWrapper
-              config={savingsBreakdownChartConfig}
-              data={savingsBreakdownChartData}
-            >
-              <LineChart
-                accessibilityLayer
-                data={savingsBreakdownChartData}
-                margin={{ top: 12, left: 12, right: 12 }}
-              >
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <ChartTooltip content={CostChartTooltip} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Line
-                  dataKey="compression"
-                  type="monotone"
-                  stroke="var(--color-compression)"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 0,
-                    r: 3,
-                    fill: "var(--color-compression)",
-                  }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
-                <Line
-                  dataKey="cache"
-                  type="monotone"
-                  stroke="var(--color-cache)"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 0,
-                    r: 3,
-                    fill: "var(--color-cache)",
-                  }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
-              </LineChart>
-            </ChartContainerWrapper>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Teams</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <ChartContainerWrapper
-                config={teamChartConfig}
-                data={teamChartData}
-                emptyMessage="No team data available"
-              >
-                <LineChart
-                  accessibilityLayer
-                  data={teamChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
+      {canReadOrganizationCosts && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Costs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainerWrapper
+                  config={costSavingsChartConfig}
+                  data={costSavingsChartData}
                 >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {sortedTeamStatistics.slice(0, 5).map((team) => (
+                  <LineChart
+                    accessibilityLayer
+                    data={costSavingsChartData}
+                    margin={{ top: 12, left: 12, right: 12 }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <ChartTooltip content={CostChartTooltip} />
+                    <ChartLegend content={<ChartLegendContent />} />
                     <Line
-                      key={team.teamId}
-                      dataKey={team.teamId}
+                      dataKey="nonOptimized"
                       type="monotone"
-                      stroke={`var(--color-${team.teamId})`}
+                      stroke="var(--color-nonOptimized)"
                       strokeWidth={2}
                       dot={{
                         strokeWidth: 0,
                         r: 3,
-                        fill: `var(--color-${team.teamId})`,
+                        fill: "var(--color-nonOptimized)",
                       }}
                       activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                  ))}
-                </LineChart>
-              </ChartContainerWrapper>
-              {teamStatistics.length > 5 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Chart shows top 5 by cost
-                </p>
-              )}
-            </div>
-
-            <StatisticsTablePanel>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Team Name
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Members
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Profiles
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Requests
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Tokens
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
-                      Cost
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedTeamStatistics.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No team data available for the selected timeframe
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sortedTeamStatistics.map((team) => (
-                      <TableRow key={team.teamId}>
-                        <TableCell className="font-medium">
-                          {team.teamName}
-                        </TableCell>
-                        <TableCell>{team.members}</TableCell>
-                        <TableCell>{team.agents}</TableCell>
-                        <TableCell>{team.requests.toLocaleString()}</TableCell>
-                        <TableCell>
-                          {(
-                            team.inputTokens + team.outputTokens
-                          ).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${team.cost.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </StatisticsTablePanel>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Agents</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <ChartContainerWrapper
-                config={agentChartConfig}
-                data={agentChartData}
-                emptyMessage="No agent data available"
-              >
-                <LineChart
-                  accessibilityLayer
-                  data={agentChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {sortedChatAgentStatistics.slice(0, 5).map((agent) => (
                     <Line
-                      key={agent.agentId}
-                      dataKey={agent.agentId}
+                      dataKey="actual"
                       type="monotone"
-                      stroke={`var(--color-${agent.agentId})`}
+                      stroke="var(--color-actual)"
                       strokeWidth={2}
                       dot={{
                         strokeWidth: 0,
                         r: 3,
-                        fill: `var(--color-${agent.agentId})`,
+                        fill: "var(--color-actual)",
                       }}
                       activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                  ))}
-                </LineChart>
-              </ChartContainerWrapper>
-              {chatAgentStatistics.length > 5 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Chart shows top 5 by cost
-                </p>
-              )}
-            </div>
+                    {hasSubscriptionCost && (
+                      <Line
+                        dataKey="subscription"
+                        type="monotone"
+                        stroke="var(--color-subscription)"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        dot={{
+                          strokeWidth: 0,
+                          r: 3,
+                          fill: "var(--color-subscription)",
+                        }}
+                        activeDot={{ strokeWidth: 0, r: 5 }}
+                      />
+                    )}
+                  </LineChart>
+                </ChartContainerWrapper>
+              </CardContent>
+            </Card>
 
-            <StatisticsTablePanel>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Name
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Team
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Requests
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Tokens
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Cache read
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
-                      Cost
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedChatAgentStatistics.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No agent data available for the selected timeframe
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sortedChatAgentStatistics.map((agent) => (
-                      <TableRow key={agent.agentId}>
-                        <TableCell className="font-medium">
-                          {agent.agentName}
-                        </TableCell>
-                        <TableCell>{agent.teamName}</TableCell>
-                        <TableCell>{agent.requests.toLocaleString()}</TableCell>
-                        <TableCell>
-                          {(
-                            agent.inputTokens + agent.outputTokens
-                          ).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          {(agent.cacheReadTokens ?? 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${agent.cost.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </StatisticsTablePanel>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>LLM Proxies</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <ChartContainerWrapper
-                config={llmProxyChartConfig}
-                data={llmProxyChartData}
-                emptyMessage="No LLM proxy data available"
-              >
-                <LineChart
-                  accessibilityLayer
-                  data={llmProxyChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Savings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainerWrapper
+                  config={savingsBreakdownChartConfig}
+                  data={savingsBreakdownChartData}
                 >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {sortedLlmProxyStatistics.slice(0, 5).map((proxy) => (
+                  <LineChart
+                    accessibilityLayer
+                    data={savingsBreakdownChartData}
+                    margin={{ top: 12, left: 12, right: 12 }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <ChartTooltip content={CostChartTooltip} />
+                    <ChartLegend content={<ChartLegendContent />} />
                     <Line
-                      key={proxy.agentId}
-                      dataKey={proxy.agentId}
+                      dataKey="compression"
                       type="monotone"
-                      stroke={`var(--color-${proxy.agentId})`}
+                      stroke="var(--color-compression)"
                       strokeWidth={2}
                       dot={{
                         strokeWidth: 0,
                         r: 3,
-                        fill: `var(--color-${proxy.agentId})`,
+                        fill: "var(--color-compression)",
                       }}
                       activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                  ))}
-                </LineChart>
-              </ChartContainerWrapper>
-              {llmProxyStatistics.length > 5 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Chart shows top 5 by cost
-                </p>
-              )}
-            </div>
-
-            <StatisticsTablePanel>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Name
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Team
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Requests
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Tokens
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
-                      Cost
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedLlmProxyStatistics.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No LLM proxy data available for the selected timeframe
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sortedLlmProxyStatistics.map((proxy) => (
-                      <TableRow key={proxy.agentId}>
-                        <TableCell className="font-medium">
-                          {proxy.agentName}
-                        </TableCell>
-                        <TableCell>{proxy.teamName}</TableCell>
-                        <TableCell>{proxy.requests.toLocaleString()}</TableCell>
-                        <TableCell>
-                          {(
-                            proxy.inputTokens + proxy.outputTokens
-                          ).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${proxy.cost.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </StatisticsTablePanel>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Models</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <ChartContainerWrapper
-                config={modelChartConfig}
-                data={modelChartData}
-                emptyMessage="No model data available"
-              >
-                <LineChart
-                  accessibilityLayer
-                  data={modelChartData}
-                  margin={{ top: 12, left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <ChartTooltip content={CostChartTooltip} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {sortedModelStatistics.slice(0, 5).map((model, rank) => (
                     <Line
-                      key={model.model}
-                      dataKey={modelSeriesKey(rank)}
+                      dataKey="cache"
                       type="monotone"
-                      stroke={`var(--color-${modelSeriesKey(rank)})`}
+                      stroke="var(--color-cache)"
                       strokeWidth={2}
                       dot={{
                         strokeWidth: 0,
                         r: 3,
-                        fill: `var(--color-${modelSeriesKey(rank)})`,
+                        fill: "var(--color-cache)",
                       }}
                       activeDot={{ strokeWidth: 0, r: 5 }}
                     />
-                  ))}
-                </LineChart>
-              </ChartContainerWrapper>
-              {modelStatistics.length > 5 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Chart shows top 5 by cost
-                </p>
-              )}
-            </div>
-
-            <StatisticsTablePanel>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Model
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Requests
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Tokens Used
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Cache read
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
-                      Cost
-                    </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
-                      % of Total
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedModelStatistics.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No model data available for the selected timeframe
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sortedModelStatistics.map((model) => (
-                      <TableRow key={model.model}>
-                        <TableCell className="font-medium">
-                          {model.model}
-                        </TableCell>
-                        <TableCell>{model.requests.toLocaleString()}</TableCell>
-                        <TableCell>
-                          {(
-                            model.inputTokens + model.outputTokens
-                          ).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          {(model.cacheReadTokens ?? 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell>${model.cost.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          {model.percentage.toFixed(1)}%
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </StatisticsTablePanel>
+                  </LineChart>
+                </ChartContainerWrapper>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>People</CardTitle>
-          <CardDescription>
-            Who is using {appName}, and on which models. Requests without a
-            resolved user identity are not attributed to anyone and do not
-            appear here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatisticsTablePanel>
-            {/*
-              `table-fixed` splits width equally without explicit widths, and
-              badges neither wrap nor shrink — too narrow a share and they
-              overflow their cell onto the next column. The floor width makes
-              the panel scroll rather than crush the columns.
-            */}
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[18%]">
-                    User
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[10%]">
-                    Requests
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[13%]">
-                    Tokens Used
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[21%]">
-                    Models
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[11%]">
-                    Active Days
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[16%]">
-                    Cost
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[11%] text-right">
-                    Last Active
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {userStatistics.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
+          <Card>
+            <CardHeader>
+              <CardTitle>Teams</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <ChartContainerWrapper
+                    config={teamChartConfig}
+                    data={teamChartData}
+                    emptyMessage="No team data available"
+                  >
+                    <LineChart
+                      accessibilityLayer
+                      data={teamChartData}
+                      margin={{ top: 12, left: 12, right: 12 }}
                     >
-                      No attributed user activity for the selected timeframe
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  userStatistics.map((user) => (
-                    <TableRow key={user.userId}>
-                      <TableCell>
-                        <div
-                          className="font-medium truncate"
-                          title={user.userName}
-                        >
-                          {user.userName}
-                        </div>
-                        <div
-                          className="text-xs text-muted-foreground truncate"
-                          title={user.userEmail}
-                        >
-                          {user.userEmail}
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.requests.toLocaleString()}</TableCell>
-                      <TableCell>{user.totalTokens.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <UserModelBadges models={user.models} />
-                      </TableCell>
-                      <TableCell>{user.activeDays}</TableCell>
-                      <TableCell>
-                        <BilledCost
-                          cost={String(user.billedCost + user.subscriptionCost)}
-                          billedCost={String(user.billedCost)}
-                          subscriptionCost={String(user.subscriptionCost)}
-                          baselineCost={String(user.billedCost)}
-                          tooltip="hover"
-                          className="flex-wrap"
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => `$${value}`}
+                      />
+                      <ChartTooltip content={CostChartTooltip} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {sortedTeamStatistics.slice(0, 5).map((team) => (
+                        <Line
+                          key={team.teamId}
+                          dataKey={team.teamId}
+                          type="monotone"
+                          stroke={`var(--color-${team.teamId})`}
+                          strokeWidth={2}
+                          dot={{
+                            strokeWidth: 0,
+                            r: 3,
+                            fill: `var(--color-${team.teamId})`,
+                          }}
+                          activeDot={{ strokeWidth: 0, r: 5 }}
                         />
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {user.lastActiveAt
-                          ? format(new Date(user.lastActiveAt), "MMM d, HH:mm")
-                          : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </StatisticsTablePanel>
-          {userStatisticsTotal > USER_STATISTICS_PAGE_SIZE && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Showing top {USER_STATISTICS_PAGE_SIZE} of{" "}
-              {userStatisticsTotal.toLocaleString()} people by tokens used
-            </p>
-          )}
-        </CardContent>
-      </Card>
+                      ))}
+                    </LineChart>
+                  </ChartContainerWrapper>
+                  {teamStatistics.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Chart shows top 5 by cost
+                    </p>
+                  )}
+                </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Apps</CardTitle>
-          <CardDescription>
-            What each app cost to build, and what it costs to run. Building an
-            app is a one-off spend; running it is UI and tool calls, plus any
-            LLM completions the app itself requests. The chat-equivalent
-            estimate assumes one run of an app replaces one chat session, priced
-            at this organization&apos;s measured average
-            {chatBaselineSessions > 0 ? (
-              <span>
-                {" "}
-                of ${chatBaselineCostPerSession.toFixed(2)} across{" "}
-                {chatBaselineSessions.toLocaleString()}{" "}
-                {chatBaselineSessions === 1 ? "chat session" : "chat sessions"}{" "}
-                in this period.
-              </span>
-            ) : (
-              <span>
-                {" "}
-                — no chat sessions in this period, so no estimate is made.
-              </span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatisticsTablePanel>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    App
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    Runs
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    Tool calls
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Build cost
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Runtime cost
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    As chat (est.)
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Net saving (est.)
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {appStatistics.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      {/* Every app is listed regardless of activity — an app with
-                          none simply reports zeros — so an empty table means
-                          there are no apps, not none in this timeframe. */}
-                      No apps have been created yet
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  appStatistics.map((app) => (
-                    <TableRow key={app.appId}>
-                      <TableCell>
-                        <div className="font-medium">{app.appName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {app.authorName ?? "Unknown author"}
-                        </div>
-                      </TableCell>
-                      <TableCell>{app.runs.toLocaleString()}</TableCell>
-                      <TableCell>{app.toolCalls.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <AppBuildCostCell app={app} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${app.runtimeCost.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        ${app.estimatedChatEquivalentCost.toFixed(2)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right ${
-                          app.estimatedNetSavings < 0 ? "text-destructive" : ""
-                        }`}
-                      >
-                        ${app.estimatedNetSavings.toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </StatisticsTablePanel>
-          {appStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
-              {appStatisticsTotal.toLocaleString()} apps by total cost
-            </p>
-          )}
-        </CardContent>
-      </Card>
+                <StatisticsTablePanel>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Team Name
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Members
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Profiles
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Requests
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Tokens
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10 text-right">
+                          Cost
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedTeamStatistics.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            No team data available for the selected timeframe
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        sortedTeamStatistics.map((team) => (
+                          <TableRow key={team.teamId}>
+                            <TableCell className="font-medium">
+                              {team.teamName}
+                            </TableCell>
+                            <TableCell>{team.members}</TableCell>
+                            <TableCell>{team.agents}</TableCell>
+                            <TableCell>
+                              {team.requests.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(
+                                team.inputTokens + team.outputTokens
+                              ).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${team.cost.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </StatisticsTablePanel>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Skills</CardTitle>
-          <CardDescription>
-            A skill works by injecting instructions into the model&apos;s
-            context, so &ldquo;context&rdquo; is the tokens its activations
-            added — the part of the cost that is the skill&apos;s alone.
-            &ldquo;On turns that used it&rdquo; is the spend of the turns that
-            then ran with the skill in context, which the skill shares with
-            everything else in those turns.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatisticsTablePanel>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    Skill
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    Activations
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
-                    People
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Context tokens
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Turns that used it
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Cost on those turns
-                  </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
-                    Last used
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {skillStatistics.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
+          <Card>
+            <CardHeader>
+              <CardTitle>Agents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <ChartContainerWrapper
+                    config={agentChartConfig}
+                    data={agentChartData}
+                    emptyMessage="No agent data available"
+                  >
+                    <LineChart
+                      accessibilityLayer
+                      data={agentChartData}
+                      margin={{ top: 12, left: 12, right: 12 }}
                     >
-                      No skill activations for the selected timeframe
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  skillStatistics.map((skill) => (
-                    <TableRow key={skill.skillId}>
-                      <TableCell className="font-medium">
-                        {skill.skillName}
-                      </TableCell>
-                      <TableCell>
-                        {skill.activations.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {skill.distinctUsers.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <SkillContextTokensCell skill={skill} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {skill.attributedRequests.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${skill.attributedCost.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {skill.lastActivatedAt
-                          ? format(
-                              new Date(skill.lastActivatedAt),
-                              "MMM d, HH:mm",
-                            )
-                          : "—"}
-                      </TableCell>
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => `$${value}`}
+                      />
+                      <ChartTooltip content={CostChartTooltip} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {sortedChatAgentStatistics.slice(0, 5).map((agent) => (
+                        <Line
+                          key={agent.agentId}
+                          dataKey={agent.agentId}
+                          type="monotone"
+                          stroke={`var(--color-${agent.agentId})`}
+                          strokeWidth={2}
+                          dot={{
+                            strokeWidth: 0,
+                            r: 3,
+                            fill: `var(--color-${agent.agentId})`,
+                          }}
+                          activeDot={{ strokeWidth: 0, r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ChartContainerWrapper>
+                  {chatAgentStatistics.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Chart shows top 5 by cost
+                    </p>
+                  )}
+                </div>
+
+                <StatisticsTablePanel>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Name
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Team
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Requests
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Tokens
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Cache read
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10 text-right">
+                          Cost
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedChatAgentStatistics.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            No agent data available for the selected timeframe
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        sortedChatAgentStatistics.map((agent) => (
+                          <TableRow key={agent.agentId}>
+                            <TableCell className="font-medium">
+                              {agent.agentName}
+                            </TableCell>
+                            <TableCell>{agent.teamName}</TableCell>
+                            <TableCell>
+                              {agent.requests.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(
+                                agent.inputTokens + agent.outputTokens
+                              ).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(agent.cacheReadTokens ?? 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${agent.cost.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </StatisticsTablePanel>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>LLM Proxies</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <ChartContainerWrapper
+                    config={llmProxyChartConfig}
+                    data={llmProxyChartData}
+                    emptyMessage="No LLM proxy data available"
+                  >
+                    <LineChart
+                      accessibilityLayer
+                      data={llmProxyChartData}
+                      margin={{ top: 12, left: 12, right: 12 }}
+                    >
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => `$${value}`}
+                      />
+                      <ChartTooltip content={CostChartTooltip} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {sortedLlmProxyStatistics.slice(0, 5).map((proxy) => (
+                        <Line
+                          key={proxy.agentId}
+                          dataKey={proxy.agentId}
+                          type="monotone"
+                          stroke={`var(--color-${proxy.agentId})`}
+                          strokeWidth={2}
+                          dot={{
+                            strokeWidth: 0,
+                            r: 3,
+                            fill: `var(--color-${proxy.agentId})`,
+                          }}
+                          activeDot={{ strokeWidth: 0, r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ChartContainerWrapper>
+                  {llmProxyStatistics.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Chart shows top 5 by cost
+                    </p>
+                  )}
+                </div>
+
+                <StatisticsTablePanel>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Name
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Team
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Requests
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Tokens
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10 text-right">
+                          Cost
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedLlmProxyStatistics.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            No LLM proxy data available for the selected
+                            timeframe
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        sortedLlmProxyStatistics.map((proxy) => (
+                          <TableRow key={proxy.agentId}>
+                            <TableCell className="font-medium">
+                              {proxy.agentName}
+                            </TableCell>
+                            <TableCell>{proxy.teamName}</TableCell>
+                            <TableCell>
+                              {proxy.requests.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(
+                                proxy.inputTokens + proxy.outputTokens
+                              ).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${proxy.cost.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </StatisticsTablePanel>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Models</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <ChartContainerWrapper
+                    config={modelChartConfig}
+                    data={modelChartData}
+                    emptyMessage="No model data available"
+                  >
+                    <LineChart
+                      accessibilityLayer
+                      data={modelChartData}
+                      margin={{ top: 12, left: 12, right: 12 }}
+                    >
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => `$${value}`}
+                      />
+                      <ChartTooltip content={CostChartTooltip} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {sortedModelStatistics.slice(0, 5).map((model, rank) => (
+                        <Line
+                          key={model.model}
+                          dataKey={modelSeriesKey(rank)}
+                          type="monotone"
+                          stroke={`var(--color-${modelSeriesKey(rank)})`}
+                          strokeWidth={2}
+                          dot={{
+                            strokeWidth: 0,
+                            r: 3,
+                            fill: `var(--color-${modelSeriesKey(rank)})`,
+                          }}
+                          activeDot={{ strokeWidth: 0, r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ChartContainerWrapper>
+                  {modelStatistics.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Chart shows top 5 by cost
+                    </p>
+                  )}
+                </div>
+
+                <StatisticsTablePanel>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Model
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Requests
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Tokens Used
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Cache read
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10">
+                          Cost
+                        </TableHead>
+                        <TableHead className="bg-card sticky top-0 z-10 text-right">
+                          % of Total
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedModelStatistics.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            No model data available for the selected timeframe
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        sortedModelStatistics.map((model) => (
+                          <TableRow key={model.model}>
+                            <TableCell className="font-medium">
+                              {model.model}
+                            </TableCell>
+                            <TableCell>
+                              {model.requests.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(
+                                model.inputTokens + model.outputTokens
+                              ).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {(model.cacheReadTokens ?? 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell>${model.cost.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">
+                              {model.percentage.toFixed(1)}%
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </StatisticsTablePanel>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>People</CardTitle>
+              <CardDescription>
+                Who is using {appName}, and on which models. Requests without a
+                resolved user identity are not attributed to anyone and do not
+                appear here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StatisticsTablePanel>
+                {/*
+                `table-fixed` splits width equally without explicit widths, and
+                badges neither wrap nor shrink — too narrow a share and they
+                overflow their cell onto the next column. The floor width makes
+                the panel scroll rather than crush the columns.
+              */}
+                <Table className="min-w-[900px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[18%]">
+                        User
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[10%]">
+                        Requests
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[13%]">
+                        Tokens Used
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[21%]">
+                        Models
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[11%]">
+                        Active Days
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[16%]">
+                        Cost
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 w-[11%] text-right">
+                        Last Active
+                      </TableHead>
                     </TableRow>
-                  ))
+                  </TableHeader>
+                  <TableBody>
+                    {userStatistics.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          No attributed user activity for the selected timeframe
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      userStatistics.map((user) => (
+                        <TableRow key={user.userId}>
+                          <TableCell>
+                            <div
+                              className="font-medium truncate"
+                              title={user.userName}
+                            >
+                              {user.userName}
+                            </div>
+                            <div
+                              className="text-xs text-muted-foreground truncate"
+                              title={user.userEmail}
+                            >
+                              {user.userEmail}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {user.requests.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {user.totalTokens.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <UserModelBadges models={user.models} />
+                          </TableCell>
+                          <TableCell>{user.activeDays}</TableCell>
+                          <TableCell>
+                            <BilledCost
+                              cost={String(
+                                user.billedCost + user.subscriptionCost,
+                              )}
+                              billedCost={String(user.billedCost)}
+                              subscriptionCost={String(user.subscriptionCost)}
+                              baselineCost={String(user.billedCost)}
+                              tooltip="hover"
+                              className="flex-wrap"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {user.lastActiveAt
+                              ? format(
+                                  new Date(user.lastActiveAt),
+                                  "MMM d, HH:mm",
+                                )
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </StatisticsTablePanel>
+              {userStatisticsTotal > USER_STATISTICS_PAGE_SIZE && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Showing top {USER_STATISTICS_PAGE_SIZE} of{" "}
+                  {userStatisticsTotal.toLocaleString()} people by tokens used
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Apps</CardTitle>
+              <CardDescription>
+                What each app cost to build, and what it costs to run. Building
+                an app is a one-off spend; running it is UI and tool calls, plus
+                any LLM completions the app itself requests. The chat-equivalent
+                estimate assumes one run of an app replaces one chat session,
+                priced at this organization&apos;s measured average
+                {chatBaselineSessions > 0 ? (
+                  <span>
+                    {" "}
+                    of ${chatBaselineCostPerSession.toFixed(2)} across{" "}
+                    {chatBaselineSessions.toLocaleString()}{" "}
+                    {chatBaselineSessions === 1
+                      ? "chat session"
+                      : "chat sessions"}{" "}
+                    in this period.
+                  </span>
+                ) : (
+                  <span>
+                    {" "}
+                    — no chat sessions in this period, so no estimate is made.
+                  </span>
                 )}
-              </TableBody>
-            </Table>
-          </StatisticsTablePanel>
-          {skillStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
-              {skillStatisticsTotal.toLocaleString()} skills by context tokens
-            </p>
-          )}
-        </CardContent>
-      </Card>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StatisticsTablePanel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        App
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        Runs
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        Tool calls
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Build cost
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Runtime cost
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        As chat (est.)
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Net saving (est.)
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {appStatistics.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          {/* Every app is listed regardless of activity — an app with
+                            none simply reports zeros — so an empty table means
+                            there are no apps, not none in this timeframe. */}
+                          No apps have been created yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      appStatistics.map((app) => (
+                        <TableRow key={app.appId}>
+                          <TableCell>
+                            <div className="font-medium">{app.appName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {app.authorName ?? "Unknown author"}
+                            </div>
+                          </TableCell>
+                          <TableCell>{app.runs.toLocaleString()}</TableCell>
+                          <TableCell>
+                            {app.toolCalls.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <AppBuildCostCell app={app} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${app.runtimeCost.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            ${app.estimatedChatEquivalentCost.toFixed(2)}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right ${
+                              app.estimatedNetSavings < 0
+                                ? "text-destructive"
+                                : ""
+                            }`}
+                          >
+                            ${app.estimatedNetSavings.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </StatisticsTablePanel>
+              {appStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
+                  {appStatisticsTotal.toLocaleString()} apps by total cost
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Skills</CardTitle>
+              <CardDescription>
+                A skill works by injecting instructions into the model&apos;s
+                context, so &ldquo;context&rdquo; is the tokens its activations
+                added — the part of the cost that is the skill&apos;s alone.
+                &ldquo;On turns that used it&rdquo; is the spend of the turns
+                that then ran with the skill in context, which the skill shares
+                with everything else in those turns.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StatisticsTablePanel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        Skill
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        Activations
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10">
+                        People
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Context tokens
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Turns that used it
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Cost on those turns
+                      </TableHead>
+                      <TableHead className="bg-card sticky top-0 z-10 text-right">
+                        Last used
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {skillStatistics.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          No skill activations for the selected timeframe
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      skillStatistics.map((skill) => (
+                        <TableRow key={skill.skillId}>
+                          <TableCell className="font-medium">
+                            {skill.skillName}
+                          </TableCell>
+                          <TableCell>
+                            {skill.activations.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {skill.distinctUsers.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <SkillContextTokensCell skill={skill} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {skill.attributedRequests.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${skill.attributedCost.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {skill.lastActivatedAt
+                              ? format(
+                                  new Date(skill.lastActivatedAt),
+                                  "MMM d, HH:mm",
+                                )
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </StatisticsTablePanel>
+              {skillStatisticsTotal > ENTITY_STATISTICS_PAGE_SIZE && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Showing top {ENTITY_STATISTICS_PAGE_SIZE} of{" "}
+                  {skillStatisticsTotal.toLocaleString()} skills by context
+                  tokens
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

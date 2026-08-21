@@ -1214,7 +1214,34 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "source or narrow the connector's scope.",
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),
-        body: BulkDeleteBodySchema,
+        body: z.union([
+          BulkDeleteBodySchema,
+          z
+            .object({
+              all: z
+                .literal(true)
+                .describe(
+                  "Delete everything matching the filters below rather than " +
+                    "an id list.",
+                ),
+              search: z
+                .string()
+                .optional()
+                .describe("Same title search the listing applies."),
+              group: z
+                .string()
+                .optional()
+                .describe("Same group filter the listing applies."),
+            })
+            .describe(
+              "Filter mode. A connector's corpus routinely runs to tens of " +
+                "thousands of documents, which is neither a sane request body " +
+                "as uuids nor worth authorizing row by row — so the filter " +
+                "travels instead and the database does the work in one " +
+                "statement. The response carries `affected` rather than a " +
+                "per-row list.",
+            ),
+        ]),
         response: constructResponseSchema(BulkOutcomeSchema),
       },
     },
@@ -1222,17 +1249,29 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user } = request;
       const connectorId = request.params.id;
 
-      // Request-level: the connector is the same for every id, so one that the
-      // caller cannot see is a 404 for the whole request rather than N
-      // identical per-document failures.
+      // Request-level: the connector is the same for every document, so one
+      // the caller cannot see is a 404 for the whole request rather than N
+      // identical per-document failures. This is also the ONLY authorization
+      // filter mode gets, which is why it is done before either branch.
       await findConnectorOrThrow({
         id: connectorId,
         organizationId,
         userId: user.id,
       });
 
+      const body = request.body;
+      if ("all" in body) {
+        const affected = await KbDocumentModel.deleteByConnectorFilter({
+          connectorId,
+          organizationId,
+          search: body.search,
+          groupToken: body.group,
+        });
+        return reply.send({ affected, succeeded: [], failed: [] });
+      }
+
       const outcome = await runBulk({
-        ids: request.body.ids,
+        ids: body.ids,
         logLabel: "connector documents bulk delete",
         notFoundMessage: "Document not found",
         unexpectedMessage: "Could not delete this document",

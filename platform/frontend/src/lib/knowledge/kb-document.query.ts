@@ -116,16 +116,26 @@ export function useAllMatchingConnectorDocuments(
 export function useBulkDeleteConnectorDocuments() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      connectorId,
-      documents,
-    }: {
-      connectorId: string;
-      documents: readonly { id: string }[];
-    }) =>
+    mutationFn: async (
+      params:
+        | { connectorId: string; documents: readonly { id: string }[] }
+        | {
+            connectorId: string;
+            /**
+             * Everything matching the table's current filters. Sent as the
+             * filter rather than as ids: a connector's corpus routinely runs
+             * to tens of thousands of documents, which no request body should
+             * be asked to carry as uuids.
+             */
+            all: { search?: string; group?: string };
+          },
+    ) =>
       bulkDeleteConnectorDocuments({
-        path: { id: connectorId },
-        body: { ids: documents.map((document) => document.id) },
+        path: { id: params.connectorId },
+        body:
+          "all" in params
+            ? { all: true as const, ...params.all }
+            : { ids: params.documents.map((document) => document.id) },
       }).then(({ data, error }) => {
         throwOnApiError(error, { toastOnError: false });
         return toBulkOutcome(data ?? { succeeded: [], failed: [] });

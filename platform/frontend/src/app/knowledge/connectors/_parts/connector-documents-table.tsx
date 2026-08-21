@@ -153,25 +153,20 @@ export function ConnectorDocumentsTable({
   // re-pointing "all N" at a different N.
   const filterSignature = `${connectorId}|${search}|${group}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
-  const { data: allMatchingDocuments } = useAllMatchingConnectorDocuments(
-    {
-      connectorId,
-      query: {
-        ...(search ? { search } : {}),
-        ...(group ? { group } : {}),
-      },
-    },
-    { enabled: allMatchingActive },
-  );
-
   const clearSelection = useCallback(() => {
     setRowSelection({});
     setSelectAllMatchingFor(null);
   }, []);
 
-  const selectedDocuments = allMatchingActive
-    ? (allMatchingDocuments ?? [])
-    : documents.filter((document) => rowSelection[document.id]);
+  const selectedDocuments = documents.filter(
+    (document) => rowSelection[document.id],
+  );
+  // Escalating does not fetch the matching rows — the delete sends the filter,
+  // so the only thing needed on screen is how many there are. That is what
+  // makes "select all 22,921" honest rather than a page-sized lie.
+  const selectedCount = allMatchingActive
+    ? totalDocuments
+    : selectedDocuments.length;
 
   // The shared Table is `table-fixed`: without explicit sizes every column
   // gets an equal width and the natural-width Access badges overflow under
@@ -328,7 +323,7 @@ export function ConnectorDocumentsTable({
       </TableFilters>
 
       <BulkActionsBar
-        count={selectedDocuments.length}
+        count={selectedCount}
         noun="document"
         onClear={clearSelection}
         busy={bulkDelete.isPending}
@@ -340,7 +335,8 @@ export function ConnectorDocumentsTable({
           active: allMatchingActive,
           onSelectAll: () => setSelectAllMatchingFor(filterSignature),
           matchDescription: "match this search",
-          max: MAX_BULK_IDS,
+          // No `max`: the delete sends the filter rather than an id list, so
+          // there is no cap for the matching set to outgrow.
         }}
         className="mb-3"
       >
@@ -447,13 +443,21 @@ export function ConnectorDocumentsTable({
           open={bulkDeleteOpen}
           onOpenChange={setBulkDeleteOpen}
           title="Delete documents"
-          description={`Delete ${selectedDocuments.length} ${
-            selectedDocuments.length === 1 ? "document" : "documents"
+          description={`Delete ${selectedCount} ${
+            selectedCount === 1 ? "document" : "documents"
           }? They stop being searchable straight away. The next sync brings back anything still present at the source — to keep them out, remove them there or narrow this connector's scope.`}
           isPending={bulkDelete.isPending}
           onConfirm={() => {
             bulkDelete.mutate(
-              { connectorId, documents: selectedDocuments },
+              allMatchingActive
+                ? {
+                    connectorId,
+                    all: {
+                      ...(search ? { search } : {}),
+                      ...(group ? { group } : {}),
+                    },
+                  }
+                : { connectorId, documents: selectedDocuments },
               {
                 onSuccess: (outcome) => {
                   reportBulkOutcome({
@@ -466,10 +470,8 @@ export function ConnectorDocumentsTable({
                   if (outcome.failed.length === 0) clearSelection();
                   // Emptying the last page would otherwise leave the table on a
                   // page that no longer exists.
-                  if (
-                    outcome.succeeded.length >= documents.length &&
-                    pageIndex > 0
-                  ) {
+                  const removed = outcome.affected ?? outcome.succeeded.length;
+                  if (removed >= documents.length && pageIndex > 0) {
                     setPagination({ pageIndex: pageIndex - 1, pageSize });
                   }
                 },

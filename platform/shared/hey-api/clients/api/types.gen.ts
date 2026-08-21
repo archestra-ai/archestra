@@ -16237,6 +16237,7 @@ export type BulkDeleteAgentsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -16348,6 +16349,7 @@ export type BulkUpdateAgentsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -19179,6 +19181,7 @@ export type BulkDeleteApiKeysResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -21466,6 +21469,7 @@ export type BulkDeleteAppsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -21574,6 +21578,7 @@ export type BulkUpdateAppsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -36102,6 +36107,7 @@ export type BulkDeleteEnvironmentsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -58066,6 +58072,7 @@ export type BulkDeleteKnowledgeBasesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -60217,6 +60224,19 @@ export type BulkDeleteConnectorDocumentsData = {
          * Ids to act on. Duplicates are collapsed.
          */
         ids: Array<string>;
+    } | {
+        /**
+         * Delete everything matching the filters below rather than an id list.
+         */
+        all: true;
+        /**
+         * Same title search the listing applies.
+         */
+        search?: string;
+        /**
+         * Same group filter the listing applies.
+         */
+        group?: string;
     };
     path: {
         id: string;
@@ -60295,6 +60315,7 @@ export type BulkDeleteConnectorDocumentsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -60391,6 +60412,7 @@ export type BulkDeleteConnectorsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -60495,6 +60517,7 @@ export type BulkUpdateConnectorsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -62636,6 +62659,7 @@ export type BulkDeleteKnowledgeFilesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -62740,6 +62764,7 @@ export type BulkUpdateKnowledgeFilesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -63297,6 +63322,7 @@ export type BulkDeleteKnowledgeDirectoriesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -63401,6 +63427,7 @@ export type BulkUpdateKnowledgeDirectoriesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -64347,6 +64374,7 @@ export type BulkUpdateModelsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -67225,6 +67253,7 @@ export type BulkDeleteMcpServersResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -79756,6 +79785,7 @@ export type BulkDeleteProjectsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -79855,6 +79885,7 @@ export type BulkUpdateProjectsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -82730,6 +82761,7 @@ export type BulkDeleteServiceAccountsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -88210,6 +88242,7 @@ export type BulkDeleteTeamsResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;
@@ -92170,6 +92203,7 @@ export type BulkDeleteRolesResponses = {
      * Default Response
      */
     200: {
+        affected?: number;
         succeeded: Array<{
             id: string;
             name: string;

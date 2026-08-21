@@ -345,11 +345,11 @@ function prepareProviderMessages(params: {
 // already using the API's spelling, and plain `reasoningText` blocks, are
 // returned by reference.
 //
-// This direction is permanent: it is the proxy speaking the Converse API
-// correctly, whatever a client sends. The opposite rewrite in
-// `clients/bedrock-redacted-reasoning.ts` is not — it works around a bug in
-// the pinned @ai-sdk/amazon-bedrock and is meant to be deleted with it, which
-// is why the two are not sharing a mapping module.
+// Kept even though the pinned @ai-sdk/amazon-bedrock now sends the API's own
+// spelling: clients on older versions of it — or on any other SDK that copied
+// the `redactedReasoning` shape — still send the legacy one, and the proxy
+// speaking the Converse API correctly does not depend on what any one client
+// happens to send.
 function normalizeRedactedReasoning(
   messages: BedrockMessages | undefined,
 ): BedrockMessages | undefined {

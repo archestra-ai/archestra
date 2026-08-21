@@ -553,8 +553,7 @@ describe("Bedrock stream reasoning delta forwarding", () => {
   });
 
   // `redactedContent` is the Converse API's own name for the encrypted-reasoning
-  // delta; the proxy forwards it under that name, and Archestra's own AI-SDK
-  // client renames it on arrival (see clients/bedrock-redacted-reasoning.ts).
+  // delta, and the proxy forwards it under that name unchanged.
   test("forwards reasoning signature and redacted-content deltas", () => {
     const adapter = bedrockAdapterFactory.createStreamAdapter(
       createConverseRequest(),

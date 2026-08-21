@@ -66,10 +66,9 @@ describe("Bedrock policy refusal", () => {
     const response = adapter.toProviderResponse();
 
     const content = response.output?.message?.content ?? [];
-    expect(content.map((block) => block.text)).toEqual([
-      "let me check",
-      "blocked message",
-    ]);
+    expect(
+      content.map((block) => ("text" in block ? block.text : undefined)),
+    ).toEqual(["let me check", "blocked message"]);
     expect(content.some((block) => "toolUse" in block)).toBe(false);
     expect(response.stopReason).toBe("end_turn");
   });

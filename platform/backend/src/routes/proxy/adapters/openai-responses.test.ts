@@ -180,8 +180,10 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     const response = adapter.toProviderResponse();
 
     const message = response.output.find((item) => item.type === "message");
+    const firstBlock =
+      message && "content" in message ? message.content[0] : undefined;
     expect(
-      message && "content" in message ? message.content[0].text : undefined,
+      firstBlock && "text" in firstBlock ? firstBlock.text : undefined,
     ).toBe("let me checkblocked message");
   });
 

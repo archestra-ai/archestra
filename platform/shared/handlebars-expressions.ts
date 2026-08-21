@@ -27,51 +27,7 @@ export interface TemplateExpression {
 }
 
 /** Parses a Handlebars template, throwing when it is syntactically invalid. */
-export type HandlebarsParser = (template: string) => unknown;
-
-/**
- * Locate the Handlebars expressions in a template.
- *
- * Deliberately conservative: an expression this misses is simply not reported,
- * which degrades to the caller's existing fallback rather than to wrong output.
- */
-export function findTemplateExpressions(
-  template: string,
-): TemplateExpression[] {
-  const expressions: TemplateExpression[] = [];
-
-  for (let i = 0; i < template.length - 1; i++) {
-    if (template[i] !== "{" || template[i + 1] !== "{") continue;
-
-    // An expression the author already escaped is literal text, not a template
-    // expression, and must not be escaped a second time.
-    if (template[i - 1] === "\\") continue;
-
-    // `{{{value}}}` needs three closing braces, `{{value}}` two. Raw blocks
-    // (`{{{{`) are left alone — skip the whole run so their inner braces are
-    // not mistaken for a triple-stache.
-    let braces = 0;
-    while (template[i + braces] === "{") braces++;
-    if (braces > 3) {
-      i += braces - 1;
-      continue;
-    }
-
-    const end = findExpressionEnd(template, i + braces, braces);
-    if (end === -1) break; // Unterminated: nothing after it is parseable either.
-
-    const source = template.slice(i, end);
-    expressions.push({
-      start: i,
-      end,
-      source,
-      body: source.slice(braces, source.length - braces).trim(),
-    });
-    i = end - 1;
-  }
-
-  return expressions;
-}
+type HandlebarsParser = (template: string) => unknown;
 
 /**
  * Whether Handlebars rejects this expression on its own.
@@ -147,6 +103,48 @@ export function findUnparseableExpressions(
 }
 
 // ===== Internal helpers =====
+
+/**
+ * Locate the Handlebars expressions in a template.
+ *
+ * Deliberately conservative: an expression this misses is simply not reported,
+ * which degrades to the caller's existing fallback rather than to wrong output.
+ */
+function findTemplateExpressions(template: string): TemplateExpression[] {
+  const expressions: TemplateExpression[] = [];
+
+  for (let i = 0; i < template.length - 1; i++) {
+    if (template[i] !== "{" || template[i + 1] !== "{") continue;
+
+    // An expression the author already escaped is literal text, not a template
+    // expression, and must not be escaped a second time.
+    if (template[i - 1] === "\\") continue;
+
+    // `{{{value}}}` needs three closing braces, `{{value}}` two. Raw blocks
+    // (`{{{{`) are left alone — skip the whole run so their inner braces are
+    // not mistaken for a triple-stache.
+    let braces = 0;
+    while (template[i + braces] === "{") braces++;
+    if (braces > 3) {
+      i += braces - 1;
+      continue;
+    }
+
+    const end = findExpressionEnd(template, i + braces, braces);
+    if (end === -1) break; // Unterminated: nothing after it is parseable either.
+
+    const source = template.slice(i, end);
+    expressions.push({
+      start: i,
+      end,
+      source,
+      body: source.slice(braces, source.length - braces).trim(),
+    });
+    i = end - 1;
+  }
+
+  return expressions;
+}
 
 /**
  * Index just past the closing braces of an expression, or -1 when unterminated.

@@ -92,18 +92,20 @@ export function FilterBar({
               />
             </Button>
           </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            // The controls inside are the same compact triggers, stretched to
-            // the popover width so they read as a small form rather than a
-            // second filter bar. Matched by element rather than by
-            // `[data-slot=button]`: these triggers reach their <button> through
-            // a Radix `asChild` wrapper, which overwrites Button's own
-            // `data-slot` with its own (`popover-trigger`, `select-trigger`).
-            className="w-72 space-y-3 [&_button]:w-full [&_button]:max-w-none"
-          >
+          <PopoverContent align="start" className="w-72 space-y-3">
             {tuckedAway.map((filter) => (
-              <div key={filter.key} className="space-y-1.5">
+              <div
+                key={filter.key}
+                // The control is the same compact trigger used in the bar,
+                // stretched to the popover width so this reads as a small form
+                // rather than a second filter bar. Scoped to the row's direct
+                // child so a control that renders buttons of its own inside
+                // itself keeps their widths, and matched by element rather than
+                // by `[data-slot=button]`: a trigger reaches its <button>
+                // through a Radix `asChild` wrapper, which overwrites Button's
+                // `data-slot` with its own (`popover-trigger`/`select-trigger`).
+                className="space-y-1.5 [&>button]:w-full [&>button]:max-w-none"
+              >
                 <span className="block text-xs font-medium">
                   {filter.label}
                 </span>

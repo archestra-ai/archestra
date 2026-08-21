@@ -1,7 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitModel, OptimizationRuleModel } from "@/models";
+import { LimitModel } from "@/models";
 import {
   ApiError,
   CreateLimitSchema,
@@ -43,13 +43,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         entityId,
         limitType,
       });
-
-      // Ensure default token prices and optimization rules exist
-      if (organizationId) {
-        await OptimizationRuleModel.ensureDefaultOptimizationRules(
-          organizationId,
-        );
-      }
 
       const limits = await LimitModel.findAll(
         entityType,

@@ -129,6 +129,10 @@ export const AuditEventNameSchema = z.enum([
   "member.created",
   "member.role_updated",
   "member.deleted",
+  // Retired with the LLM optimization rules feature. Kept in the vocabulary
+  // because audit rows written before its removal still carry these names —
+  // dropping them would render that history as raw dotted keys. No route
+  // produces them any more.
   "optimizationRule.created",
   "optimizationRule.updated",
   "optimizationRule.deleted",

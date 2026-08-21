@@ -21,7 +21,6 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
-import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ProjectModel from "@/models/project";
@@ -116,7 +115,6 @@ export const AUDIT_DECISIONS = {
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
-  optimizationRulesTable: { audited: true, model: OptimizationRuleModel },
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },

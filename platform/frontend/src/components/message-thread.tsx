@@ -44,7 +44,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { isBlankReasoningPart } from "@/components/chat/chat-messages.utils";
+import {
+  isBlankReasoningPart,
+  stripAssistantProtocolMarkers,
+} from "@/components/chat/chat-messages.utils";
 import { InlineChatError } from "@/components/chat/inline-chat-error";
 import {
   hasKnowledgeBaseToolCall,
@@ -341,8 +344,14 @@ const MessageThread = ({
                             // text; the citation chips re-present the quotes.
                             const citationFold =
                               citationParts && message.role === "assistant"
-                                ? foldCitationSources(part.text)
+                                ? foldCitationSources(
+                                    stripAssistantProtocolMarkers(part.text),
+                                  )
                                 : null;
+                            const visibleText =
+                              message.role === "assistant"
+                                ? stripAssistantProtocolMarkers(part.text)
+                                : part.text;
 
                             return (
                               <Fragment key={partKey}>
@@ -365,7 +374,7 @@ const MessageThread = ({
                                         {citationFold &&
                                         citationFold.entries.length > 0
                                           ? citationFold.displayText
-                                          : part.text}
+                                          : visibleText}
                                       </Response>
                                     )}
                                     {citationParts && (
@@ -379,7 +388,7 @@ const MessageThread = ({
                                 {message.role === "assistant" &&
                                   i === messages.length - 1 && (
                                     <MessageActions
-                                      textToCopy={part.text}
+                                      textToCopy={visibleText}
                                       className="-mt-1 w-fit"
                                     />
                                   )}

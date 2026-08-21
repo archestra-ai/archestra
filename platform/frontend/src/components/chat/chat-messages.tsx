@@ -893,14 +893,16 @@ export function ChatMessages({
                               isLastAssistantInSequence &&
                               isLastTextPart &&
                               status !== "streaming";
-                            // Show citations on the last text part of the last
-                            // assistant message, only after streaming completes
-                            // to avoid citations jumping between messages.
+                            // Completed earlier turns keep their citations and
+                            // images while a later turn streams. Only suppress
+                            // citations for the response currently in flight to
+                            // avoid them jumping between its tool/text messages.
                             let citationParts: typeof message.parts | undefined;
                             if (
                               isLastAssistantInSequence &&
                               isLastTextPart &&
-                              !isResponseInProgress
+                              (!isResponseInProgress ||
+                                idx < messages.length - 1)
                             ) {
                               if (
                                 hasKnowledgeBaseToolCall(message.parts ?? [])

@@ -14,7 +14,8 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { runBulkAction } from "@/lib/bulk-action";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
   archestraApiSdk;
@@ -152,6 +153,39 @@ export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
  * Update model details (pricing + modalities).
  * Set prices to null to reset to default pricing.
  */
+/**
+ * Hides or shows a selection of models at once — the models table's bulk
+ * action. Fans out over the single-item PATCH, bypassing `useUpdateModel`
+ * so a batch reports once rather than per row.
+ */
+export function useBulkUpdateModelVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      models,
+      ignored,
+    }: {
+      models: readonly { id: string; modelId: string }[];
+      ignored: boolean;
+    }) =>
+      runBulkAction({
+        items: models,
+        describe: (model) => model.modelId,
+        run: async ({ id }) => {
+          const { error } = await updateModel({
+            path: { id },
+            body: { ignored },
+          });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+    },
+  });
+}
+
 export function useUpdateModel() {
   const queryClient = useQueryClient();
   return useMutation({

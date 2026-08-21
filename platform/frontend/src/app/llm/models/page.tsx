@@ -4,7 +4,7 @@ import {
   isOpenRouterLatestAlias,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   ArrowLeftRight,
   Boxes,
@@ -36,9 +36,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -47,9 +50,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
+  useBulkUpdateModelVisibility,
   useModelsWithApiKeys,
   useSyncLlmModels,
   useUpdateModel,
@@ -139,6 +144,29 @@ export default function ModelsPage() {
     }
   }, [syncModelsMutation, refetch]);
 
+  const selectedModels = filteredModels.filter(
+    (model) => rowSelection[model.id],
+  );
+
+  // Hiding keeps a model out of the pickers without deleting anything, so the
+  // bar offers both directions rather than a single toggle whose meaning would
+  // depend on a mixed selection.
+  const applyVisibility = (ignored: boolean) =>
+    bulkVisibility.mutate(
+      { models: selectedModels, ignored },
+      {
+        onSuccess: (outcome) => {
+          reportBulkOutcome({
+            outcome,
+            verb: ignored ? "Hid" : "Showed",
+            failureVerb: ignored ? "hide" : "show",
+            noun: "model",
+          });
+          if (outcome.failed.length === 0) clearSelection();
+        },
+      },
+    );
+
   const refreshModelsButton = (
     <Button
       variant="outline"
@@ -153,8 +181,16 @@ export default function ModelsPage() {
     </Button>
   );
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const bulkVisibility = useBulkUpdateModelVisibility();
+  const clearSelection = useCallback(() => setRowSelection({}), []);
+
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
+      createSelectColumn<ModelWithApiKeys>({
+        rowLabel: (model) => `Select ${model.modelId}`,
+        allLabel: "Select all models on this page",
+      }),
       {
         id: "providerIcon",
         size: 40,
@@ -569,10 +605,39 @@ export default function ModelsPage() {
             )}
           </div>
         )}
+        <BulkActionsBar
+          count={selectedModels.length}
+          noun="model"
+          onClear={clearSelection}
+          busy={bulkVisibility.isPending}
+          className="mb-3"
+        >
+          <PermissionButton
+            permissions={{ llmModel: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => applyVisibility(false)}
+          >
+            <Eye className="h-4 w-4" />
+            <span>Show</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ llmModel: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => applyVisibility(true)}
+          >
+            <EyeOff className="h-4 w-4" />
+            <span>Hide</span>
+          </PermissionButton>
+        </BulkActionsBar>
+
         <DataTable
           columns={columns}
           data={filteredModels}
           getRowId={(row) => row.id}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
           getRowClassName={(row) =>
             row.ignored ? "opacity-60 [&_td]:text-muted-foreground" : undefined
           }

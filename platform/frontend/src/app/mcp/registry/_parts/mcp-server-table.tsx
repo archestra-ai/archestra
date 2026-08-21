@@ -1,7 +1,8 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
+  Download,
   FileSearch,
   Loader2,
   MessageSquare,
@@ -13,7 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
@@ -21,7 +22,10 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -74,7 +78,27 @@ export function McpServerTable({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const clearSelection = useCallback(() => setRowSelection({}), []);
+
+  /**
+   * Only entries that are not already installed. Install is the one bulk-safe
+   * operation this table exposes — uninstall and reinstall each open their own
+   * per-server dialog, so they stay row actions.
+   */
+  const selectedToInstall = items.filter(
+    (item) =>
+      rowSelection[item.id] &&
+      !getServerInfo(item).installedServer &&
+      !getServerInfo(item).isInstallInProgress,
+  );
+
   const columns: ColumnDef<CatalogItem>[] = [
+    createSelectColumn<CatalogItem>({
+      rowLabel: (item) => `Select ${item.name}`,
+      allLabel: "Select all MCP servers on this page",
+      canSelect: (item) => !getServerInfo(item).installedServer,
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -186,14 +210,39 @@ export function McpServerTable({
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={items}
-      getRowId={(row) => row.id}
-      onRowClick={(row) => router.push(`/mcp/registry/${row.id}`)}
-      emptyMessage="No MCP servers found."
-      hidePaginationWhenSinglePage
-    />
+    <>
+      <BulkActionsBar
+        count={selectedToInstall.length}
+        noun="server"
+        onClear={clearSelection}
+        className="mb-3"
+      >
+        <PermissionButton
+          permissions={{ mcpServerInstallation: ["create"] }}
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            for (const item of selectedToInstall) onInstall(item);
+            clearSelection();
+          }}
+        >
+          <Download className="h-4 w-4" />
+          <span>Install</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
+      <DataTable
+        columns={columns}
+        data={items}
+        getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        hideSelectedCount
+        onRowClick={(row) => router.push(`/mcp/registry/${row.id}`)}
+        emptyMessage="No MCP servers found."
+        hidePaginationWhenSinglePage
+      />
+    </>
   );
 }
 

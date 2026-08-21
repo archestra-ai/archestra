@@ -37,6 +37,13 @@ import type { LanguageModelMiddleware } from "ai";
  * Both are confined to Archestra's own client. The LLM proxy keeps emitting
  * the Converse API's own field name, so clients that read Bedrock's documented
  * shape still see it.
+ *
+ * The proxy carries the opposite rewrite for *requests*
+ * (`normalizeRedactedReasoning` in `routes/proxy/adapters/bedrock.ts`), which
+ * looks like the same mapping and is not: that one is the proxy speaking the
+ * Converse API correctly and stays whatever the package does, while everything
+ * here exists only until the package accepts Bedrock's own field. Deleting
+ * this file must not disturb it.
  */
 
 // Bedrock's own name for the encrypted-reasoning union member, in both the

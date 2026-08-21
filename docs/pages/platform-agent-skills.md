@@ -16,8 +16,6 @@ Skills live under **Studio** in the sidebar. The page lists every skill in the o
 
 Click a skill's use count (or its chart action) to open usage analytics — a chart of who activated the skill over the last 30 days, and how often.
 
-Tick the checkbox on each row to select skills, or the one in the header to take the whole page. **Edit visibility** moves every selected skill to one scope at once — five personal drafts go org-wide in a single step. **Delete** removes them all together. A skill you cannot manage, or one whose name is already taken in the scope you picked, is reported by name and left where it was; the rest of the selection still goes through.
-
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 
 ## Progressive disclosure via two tools

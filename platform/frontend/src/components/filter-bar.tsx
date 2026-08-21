@@ -1,0 +1,194 @@
+"use client";
+
+import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { DEFAULT_FILTER_ALL } from "@/consts";
+import { cn } from "@/lib/utils";
+
+/**
+ * A filter a page is willing to tuck away behind "More filters" while nobody is
+ * using it. See {@link FilterBar}'s `moreFilters`.
+ */
+export type OverflowFilter = {
+  /** Stable identity for the entry. */
+  key: string;
+  /** Names the control inside the "More filters" popover. */
+  label: string;
+  /** Whether the filter currently holds a value. Applied filters go inline. */
+  active: boolean;
+  control: ReactNode;
+};
+
+/**
+ * One compact row of table filters: search, then the filter controls, then any
+ * trailing view/sort actions. Every filtered list page uses this so the bars
+ * read the same everywhere.
+ *
+ * The controls are deliberately sized to their content rather than to a fixed
+ * width. Fixed-width triggers were what pushed these bars onto a second line
+ * and truncated their labels ("All Agents & LLM Pr…") while leaving dead space
+ * inside the shorter ones.
+ *
+ * @param onClearFilters - When provided, a "Clear" button is appended after the
+ * filters. Pass it only while some filter is actually applied; the button is
+ * the bar's only affordance for resetting them all at once.
+ * @param moreFilters - Secondary filters, for pages with more of them than fit
+ * a row. An entry is shown inline while it is `active` and tucked into a "More
+ * filters" popover while it is not, so the bar always states every filter
+ * currently narrowing the table — a hidden active filter reads as an empty
+ * table with no explanation.
+ * @param actions - Trailing controls (sort, view toggle) pinned to the right.
+ */
+export function FilterBar({
+  children,
+  className,
+  onClearFilters,
+  moreFilters,
+  actions,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClearFilters?: () => void;
+  moreFilters?: OverflowFilter[];
+  actions?: ReactNode;
+}) {
+  const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
+  const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
+
+  return (
+    <div
+      className={cn(
+        "mb-4 flex flex-wrap items-center gap-1.5",
+        // Search boxes are the one control whose height isn't set by
+        // `filterControlClass` (callers render an <Input>, not a trigger
+        // button), so the bar pulls them down to the compact height itself
+        // rather than making every call site repeat `inputClassName="h-8"`.
+        "[&_[data-slot=input]]:h-8",
+        className,
+      )}
+    >
+      {children}
+      {appliedOverflow.map((filter) => (
+        <span key={filter.key}>{filter.control}</span>
+      ))}
+      {tuckedAway.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={filterControlClass()}>
+              <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
+              <span>More filters</span>
+              <ChevronDown
+                aria-hidden
+                className="h-4 w-4 text-muted-foreground"
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            // The controls inside are the same compact triggers, stretched to
+            // the popover width so they read as a small form rather than a
+            // second filter bar. Selector kept free of nested brackets —
+            // Tailwind's class extractor misses `[&_[data-slot=button]]:…`.
+            className="w-72 space-y-3 [&_button]:w-full [&_button]:max-w-none"
+          >
+            {tuckedAway.map((filter) => (
+              <div key={filter.key} className="space-y-1.5">
+                <span className="block text-xs font-medium">
+                  {filter.label}
+                </span>
+                {filter.control}
+              </div>
+            ))}
+          </PopoverContent>
+        </Popover>
+      )}
+      {onClearFilters && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearFilters}
+          className="h-8 gap-1.5 px-2"
+        >
+          <X className="h-3.5 w-3.5" />
+          <span>Clear</span>
+        </Button>
+      )}
+      {actions && (
+        <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Trigger styling shared by every control in a {@link FilterBar} — the compact
+ * height and content width, plus the accent an applied filter carries.
+ *
+ * Use it directly for controls that aren't a {@link FilterSelect} (a shadcn
+ * `Select`, an `AgentSelector`, a bespoke popover); `FilterSelect` applies it
+ * for you.
+ *
+ * `active` styling stays on the border and background: the label itself keeps
+ * the foreground colour rather than dimming to `muted-foreground` when idle,
+ * which dips under the 4.5:1 contrast minimum on some themes (WCAG 1.4.3).
+ */
+export function filterControlClass({
+  active = false,
+  className,
+}: {
+  active?: boolean;
+  className?: string;
+} = {}) {
+  return cn(
+    // `min-h-8` matters as much as `h-8`: AgentSelector's trigger sets
+    // `h-auto min-h-9` for its two-line rows, and a bare `h-8` would lose to it.
+    "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 text-sm font-normal",
+    active && "border-primary/50 bg-primary/10 font-medium",
+    className,
+  );
+}
+
+/** Sizing for a {@link FilterBar}'s search box: it takes the leftover width. */
+export const filterSearchClass =
+  "relative w-full min-w-[12rem] flex-1 sm:w-auto sm:max-w-[20rem]";
+
+/**
+ * A {@link SearchableSelect} dressed as a filter-bar control: compact, sized to
+ * its label, and accented once it holds something other than `inactiveValue`.
+ *
+ * The dropdown gets its own width because the trigger no longer has one to lend
+ * it — a content-sized "Status" trigger would otherwise open an 80px list.
+ */
+export function FilterSelect({
+  inactiveValue = DEFAULT_FILTER_ALL,
+  className,
+  contentClassName,
+  ...props
+}: ComponentProps<typeof SearchableSelect> & { inactiveValue?: string }) {
+  return (
+    <SearchableSelect
+      {...props}
+      // The trigger's `role="combobox"` takes its name from the author, so the
+      // control is anonymous to a screen reader without one. Filter placeholders
+      // already read as names ("Filter by action"), so they stand in unless the
+      // caller supplies something better. Set after the spread: spreading an
+      // absent `ariaLabel` would otherwise overwrite this with undefined.
+      ariaLabel={props.ariaLabel ?? props.placeholder}
+      className={filterControlClass({
+        active: props.value !== inactiveValue,
+        className,
+      })}
+      contentClassName={cn(
+        "w-auto min-w-[14rem] max-w-[min(22rem,calc(100vw-2rem))]",
+        contentClassName,
+      )}
+    />
+  );
+}

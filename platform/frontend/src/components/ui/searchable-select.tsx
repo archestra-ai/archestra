@@ -27,6 +27,12 @@ interface SearchableSelectProps {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
+  /**
+   * Accessible name for the trigger. `role="combobox"` takes its name from the
+   * author rather than from the trigger's contents, so without this the control
+   * announces as an unnamed combobox.
+   */
+  ariaLabel?: string;
   searchPlaceholder?: string;
   items: Array<SearchableSelectItem>;
   /**
@@ -53,6 +59,7 @@ export function SearchableSelect({
   value,
   onValueChange,
   placeholder = "Select...",
+  ariaLabel,
   searchPlaceholder = "Search...",
   items,
   pinnedItems,
@@ -142,6 +149,7 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={ariaLabel}
           disabled={disabled}
           className={cn(
             multiline

@@ -56588,6 +56588,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -56914,6 +56917,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -66752,6 +66758,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -74594,6 +74603,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -74921,6 +74933,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -130397,6 +130412,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -227623,6 +227641,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -238066,20 +238087,48 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "ids": {
-                    "minItems": 1,
-                    "maxItems": 500,
-                    "type": "array",
-                    "items": {
-                      "type": "string"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ids": {
+                        "minItems": 1,
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Ids to act on. Duplicates are collapsed."
+                      }
                     },
-                    "description": "Ids to act on. Duplicates are collapsed."
+                    "required": [
+                      "ids"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "all": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ],
+                        "description": "Delete everything matching the filters below rather than an id list."
+                      },
+                      "search": {
+                        "description": "Same title search the listing applies.",
+                        "type": "string"
+                      },
+                      "group": {
+                        "description": "Same group filter the listing applies.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "all"
+                    ],
+                    "description": "Filter mode. A connector's corpus routinely runs to tens of thousands of documents, which is neither a sane request body as uuids nor worth authorizing row by row — so the filter travels instead and the database does the work in one statement. The response carries `affected` rather than a per-row list."
                   }
-                },
-                "required": [
-                  "ids"
                 ]
               }
             }
@@ -238105,6 +238154,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -238450,6 +238502,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -238777,6 +238832,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -246307,6 +246365,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -246634,6 +246695,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -248574,6 +248638,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -248901,6 +248968,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -252602,6 +252672,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -263765,6 +263838,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -310431,6 +310507,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -310758,6 +310837,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -321038,6 +321120,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -341072,6 +341157,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {
@@ -354554,6 +354642,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
                     "succeeded": {
                       "type": "array",
                       "items": {

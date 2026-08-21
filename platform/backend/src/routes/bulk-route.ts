@@ -31,6 +31,16 @@ export const BulkIdsSchema = z
 export const BulkDeleteBodySchema = z.object({ ids: BulkIdsSchema });
 
 export const BulkOutcomeSchema = z.object({
+  /**
+   * How many rows the batch actually changed.
+   *
+   * Present only when the request selected by FILTER rather than by id. A
+   * filter can match tens of thousands of rows, so there is no per-row list to
+   * return and no caller that would want one — the count is the whole answer.
+   * Id-mode leaves it absent, because `succeeded` already says both which rows
+   * changed and how many.
+   */
+  affected: z.number().optional(),
   succeeded: z.array(
     z.object({
       id: z.string(),

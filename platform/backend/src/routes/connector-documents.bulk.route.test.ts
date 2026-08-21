@@ -1,5 +1,6 @@
 import config from "@/config";
 import db, { schema } from "@/database";
+import { buildGroupToken } from "@/knowledge-base/acl-tokens";
 import { KbDocumentModel, KnowledgeBaseConnectorModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -43,7 +44,11 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
     await app.close();
   });
 
-  const makeDocument = async (title: string, forConnectorId = connectorId) => {
+  const makeDocument = async (
+    title: string,
+    forConnectorId = connectorId,
+    acl: string[] = [],
+  ) => {
     const [row] = await db
       .insert(schema.kbDocumentsTable)
       .values({
@@ -53,6 +58,7 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
         title,
         content: "body",
         contentHash: `hash-${title}`,
+        acl,
       })
       .returning();
     return row;
@@ -175,6 +181,162 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
     const response = await bulkDelete([crypto.randomUUID()], foreign.id);
 
     expect(response.statusCode).toBe(404);
+  });
+
+  describe("filter mode", () => {
+    const bulkDeleteAll = (body: Record<string, unknown>, id = connectorId) =>
+      app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${id}/documents/bulk`,
+        payload: { all: true, ...body },
+      });
+
+    /**
+     * The reason filter mode exists: a corpus of tens of thousands cannot be
+     * selected by posting uuids, so "select all matching" sends the filter and
+     * the count comes back instead of a per-row list.
+     */
+    test("deletes every document when no filter narrows it", async () => {
+      await makeDocument("alpha");
+      await makeDocument("beta");
+      await makeDocument("gamma");
+
+      const response = await bulkDeleteAll({});
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        affected: 3,
+        succeeded: [],
+        failed: [],
+      });
+      expect(
+        await KbDocumentModel.countByConnectorWithSearch({
+          connectorId,
+          organizationId,
+        }),
+      ).toBe(0);
+    });
+
+    /**
+     * The delete has to match exactly what the table was showing, or it
+     * destroys rows the user never saw. Same predicate, same result.
+     */
+    test("honours the same title search the listing uses", async () => {
+      await makeDocument("keep-me");
+      const target = await makeDocument("delete-me");
+      await makeDocument("delete-me-too");
+
+      const response = await bulkDeleteAll({ search: "delete-me" });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().affected).toBe(2);
+
+      const survivors = await KbDocumentModel.findListItemsByConnector({
+        connectorId,
+        organizationId,
+      });
+      expect(survivors.map((doc) => doc.title)).toEqual(["keep-me"]);
+      expect(await stillExists(target.id)).toBe(false);
+    });
+
+    test("never reaches another connector's documents", async () => {
+      const other = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "untouched-connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://untouched.atlassian.net",
+          isCloud: true,
+          projectKey: "UN",
+        },
+      });
+      await makeDocument("mine");
+      const theirs = await makeDocument("theirs", other.id);
+
+      const response = await bulkDeleteAll({});
+
+      expect(response.json().affected).toBe(1);
+      expect(
+        await KbDocumentModel.findForBulkByConnector({
+          documentIds: [theirs.id],
+          connectorId: other.id,
+          organizationId,
+        }),
+      ).toHaveLength(1);
+    });
+
+    test("404s for a connector in another organization without deleting", async ({
+      makeOrganization,
+    }) => {
+      const otherOrgId = (await makeOrganization()).id;
+      const foreign = await KnowledgeBaseConnectorModel.create({
+        organizationId: otherOrgId,
+        name: "foreign-filter",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://foreign-filter.atlassian.net",
+          isCloud: true,
+          projectKey: "FF",
+        },
+      });
+      await makeDocument("mine");
+
+      const response = await bulkDeleteAll({}, foreign.id);
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        await KbDocumentModel.countByConnectorWithSearch({
+          connectorId,
+          organizationId,
+        }),
+      ).toBe(1);
+    });
+
+    /**
+     * `group` arrives as the bare upstream group id and has to be namespaced
+     * before it can match a stored ACL entry — the same transform the listing
+     * applies. Getting this wrong does not fail loudly: the raw id matches
+     * nothing, so the delete would report success over zero rows while the
+     * filtered table the user was looking at survived intact.
+     */
+    test("namespaces the group filter the same way the listing does", async () => {
+      const engineering = buildGroupToken({
+        connectorType: "jira",
+        groupId: "engineering",
+      });
+      const support = buildGroupToken({
+        connectorType: "jira",
+        groupId: "support",
+      });
+      const targeted = await makeDocument("eng-doc", connectorId, [
+        engineering,
+      ]);
+      const spared = await makeDocument("support-doc", connectorId, [support]);
+
+      const response = await bulkDeleteAll({ group: "engineering" });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().affected).toBe(1);
+      expect(await stillExists(targeted.id)).toBe(false);
+      expect(await stillExists(spared.id)).toBe(true);
+    });
+
+    test("reports zero rather than failing when nothing matches", async () => {
+      await makeDocument("present");
+
+      const response = await bulkDeleteAll({ search: "no-such-title" });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().affected).toBe(0);
+      expect(
+        await KbDocumentModel.countByConnectorWithSearch({
+          connectorId,
+          organizationId,
+        }),
+      ).toBe(1);
+    });
   });
 
   test("rejects an empty batch", async () => {

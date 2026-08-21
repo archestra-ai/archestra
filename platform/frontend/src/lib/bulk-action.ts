@@ -64,8 +64,10 @@ export async function runBulkAction<T>({
 export function toBulkOutcome(result: {
   succeeded: Array<{ name: string }>;
   failed: Array<{ name: string | null; error: string }>;
+  affected?: number;
 }): BulkOutcome {
   return {
+    affected: result.affected,
     succeeded: result.succeeded.map((entry) => entry.name),
     failed: result.failed.map((entry) => ({
       label: entry.name ?? "Unknown",
@@ -97,9 +99,12 @@ export function reportBulkOutcome({
   const { succeeded, failed } = outcome;
   const count = (n: number) =>
     `${n} ${n === 1 ? noun : (plural ?? `${noun}s`)}`;
+  // A filter-mode batch reports only a count: it has no per-row names, so
+  // reading `succeeded.length` would announce "0" after moving thousands.
+  const succeededCount = outcome.affected ?? succeeded.length;
 
   if (failed.length === 0) {
-    toast.success(`${verb} ${count(succeeded.length)}`);
+    toast.success(`${verb} ${count(succeededCount)}`);
     return;
   }
 
@@ -110,7 +115,7 @@ export function reportBulkOutcome({
   const remaining = failed.length - BULK_FAILURE_NAMES_SHOWN;
   const description = `${remaining > 0 ? `${named} and ${remaining} more` : named} — ${failed[0].error}`;
 
-  if (succeeded.length === 0) {
+  if (succeededCount === 0) {
     // The reason is the same for every entry in the common cases (no
     // permission, still in use), so the first one stands for the rest.
     toast.error(`Could not ${failureVerb} ${count(failed.length)}`, {
@@ -120,7 +125,7 @@ export function reportBulkOutcome({
   }
 
   toast.warning(
-    `${verb} ${count(succeeded.length)} — ${count(failed.length)} could not be ${failureVerb}d`,
+    `${verb} ${count(succeededCount)} — ${count(failed.length)} could not be ${failureVerb}d`,
     { description },
   );
 }
@@ -128,6 +133,12 @@ export function reportBulkOutcome({
 export interface BulkOutcome {
   succeeded: string[];
   failed: { label: string; error: string }[];
+  /**
+   * Rows changed when the batch selected by filter rather than by id. Such a
+   * batch has no per-row names to report — it may have moved tens of thousands
+   * of rows — so the count stands in for `succeeded`.
+   */
+  affected?: number;
 }
 
 /** How many failures a bulk toast names before it starts counting. */

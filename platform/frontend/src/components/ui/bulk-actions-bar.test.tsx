@@ -152,6 +152,26 @@ describe("BulkActionsBar", () => {
       expect(offer()).toBeNull();
     });
 
+    /**
+     * The counterpart to the test above: `max` exists for callers that send an
+     * id list, and a caller that sends the FILTER instead has no such ceiling.
+     * Withholding the offer there would hide the escalation from exactly the
+     * corpora it exists for — a connector with 22,921 documents.
+     */
+    it("offers the whole set however large it is when no cap is declared", () => {
+      selectAll({
+        noun: "document",
+        selectAllMatching: {
+          total: 22_921,
+          pageFullySelected: true,
+          active: false,
+          onSelectAll: vi.fn(),
+        },
+      });
+
+      expect(offer()?.textContent).toContain("22921");
+    });
+
     it("reports the whole set once escalated, and stops re-offering it", () => {
       const onSelectAll = vi.fn();
       selectAll({

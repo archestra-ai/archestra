@@ -28,9 +28,15 @@ export interface SelectAllMatching {
    */
   matchDescription?: string;
   /**
-   * Largest set the caller's action can actually express — for skills the bulk
-   * endpoints take at most 500 ids. Above it the offer is withheld rather than
-   * promising a batch that would be refused.
+   * Largest set the caller's action can actually express, for callers whose
+   * action sends an ID LIST — the bulk endpoints take at most `MAX_BULK_IDS`
+   * of them. Above it the offer is withheld rather than promising a batch that
+   * would be refused.
+   *
+   * Omit it when the action can send the FILTER instead, as the connector
+   * documents table does: there is no id list to outgrow, so a corpus of
+   * 22,000 is as selectable as one of 5, and capping the offer would withhold
+   * exactly the case the escalation exists for.
    */
   max?: number;
 }

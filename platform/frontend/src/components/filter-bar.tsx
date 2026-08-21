@@ -21,7 +21,13 @@ export type OverflowFilter = {
   key: string;
   /** Names the control inside the "More filters" popover. */
   label: string;
-  /** Whether the filter currently holds a value. Applied filters go inline. */
+  /**
+   * Whether the filter currently holds a value — derive it from the same state
+   * `control` is bound to, so the two cannot disagree. The bar can't read this
+   * off `control` itself: it is an opaque node, and these entries are not all
+   * {@link FilterSelect}s. Getting it wrong is not cosmetic — a filter that
+   * reports `false` while actually filtering stays hidden behind the popover.
+   */
   active: boolean;
   control: ReactNode;
 };

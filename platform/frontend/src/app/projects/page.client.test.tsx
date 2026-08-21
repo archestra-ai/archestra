@@ -248,6 +248,13 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
+  // The table view's bulk bar reaches for this; the tests below only drive the
+  // view toggle, so an inert mutation is enough.
+  useBulkDeleteProjects: () => ({ mutate: vi.fn(), isPending: false }),
+  useBulkUpdateProjectVisibility: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useUpdateProject: () => ({
     mutateAsync: mockUpdateMutateAsync,
     isPending: false,

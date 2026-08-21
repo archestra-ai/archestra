@@ -308,6 +308,56 @@ class KbFileModel {
     return deleted.length > 0;
   }
 
+  /**
+   * Ids, names and visibility for a bulk route's audit record, on both sides
+   * of the write.
+   *
+   * Deliberately NOT viewer-filtered, unlike {@link findManyByIds}. Narrowing a
+   * document's audience can put it out of the caller's own view, and a snapshot
+   * that dropped it there would make a visibility change read as a deletion.
+   * Organization ownership is the fence; the route has already decided what the
+   * caller may touch.
+   */
+  static async findVisibilityForBulkAudit(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<
+    Array<{
+      id: string;
+      filename: string;
+      visibility: string;
+      teamIds: string[];
+    }>
+  > {
+    const { ids, organizationId } = params;
+    if (ids.length === 0) return [];
+
+    const rows = await db
+      .select({
+        id: schema.kbFilesTable.id,
+        filename: schema.kbFilesTable.filename,
+        visibility: schema.kbFilesTable.visibility,
+      })
+      .from(schema.kbFilesTable)
+      .where(
+        and(
+          inArray(schema.kbFilesTable.id, ids),
+          eq(schema.kbFilesTable.organizationId, organizationId),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides and
+      // the audit diff stays empty; row order is unspecified.
+      .orderBy(schema.kbFilesTable.id);
+
+    const teamsByFile = await KbFileModel.findTeamIdsForFiles(
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => ({
+      ...row,
+      teamIds: [...(teamsByFile.get(row.id) ?? [])].sort(),
+    }));
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

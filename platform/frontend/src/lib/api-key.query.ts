@@ -2,11 +2,13 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type UserApiKey = archestraApiTypes.GetApiKeysResponses["200"][number];
 
-const { getApiKeys, createApiKey, deleteApiKey } = archestraApiSdk;
+const { getApiKeys, createApiKey, deleteApiKey, bulkDeleteApiKeys } =
+  archestraApiSdk;
 
 export function useApiKeys() {
   const { data: canReadApiKeys } = useHasPermissions({ apiKey: ["read"] });
@@ -41,6 +43,24 @@ export function useCreateApiKey() {
       toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
+  });
+}
+
+/**
+ * Deletes a selection of API keys in one request, bypassing `useDeleteApiKey`
+ * so a batch reports once rather than per key.
+ */
+export function useBulkDeleteApiKeys() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (keys: readonly { id: string; name: string }[]) =>
+      bulkDeleteApiKeys({
+        body: { ids: keys.map((key) => key.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
   });
 }
 

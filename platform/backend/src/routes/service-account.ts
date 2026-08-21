@@ -18,6 +18,7 @@ import {
   UpdateServiceAccountBodySchema,
   UpdateServiceAccountTokenBodySchema,
 } from "@/types";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -120,6 +121,67 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(serviceAccount);
+    },
+  );
+
+  fastify.delete(
+    "/api/service-accounts/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteServiceAccounts,
+        description:
+          "Delete several service accounts in one request, along with their " +
+          "tokens. Ids outside the caller's organization are reported in " +
+          "`failed` as not found and leave the rest of the batch applied.",
+        tags: ["Service Accounts"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "service accounts bulk delete",
+        notFoundMessage: "Service account not found",
+        unexpectedMessage: "Could not delete this service account",
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const accounts =
+            await ServiceAccountModel.listByOrganizationId(organizationId);
+          return new Map(
+            accounts
+              .filter((account) => wanted.has(account.id))
+              .map((account) => [account.id, account]),
+          );
+        },
+        describe: (account) => account.name,
+        applyEach: async (_account, id) => {
+          const deleted = await ServiceAccountModel.delete(id, organizationId);
+          if (!deleted) {
+            throw new ApiError(404, "Service account not found");
+          }
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => {
+            const wanted = new Set(ids);
+            const accounts =
+              await ServiceAccountModel.listByOrganizationId(organizationId);
+            return {
+              serviceAccounts: accounts
+                .filter((account) => wanted.has(account.id))
+                .map(({ id, name }) => ({ id, name }))
+                // Sorted so an unchanged batch snapshots identically on both
+                // sides and the audit diff stays empty.
+                .sort((a, b) => a.id.localeCompare(b.id)),
+            };
+          },
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

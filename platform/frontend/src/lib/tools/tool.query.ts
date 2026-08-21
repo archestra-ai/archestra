@@ -4,6 +4,7 @@ import {
   type ClientFilter,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { throwOnApiError } from "@/lib/utils";
 
 const { getTool, getToolObservers, getTools, getToolsWithAssignments } =
@@ -144,3 +145,48 @@ export function useToolObservers() {
     },
   });
 }
+
+/**
+ * Every tool matching the guardrails filters, not just the page in view —
+ * what backs "select all N tools that match this search query". The bulk
+ * policy routes take an unbounded id array, so this relies on the shared
+ * ceiling rather than a limit of its own.
+ */
+export function useAllMatchingTools({
+  filters,
+  sorting,
+  enabled,
+}: {
+  filters?: ToolFilters;
+  sorting?: ToolSorting;
+  enabled?: boolean;
+}) {
+  return useAllMatching({
+    queryKey: ["tools-with-assignments", "all-matching", { filters, sorting }],
+    enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const result = await getToolsWithAssignments({
+        query: { ...filters, ...sorting, limit, offset },
+      });
+      throwOnApiError(result.error, { toastOnError: false });
+      return result.data?.data ?? [];
+    },
+  });
+}
+
+/** The guardrails table's filter set, shared by the page query and the walk. */
+type ToolFilters = {
+  search?: string;
+  origin?: string;
+  observedByUserId?: string;
+  observedByClient?: ClientFilter;
+  excludeArchestraTools?: boolean;
+  includeKnowledgeSourcesTool?: boolean;
+};
+
+type ToolSorting = {
+  sortBy?: NonNullable<GetToolsWithAssignmentsQueryParams["sortBy"]>;
+  sortDirection?: NonNullable<
+    GetToolsWithAssignmentsQueryParams["sortDirection"]
+  >;
+};

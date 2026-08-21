@@ -732,6 +732,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
+  [RouteId.BulkUpdateAgents]: {},
+  [RouteId.BulkDeleteAgents]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
   [RouteId.PermanentlyDeleteAgent]: {},
@@ -941,6 +943,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.InstallMcpServer]: {
     mcpServerInstallation: ["create"],
   },
+  [RouteId.BulkDeleteMcpServers]: { mcpServerInstallation: ["delete"] },
   [RouteId.DeleteMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
@@ -1003,6 +1006,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateTeam]: {
     team: ["read"],
   },
+  [RouteId.BulkDeleteTeams]: { team: ["delete"] },
   [RouteId.DeleteTeam]: {
     team: ["delete"],
   },
@@ -1066,6 +1070,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateRole]: {
     ac: ["update"],
   },
+  [RouteId.BulkDeleteRoles]: { ac: ["delete"] },
   [RouteId.DeleteRole]: {
     ac: ["delete"],
   },
@@ -1243,6 +1248,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApiKey]: {
     apiKey: ["create"],
   },
+  [RouteId.BulkDeleteApiKeys]: { apiKey: ["delete"] },
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
@@ -1258,6 +1264,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateServiceAccount]: {
     serviceAccount: ["update"],
   },
+  [RouteId.BulkDeleteServiceAccounts]: { serviceAccount: ["delete"] },
   [RouteId.DeleteServiceAccount]: {
     serviceAccount: ["delete"],
   },
@@ -1322,6 +1329,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetModelsWithApiKeys]: {
     llmModel: ["read"],
   },
+  [RouteId.BulkUpdateModels]: { llmModel: ["update"] },
   [RouteId.UpdateModel]: {
     llmModel: ["update"],
   },
@@ -1409,6 +1417,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateEnvironment]: {
     environment: ["update"],
   },
+  [RouteId.BulkDeleteEnvironments]: { environment: ["delete"] },
   [RouteId.DeleteEnvironment]: {
     environment: ["delete"],
   },
@@ -1704,6 +1713,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
   [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
+  [RouteId.BulkDeleteKnowledgeBases]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
   // Restore is the inverse of delete — same gate, as for skills and projects.
   [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["delete"] },
@@ -1720,10 +1730,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorDocuments]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
+  [RouteId.BulkUpdateConnectors]: { knowledgeSource: ["update"] },
+  [RouteId.BulkDeleteConnectors]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
   // Same gates as the knowledge-base pair above.
   [RouteId.RestoreConnector]: { knowledgeSource: ["delete"] },
   [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.BulkDeleteConnectorDocuments]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
@@ -1771,7 +1784,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.BulkUpdateSkillsVisibility]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.BulkDeleteSkills]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
   // Permanent deletion is irreversible, so the handler narrows this further to
   // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
@@ -1801,6 +1816,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },
+  [RouteId.BulkUpdateProjects]: { project: ["update"] },
+  [RouteId.BulkDeleteProjects]: { project: ["delete"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   // Restore is the inverse of delete and, like the deleted-projects view, an
   // oversight action — the handler further narrows it to `project:admin`.
@@ -1860,6 +1877,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DisableApp]: { app: ["update"] },
   [RouteId.LockApp]: { app: ["update"] },
   [RouteId.UnlockApp]: { app: ["update"] },
+  [RouteId.BulkUpdateApps]: { app: ["update"] },
+  [RouteId.BulkDeleteApps]: { app: ["delete"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1951,6 +1970,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateKnowledgeFile]: { knowledgeSource: ["update"] },
   [RouteId.UpdateKnowledgeDirectory]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeFile]: { knowledgeSource: ["delete"] },
+  [RouteId.BulkUpdateKnowledgeFiles]: { knowledgeSource: ["update"] },
+  [RouteId.BulkDeleteKnowledgeFiles]: { knowledgeSource: ["delete"] },
+  [RouteId.BulkUpdateKnowledgeDirectories]: { knowledgeSource: ["update"] },
+  [RouteId.BulkDeleteKnowledgeDirectories]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteKnowledgeDirectory]: { knowledgeSource: ["delete"] },
 };
 

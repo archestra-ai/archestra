@@ -176,6 +176,57 @@ class KbDirectoryModel {
     return deleted.length > 0;
   }
 
+  /**
+   * Ids, names and visibility for a bulk route's audit record, on both sides of
+   * the write. Team membership is the substance of a `team-scoped` change, so
+   * it is carried here too or the diff would show nothing happened.
+   */
+  static async findVisibilityForBulkAudit(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<
+    Array<{ id: string; name: string; visibility: string; teamIds: string[] }>
+  > {
+    const { ids, organizationId } = params;
+    if (ids.length === 0) return [];
+
+    const rows = await db
+      .select({
+        id: schema.kbDirectoriesTable.id,
+        name: schema.kbDirectoriesTable.name,
+        visibility: schema.kbDirectoriesTable.visibility,
+      })
+      .from(schema.kbDirectoriesTable)
+      .where(
+        and(
+          inArray(schema.kbDirectoriesTable.id, ids),
+          eq(schema.kbDirectoriesTable.organizationId, organizationId),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides.
+      .orderBy(schema.kbDirectoriesTable.id);
+
+    const teamRows = rows.length
+      ? await db
+          .select()
+          .from(schema.kbDirectoryTeamsTable)
+          .where(
+            inArray(
+              schema.kbDirectoryTeamsTable.directoryId,
+              rows.map((row) => row.id),
+            ),
+          )
+      : [];
+
+    return rows.map((row) => ({
+      ...row,
+      teamIds: teamRows
+        .filter((team) => team.directoryId === row.id)
+        .map((team) => team.teamId)
+        .sort(),
+    }));
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

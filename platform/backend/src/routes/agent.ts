@@ -58,6 +58,7 @@ import {
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
+  AgentScopeSchema,
   AgentSkillAssignmentsResponseSchema,
   AgentSkillAssignmentsSchema,
   AgentSkillExclusionsResponseSchema,
@@ -82,6 +83,12 @@ import {
   SelectAgentVersionSchema,
 } from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -1683,6 +1690,255 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.patch(
+    "/api/agents/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateAgents,
+        description:
+          "Update several agents in one request. Today the only editable " +
+          "surface is visibility — `scope` with the `teams` it belongs to or " +
+          "the `users` it is shared with — and every agent in the batch is " +
+          "moved to the same one. The target is validated once for the whole " +
+          "request (a 400 or 403 changes nothing); per-agent problems, such " +
+          "as an id the caller cannot see or modify, are reported in `failed` " +
+          "and leave the rest of the batch applied. An agent already in the " +
+          "requested state is reported as succeeded without being rewritten.",
+        tags: ["Agents"],
+        body: z
+          .object({
+            ids: BulkIdsSchema,
+            scope: AgentScopeSchema.describe(
+              "The visibility every agent in the batch moves to.",
+            ),
+            teams: z
+              .array(z.string())
+              .optional()
+              .describe("Only meaningful for `scope = team`; required there."),
+            users: z
+              .array(z.string())
+              .optional()
+              .describe(
+                "People to share with. Only meaningful for " +
+                  "`scope = personal`; ignored otherwise. Unlike the " +
+                  "single-agent update, omitting it revokes existing grants " +
+                  "rather than keeping them: this sets one visibility across " +
+                  "the whole selection, so a per-agent grant list would " +
+                  "survive as a difference the request just asked to remove.",
+              ),
+          })
+          .describe(
+            "Ids plus the fields to change. Shaped so further bulk-editable " +
+              "fields can be added here rather than as another endpoint.",
+          ),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const { scope } = body;
+      // Mirrors the single-agent update: teams only bind a team-scoped agent
+      // and grants only a personal one, so the other set is cleared rather
+      // than left stranded on an agent whose visibility now says otherwise.
+      const teams = scope === "team" ? [...new Set(body.teams ?? [])] : [];
+      const users = scope === "personal" ? [...new Set(body.users ?? [])] : [];
+
+      // Request-level: the target is the same for every agent, so an unusable
+      // one is a bad request rather than N identical per-agent failures.
+      await assertAgentTeams({ scope, teamIds: teams, organizationId });
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const userTeamIdSet = new Set(userTeamIds);
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "agents bulk update",
+        notFoundMessage: "Agent not found",
+        unexpectedMessage: "Could not update this agent",
+        load: async (ids) =>
+          new Map(
+            (
+              await AgentModel.findForBulk({ organizationId, agentIds: ids })
+            ).map((agent) => [agent.id, agent]),
+          ),
+        describe: (agent) => agent.name,
+        authorize: (agent) => {
+          // A type the caller cannot update is answered as "not found", as the
+          // single-agent update does, so a batch never confirms an agent
+          // exists that the caller was not allowed to see.
+          try {
+            checker.require(agent.agentType, "update");
+          } catch {
+            throw new ApiError(404, "Agent not found");
+          }
+
+          const isAdmin = checker.isAdmin(agent.agentType);
+          requireAgentModifyPermission({
+            checker,
+            agentType: agent.agentType,
+            agentScope: agent.scope,
+            agentAuthorId: agent.authorId,
+            agentTeamIds: agent.teamIds,
+            userTeamIds: isAdmin ? [] : userTeamIds,
+            userId: user.id,
+          });
+
+          // Admin-ness is per agent type, so these cannot be hoisted to a
+          // request-level 403 the way the team validation above can.
+          if (!isAdmin) {
+            if (scope === "org") {
+              throw new ApiError(403, "Only admins can set scope to org");
+            }
+            if (
+              (scope === "team" || teams.length > 0) &&
+              !checker.isTeamAdmin(agent.agentType)
+            ) {
+              throw new ApiError(
+                403,
+                "You need team-admin permission to set scope to team",
+              );
+            }
+            // A team-admin may only place an agent on teams they belong to.
+            // The single-agent update silently preserves teams they do not
+            // control; a batch cannot, because it sets one team list across
+            // the selection — so an unassignable team is refused outright
+            // rather than quietly producing a different result per agent.
+            const unassignable = teams.filter((id) => !userTeamIdSet.has(id));
+            if (checker.isTeamAdmin(agent.agentType) && unassignable.length) {
+              throw new ApiError(
+                403,
+                "You can only assign teams you are a member of",
+              );
+            }
+          }
+
+          if (scope === "personal" && agent.scope !== "personal") {
+            throw new ApiError(400, "Shared agents cannot be made personal");
+          }
+          // A personal agent IS its author, and `author_id` is nullable —
+          // built-ins are seeded without one, and deleting a user leaves their
+          // shared agents authorless. Making one of those personal would
+          // strand it, reachable by nobody, which is exactly what selecting a
+          // whole page and choosing "personal" would otherwise do.
+          if (scope === "personal" && agent.authorId === null) {
+            throw new ApiError(
+              400,
+              "This agent has no author, so it cannot be made personal. " +
+                "Share it with named people instead, or leave it team- or " +
+                "organization-scoped.",
+            );
+          }
+        },
+        applyEach: async (agent, id) => {
+          const unchanged =
+            agent.scope === scope && sameIdSet(agent.teamIds, teams);
+          if (unchanged && scope !== "personal") return;
+          await AgentModel.update(id, { scope, teams, users });
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            agents: await AgentModel.findVisibilityForBulkAudit({
+              organizationId,
+              agentIds: ids,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteAgents,
+        description:
+          "Soft-delete several agents in one request. Each id is authorized " +
+          "exactly as the single-agent delete authorizes its own, so an id " +
+          "the caller cannot see or modify — and a built-in agent or personal " +
+          "MCP gateway, which are never deletable — is reported in `failed` " +
+          "while the rest of the batch still applies. Deleted agents can be " +
+          "restored from the trash. Members who chose one as their personal " +
+          "default, and projects pinning it, are unpinned, as they are on the " +
+          "single-agent delete.",
+        tags: ["Agents"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "agents bulk delete",
+        notFoundMessage: "Agent not found",
+        unexpectedMessage: "Could not delete this agent",
+        load: async (ids) =>
+          new Map(
+            (
+              await AgentModel.findForBulk({ organizationId, agentIds: ids })
+            ).map((agent) => [agent.id, agent]),
+          ),
+        describe: (agent) => agent.name,
+        authorize: (agent) => {
+          try {
+            checker.require(agent.agentType, "delete");
+          } catch {
+            throw new ApiError(404, "Agent not found");
+          }
+          requireAgentModifyPermission({
+            checker,
+            agentType: agent.agentType,
+            agentScope: agent.scope,
+            agentAuthorId: agent.authorId,
+            agentTeamIds: agent.teamIds,
+            userTeamIds: checker.isAdmin(agent.agentType) ? [] : userTeamIds,
+            userId: user.id,
+          });
+          if (agent.isBuiltIn) {
+            throw new ApiError(403, "Built-in agents cannot be deleted");
+          }
+          if (agent.isPersonalGateway) {
+            throw new ApiError(403, "Personal MCP gateways cannot be deleted.");
+          }
+        },
+        applyEach: async (_agent, id) => {
+          const deleted = await AgentModel.delete(id);
+          if (!deleted) {
+            throw new ApiError(404, "Agent not found");
+          }
+          await MemberModel.clearDefaultAgent(id);
+          await ProjectModel.clearDefaultAgent(id);
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            agents: await AgentModel.findVisibilityForBulkAudit({
+              organizationId,
+              agentIds: ids,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
   fastify.delete(
     "/api/agents/:id",
     {
@@ -2350,3 +2606,10 @@ async function requireAgentSkillWriteAccess(params: {
  */
 const AGENT_READ_FORBIDDEN_MESSAGE =
   "You don't have permission to view agents. This requires read access to at least one agent type (agents, MCP gateways, or LLM proxies).";
+
+/** Whether two id lists hold the same set of ids, order aside. */
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
+}

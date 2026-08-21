@@ -14,10 +14,16 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { getLlmModels, getModelsWithApiKeys, updateModel, syncLlmModels } =
-  archestraApiSdk;
+const {
+  getLlmModels,
+  getModelsWithApiKeys,
+  updateModel,
+  syncLlmModels,
+  bulkUpdateModels,
+} = archestraApiSdk;
 type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
 type LlmModelsParams = Partial<LlmModelsQuery> & {
   enabled?: boolean;
@@ -152,6 +158,34 @@ export function useModelsWithApiKeys(options?: { toastOnError?: boolean }) {
  * Update model details (pricing + modalities).
  * Set prices to null to reset to default pricing.
  */
+/**
+ * Hides or shows a selection of models at once — the models table's bulk
+ * action. One request, bypassing `useUpdateModel` so a batch reports once
+ * rather than per row.
+ */
+export function useBulkUpdateModelVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      models,
+      ignored,
+    }: {
+      models: readonly { id: string; modelId: string }[];
+      ignored: boolean;
+    }) =>
+      bulkUpdateModels({
+        body: { ids: models.map((model) => model.id), ignored },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+    },
+  });
+}
+
 export function useUpdateModel() {
   const queryClient = useQueryClient();
   return useMutation({

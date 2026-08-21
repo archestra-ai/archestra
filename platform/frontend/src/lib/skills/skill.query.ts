@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  MAX_BULK_IDS,
+} from "@archestra/shared";
 import {
   useInfiniteQuery,
   useMutation,
@@ -7,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorInternalCode,
@@ -16,6 +21,8 @@ import {
 } from "@/lib/utils";
 
 const {
+  bulkDeleteSkills,
+  bulkUpdateSkillsVisibility,
   getSkills,
   getSkill,
   getSkillSourceRepos,
@@ -81,6 +88,36 @@ export function useSkillsPaginated(
       const { data, error } = await getSkills({ query: params });
       throwOnApiError(error, { toastOnError });
       return data;
+    },
+  });
+}
+
+/**
+ * Every skill matching `params`, not just the page in view — what backs the
+ * table's "select all N skills that match this search query".
+ *
+ * The list route caps a page at 100, so this walks the offsets. It stops at
+ * `MAX_BULK_IDS` because that is the largest batch a bulk route accepts:
+ * collecting more would only build a selection the action must refuse. Pass
+ * `enabled` so the walk happens on escalation rather than on every render of a
+ * table nobody has selected anything in.
+ */
+export function useAllMatchingSkills(
+  params: Omit<SkillsPaginatedParams, "limit" | "offset">,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["skills", "all-matching", params],
+    enabled: options?.enabled,
+    // The bulk routes take at most this many ids, so a longer walk could only
+    // build a selection they would refuse.
+    max: MAX_BULK_IDS,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getSkills({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error);
+      return data?.data ?? [];
     },
   });
 }
@@ -294,6 +331,64 @@ export function useDeleteSkill() {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill deleted");
     },
+  });
+}
+
+/**
+ * Move a selection of skills to one visibility scope in a single request.
+ *
+ * Partial success is normal — the route authorizes each skill on its own, and a
+ * skill widening into a namespace where its name is taken is rejected
+ * individually — so the toast reports both sides rather than claiming a clean
+ * sweep. The caller is told whether anything at all landed, so it can keep a
+ * failed selection on screen instead of clearing it.
+ */
+export function useBulkUpdateSkillsVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.BulkUpdateSkillsVisibilityData["body"],
+    ) => {
+      const { data, error } = await bulkUpdateSkillsVisibility({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      reportBulkSkillOutcome(data, {
+        verb: "Updated",
+        failureVerb: "update",
+      });
+    },
+    onError: (error) => handleApiError(error),
+  });
+}
+
+/** Soft-delete a selection of skills; see {@link useBulkUpdateSkillsVisibility}. */
+export function useBulkDeleteSkills() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (skillIds: string[]) => {
+      const { data, error } = await bulkDeleteSkills({ body: { skillIds } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      reportBulkSkillOutcome(data, {
+        verb: "Deleted",
+        failureVerb: "delete",
+      });
+    },
+    onError: (error) => handleApiError(error),
   });
 }
 
@@ -579,6 +674,58 @@ export function useImportGithubSkills() {
 }
 
 // ===== Internal =====
+
+/**
+ * Report a bulk outcome as one toast rather than one per skill.
+ *
+ * The failure side names the skills it can, because "3 skills could not be
+ * updated" leaves the reader to work out which of their selection is still
+ * where it was. Only the first few are named — a selection can be a whole page
+ * long, and a toast is not a report.
+ */
+function reportBulkSkillOutcome(
+  outcome: {
+    succeeded: Array<{ id: string; name: string }>;
+    failed: Array<{ id: string; name: string | null; error: string }>;
+  },
+  labels: { verb: string; failureVerb: string },
+) {
+  const { succeeded, failed } = outcome;
+  const skillCount = (count: number) =>
+    `${count} ${count === 1 ? "skill" : "skills"}`;
+
+  if (failed.length === 0) {
+    toast.success(`${labels.verb} ${skillCount(succeeded.length)}`);
+    return;
+  }
+
+  const named = failed
+    .slice(0, BULK_FAILURE_NAMES_SHOWN)
+    .map((entry) => entry.name ?? entry.id)
+    .join(", ");
+  const remaining = failed.length - BULK_FAILURE_NAMES_SHOWN;
+  const description = remaining > 0 ? `${named} and ${remaining} more` : named;
+
+  if (succeeded.length === 0) {
+    toast.error(
+      `Could not ${labels.failureVerb} ${skillCount(failed.length)}`,
+      {
+        // The reason is the same for every entry in the common cases (no
+        // permission, name taken), so the first one stands for the rest.
+        description: `${description} — ${failed[0].error}`,
+      },
+    );
+    return;
+  }
+
+  toast.warning(
+    `${labels.verb} ${skillCount(succeeded.length)} — ${skillCount(failed.length)} could not be ${labels.failureVerb}d`,
+    { description: `${description} — ${failed[0].error}` },
+  );
+}
+
+/** How many failed skills a bulk toast names before it starts counting. */
+const BULK_FAILURE_NAMES_SHOWN = 3;
 
 /**
  * The update route's compare-and-set rejected the write: the skill moved past

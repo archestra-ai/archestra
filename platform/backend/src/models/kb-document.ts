@@ -395,6 +395,42 @@ class KbDocumentModel {
     return result?.count ?? 0;
   }
 
+  /**
+   * The documents a bulk route was asked to act on, fenced to one connector
+   * AND one organization and read in a single query rather than one per id.
+   *
+   * Both fences matter: ids arrive straight from a request body, and a
+   * document id from a different connector — or a different organization —
+   * must be indistinguishable from one that never existed, which is what the
+   * single-document route answers too. Only id and title are selected, since
+   * that is all a bulk delete authorizes on or reports.
+   */
+  static async findForBulkByConnector(params: {
+    documentIds: string[];
+    connectorId: string;
+    organizationId: string;
+  }): Promise<Array<{ id: string; title: string }>> {
+    const { documentIds, connectorId, organizationId } = params;
+    if (documentIds.length === 0) return [];
+
+    return await db
+      .select({
+        id: schema.kbDocumentsTable.id,
+        title: schema.kbDocumentsTable.title,
+      })
+      .from(schema.kbDocumentsTable)
+      .where(
+        and(
+          inArray(schema.kbDocumentsTable.id, documentIds),
+          eq(schema.kbDocumentsTable.connectorId, connectorId),
+          eq(schema.kbDocumentsTable.organizationId, organizationId),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides of
+      // the write and the audit diff stays empty; row order is unspecified.
+      .orderBy(schema.kbDocumentsTable.id);
+  }
+
   static async findListItemByIdAndConnector(params: {
     documentId: string;
     connectorId: string;

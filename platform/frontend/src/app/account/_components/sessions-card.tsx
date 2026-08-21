@@ -1,13 +1,18 @@
 "use client";
 
-import { KeyRound, Laptop, Loader2, Smartphone } from "lucide-react";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import { KeyRound, Laptop, LogOut, Smartphone, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import { UAParser } from "ua-parser-js";
-import { LoadingSkeletons } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { TableRowActions } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Empty,
   EmptyContent,
@@ -19,13 +24,22 @@ import {
 import { useSession } from "@/lib/auth/auth.query";
 import {
   StaleSessionError,
+  useBulkRevokeSessions,
   useListSessions,
   useRevokeSessionMutation,
 } from "@/lib/auth/sessions.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+
+type AccountSession = NonNullable<
+  ReturnType<typeof useListSessions>["data"]
+>[number];
 
 /**
- * Lists the account's active sessions. Other sessions can be revoked in
- * place; revoking the current session signs the user out.
+ * The account's active sessions, as a table so it reads like every other list
+ * in settings. Other sessions can be revoked individually or in a batch;
+ * revoking the current one signs the user out and so stays a row action.
  */
 export function SessionsCard() {
   const router = useRouter();
@@ -40,6 +54,114 @@ export function SessionsCard() {
     refetch,
   } = useListSessions();
   const revokeSession = useRevokeSessionMutation();
+  const bulkRevoke = useBulkRevokeSessions();
+
+  const currentSessionId = session?.session?.id;
+  const isCurrent = (row: AccountSession) => row.id === currentSessionId;
+
+  const rows = sessions ?? [];
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows,
+    getId: (row) => row.id,
+    canSelect: (row) => !isCurrent(row),
+    // Sessions carry no filters, so the escalation never needs invalidating.
+    filterSignature: "sessions",
+    matchDescription: "your account is signed in to",
+  });
+
+  const selectedSessions = selected.map((row) => ({
+    token: row.token,
+    label: row.ipAddress ?? describeUserAgent(row.userAgent).label,
+  }));
+
+  const columns: ColumnDef<AccountSession>[] = [
+    createSelectColumn<AccountSession>({
+      rowLabel: (row) => `Select session ${row.ipAddress ?? row.id}`,
+      allLabel: "Select all sessions on this page",
+      // Signing yourself out is the row's own action; doing it inside a batch
+      // would kill the request revoking the rest.
+      canSelect: (row) => !isCurrent(row),
+    }),
+    {
+      id: "device",
+      header: "Device",
+      cell: ({ row }) => {
+        const { deviceType, label } = describeUserAgent(row.original.userAgent);
+        return (
+          <div className="flex items-center gap-3">
+            {deviceType === "mobile" ? (
+              <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <Laptop className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">
+                {isCurrent(row.original)
+                  ? "Current session"
+                  : (row.original.ipAddress ?? "Unknown")}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {label}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "signed-in",
+      header: "Signed in",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTimeFromNow(row.original.createdAt)}
+        </span>
+      ),
+    },
+    {
+      id: "expires",
+      header: "Expires",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTimeFromNow(row.original.expiresAt)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Actions</div>,
+      cell: ({ row }) => (
+        <TableRowActions
+          itemName={row.original.ipAddress ?? "this session"}
+          actions={[
+            {
+              icon: isCurrent(row.original) ? (
+                <LogOut className="h-4 w-4" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              ),
+              label: isCurrent(row.original) ? "Sign out" : "Revoke",
+              variant: "destructive" as const,
+              disabled: revokeSession.isPending,
+              onClick: () => {
+                if (isCurrent(row.original)) {
+                  router.push("/auth/sign-out");
+                  return;
+                }
+                revokeSession.mutate({ token: row.original.token });
+              },
+            },
+          ]}
+        />
+      ),
+    },
+  ];
 
   return (
     <Card className="w-full">
@@ -47,10 +169,8 @@ export function SessionsCard() {
         title="Sessions"
         description="Manage where your account is signed in."
       />
-      <CardContent className="space-y-3">
-        {isPending ? (
-          <LoadingSkeletons rows={2} />
-        ) : isLoadingError && error instanceof StaleSessionError ? (
+      <CardContent>
+        {isLoadingError && error instanceof StaleSessionError ? (
           <Empty className="py-6">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -81,53 +201,48 @@ export function SessionsCard() {
             onRetry={() => refetch()}
           />
         ) : (
-          (sessions ?? []).map((accountSession) => {
-            const isCurrentSession = accountSession.id === session?.session?.id;
-            const { deviceType, label } = describeUserAgent(
-              accountSession.userAgent,
-            );
-
-            return (
-              <div
-                key={accountSession.id}
-                className="flex items-center gap-3 rounded-md border p-3"
+          <>
+            <BulkActionsBar
+              count={selectedSessions.length}
+              noun="session"
+              onClear={clearSelection}
+              selectAllMatching={selectAllMatching}
+              busy={bulkRevoke.isPending}
+              className="mb-3"
+            >
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() =>
+                  bulkRevoke.mutate(selectedSessions, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Revoked",
+                        failureVerb: "revoke",
+                        noun: "session",
+                      });
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  })
+                }
               >
-                {deviceType === "mobile" ? (
-                  <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
-                ) : (
-                  <Laptop className="h-4 w-4 shrink-0 text-muted-foreground" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">
-                    {isCurrentSession
-                      ? "Current session"
-                      : (accountSession.ipAddress ?? "Unknown")}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {label}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={revokeSession.isPending}
-                  onClick={() => {
-                    if (isCurrentSession) {
-                      router.push("/auth/sign-out");
-                      return;
-                    }
-                    revokeSession.mutate({ token: accountSession.token });
-                  }}
-                >
-                  {revokeSession.isPending &&
-                    revokeSession.variables?.token === accountSession.token && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                  {isCurrentSession ? "Sign Out" : "Revoke"}
-                </Button>
-              </div>
-            );
-          })
+                <span>Revoke</span>
+              </Button>
+            </BulkActionsBar>
+
+            <DataTable
+              columns={columns}
+              data={rows}
+              getRowId={(row) => row.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              onPageRowIdsChange={onPageRowIdsChange}
+              hideSelectedCount
+              isLoading={isPending}
+              emptyMessage="No active sessions."
+            />
+          </>
         )}
       </CardContent>
     </Card>

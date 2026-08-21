@@ -4,6 +4,7 @@ import { E2eTestId, parseFullToolName } from "@archestra/shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -124,8 +125,6 @@ export function McpToolsDialog({
     }
   };
 
-  const hasSelection = selectedToolIds.length > 0;
-
   return (
     <StandardDialog
       open={open}
@@ -149,52 +148,17 @@ export function McpToolsDialog({
         </div>
       )}
 
-      {!isLoading && tools.length > 0 && (
-        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-4">
-          <div className="flex items-center gap-3">
-            {hasSelection ? (
-              <>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-sm font-semibold text-primary">
-                    {selectedToolIds.length}
-                  </span>
-                </div>
-                <span className="text-sm font-medium">
-                  {selectedToolIds.length === 1
-                    ? "tool selected"
-                    : "tools selected"}
-                </span>
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">
-                Select tools to bulk assign to profiles
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleBulkAssign}
-              disabled={!hasSelection}
-              className="gap-2"
-            >
-              <Users className="h-4 w-4" />
-              Bulk Assign to Profiles
-            </Button>
-            {hasSelection ? (
-              <>
-                <div className="h-4 w-px bg-border" />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setSelectedToolIds([])}
-                >
-                  Clear selection
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
+      {!isLoading && (
+        <BulkActionsBar
+          count={selectedToolIds.length}
+          noun="tool"
+          onClear={() => setSelectedToolIds([])}
+        >
+          <Button size="sm" onClick={handleBulkAssign} className="gap-2">
+            <Users className="h-4 w-4" />
+            Bulk Assign to Profiles
+          </Button>
+        </BulkActionsBar>
       )}
 
       {isLoading ? (

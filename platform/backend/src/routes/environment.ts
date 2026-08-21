@@ -28,6 +28,7 @@ import {
   UpdateEnvironmentSchema,
   UuidIdSchema,
 } from "@/types";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 // Routes are thin: parse/validate (Zod), delegate to the service, serialize.
 // All business logic (dup-name 409, not-found 404) lives in the service.
@@ -197,6 +198,64 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(updated);
+    },
+  );
+
+  fastify.delete(
+    "/api/environments/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteEnvironments,
+        description:
+          "Delete several org-level environments in one request. An " +
+          "environment that still has catalog items assigned to it cannot be " +
+          "deleted; it is reported in `failed` with that reason while the " +
+          "rest of the batch still applies.",
+        tags: ["Organization"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+      const snapshot = async (ids: string[]) => {
+        const wanted = new Set(ids);
+        const environments =
+          await EnvironmentModel.listForOrganization(organizationId);
+        return {
+          environments: environments
+            .filter((environment) => wanted.has(environment.id))
+            .map(({ id, name }) => ({ id, name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "environments bulk delete",
+        notFoundMessage: "Environment not found",
+        unexpectedMessage: "Could not delete this environment",
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const environments =
+            await EnvironmentModel.listForOrganization(organizationId);
+          return new Map(
+            environments
+              .filter((environment) => wanted.has(environment.id))
+              .map((environment) => [environment.id, environment]),
+          );
+        },
+        describe: (environment) => environment.name,
+        // Reuses the single-environment service, so a batch refuses exactly
+        // what one request would — an environment still in use answers 409,
+        // which lands as this row's reason rather than as the batch's status.
+        applyEach: async (_environment, id) => {
+          await deleteEnvironment({ id, organizationId });
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

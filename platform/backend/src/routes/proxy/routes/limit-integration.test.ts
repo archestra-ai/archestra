@@ -32,7 +32,6 @@ import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertAgent } from "@/types";
 import { openaiAdapterFactory } from "../adapters/openai";
-import * as proxyUtils from "../utils";
 import openAiProxyRoutes from "./openai";
 
 const DEFAULT_USAGE = { inputTokens: 100, outputTokens: 20 };
@@ -115,11 +114,6 @@ describe("LLM proxy limit enforcement (integration)", () => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => harness.client as never,
     );
-    // Suppress cost optimization to avoid DB lookups for models without pricing
-    vi.spyOn(
-      proxyUtils.costOptimization,
-      "getOptimizedModel",
-    ).mockResolvedValue(null);
     await app.register(openAiProxyRoutes);
     return harness;
   }

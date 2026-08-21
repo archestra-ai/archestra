@@ -22,7 +22,6 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openaiAdapterFactory } from "../adapters/openai";
-import * as proxyUtils from "../utils";
 import openAiProxyRoutes from "./openai";
 
 const OPENAI_ENDPOINT = (agentId: string) =>
@@ -102,11 +101,6 @@ describe("app-runtime interaction attribution (integration)", () => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => fakeOpenAiClient() as never,
     );
-    // No pricing rows for gpt-4o in the test DB; skip the optimization lookup.
-    vi.spyOn(
-      proxyUtils.costOptimization,
-      "getOptimizedModel",
-    ).mockResolvedValue(null);
     await app.register(openAiProxyRoutes);
   }
 

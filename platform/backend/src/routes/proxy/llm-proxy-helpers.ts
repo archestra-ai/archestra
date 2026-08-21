@@ -282,15 +282,13 @@ export function canonicalizeCommonMessageToolNames(
 }
 
 /**
- * Calculate both baseline and actual costs for an interaction.
+ * Calculate the costs recorded on an interaction.
  */
 export async function calculateInteractionCosts(params: {
-  baselineModel: string;
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
 }): Promise<{
-  baselineCost: number | undefined;
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
@@ -301,13 +299,6 @@ export async function calculateInteractionCosts(params: {
     writeTokens: params.usage.cacheWriteTokens ?? 0,
     write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
   };
-  const baselineCost = await utils.costOptimization.calculateCost(
-    params.baselineModel,
-    params.usage.inputTokens,
-    params.usage.outputTokens,
-    params.providerName,
-    cacheTokens,
-  );
   const actualCost = await utils.costOptimization.calculateCost(
     params.actualModel,
     params.usage.inputTokens,
@@ -323,7 +314,6 @@ export async function calculateInteractionCosts(params: {
     params.usage.cacheWrite1hTokens ?? 0,
   );
   return {
-    baselineCost,
     actualCost,
     cacheCost: cacheBreakdown?.cacheCost,
     cacheSavings: cacheBreakdown?.cacheSavings,
@@ -425,10 +415,8 @@ export function buildInteractionRecord(params: {
   processedRequest: unknown;
   response: unknown;
   actualModel: string;
-  baselineModel: string;
   usage: UsageView;
   costs: {
-    baselineCost: number | undefined;
     actualCost: number | undefined;
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
@@ -460,7 +448,14 @@ export function buildInteractionRecord(params: {
     dualLlmAnalyses: params.dualLlmAnalyses,
     unsafeContextBoundary: params.unsafeContextBoundary,
     model: params.actualModel,
-    baselineModel: params.baselineModel,
+    // `baseline_model` / `baseline_cost` predate the removal of optimization
+    // rules, which were the only thing that could swap the requested model for
+    // a cheaper one. Nothing rewrites the model any more, so the baseline is
+    // the model actually used. They stay populated (rather than null) so the
+    // savings statistics, which read `baseline_cost - cost`, report no
+    // optimization saving instead of a negative one, and so historical rows
+    // written while rules existed keep their meaning.
+    baselineModel: params.actualModel,
     inputTokens: params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
     outputTokens: params.usage.outputTokens,
@@ -468,7 +463,7 @@ export function buildInteractionRecord(params: {
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
-    baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
+    baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
     toonTokensBefore: params.toonStats.tokensBefore,

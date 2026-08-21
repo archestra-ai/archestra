@@ -16,6 +16,8 @@ import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-kn
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilePreviewDialog,
   type PreviewableDocument,
@@ -30,12 +32,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type KnowledgeDirectory,
   type KnowledgeFile,
+  type KnowledgeSelectionItem,
   ROOT_DIRECTORY,
   useAllMatchingKnowledgeFiles,
+  useBulkDeleteKnowledgeItems,
+  useBulkUpdateKnowledgeVisibility,
   useDeleteKnowledgeDirectory,
   useDeleteKnowledgeFile,
   useKnowledgeDirectories,
@@ -64,6 +70,13 @@ const SCOPE_BY_VISIBILITY = {
   "org-wide": "org",
   "team-scoped": "team",
   private: "personal",
+} as const;
+
+/** The reverse of {@link SCOPE_BY_VISIBILITY}, for writing a scope back. */
+const VISIBILITY_BY_SCOPE = {
+  org: "org-wide",
+  team: "team-scoped",
+  personal: "private",
 } as const;
 
 function VisibilityBadge({
@@ -124,6 +137,10 @@ export default function KnowledgeFilesPage() {
     search: search || undefined,
   });
 
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkDelete = useBulkDeleteKnowledgeItems();
+  const bulkVisibility = useBulkUpdateKnowledgeVisibility();
   const deleteFile = useDeleteKnowledgeFile();
   const deleteDirectory = useDeleteKnowledgeDirectory();
 
@@ -212,6 +229,33 @@ export default function KnowledgeFilesPage() {
   const escalatedFileIds = allMatchingSelected
     ? (allMatchingFiles ?? []).map((file) => file.id)
     : null;
+  /**
+   * The ticked rows tagged with which route acts on them. An escalation
+   * resolved to documents alone, so it contributes no directories.
+   */
+  const selectionItems: KnowledgeSelectionItem[] = allMatchingSelected
+    ? (allMatchingFiles ?? []).map((file) => ({
+        kind: "file" as const,
+        id: file.id,
+        name: file.filename,
+      }))
+    : [
+        ...rows
+          .filter((row) => row.kind === "directory" && rowSelection[row.id])
+          .map((row) => ({
+            kind: "directory" as const,
+            id: row.id.slice(4),
+            name: row.kind === "directory" ? row.directory.name : "",
+          })),
+        ...rows
+          .filter((row) => row.kind === "file" && rowSelection[row.id])
+          .map((row) => ({
+            kind: "file" as const,
+            id: row.id.slice(5),
+            name: row.kind === "file" ? row.file.filename : "",
+          })),
+      ];
+
   const actionFileIds = escalatedFileIds ?? selectedFileIds;
   const actionDirectoryIds = escalatedFileIds ? [] : selectedDirectoryIds;
   const actionDocumentCount = escalatedFileIds
@@ -516,6 +560,24 @@ export default function KnowledgeFilesPage() {
         >
           <PermissionButton
             permissions={{ knowledgeSource: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => setBulkVisibilityOpen(true)}
+          >
+            <Pencil className="h-4 w-4" />
+            <span>Edit visibility</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ knowledgeSource: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ knowledgeSource: ["update"] }}
             size="sm"
             // An empty directory resolves to nothing, so the action is
             // refused here rather than by an error that contradicts the
@@ -590,6 +652,67 @@ export default function KnowledgeFilesPage() {
         onOpenChange={(open) => !open && setPreviewFile(undefined)}
         file={previewFile}
       />
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete selection"
+          description={`Delete ${selectionItems.length} ${
+            selectionItems.length === 1 ? "item" : "items"
+          }? Deleting a directory takes the documents inside it too.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectionItems, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "item",
+                });
+                setBulkDeleteOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete"
+          pendingLabel="Deleting..."
+        />
+      )}
+
+      {bulkVisibilityOpen && (
+        <BulkVisibilityDialog
+          // Documents carry team scoping but no per-person grants, so the
+          // dialog's Users choice resolves to "private" — visible to you alone.
+          items={selectionItems.map((item) => ({
+            id: item.id,
+            scope: "org" as const,
+            teams: [],
+            users: [],
+          }))}
+          noun="item"
+          open={bulkVisibilityOpen}
+          onOpenChange={setBulkVisibilityOpen}
+          isPending={bulkVisibility.isPending}
+          onApply={async (change) => {
+            const outcome = await bulkVisibility.mutateAsync({
+              items: selectionItems,
+              visibility: VISIBILITY_BY_SCOPE[change.scope],
+              teamIds: change.teamIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated",
+              failureVerb: "update",
+              noun: "item",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
+        />
+      )}
+
       <AddToKnowledgeBaseDialog
         open={addToKbOpen}
         onOpenChange={setAddToKbOpen}

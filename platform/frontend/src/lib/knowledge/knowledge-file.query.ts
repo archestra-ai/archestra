@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { runBulkAction } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
@@ -73,6 +74,82 @@ export function useAllMatchingKnowledgeFiles(
     },
   });
 }
+
+/**
+ * One selection, two kinds of row: documents and the directories that hold
+ * them. Both bulk actions below dispatch per kind rather than making the
+ * caller keep two selections.
+ *
+ * Deleting a directory takes its contents with it, which is why the confirm
+ * copy says so.
+ */
+export function useBulkDeleteKnowledgeItems() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: readonly KnowledgeSelectionItem[]) =>
+      runBulkAction({
+        items,
+        describe: (item) => item.name,
+        run: async (item) => {
+          const { error } =
+            item.kind === "directory"
+              ? await deleteKnowledgeDirectory({
+                  path: { directoryId: item.id },
+                })
+              : await deleteKnowledgeFile({ path: { fileId: item.id } });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [FILES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [DIRECTORIES_KEY] });
+    },
+  });
+}
+
+export function useBulkUpdateKnowledgeVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      items,
+      visibility,
+      teamIds,
+    }: {
+      items: readonly KnowledgeSelectionItem[];
+      visibility: "org-wide" | "team-scoped" | "private";
+      teamIds: string[];
+    }) =>
+      runBulkAction({
+        items,
+        describe: (item) => item.name,
+        run: async (item) => {
+          const body = { visibility, teamIds };
+          const { error } =
+            item.kind === "directory"
+              ? await updateKnowledgeDirectory({
+                  path: { directoryId: item.id },
+                  body,
+                })
+              : await updateKnowledgeFile({
+                  path: { fileId: item.id },
+                  body,
+                });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [FILES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [DIRECTORIES_KEY] });
+    },
+  });
+}
+
+/** A ticked row, tagged with which route acts on it. */
+export type KnowledgeSelectionItem = {
+  kind: "file" | "directory";
+  id: string;
+  name: string;
+};
 
 export function useKnowledgeDirectories() {
   return useQuery({

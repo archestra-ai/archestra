@@ -331,7 +331,66 @@ function prepareProviderMessages(params: {
   isNova: boolean;
 }): BedrockMessages | undefined {
   const messagesWithEncodedToolNames = encodeProviderMessageToolNames(params);
-  return sanitizeProviderDocumentNames(messagesWithEncodedToolNames);
+  return normalizeRedactedReasoning(
+    sanitizeProviderDocumentNames(messagesWithEncodedToolNames),
+  );
+}
+
+// Rewrites `reasoningContent: { redactedReasoning: { data } }` — the spelling
+// @ai-sdk/amazon-bedrock uses when it echoes a prior redacted thinking block
+// back on the next turn — to the Converse API's own
+// `reasoningContent: { redactedContent }`. `ReasoningContentBlock` has no
+// `redactedReasoning` member, so forwarding the SDK's spelling verbatim risks a
+// 400 on exactly the multi-turn requests that carry redacted thinking. Blocks
+// already using the API's spelling, and plain `reasoningText` blocks, are
+// returned by reference.
+function normalizeRedactedReasoning(
+  messages: BedrockMessages | undefined,
+): BedrockMessages | undefined {
+  if (!messages) {
+    return messages;
+  }
+
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) {
+      return message;
+    }
+
+    let changed = false;
+    const content = message.content.map((contentBlock) => {
+      const data = redactedReasoningData(contentBlock);
+      if (data === null) {
+        return contentBlock;
+      }
+
+      changed = true;
+      return { reasoningContent: { redactedContent: data } };
+    });
+
+    return changed ? { ...message, content } : message;
+  }) as BedrockMessages;
+}
+
+// The base64 blob of a `redactedReasoning` block, or null for anything else.
+function redactedReasoningData(contentBlock: unknown): string | null {
+  if (typeof contentBlock !== "object" || contentBlock === null) {
+    return null;
+  }
+
+  const { reasoningContent } = contentBlock as { reasoningContent?: unknown };
+  if (typeof reasoningContent !== "object" || reasoningContent === null) {
+    return null;
+  }
+
+  const { redactedReasoning } = reasoningContent as {
+    redactedReasoning?: unknown;
+  };
+  if (typeof redactedReasoning !== "object" || redactedReasoning === null) {
+    return null;
+  }
+
+  const { data } = redactedReasoning as { data?: unknown };
+  return typeof data === "string" ? data : null;
 }
 
 // Walks message content blocks and normalizes document names so Bedrock does
@@ -487,6 +546,29 @@ function isToolUseBlock(block: unknown): block is {
     block !== null &&
     "toolUse" in block &&
     (block as { toolUse: unknown }).toolUse !== undefined
+  );
+}
+
+/** An extended-thinking block as it appears in a Converse response. */
+type BedrockReasoningContentBlock = Extract<
+  NonNullable<
+    NonNullable<BedrockResponse["output"]>["message"]
+  >["content"][number],
+  { reasoningContent: unknown }
+>;
+
+/**
+ * Check if a content block is an extended-thinking block, in either of the
+ * Converse API's variants (`reasoningText` or `redactedContent`).
+ */
+function isReasoningContentBlock(
+  block: unknown,
+): block is BedrockReasoningContentBlock {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "reasoningContent" in block &&
+    (block as { reasoningContent: unknown }).reasoningContent !== undefined
   );
 }
 
@@ -1928,7 +2010,10 @@ export const bedrockAdapterFactory: LLMProvider<
       run: (input) => bedrockClient.converse(request.modelId, input),
     });
 
-    // Convert response to our internal format with decoded tool names
+    // Convert response to our internal format with decoded tool names.
+    // Reasoning blocks are carried by reference: only tool names need decoding,
+    // and dropping them would strip extended thinking from the answer and cost
+    // the client the signature it has to echo back on the next turn.
     const outputContent: Array<
       | { text: string }
       | {
@@ -1938,6 +2023,7 @@ export const bedrockAdapterFactory: LLMProvider<
             input: Record<string, unknown>;
           };
         }
+      | BedrockReasoningContentBlock
     > = [];
     if (response.output?.message?.content) {
       for (const c of response.output.message.content) {
@@ -1951,6 +2037,8 @@ export const bedrockAdapterFactory: LLMProvider<
               input: (c.toolUse.input ?? {}) as Record<string, unknown>,
             },
           });
+        } else if (isReasoningContentBlock(c)) {
+          outputContent.push(c);
         }
       }
     }

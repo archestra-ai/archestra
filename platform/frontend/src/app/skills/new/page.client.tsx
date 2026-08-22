@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -290,9 +291,9 @@ function NewSkillWizard() {
               {effectiveStep === "content" && (
                 <div className="flex flex-col gap-4">
                   <div className="rounded-lg border p-6">
-                    <div className="mb-6 grid gap-5 md:grid-cols-2">
-                      <label htmlFor="skill-name" className="space-y-2">
-                        <span className="text-sm font-medium">Skill name</span>
+                    <div className="mb-6 space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="skill-name">Skill name</Label>
                         <Input
                           id="skill-name"
                           value={parsed.name ?? ""}
@@ -308,9 +309,9 @@ function NewSkillWizard() {
                           placeholder="release-checklist"
                           required
                         />
-                      </label>
-                      <label htmlFor="skill-description" className="space-y-2">
-                        <span className="text-sm font-medium">Description</span>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="skill-description">Description</Label>
                         <Textarea
                           id="skill-description"
                           value={parsed.description ?? ""}
@@ -327,7 +328,7 @@ function NewSkillWizard() {
                           rows={2}
                           required
                         />
-                      </label>
+                      </div>
                     </div>
                     <SkillContentEditor
                       manifest={draft.manifest}

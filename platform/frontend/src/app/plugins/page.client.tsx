@@ -392,7 +392,7 @@ function PluginsList() {
           variant="secondary"
           className="gap-1.5 font-normal [&_img]:size-3.5"
         >
-          <span aria-hidden>{clientFilterIcon(row.original.clientType)}</span>
+          {clientFilterIcon(row.original.clientType)}
           {CLIENT_LABELS[row.original.clientType] ?? row.original.clientType}
         </Badge>
       ),

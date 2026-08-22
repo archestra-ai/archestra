@@ -54,7 +54,11 @@ export function ConnectionClientMultiSelect({
         >
           <span className="flex min-w-0 items-center gap-2 truncate">
             {selected.map((client) => (
-              <span key={client.id} aria-hidden>
+              <span
+                key={client.id}
+                aria-hidden
+                className="inline-flex shrink-0"
+              >
                 {renderIcon(client)}
               </span>
             ))}
@@ -92,7 +96,9 @@ export function ConnectionClientMultiSelect({
               onSelect={(event) => event.preventDefault()}
             >
               <span className="flex items-center gap-2">
-                <span aria-hidden>{renderIcon(client)}</span>
+                <span aria-hidden className="inline-flex shrink-0">
+                  {renderIcon(client)}
+                </span>
                 {client.label}
               </span>
             </DropdownMenuCheckboxItem>

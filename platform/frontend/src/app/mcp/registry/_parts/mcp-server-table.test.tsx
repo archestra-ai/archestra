@@ -199,7 +199,7 @@ describe("McpServerTable uninstall permission", () => {
     });
     expect(screen.getByText("Needs re-authentication")).toBeInTheDocument();
     expect(screen.getByTestId("mcp-server-issue-needs-reauth")).toHaveClass(
-      "bg-tone-attention/12",
+      "bg-tone-attention/8",
     );
     expect(
       screen.queryByText(

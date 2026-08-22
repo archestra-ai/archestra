@@ -7,7 +7,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { STATUS_TONE } from "@/lib/design/status-tone";
 import { typeRole } from "@/lib/design/type-scale";
 import {
   describeMcpServerIssue,
@@ -17,9 +16,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
-  "failed-to-start": STATUS_TONE.down,
-  "not-running": STATUS_TONE.down,
-  "needs-reauth": STATUS_TONE.attention,
+  "failed-to-start":
+    "border border-tone-down/25 bg-tone-down/8 text-tone-down-foreground",
+  "not-running":
+    "border border-tone-down/25 bg-tone-down/8 text-tone-down-foreground",
+  "needs-reauth":
+    "border border-tone-attention/25 bg-tone-attention/8 text-tone-attention-foreground",
 };
 
 /**

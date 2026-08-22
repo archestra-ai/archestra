@@ -1,7 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { Checkbox } from "./checkbox";
 import { DataTable } from "./data-table";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 
 type Row = { name: string; files: number };
 
@@ -97,9 +99,9 @@ describe("DataTable column widths", () => {
 
     const name = container.querySelector('th[data-column-id="name"]');
     const files = container.querySelector('th[data-column-id="files"]');
-    // total size = 700 + 150 + 150 = 1000
-    expect(name).toHaveStyle({ width: "70.0000%" });
-    expect(files).toHaveStyle({ width: "15.0000%" });
+    // Flexible size = 700 + 150 = 850; actions keep their fixed 150px.
+    expect(name).toHaveStyle({ width: "82.3529%" });
+    expect(files).toHaveStyle({ width: "17.6471%" });
   });
 
   it("keeps a pixel width on the actions column", () => {
@@ -109,7 +111,7 @@ describe("DataTable column widths", () => {
     expect(actions).toHaveStyle({ width: "150px" });
   });
 
-  it("keeps selection controls at their configured compact width", () => {
+  it("keeps selection controls at the shared fixed square width", () => {
     const compactColumns: ColumnDef<Row>[] = [
       { id: "select", header: "Select", size: 36, cell: () => null },
       { id: "name", accessorKey: "name", header: "Name", size: 300 },
@@ -119,8 +121,12 @@ describe("DataTable column widths", () => {
     );
 
     const select = container.querySelector('th[data-column-id="select"]');
-    expect(select).toHaveStyle({ width: "36px" });
-    expect(select).toHaveClass("px-2");
+    expect(select).toHaveStyle({
+      width: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+      minWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+      maxWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+    });
+    expect(select).toHaveClass("!p-0");
   });
 
   it("keeps utility columns fixed and lets the server column grow past its minimum", () => {
@@ -154,5 +160,52 @@ describe("DataTable column widths", () => {
     expect(container.querySelector('th[data-column-id="owner"]')).toHaveStyle({
       width: "220px",
     });
+  });
+});
+
+describe("DataTable selection cells", () => {
+  it("forwards the full selection cell to its checkbox without clicking the row", () => {
+    const onCheckedChange = vi.fn();
+    const onRowClick = vi.fn();
+    const columns: ColumnDef<Row>[] = [
+      {
+        id: "select",
+        header: "Select",
+        cell: () => (
+          <Checkbox
+            aria-label="Select a-skill"
+            onCheckedChange={onCheckedChange}
+          />
+        ),
+      },
+      { id: "name", accessorKey: "name", header: "Name" },
+    ];
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={[{ name: "a-skill", files: 1 }]}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    const selectionCell = container.querySelector(
+      'td[data-column-id="select"]',
+    );
+    if (!selectionCell) throw new Error("Selection cell not rendered");
+    expect(selectionCell).toHaveClass("!p-0");
+    expect(selectionCell).toHaveStyle({
+      width: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+      minWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+      maxWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
+    });
+    fireEvent.click(selectionCell);
+
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(onRowClick).not.toHaveBeenCalled();
+
+    const nameCell = container.querySelector('td[data-column-id="name"]');
+    if (!nameCell) throw new Error("Name cell not rendered");
+    fireEvent.click(nameCell);
+    expect(onRowClick).toHaveBeenCalledTimes(1);
   });
 });

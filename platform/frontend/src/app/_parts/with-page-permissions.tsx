@@ -12,7 +12,7 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   const pathname = usePathname();
 
   // Get required permissions for current page
-  const requiredPermissions = requiredPagePermissionsMap[pathname];
+  const requiredPermissions = resolvePagePermissions(pathname);
   const { data: hasRequiredPermissions, isPending } = useHasPermissions(
     requiredPermissions || {},
   );
@@ -29,3 +29,22 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   return <>{children}</>;
 };
+
+function resolvePagePermissions(pathname: string) {
+  const exact = requiredPagePermissionsMap[pathname];
+  if (exact) return exact;
+  const pathSegments = pathname.split("/").filter(Boolean);
+  for (const [pattern, permissions] of Object.entries(
+    requiredPagePermissionsMap,
+  )) {
+    const patternSegments = pattern.split("/").filter(Boolean);
+    if (patternSegments.length !== pathSegments.length) continue;
+    const matches = patternSegments.every(
+      (segment, index) =>
+        (/^\[[^/]+\]$/.test(segment) && !!pathSegments[index]) ||
+        segment === pathSegments[index],
+    );
+    if (matches) return permissions;
+  }
+  return undefined;
+}

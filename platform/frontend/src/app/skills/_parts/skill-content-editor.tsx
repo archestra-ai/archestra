@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage } from "@archestra/shared";
+import { DocsPage, isSpecCompliantSkillName } from "@archestra/shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -63,10 +63,10 @@ export const SKILL_WIZARD_EDITOR_CLASS =
   "h-[calc(100vh-22rem)] min-h-[28rem] max-h-[64rem] flex-none";
 
 /**
- * The content half of a skill: SKILL.md manifest plus resource files, as a
- * file tree beside a text editor. Controlled — the manifest and file set live
- * in the caller's draft; only view state (open file, collapsed folders, the
- * session trash bin) is kept here, so it resets whenever the pane unmounts.
+ * A manifest and resource files as a file tree beside a text editor. Passing a
+ * null manifest renders a payload-only tree for read-only Plugin surfaces.
+ * Controlled — content lives in the caller's draft; only view state (open
+ * file, collapsed folders, the session trash bin) is kept here.
  */
 export function SkillContentEditor({
   manifest,
@@ -77,7 +77,7 @@ export function SkillContentEditor({
   readOnlyMarker = true,
   className,
 }: {
-  manifest: string;
+  manifest: string | null;
   files: ResourceFile[];
   onManifestChange: (manifest: string) => void;
   onFilesChange: (update: (files: ResourceFile[]) => ResourceFile[]) => void;
@@ -91,7 +91,9 @@ export function SkillContentEditor({
   readOnlyMarker?: boolean;
   className?: string;
 }) {
-  const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
+  const [openFileIndex, setOpenFileIndex] = useState<number | null>(() =>
+    manifest === null && files.length > 0 ? 0 : null,
+  );
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
@@ -107,7 +109,7 @@ export function SkillContentEditor({
   const [trash, setTrash] = useState<TrashedFile[]>([]);
   const [trashExpanded, setTrashExpanded] = useState(true);
 
-  const parsed = useMemo(() => parseManifestFields(manifest), [manifest]);
+  const parsed = useMemo(() => parseManifestFields(manifest ?? ""), [manifest]);
 
   const tree = useMemo(
     () => buildTree(files, pendingFolders),
@@ -222,10 +224,10 @@ export function SkillContentEditor({
   };
 
   const openFile = openFileIndex === null ? null : files[openFileIndex];
-  const editorValue = openFile ? openFile.content : manifest;
+  const editorValue = openFile ? openFile.content : (manifest ?? "");
   const setEditorValue = (value: string) => {
     if (openFileIndex === null) {
-      onManifestChange(value);
+      if (manifest !== null) onManifestChange(value);
     } else {
       onFilesChange((prev) =>
         prev.map((file, i) =>
@@ -245,10 +247,12 @@ export function SkillContentEditor({
       <div className="flex max-h-48 min-h-0 flex-col rounded-md border md:max-h-none">
         <div className="flex-1 overflow-y-auto p-2">
           <ul className="space-y-0.5">
-            <ManifestRow
-              isOpen={openFileIndex === null}
-              onOpen={() => setOpenFileIndex(null)}
-            />
+            {manifest !== null && (
+              <ManifestRow
+                isOpen={openFileIndex === null}
+                onOpen={() => setOpenFileIndex(null)}
+              />
+            )}
 
             {tree.folderNames.map((folder) => {
               const isCollapsed = collapsedFolders.has(folder);
@@ -396,7 +400,7 @@ export function SkillContentEditor({
               </span>
             )}
           </div>
-          {!openFile && !readOnly && (
+          {manifest !== null && !openFile && !readOnly && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-help text-xs text-muted-foreground">
@@ -415,6 +419,17 @@ export function SkillContentEditor({
             </Tooltip>
           )}
         </div>
+        {manifest !== null &&
+          !openFile &&
+          parsed.name !== null &&
+          !isSpecCompliantSkillName(parsed.name) && (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              This name cannot be published over MCP: the Agent Skills
+              specification allows only lowercase letters, digits, and single
+              hyphens (max 64 characters). The skill still works everywhere
+              else.
+            </p>
+          )}
         {openFile && openFile.encoding === "base64" ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Binary asset</span>
@@ -479,7 +494,9 @@ export function SkillContentEditor({
             />
           </div>
         )}
-        {!openFile && parsed.templated && <TemplatedManifestHint />}
+        {manifest !== null && !openFile && parsed.templated && (
+          <TemplatedManifestHint />
+        )}
       </div>
     </div>
   );
@@ -557,7 +574,7 @@ function FolderRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
             onClick={onAddFile}
             title={`Add file in ${folder}/`}
           >
@@ -567,7 +584,7 @@ function FolderRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
             onClick={onRemoveFolder}
             title={`Move folder ${folder}/ to trash`}
           >
@@ -612,7 +629,7 @@ function FileRow({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+          className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
           onClick={onRemove}
           title="Move to trash"
         >
@@ -698,7 +715,7 @@ function TrashRow({
         type="button"
         variant="ghost"
         size="icon"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+        className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         onClick={onRestore}
         title="Restore"
       >
@@ -708,7 +725,7 @@ function TrashRow({
         type="button"
         variant="ghost"
         size="icon"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+        className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         onClick={onPurge}
         title="Delete permanently"
       >
@@ -872,6 +889,7 @@ const EDITOR_LANGUAGES: Record<string, string> = {
   sh: "shell",
   bash: "shell",
   zsh: "shell",
+  ps1: "powershell",
   toml: "ini",
   ini: "ini",
   html: "html",

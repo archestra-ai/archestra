@@ -47,12 +47,12 @@ import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
-  CONNECT_PLATFORM_OPTIONS,
   type ConnectPlatformOption,
   detectPlatform,
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
+import { ConnectionPlatformSelect } from "./platform-select";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
@@ -274,24 +274,10 @@ export function ConnectConfigPanel({
             onToggle={() => toggleEdit("platform")}
             editor={
               <EditorField label="Platform">
-                <Select
+                <ConnectionPlatformSelect
                   value={platform}
-                  onValueChange={(v) => setPlatform(v as ConnectPlatformOption)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONNECT_PLATFORM_OPTIONS.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        <span className="flex items-center gap-2">
-                          <OsLogos platform={p} />
-                          {platformLabels[p]}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={setPlatform}
+                />
               </EditorField>
             }
           >

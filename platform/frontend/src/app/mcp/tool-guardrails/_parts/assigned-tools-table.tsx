@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
@@ -428,6 +429,9 @@ export function AssignedToolsTable({
     () => [
       {
         id: "select",
+        size: DATA_TABLE_SELECT_COLUMN_SIZE,
+        minSize: DATA_TABLE_SELECT_COLUMN_SIZE,
+        maxSize: DATA_TABLE_SELECT_COLUMN_SIZE,
         header: ({ table }) => (
           <Checkbox
             checked={
@@ -447,7 +451,6 @@ export function AssignedToolsTable({
             aria-label={`Select ${row.original.name}`}
           />
         ),
-        size: 30,
       },
       {
         id: "name",

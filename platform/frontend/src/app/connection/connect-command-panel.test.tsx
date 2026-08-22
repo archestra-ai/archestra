@@ -8,15 +8,16 @@ import {
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 
-const { createSetupMock, allSkillsMock } = vi.hoisted(() => ({
+const { createSetupMock, allSkillsMock, pluginsMock } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
   allSkillsMock: vi.fn(),
+  pluginsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
@@ -28,6 +29,10 @@ vi.mock("@/lib/connection-setup.query", () => ({
 
 vi.mock("./skills-marketplace-step", () => ({
   useAllSkills: (params?: { enabled?: boolean }) => allSkillsMock(params),
+}));
+
+vi.mock("@/lib/plugins/plugin.query", () => ({
+  usePlugins: (enabled?: boolean) => pluginsMock(enabled),
 }));
 
 // The per-gateway server list fetches its own data; its behavior is pinned in
@@ -128,6 +133,11 @@ function renderPanel(
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(true);
+  vi.mocked(useConfig).mockReturnValue({
+    data: { features: { plugins: true } },
+    isPending: false,
+    isError: false,
+  } as ReturnType<typeof useConfig>);
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
@@ -155,11 +165,28 @@ beforeEach(() => {
       },
     ],
   });
+  pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+    data: enabled
+      ? [
+          {
+            id: "b1",
+            displayName: "OpenAPPA",
+            clientType: "claude-code",
+            enabled: true,
+            contentHash: "hash-1",
+            approvedContentHash: "hash-1",
+            supportedPlatforms: ["posix"],
+          },
+        ]
+      : undefined,
+    isPending: false,
+  }));
   createSetupMock.mockResolvedValue({
     id: "setup-1",
     command: COMMAND,
     expiresAt: new Date().toISOString(),
     tokenStart: "tok",
+    plugins: [],
   });
 });
 
@@ -188,6 +215,7 @@ describe("ConnectCommandPanel", () => {
         provider: "anthropic", // first supported provider auto-selected
         proxyAuth: "provider-key",
         skills: { skillIds: ["s1", "s2"], ttlDays: null }, // skills ride along by default
+        pluginIds: ["b1"],
       }),
     );
     expect(await screen.findByText(COMMAND)).toBeInTheDocument();
@@ -201,10 +229,366 @@ describe("ConnectCommandPanel", () => {
           el?.tagName === "SPAN" && el.textContent === "2 shared skills",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("1 plugin")).toBeInTheDocument();
+    expect(screen.getByText("OpenAPPA")).toBeInTheDocument();
     // single endpoint: not worth naming
     expect(
       screen.queryByText("http://localhost:9000/v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("generates a plugin-only setup when no gateway, proxy, or skill exists", async () => {
+    allSkillsMock.mockReturnValue({ data: [] });
+    renderPanel({
+      mcpGateways: [],
+      mcpGatewayId: null,
+      llmProxies: [],
+      llmProxyId: null,
+    });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith({
+        clientId: "claude-code",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: undefined,
+        llmProxyId: undefined,
+        provider: undefined,
+        proxyAuth: undefined,
+        model: undefined,
+        skills: undefined,
+        pluginIds: ["b1"],
+      }),
+    );
+    expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "1 plugin" }).closest("li"),
+    ).toHaveTextContent("Install 1 plugin");
+    expect(screen.getByTestId("connect-change-plugins")).toBeVisible();
+  });
+
+  it("changes the exact plugin snapshot from the review row", async () => {
+    const user = userEvent.setup();
+    allSkillsMock.mockReturnValue({ data: [] });
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? [
+            {
+              id: "plugin-a",
+              displayName: "Plugin A",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-a",
+              approvedContentHash: "hash-a",
+              supportedPlatforms: ["posix"],
+            },
+            {
+              id: "plugin-b",
+              displayName: "Plugin B",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-b",
+              approvedContentHash: "hash-b",
+              supportedPlatforms: ["posix"],
+            },
+          ]
+        : undefined,
+      isPending: false,
+    }));
+    renderPanel({
+      mcpGateways: [],
+      mcpGatewayId: null,
+      llmProxies: [],
+      llmProxyId: null,
+    });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["plugin-a", "plugin-b"] }),
+      ),
+    );
+    await user.click(screen.getByTestId("connect-change-plugins"));
+    await user.click(screen.getByRole("checkbox", { name: "Plugin B" }));
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["plugin-a"] }),
+      ),
+    );
+    expect(screen.getByText("1 of 2 plugins")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Install compatible plugins" }),
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["plugin-a", "plugin-b"] }),
+      ),
+    );
+    expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+      "Setup command ready",
+    );
+  });
+
+  it("preserves an explicit plugin selection when switching clients", async () => {
+    const user = userEvent.setup();
+    allSkillsMock.mockReturnValue({ data: [] });
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? [
+            {
+              id: "claude-a",
+              displayName: "Claude A",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-ca",
+              approvedContentHash: "hash-ca",
+              supportedPlatforms: ["posix", "windows"],
+            },
+            {
+              id: "claude-b",
+              displayName: "Claude B",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-cb",
+              approvedContentHash: "hash-cb",
+              supportedPlatforms: ["posix", "windows"],
+            },
+            {
+              id: "codex-a",
+              displayName: "Codex A",
+              clientType: "codex",
+              enabled: true,
+              contentHash: "hash-xa",
+              approvedContentHash: "hash-xa",
+              supportedPlatforms: ["posix", "windows"],
+            },
+          ]
+        : undefined,
+      isPending: false,
+    }));
+    const noOtherResources = {
+      mcpGateways: [],
+      mcpGatewayId: null,
+      llmProxies: [],
+      llmProxyId: null,
+    };
+    const { rerender } = renderPanel(noOtherResources);
+    await screen.findByText(COMMAND);
+    await user.click(screen.getByTestId("connect-change-plugins"));
+    await user.click(screen.getByRole("checkbox", { name: "Claude A" }));
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pluginIds: ["claude-b"] }),
+      ),
+    );
+
+    rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({
+          ...noOtherResources,
+          client: findClient("codex"),
+        })}
+      />,
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          clientId: "codex",
+          pluginIds: ["codex-a"],
+        }),
+      ),
+    );
+
+    rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ ...noOtherResources, client: claudeClient })}
+      />,
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          clientId: "claude-code",
+          pluginIds: ["claude-b"],
+        }),
+      ),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Claude A" }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Claude B" })).toBeChecked();
+  });
+
+  it("retains plugins hidden by the current platform when editing a selection", async () => {
+    const user = userEvent.setup();
+    allSkillsMock.mockReturnValue({ data: [] });
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? [
+            {
+              id: "posix-only",
+              displayName: "POSIX Plugin",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-posix",
+              approvedContentHash: "hash-posix",
+              supportedPlatforms: ["posix"],
+            },
+            {
+              id: "windows-only",
+              displayName: "Windows Plugin",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-windows",
+              approvedContentHash: "hash-windows",
+              supportedPlatforms: ["windows"],
+            },
+            {
+              id: "cross-platform",
+              displayName: "Cross-platform Plugin",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "hash-cross",
+              approvedContentHash: "hash-cross",
+              supportedPlatforms: ["posix", "windows"],
+            },
+          ]
+        : undefined,
+      isPending: false,
+    }));
+    const platformSpy = vi
+      .spyOn(window.navigator, "platform", "get")
+      .mockReturnValue("Win32");
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      renderPanel({
+        mcpGateways: [],
+        mcpGatewayId: null,
+        llmProxies: [],
+        llmProxyId: null,
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            platform: "windows",
+            pluginIds: ["cross-platform", "windows-only"],
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-plugins"));
+      await user.click(
+        screen.getByRole("checkbox", { name: "Windows Plugin" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ pluginIds: ["cross-platform"] }),
+        ),
+      );
+
+      await user.click(screen.getByTestId("connect-change-platform"));
+      const platformSelect = screen.getByTestId("connect-platform-select");
+      platformSelect.focus();
+      await user.keyboard("{Enter}{ArrowUp}{Enter}");
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            platform: "macos",
+            pluginIds: ["cross-platform", "posix-only"],
+          }),
+        ),
+      );
+    } finally {
+      platformSpy.mockRestore();
+      if (originalScrollIntoView) {
+        Element.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        // jsdom does not define it; remove the local Radix compatibility shim.
+        Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      }
+    }
+  });
+
+  it("waits for plugin permissions before generating the command", async () => {
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      const pluginCheck = "plugin" in permissions;
+      return {
+        data: !pluginCheck,
+        isPending: pluginCheck,
+      } as ReturnType<typeof useHasPermissions>;
+    });
+    const { rerender } = renderPanel();
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(createSetupMock).not.toHaveBeenCalled();
+
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    rerender(<ConnectCommandPanel {...renderPanelProps()} />);
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pluginIds: ["b1"] }),
+      ),
+    );
+  });
+
+  it("still generates non-plugin setup sections when config loading fails", async () => {
+    vi.mocked(useConfig).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    } as ReturnType<typeof useConfig>);
+    renderPanel();
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pluginIds: [] }),
+      ),
+    );
+    expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["codex", "Install 1 plugin", "After setup, open /hooks"],
+    ["copilot-cli", "Install 1 plugin", null],
+    ["cursor", "Install 1 plugin manually", null],
+  ] as const)("reviews %s plugin installation", async (clientId, summaryCopy, detailCopy) => {
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? [
+            {
+              id: "plugin-for-client",
+              displayName: `${clientId} plugin`,
+              clientType: clientId,
+              enabled: true,
+              contentHash: "hash-client",
+              approvedContentHash: "hash-client",
+              supportedPlatforms: ["posix", "windows"],
+            },
+          ]
+        : undefined,
+      isPending: false,
+    }));
+    renderPanel({ client: findClient(clientId) });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          clientId,
+          pluginIds: ["plugin-for-client"],
+        }),
+      ),
+    );
+    expect(
+      screen.getByRole("link", { name: "1 plugin" }).closest("li"),
+    ).toHaveTextContent(summaryCopy);
+    if (detailCopy) {
+      expect(screen.getByText(new RegExp(detailCopy, "i"))).toBeInTheDocument();
+    }
   });
 
   it("shows a separate endpoint line when more than one endpoint is configured", async () => {
@@ -229,6 +613,76 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText(/Run on/)).toBeInTheDocument();
     expect(screen.getByText("macOS / Linux")).toBeInTheDocument();
     expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
+  });
+
+  it("shows that Windows setup excludes plugins", async () => {
+    const platformSpy = vi
+      .spyOn(window.navigator, "platform", "get")
+      .mockReturnValue("Win32");
+    try {
+      renderPanel();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            platform: "windows",
+            pluginIds: [],
+          }),
+        ),
+      );
+      expect(
+        screen.getByText(/No compatible plugins for Windows/),
+      ).toBeVisible();
+      expect(
+        screen.getByText(/Not marked compatible with Windows: OpenAPPA/),
+      ).toBeVisible();
+    } finally {
+      platformSpy.mockRestore();
+    }
+  });
+
+  it("installs plugins explicitly marked Windows-compatible", async () => {
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled
+        ? [
+            {
+              id: "windows-hook",
+              displayName: "Superpowers",
+              clientType: "claude-code",
+              enabled: true,
+              contentHash: "windows-hash",
+              approvedContentHash: "windows-hash",
+              supportedPlatforms: ["posix", "windows"],
+            },
+          ]
+        : undefined,
+      isPending: false,
+    }));
+    allSkillsMock.mockReturnValue({ data: [] });
+    const platformSpy = vi
+      .spyOn(window.navigator, "platform", "get")
+      .mockReturnValue("Win32");
+    try {
+      renderPanel({
+        mcpGateways: [],
+        mcpGatewayId: null,
+        llmProxies: [],
+        llmProxyId: null,
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            platform: "windows",
+            pluginIds: ["windows-hook"],
+          }),
+        ),
+      );
+      expect(screen.getByText("Superpowers")).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: "1 plugin" }).closest("li"),
+      ).toHaveTextContent("Install 1 plugin");
+    } finally {
+      platformSpy.mockRestore();
+    }
   });
 
   it("shows a Finish the OAuth flow step for Claude Code when a gateway is connected", async () => {
@@ -275,7 +729,7 @@ describe("ConnectCommandPanel", () => {
 
   it("keeps the skills opt-out sticky when the skill list later grows", async () => {
     // The skills query refetches (refocus / cache invalidation). A new skill
-    // appearing must not silently re-enable the bundle after an explicit
+    // appearing must not silently re-enable the plugin after an explicit
     // opt-out — the command stays skills-free.
     const user = userEvent.setup();
     const { rerender } = renderPanel();
@@ -417,6 +871,9 @@ describe("ConnectCommandPanel", () => {
     // Two supported providers (Anthropic, Bedrock) → the CTA stays generic.
     expect(gateButton).toHaveTextContent("Add a provider key");
     expect(screen.queryByText(COMMAND)).not.toBeInTheDocument();
+    expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+      "Add a provider key to generate the setup command",
+    );
     // ...and the setup, now unproducible as configured, drops the OAuth step.
     expect(
       screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
@@ -545,6 +1002,9 @@ describe("ConnectCommandPanel", () => {
       ).toBeInTheDocument();
       // No command is generated until the user connects their own account.
       expect(createSetupMock).not.toHaveBeenCalled();
+      expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+        "Connect GitHub Copilot to generate the setup command",
+      );
     });
 
     it("creates a personal key when the user connects", async () => {

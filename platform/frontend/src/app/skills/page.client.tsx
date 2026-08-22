@@ -37,6 +37,7 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
@@ -54,6 +55,7 @@ import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -71,7 +73,7 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useAllMatchingSkills,
@@ -129,6 +131,7 @@ function SkillsList() {
   const router = useRouter();
   const pathname = usePathname();
   const appName = useAppName();
+  const appIconLogo = useAppIconLogo();
 
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
@@ -404,7 +407,12 @@ function SkillsList() {
         const skill = row.original;
         const repo = parseRepoFromSourceRef(skill.sourceRef);
         return (
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <SkillSourceIcon
+              repo={repo}
+              builtIn={skill.sourceType === "built_in"}
+              appIconLogo={appIconLogo}
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <span className="truncate font-medium">{skill.name}</span>
@@ -513,7 +521,7 @@ function SkillsList() {
       header: ({ column }) => (
         // Right padding keeps the right-aligned value from sitting flush
         // against the Actions buttons in the next cell.
-        <div className="flex justify-end pr-4">
+        <div className="flex justify-end pr-6">
           <Button
             variant="ghost"
             className="h-auto !p-0 font-medium hover:bg-transparent"
@@ -525,7 +533,7 @@ function SkillsList() {
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex justify-end pr-4">
+        <div className="flex justify-end pr-6">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -562,8 +570,8 @@ function SkillsList() {
     },
     {
       id: "actions",
-      size: 150,
-      header: () => <div className="text-right">Actions</div>,
+      size: 200,
+      header: () => <div className="pl-4 text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
         const actionModel = getSkillActionModel(skill.id);
@@ -654,7 +662,7 @@ function SkillsList() {
               },
             ];
         return (
-          <div className="flex justify-end">
+          <div className="flex justify-end pl-4">
             <TableRowActions
               actions={actions}
               dropdownActions={dropdownActions}
@@ -751,15 +759,32 @@ function SkillsList() {
                       aria-label="Filter by repository"
                       className="w-[260px]"
                     >
-                      <SelectValue placeholder="All repositories" />
+                      <SelectValue placeholder="All repositories">
+                        {sourceRepo ? (
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span aria-hidden>
+                              <RepositoryOwnerIcon repo={sourceRepo} />
+                            </span>
+                            <span className="truncate">{sourceRepo}</span>
+                          </span>
+                        ) : (
+                          <span>All repositories</span>
+                        )}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All repositories</SelectItem>
                       {sourceRepos.map((repo) => (
-                        <SelectItem key={repo} value={repo}>
-                          <span className="truncate font-mono text-xs">
-                            {repo}
-                          </span>
+                        <SelectItem
+                          key={repo}
+                          value={repo}
+                          icon={
+                            <span aria-hidden>
+                              <RepositoryOwnerIcon repo={repo} />
+                            </span>
+                          }
+                        >
+                          {repo}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -953,8 +978,9 @@ function SkillsList() {
  */
 const selectColumn: ColumnDef<SkillItem> = {
   id: "select",
-  size: 40,
-  minSize: 44,
+  size: DATA_TABLE_SELECT_COLUMN_SIZE,
+  minSize: DATA_TABLE_SELECT_COLUMN_SIZE,
+  maxSize: DATA_TABLE_SELECT_COLUMN_SIZE,
   header: ({ table }) => (
     <Checkbox
       checked={
@@ -990,6 +1016,45 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
+  );
+}
+
+function SkillSourceIcon({
+  repo,
+  builtIn,
+  appIconLogo,
+}: {
+  repo: string | null;
+  builtIn: boolean;
+  appIconLogo: string;
+}) {
+  if (builtIn) {
+    return (
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+        aria-hidden
+      >
+        <img src={appIconLogo} alt="" className="size-6 object-contain" />
+      </span>
+    );
+  }
+  if (repo) {
+    return (
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+        aria-hidden
+      >
+        <RepositoryOwnerIcon repo={repo} className="size-6" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30 text-muted-foreground"
+      aria-hidden
+    >
+      <BookOpen className="size-4" />
+    </span>
   );
 }
 

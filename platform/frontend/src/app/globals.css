@@ -506,6 +506,129 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   }
 }
 
+/* OpenAPPA is the first-party Plugin. A restrained accent hairline and one
+   smooth glint every 12 seconds distinguish it without persistent motion. */
+@keyframes plugin-featured-glint {
+  0%,
+  72%,
+  100% {
+    opacity: 0;
+    transform: translate3d(-120%, 0, 0) skewX(-16deg);
+  }
+  79% {
+    opacity: 0.12;
+  }
+  87% {
+    opacity: 0.28;
+    transform: translate3d(280%, 0, 0) skewX(-16deg);
+  }
+  91% {
+    opacity: 0;
+    transform: translate3d(280%, 0, 0) skewX(-16deg);
+  }
+}
+
+.plugin-featured-action,
+.plugin-featured-repository-option {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.plugin-featured-row > td::after,
+.plugin-featured-action::after,
+.plugin-featured-repository-option::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -30%;
+  width: 26%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, white 16%, transparent) 28%,
+    color-mix(in oklab, white 55%, var(--primary)) 47%,
+    color-mix(in oklab, white 82%, var(--primary)) 50%,
+    color-mix(in oklab, white 34%, var(--primary)) 54%,
+    color-mix(in oklab, white 10%, transparent) 72%,
+    transparent 100%
+  );
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transform: translate3d(-120%, 0, 0) skewX(-16deg);
+  animation: plugin-featured-glint 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--plugin-featured-delay, 0s);
+}
+
+.plugin-featured-row {
+  outline: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+  outline-offset: -1px;
+}
+
+.plugin-featured-row > td {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background-color: color-mix(in oklab, var(--primary) 3%, transparent);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 4%, transparent),
+    transparent 55%
+  );
+}
+
+.plugin-featured-row > td:nth-child(2) {
+  --plugin-featured-delay: 40ms;
+}
+
+.plugin-featured-row > td:nth-child(3) {
+  --plugin-featured-delay: 80ms;
+}
+
+.plugin-featured-row > td:nth-child(4) {
+  --plugin-featured-delay: 120ms;
+}
+
+.plugin-featured-row > td:nth-child(5) {
+  --plugin-featured-delay: 160ms;
+}
+
+.plugin-featured-row > td:nth-child(6) {
+  --plugin-featured-delay: 200ms;
+}
+
+.plugin-featured-row > td:nth-child(7) {
+  --plugin-featured-delay: 240ms;
+}
+
+.plugin-featured-row > td:nth-child(8) {
+  --plugin-featured-delay: 280ms;
+}
+
+.plugin-featured-row > td:nth-child(9) {
+  --plugin-featured-delay: 320ms;
+}
+
+.plugin-featured-action {
+  border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
+  color: color-mix(in oklab, var(--primary) 68%, var(--foreground));
+  background-color: color-mix(in oklab, var(--primary) 4%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 16%, transparent);
+}
+
+.plugin-featured-repository-option {
+  color: color-mix(in oklab, var(--primary) 42%, var(--foreground));
+  background-color: color-mix(in oklab, var(--primary) 2%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-featured-row > td::after,
+  .plugin-featured-action::after,
+  .plugin-featured-repository-option::after {
+    animation: none;
+  }
+}
+
 
 /* ── Feedback pop-up ──
    Friendly greeting: the hand waves twice when the pop-up opens, then rests. */

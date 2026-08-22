@@ -32,7 +32,7 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Install the skill bundle",
+        label: "Install the skills plugin",
         body: "Installs the shared skills as a single plugin; they load next time you start Claude Code.",
         code: `claude plugin install ${marketplaceName}@${marketplaceName}`,
         language: "bash",
@@ -48,8 +48,8 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Install the skill bundle",
-        body: 'Run /plugins inside Codex and pick "Install Plugin" to install the bundled skills.',
+        label: "Install the skills plugin",
+        body: 'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
         code: "/plugins",
         language: "bash",
       },
@@ -64,8 +64,8 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Browse and install the skill bundle",
-        body: "Pick the shared plugin from the marketplace browser; Copilot installs the bundled skills from there.",
+        label: "Browse and install the skills plugin",
+        body: "Pick the shared plugin from the marketplace browser; Copilot installs the included skills from there.",
         code: `copilot plugin marketplace browse ${marketplaceName}`,
         language: "bash",
       },
@@ -81,8 +81,8 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         language: "bash",
       },
       {
-        label: "Install the skill bundle",
-        body: `The bundled skills appear under the "${marketplaceName}" plugin entry; install it from the marketplace view.`,
+        label: "Install the skills plugin",
+        body: `The included skills appear under the "${marketplaceName}" plugin entry; install it from the marketplace view.`,
         language: "text",
       },
     ],

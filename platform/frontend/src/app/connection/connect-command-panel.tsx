@@ -5,17 +5,9 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import {
-  Check,
-  CircleDashed,
-  Copy,
-  KeyRound,
-  Loader2,
-  RotateCcw,
-} from "lucide-react";
+import { KeyRound, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
   AgentSelector,
   type AgentSelectorAgent,
@@ -38,7 +30,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { copyToClipboard } from "@/lib/clipboard";
+import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
@@ -51,6 +43,7 @@ import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
@@ -60,12 +53,14 @@ import {
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
-  CONNECT_PLATFORM_OPTIONS,
   type ConnectPlatformOption,
   detectPlatform,
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
+import { ConnectionPlatformSelect } from "./platform-select";
+import { SetupCommandLine } from "./setup-command-line";
+import { SetupSummaryRow } from "./setup-summary-row";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
 
@@ -77,6 +72,7 @@ type EditableRow =
   | "proxy"
   | "model"
   | "skills"
+  | "plugins"
   | "platform";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
@@ -177,6 +173,12 @@ export function ConnectCommandPanel({
   // cleanly.
   const [selectedSkillIds, setSelectedSkillIds] =
     useState<ReadonlySet<string> | null>(null);
+  // Plugin selection mirrors Skills: null means every compatible plugin;
+  // touching a checkbox freezes an explicit id set so later refetches cannot
+  // silently add a plugin the user did not review.
+  const [pluginSelections, setPluginSelections] = useState<
+    ReadonlyMap<string, ReadonlySet<string>>
+  >(new Map());
   const selectedSkills = useMemo(
     () =>
       selectedSkillIds === null
@@ -185,6 +187,35 @@ export function ConnectCommandPanel({
     [allSkills, selectedSkillIds],
   );
   const includeSkills = skillsEligible && selectedSkills.length > 0;
+
+  const {
+    data: configData,
+    isPending: configPending,
+    isError: configError,
+  } = useConfig();
+  const pluginsEnabled = !configError && configData?.features.plugins === true;
+  const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
+    useHasPermissions({
+      plugin: ["read", "admin"],
+    });
+  const pluginsQueryEnabled =
+    pluginsEnabled === true && canAdminPlugins === true;
+  const { data: allPlugins, isPending: pluginsPending } =
+    usePlugins(pluginsQueryEnabled);
+  const plugins = useMemo(
+    () =>
+      (allPlugins ?? []).filter(
+        (plugin) =>
+          plugin.clientType === client.id &&
+          plugin.enabled &&
+          plugin.approvedContentHash === plugin.contentHash,
+      ),
+    [allPlugins, client.id],
+  );
+  const pluginsLoading =
+    configPending ||
+    (pluginsEnabled && pluginsPermissionPending) ||
+    (pluginsQueryEnabled && pluginsPending);
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
@@ -299,7 +330,37 @@ export function ConnectCommandPanel({
   // instead of shipping a half-configured command.
   const virtualKeyUnbacked =
     !!proxy && !provider && proxyAuth === "virtual-key";
-  const hasAnything = Boolean(gateway || proxyActive || includeSkills);
+  const requiredPluginPlatform = platform === "windows" ? "windows" : "posix";
+  // The selection follows the client across OS changes. Compatibility is a
+  // filter, not permission to re-add something the user explicitly removed.
+  const pluginSelectionContext = client.id;
+  const selectedPluginIds =
+    pluginSelections.get(pluginSelectionContext) ?? null;
+  const compatiblePlugins = plugins.filter((plugin) =>
+    plugin.supportedPlatforms.includes(requiredPluginPlatform),
+  );
+  const selectedPlugins =
+    selectedPluginIds === null
+      ? compatiblePlugins
+      : compatiblePlugins.filter((plugin) => selectedPluginIds.has(plugin.id));
+  const incompatiblePlugins = plugins.filter(
+    (plugin) => !plugin.supportedPlatforms.includes(requiredPluginPlatform),
+  );
+  const togglePlugin = useCallback(
+    (pluginId: string, checked: boolean) =>
+      setPluginSelections((current) => {
+        const currentIds = current.get(pluginSelectionContext) ?? null;
+        const next = new Set(currentIds ?? plugins.map((plugin) => plugin.id));
+        if (checked) next.add(pluginId);
+        else next.delete(pluginId);
+        return new Map(current).set(pluginSelectionContext, next);
+      }),
+    [plugins, pluginSelectionContext],
+  );
+  const hasRunnableAnything = Boolean(
+    gateway || proxyActive || includeSkills || selectedPlugins.length,
+  );
+  const hasAnything = Boolean(hasRunnableAnything || plugins.length > 0);
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
   // gateway authenticates over OAuth, so the user still finishes the handshake
@@ -362,6 +423,7 @@ export function ConnectCommandPanel({
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
+    pluginIds: selectedPlugins.map((plugin) => plugin.id).sort(),
   });
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
@@ -378,6 +440,7 @@ export function ConnectCommandPanel({
         proxyAuth: ConnectProxyAuth | null;
         model: string | null;
         skillIds: string[] | null;
+        pluginIds: string[];
       };
 
       let skills: CreateConnectionSetupBody["skills"];
@@ -387,7 +450,14 @@ export function ConnectCommandPanel({
         // page when needed.
         skills = { skillIds: inputs.skillIds, ttlDays: null };
       }
-      if (!inputs.gatewayId && !inputs.proxyId && !skills) return;
+      if (
+        !inputs.gatewayId &&
+        !inputs.proxyId &&
+        !skills &&
+        inputs.pluginIds.length === 0
+      ) {
+        return;
+      }
 
       const created = await createSetup({
         clientId: inputs.clientId,
@@ -399,6 +469,7 @@ export function ConnectCommandPanel({
         proxyAuth: inputs.proxyAuth ?? undefined,
         model: inputs.model ?? undefined,
         skills,
+        pluginIds: inputs.pluginIds,
       });
       if (latestKeyRef.current !== key) return; // stale response
       setResult(created);
@@ -414,14 +485,22 @@ export function ConnectCommandPanel({
     // not before a per-user account is connected, and not for a virtual key that
     // has no provider key to mint from — either way the backend would reject it
     // (or the script would silently drop the proxy).
-    if (!hasAnything || needsPerUserConnect || virtualKeyUnbacked) return;
+    if (
+      !hasRunnableAnything ||
+      pluginsLoading ||
+      needsPerUserConnect ||
+      virtualKeyUnbacked
+    ) {
+      return;
+    }
     const timer = setTimeout(() => {
       void runGeneration(inputsKey);
     }, 350);
     return () => clearTimeout(timer);
   }, [
     inputsKey,
-    hasAnything,
+    hasRunnableAnything,
+    pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,
     runGeneration,
@@ -466,28 +545,12 @@ export function ConnectCommandPanel({
 
   const platformEditor = (
     <EditorField label="Platform">
-      <Select
+      <ConnectionPlatformSelect
         value={platform}
-        onValueChange={(v) => setPlatform(v as ConnectPlatformOption)}
-      >
-        <SelectTrigger
-          aria-label="Select a client"
-          className="w-full"
-          data-testid="connect-platform-select"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {CONNECT_PLATFORM_OPTIONS.map((p) => (
-            <SelectItem key={p} value={p}>
-              <span className="flex items-center gap-2">
-                <OsLogos platform={p} />
-                {platformLabels[p]}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        onValueChange={setPlatform}
+        ariaLabel="Select a client"
+        dataTestId="connect-platform-select"
+      />
     </EditorField>
   );
 
@@ -713,10 +776,79 @@ export function ConnectCommandPanel({
     </div>
   );
 
+  const pluginsEditor =
+    compatiblePlugins.length > 0 ? (
+      <div className="grid gap-2">
+        <label
+          className="flex items-center gap-2 text-sm font-medium"
+          htmlFor="connect-include-plugins"
+        >
+          <Checkbox
+            id="connect-include-plugins"
+            checked={
+              selectedPlugins.length === compatiblePlugins.length
+                ? true
+                : selectedPlugins.length === 0
+                  ? false
+                  : "indeterminate"
+            }
+            onCheckedChange={(checked) => {
+              setPluginSelections((current) => {
+                const next = new Map(current);
+                if (checked === true) next.delete(pluginSelectionContext);
+                else next.set(pluginSelectionContext, new Set());
+                return next;
+              });
+            }}
+          />
+          Install compatible plugins
+        </label>
+        <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
+          {compatiblePlugins.map((plugin) => (
+            <li key={plugin.id}>
+              <label
+                className="flex items-center gap-2 text-sm"
+                htmlFor={`connect-plugin-${plugin.id}`}
+              >
+                <Checkbox
+                  id={`connect-plugin-${plugin.id}`}
+                  checked={
+                    selectedPluginIds === null ||
+                    selectedPluginIds.has(plugin.id)
+                  }
+                  onCheckedChange={(checked) =>
+                    togglePlugin(plugin.id, checked === true)
+                  }
+                />
+                <span>{plugin.displayName}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
   const noVirtualKeyMessage =
     supportedNames.length === 1
       ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
       : `None of ${client.label}'s providers have a key configured for a virtual key — switch to your provider key.`;
+  const pluginCountLabel =
+    selectedPlugins.length === compatiblePlugins.length
+      ? `${selectedPlugins.length} plugin${selectedPlugins.length === 1 ? "" : "s"}`
+      : `${selectedPlugins.length} of ${compatiblePlugins.length} plugins`;
+  const commandStatus = pluginsLoading
+    ? "Loading plugins"
+    : needsPerUserConnect
+      ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
+      : virtualKeyUnbacked
+        ? "Add a provider key to generate the setup command"
+        : failed
+          ? "Setup command generation failed"
+          : result
+            ? "Setup command ready"
+            : hasRunnableAnything
+              ? "Generating setup command"
+              : "No setup command selected";
 
   if (!hasAnything) {
     return (
@@ -731,7 +863,7 @@ export function ConnectCommandPanel({
       <WizardStep n={2} title="Review the setup">
         <ul className="grid gap-2">
           {gateway && (
-            <SummaryRow
+            <SetupSummaryRow
               editable={!!gatewayEditor}
               isEditing={editing === "gateway"}
               onToggle={() => toggleEdit("gateway")}
@@ -742,10 +874,10 @@ export function ConnectCommandPanel({
               Connect{" "}
               <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
               for tools
-            </SummaryRow>
+            </SetupSummaryRow>
           )}
           {proxy && (
-            <SummaryRow
+            <SetupSummaryRow
               done={proxyActive}
               editable
               isEditing={editing === "proxy"}
@@ -785,10 +917,10 @@ export function ConnectCommandPanel({
                   </RecommendationChip>
                 </>
               )}
-            </SummaryRow>
+            </SetupSummaryRow>
           )}
           {isCopilotClient && proxyActive && provider && (
-            <SummaryRow
+            <SetupSummaryRow
               done
               editable
               isEditing={editing === "model"}
@@ -800,10 +932,10 @@ export function ConnectCommandPanel({
               <span className="font-medium text-foreground">
                 {effectiveModel}
               </span>
-            </SummaryRow>
+            </SetupSummaryRow>
           )}
           {skillsEligible && (
-            <SummaryRow
+            <SetupSummaryRow
               done={includeSkills}
               editable
               isEditing={editing === "skills"}
@@ -833,10 +965,51 @@ export function ConnectCommandPanel({
               ) : (
                 <span>Shared skills not installed</span>
               )}
-            </SummaryRow>
+            </SetupSummaryRow>
+          )}
+          {plugins.length > 0 && (
+            <SetupSummaryRow
+              done={selectedPlugins.length > 0 && client.id !== "cursor"}
+              editable={!!pluginsEditor}
+              isEditing={editing === "plugins"}
+              onToggle={() => toggleEdit("plugins")}
+              editor={pluginsEditor}
+              changeTestId="connect-change-plugins"
+              detail={
+                <PluginsDetail
+                  plugins={selectedPlugins}
+                  incompatiblePlugins={incompatiblePlugins}
+                  clientId={client.id as ScriptClientId}
+                  platform={platform}
+                />
+              }
+            >
+              {compatiblePlugins.length === 0 ? (
+                <span>
+                  No compatible plugins for {platformLabels[platform]}
+                </span>
+              ) : selectedPlugins.length === 0 ? (
+                <span>Plugins not installed</span>
+              ) : client.id === "cursor" ? (
+                <span>
+                  Install{" "}
+                  <ResourceLink href="/plugins">
+                    {pluginCountLabel}
+                  </ResourceLink>{" "}
+                  manually
+                </span>
+              ) : (
+                <span>
+                  Install{" "}
+                  <ResourceLink href="/plugins">
+                    {pluginCountLabel}
+                  </ResourceLink>
+                </span>
+              )}
+            </SetupSummaryRow>
           )}
           {showEndpoint && (
-            <SummaryRow
+            <SetupSummaryRow
               editable
               isEditing={editing === "endpoint"}
               onToggle={() => toggleEdit("endpoint")}
@@ -845,9 +1018,9 @@ export function ConnectCommandPanel({
             >
               Reach the gateway and proxy at{" "}
               <span className="font-medium text-foreground">{baseUrl}</span>
-            </SummaryRow>
+            </SetupSummaryRow>
           )}
-          <SummaryRow
+          <SetupSummaryRow
             editable
             isEditing={editing === "platform"}
             onToggle={() => toggleEdit("platform")}
@@ -859,12 +1032,19 @@ export function ConnectCommandPanel({
               <OsLogos platform={platform} />
               {platformLabels[platform]}
             </span>
-          </SummaryRow>
+          </SetupSummaryRow>
         </ul>
       </WizardStep>
 
       <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
         <div className="flex flex-col gap-3">
+          <output
+            className="sr-only"
+            aria-live="polite"
+            data-testid="connect-command-status"
+          >
+            {commandStatus}
+          </output>
           <CreditWarningNotice warning={result?.creditWarning} />
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
@@ -886,7 +1066,13 @@ export function ConnectCommandPanel({
                 ))}
               </div>
             )}
-            {needsPerUserConnect && provider ? (
+            {!hasRunnableAnything ? (
+              <div className="px-5 py-4 text-sm text-[#9ca3af]">
+                No selected resource can be configured for this client and
+                operating system. Choose another platform or add a connection
+                resource.
+              </div>
+            ) : needsPerUserConnect && provider ? (
               <PerUserConnectGate
                 providerLabel={providerCatalog.label(provider)}
                 pending={createPerUserKey.isPending}
@@ -913,7 +1099,7 @@ export function ConnectCommandPanel({
                 onAddKey={() => setShowAddProviderKey(true)}
               />
             ) : (
-              <CommandLine
+              <SetupCommandLine
                 command={result?.command ?? null}
                 pending={isPending || (!result && !failed)}
                 failed={failed}
@@ -991,77 +1177,6 @@ export function ConnectCommandPanel({
 // ===================================================================
 // Internal pieces
 // ===================================================================
-
-function CommandLine({
-  command,
-  pending,
-  failed,
-  onRetry,
-}: {
-  command: string | null;
-  pending: boolean;
-  failed: boolean;
-  onRetry: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = useCallback(async () => {
-    if (!command) return;
-    await copyToClipboard(command);
-    setCopied(true);
-    toast.success("Copied to clipboard");
-    setTimeout(() => setCopied(false), 1600);
-  }, [command]);
-
-  if (failed) {
-    return (
-      <div className="flex items-center gap-3 px-5 py-4 font-mono text-[13px] text-[#f87171]">
-        {/* Spans (here and in the pending branch below): these three branches
-            reconcile into the same div, so branch flips delete the old bare
-            text node — which crashes React once Chrome page-translate has
-            re-parented it into a <font> wrapper (facebook/react#11538). */}
-        <span>Couldn't generate the command.</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 border-[#1f2937] bg-transparent text-xs text-[#e5e7eb] hover:bg-[#1f2937] hover:text-white"
-          onClick={onRetry}
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  if (pending || !command) {
-    return (
-      <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-[13px] text-[#9ca3af]">
-        <Loader2 className="size-3.5 animate-spin" />
-        <span>Generating command…</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onCopy}
-        aria-label="Copy to clipboard"
-        className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
-      >
-        {copied ? (
-          <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
-        ) : (
-          <Copy className="size-3.5" strokeWidth={2} />
-        )}
-      </button>
-      <pre className="m-0 overflow-x-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
-        {command}
-      </pre>
-    </div>
-  );
-}
 
 /**
  * Shown in place of the command when a per-user provider (GitHub Copilot) is
@@ -1144,66 +1259,6 @@ function ProviderKeyGate({
   );
 }
 
-/**
- * One review line: a status icon, the summary text, and (when there's a real
- * choice) an inline "Change" that expands the row's own editor right below it.
- */
-function SummaryRow({
-  children,
-  done = true,
-  editable = false,
-  isEditing = false,
-  onToggle,
-  editor,
-  changeTestId,
-  detail,
-}: {
-  children: React.ReactNode;
-  /** Green check vs. muted "not included" indicator. */
-  done?: boolean;
-  editable?: boolean;
-  isEditing?: boolean;
-  onToggle?: () => void;
-  editor?: React.ReactNode;
-  changeTestId?: string;
-  /** Extra context under the line (e.g. what the gateway/skills contain). */
-  detail?: React.ReactNode;
-}) {
-  return (
-    <li className="text-sm text-muted-foreground">
-      <div className="flex items-start gap-2">
-        {done ? (
-          <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-        ) : (
-          <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
-        )}
-        <span>
-          {children}
-          {editable && (
-            <>
-              {" "}
-              <button
-                type="button"
-                onClick={onToggle}
-                data-testid={changeTestId}
-                className="text-xs text-muted-foreground/70 hover:text-foreground hover:underline"
-              >
-                {isEditing ? "Done" : "Change"}
-              </button>
-            </>
-          )}
-        </span>
-      </div>
-      {detail && <div className="ml-6 mt-1.5">{detail}</div>}
-      {isEditing && editor && (
-        <div className="ml-6 mt-2 max-w-md rounded-lg border bg-muted/20 p-3">
-          {editor}
-        </div>
-      )}
-    </li>
-  );
-}
-
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
 function ResourceLink({
   href,
@@ -1242,6 +1297,42 @@ function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
       {shown.map((s) => s.name).join(", ")}
       {more > 0 ? ` and ${more} more` : ""}
     </p>
+  );
+}
+
+function PluginsDetail({
+  plugins,
+  incompatiblePlugins,
+  clientId,
+  platform,
+}: {
+  plugins: PluginListItem[];
+  incompatiblePlugins: PluginListItem[];
+  clientId: ScriptClientId;
+  platform: ConnectPlatformOption;
+}) {
+  const shown = plugins.slice(0, SKILL_NAME_PREVIEW_LIMIT);
+  const more = plugins.length - shown.length;
+  return (
+    <div className="grid gap-1 text-xs text-muted-foreground/80">
+      {plugins.length > 0 && (
+        <>
+          <p>
+            {shown.map((plugin) => plugin.displayName).join(", ")}
+            {more > 0 ? ` and ${more} more` : ""}
+          </p>
+          {clientId === "codex" && (
+            <p>After setup, open /hooks and approve each content hash.</p>
+          )}
+        </>
+      )}
+      {incompatiblePlugins.length > 0 && (
+        <p>
+          Not marked compatible with {platformLabels[platform]}:{" "}
+          {incompatiblePlugins.map((plugin) => plugin.displayName).join(", ")}.
+        </p>
+      )}
+    </div>
   );
 }
 

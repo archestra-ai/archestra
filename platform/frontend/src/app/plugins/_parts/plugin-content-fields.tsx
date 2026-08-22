@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
@@ -55,9 +56,9 @@ export function PluginContentFields({
 }) {
   return (
     <div className="space-y-6">
-      <section className="grid gap-5 md:grid-cols-2">
-        <label htmlFor="plugin-display-name" className="space-y-2">
-          <span className="text-sm font-medium">Display name</span>
+      <section className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="plugin-display-name">Display name</Label>
           <Input
             id="plugin-display-name"
             value={displayName}
@@ -67,10 +68,36 @@ export function PluginContentFields({
             maxLength={120}
             required
           />
-        </label>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="plugin-description">Description</Label>
+          <Textarea
+            id="plugin-description"
+            value={description}
+            readOnly={readOnly}
+            onChange={(event) => onDescriptionChange(event.target.value)}
+            placeholder="What this plugin does and when an administrator should deploy it"
+            maxLength={1000}
+            rows={3}
+          />
+        </div>
+        {pluginSlug ? (
+          <div className="space-y-2">
+            <Label htmlFor="plugin-slug">Plugin identity</Label>
+            <Input
+              id="plugin-slug"
+              value={pluginSlug}
+              readOnly
+              className="font-mono text-xs"
+            />
+            <span className="block text-xs text-muted-foreground">
+              Frozen so renaming the plugin cannot orphan installed plugins.
+            </span>
+          </div>
+        ) : null}
         {onClientTypeChange && clientType ? (
-          <label htmlFor="plugin-client-type" className="space-y-2">
-            <span className="text-sm font-medium">Target client</span>
+          <div className="space-y-2">
+            <Label htmlFor="plugin-client-type">Target client</Label>
             <SingleSelectCombobox
               id="plugin-client-type"
               value={clientType}
@@ -81,34 +108,8 @@ export function PluginContentFields({
               searchPlaceholder="Search clients..."
               disabled={readOnly}
             />
-          </label>
+          </div>
         ) : null}
-        {pluginSlug ? (
-          <label htmlFor="plugin-slug" className="space-y-2">
-            <span className="text-sm font-medium">Plugin identity</span>
-            <Input
-              id="plugin-slug"
-              value={pluginSlug}
-              readOnly
-              className="font-mono text-xs"
-            />
-            <span className="block text-xs text-muted-foreground">
-              Frozen so renaming the plugin cannot orphan installed plugins.
-            </span>
-          </label>
-        ) : null}
-        <label htmlFor="plugin-description" className="space-y-2 md:col-span-2">
-          <span className="text-sm font-medium">Description</span>
-          <Textarea
-            id="plugin-description"
-            value={description}
-            readOnly={readOnly}
-            onChange={(event) => onDescriptionChange(event.target.value)}
-            placeholder="What this plugin does and when an administrator should deploy it"
-            maxLength={1000}
-            rows={3}
-          />
-        </label>
         <PluginPlatforms
           value={platforms}
           onChange={onPlatformsChange}

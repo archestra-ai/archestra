@@ -152,6 +152,12 @@ describe("NewSkillPage wizard", () => {
 
     await user.click(screen.getByText("Blank template"));
     expect(contentEditor()).toBeInTheDocument();
+    expect(screen.getByLabelText("Skill name")).toHaveValue("");
+    expect(screen.getByLabelText("Skill name")).toHaveAttribute(
+      "placeholder",
+      "release-checklist",
+    );
+    expect(screen.getByLabelText("Description")).toHaveValue("");
     await user.clear(screen.getByLabelText("Skill name"));
     await user.type(screen.getByLabelText("Skill name"), "release-checklist");
     await user.clear(screen.getByLabelText("Description"));

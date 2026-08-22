@@ -19,7 +19,7 @@ export function PluginPlatforms({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-2 md:col-span-2">
+    <div className="space-y-2">
       <Label htmlFor="plugin-platforms">Supported setup platforms</Label>
       <ConnectionPlatformMultiSelect
         id="plugin-platforms"

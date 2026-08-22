@@ -7,6 +7,8 @@ description: Use when modifying Archestra frontend Next.js/React code, UI compon
 
 Use this skill before changing files under `platform/frontend/` or frontend-facing shared code.
 
+This is the skill for day-to-day platform UI work. For visual design direction on a greenfield, user-facing surface — a marketing or landing page, a generated app, a standalone page — see `design-taste-frontend` instead.
+
 ## Commands
 
 Run commands from `platform/` unless specifically instructed otherwise.

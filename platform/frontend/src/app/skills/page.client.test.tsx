@@ -4,13 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => false,
+}));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 // The scope check behind Edit/Delete asks which teams the caller belongs to.
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
+  useAllMatchingSkills: () => ({ data: [] }),
+  useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSkillsPaginated: vi.fn(),
   useSkillSourceRepos: vi.fn(),
+  useExternalMcpSkills: () => ({ data: [], isPending: false }),
   useRestoreSkill: vi.fn(),
   usePermanentlyDeleteSkill: vi.fn(),
 }));

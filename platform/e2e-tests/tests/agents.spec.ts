@@ -111,6 +111,7 @@ async function deleteFromList(
     intervals: [2000, 3000, 5000],
     checkEnabled: false,
   });
+  await openAgentRowMenu(page, name);
   await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${name}`).click();
   await clickButton({ page, options: { name: confirmLabel } });
   await expect(rowLocator).not.toBeVisible({ timeout: 10_000 });

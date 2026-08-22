@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
 import { LRUCacheManager } from "@/cache-manager";
@@ -18,6 +18,8 @@ export interface GithubTreeItem {
 const REPO_CACHE_MAX_ENTRIES = 50;
 /** Match the existing Skills discover-to-import cache window. */
 const REPO_CACHE_TTL_MS = 5 * TimeInMs.Minute;
+/** Per-process key for authentication-context cache fingerprints. */
+const REPO_CACHE_HMAC_KEY = randomBytes(32);
 
 /**
  * Process-local counterpart of the existing Skills repository cache. The key
@@ -95,9 +97,15 @@ function repoCacheKey(params: {
   githubToken?: string;
 }): string {
   const tokenFingerprint = params.githubToken
-    ? createHash("sha256").update(params.githubToken).digest("hex").slice(0, 16)
+    ? fingerprintToken(params.githubToken)
     : "public";
   return `${params.owner}/${params.repo}@${params.commitSha}#${tokenFingerprint}`;
+}
+
+function fingerprintToken(token: string): string {
+  const hmac = createHmac("sha256", REPO_CACHE_HMAC_KEY);
+  // codeql[js/insufficient-password-hash] Isolates an in-memory cache by bearer token; it is not a persisted credential verifier.
+  return hmac.update(token).digest("hex").slice(0, 16);
 }
 
 export const githubRepositoryTreeService = new GithubRepositoryTreeService();

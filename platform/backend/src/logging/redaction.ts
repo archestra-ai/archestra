@@ -31,6 +31,18 @@ export const REDACTED_LOG_PATHS = [
     '["x-archestra-locked-chat-key"]',
     '*["x-archestra-locked-chat-key"]',
     '*.headers["x-archestra-locked-chat-key"]',
+    // Provider API keys ride hyphenated HTTP headers that the camelCase
+    // flatMap above does not catch: Anthropic (x-api-key), Azure OpenAI
+    // (api-key), and Google AI (x-goog-api-key).
+    '["x-api-key"]',
+    '*["x-api-key"]',
+    '*.headers["x-api-key"]',
+    '["api-key"]',
+    '*["api-key"]',
+    '*.headers["api-key"]',
+    '["x-goog-api-key"]',
+    '*["x-goog-api-key"]',
+    '*.headers["x-goog-api-key"]',
   ]);
 
 /**

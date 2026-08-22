@@ -77,6 +77,33 @@ describe("log redaction", () => {
   });
 });
 
+test("censors hyphenated provider auth headers (Anthropic, Azure, Google)", () => {
+  const { logger, records } = createCapturingLogger();
+
+  logger.info(
+    {
+      request: {
+        headers: {
+          "x-api-key": "sk-ant-api03-abc123",
+          "api-key": "azure-openai-key-xyz789",
+          "x-goog-api-key": "AIzaSyABC123_google_key",
+          "content-type": "application/json",
+          "x-archestra-locked-chat-key": "lk_abc123",
+        },
+      },
+    },
+    "provider request",
+  );
+
+  const headers = (records[0].request as { headers: Record<string, unknown> })
+    .headers;
+  expect(headers["x-api-key"]).toBe("[Redacted]");
+  expect(headers["api-key"]).toBe("[Redacted]");
+  expect(headers["x-goog-api-key"]).toBe("[Redacted]");
+  expect(headers["content-type"]).toBe("application/json");
+  expect(headers["x-archestra-locked-chat-key"]).toBe("[Redacted]");
+});
+
 describe("bounded error serialization", () => {
   test("drops headers/config and truncates responseBody on logged errors", () => {
     const { logger, records } = createCapturingLogger();

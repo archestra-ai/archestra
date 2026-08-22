@@ -6,11 +6,12 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 const TABS = [
-  { label: "Costs", href: "/llm/costs" },
+  { label: "My Usage", href: "/llm/costs" },
+  { label: "Costs", href: "/llm/costs/organization" },
   { label: "Limits", href: "/llm/limits" },
 ];
 
@@ -19,6 +20,11 @@ const PAGE_CONFIG: Record<
   { title: React.ReactNode; description: React.ReactNode }
 > = {
   "/llm/costs": {
+    title: "My Usage",
+    description:
+      "Review your own LLM activity, token mix, clients, models, sessions, and billed spend.",
+  },
+  "/llm/costs/organization": {
     title: "Costs",
     description: (
       <>
@@ -36,16 +42,6 @@ const PAGE_CONFIG: Record<
     description:
       "Control LLM spend with token-cost limits scoped to the organization, teams, agents, users, virtual keys, or environments.",
   },
-};
-
-/**
- * What the Costs page is for a reader without `llmCost:read`: their own usage,
- * and none of the organization-wide charts the default description describes.
- */
-const PERSONAL_COSTS_PAGE_CONFIG = {
-  title: "Costs",
-  description:
-    "Your own LLM usage and spend. Organization-wide cost reporting needs additional permissions.",
 };
 
 type CostsLayoutContextType = {
@@ -73,31 +69,18 @@ export default function CostsLayout({
     "prometheus-metrics",
   );
 
-  // The Costs tab is reachable by everyone (it leads with the reader's own
-  // usage), so its siblings can no longer be assumed reachable too — someone
-  // arriving here without `llmLimit:read` would otherwise be offered a tab that
-  // only ever renders a forbidden page. Tabs with no entry in the map are
-  // ungated; the rest wait for the permission answer rather than flashing.
+  // My Usage is reachable by everyone. Its siblings wait for the permission
+  // answer rather than flashing tabs that would only render a forbidden page.
   const tabs = TABS.filter(({ href }) => {
     const required = requiredPagePermissionsMap[href];
     const isGated = required && Object.keys(required).length > 0;
     return isGated ? permissionMap?.[href] === true : true;
   });
 
-  // The Costs page shows organization-wide charts only to those who may read
-  // them; for everyone else it is their own usage summary and nothing more, so
-  // the description says that rather than promising figures they won't see.
-  const { data: canReadOrganizationCosts = false } = useHasPermissions({
-    llmCost: ["read"],
-  });
-
-  const config =
-    pathname === "/llm/costs" && !canReadOrganizationCosts
-      ? PERSONAL_COSTS_PAGE_CONFIG
-      : (PAGE_CONFIG[pathname] ?? {
-          title: "Costs & Limits",
-          description: "Monitor and manage AI model usage costs.",
-        });
+  const config = PAGE_CONFIG[pathname] ?? {
+    title: "Costs & Limits",
+    description: "Monitor and manage AI model usage costs.",
+  };
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
@@ -106,9 +89,7 @@ export default function CostsLayout({
       <PageLayout
         title={config.title}
         description={
-          pathname === "/llm/costs" &&
-          canReadOrganizationCosts &&
-          prometheusDocsUrl ? (
+          pathname === "/llm/costs/organization" && prometheusDocsUrl ? (
             <>
               {config.description} Check{" "}
               <ExternalDocsLink

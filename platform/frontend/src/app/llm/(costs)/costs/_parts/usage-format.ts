@@ -1,5 +1,5 @@
 /**
- * Shared formatting for the personal usage page.
+ * Shared formatting for the My Usage page.
  *
  * Token counts here run to the hundreds of millions, where a fully punctuated
  * number is read as a length rather than a value. Costs stay exact: they are

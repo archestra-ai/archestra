@@ -17,12 +17,12 @@ function makeSession(overrides: Partial<SessionCost> = {}): SessionCost {
     lastActiveAt: "2026-08-19T12:30:00.000Z",
     durationMinutes: 210,
     model: "claude-opus-4",
-    client: "anthropic_claude",
+    client: "Claude",
     ...overrides,
   };
 }
 
-describe("TopSessionsCard", () => {
+describe("My Usage TopSessionsCard", () => {
   it("states the listed sessions' share of the whole timeframe, not of themselves", () => {
     render(
       <TopSessionsCard
@@ -32,7 +32,23 @@ describe("TopSessionsCard", () => {
       />,
     );
 
-    expect(screen.getByText(/60% of/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/60% of your list-price usage/),
+    ).toBeInTheDocument();
+  });
+
+  it("does not present subscription-covered session usage as billed spend", () => {
+    render(
+      <TopSessionsCard
+        sessions={[makeSession({ cost: 12.5, billedCost: 0 })]}
+        totalCost={12.5}
+        unsessionedRequests={0}
+      />,
+    );
+
+    expect(screen.getByText("$0.00")).toBeInTheDocument();
+    expect(screen.getByText("Subscription")).toBeInTheDocument();
+    expect(screen.queryByText("$12.50")).not.toBeInTheDocument();
   });
 
   it("discloses requests that belong to no session", () => {

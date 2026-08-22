@@ -352,6 +352,8 @@ const contentNavGroups: NavGroup[] = [
         title: "Costs & Limits",
         url: "/llm/costs",
         icon: CircleDollarSign,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
       },
     ],
   },

@@ -346539,6 +346539,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
+                                "percentage": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -346552,6 +346558,8 @@
                                 "inputTokens",
                                 "outputTokens",
                                 "cacheReadTokens",
+                                "totalTokens",
+                                "percentage",
                                 "billedCost",
                                 "subscriptionCost"
                               ],
@@ -346977,6 +346985,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "totalTokens": {
+                            "type": "number"
+                          },
+                          "percentage": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -346990,6 +347004,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "totalTokens",
+                          "percentage",
                           "billedCost",
                           "subscriptionCost"
                         ],
@@ -347276,7 +347292,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Explain the calling user's own usage: the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Explain the calling user's own usage: the client applications that generated it, the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -347348,6 +347364,54 @@
                         "cacheSavings"
                       ],
                       "additionalProperties": false
+                    },
+                    "clients": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "client": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
+                          "percentage": {
+                            "type": "number"
+                          },
+                          "billedCost": {
+                            "type": "number"
+                          },
+                          "subscriptionCost": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "client",
+                          "requests",
+                          "inputTokens",
+                          "outputTokens",
+                          "cacheReadTokens",
+                          "totalTokens",
+                          "percentage",
+                          "billedCost",
+                          "subscriptionCost"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "contextBuckets": {
                       "type": "array",
@@ -347444,6 +347508,7 @@
                   },
                   "required": [
                     "tokenMix",
+                    "clients",
                     "contextBuckets",
                     "topSessions",
                     "totalCost",

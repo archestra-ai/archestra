@@ -2,13 +2,10 @@
 
 import type { StatisticsTimeFrame } from "@archestra/shared";
 import { format } from "date-fns";
-import Link from "next/link";
 import { Area, AreaChart, XAxis, YAxis } from "recharts";
 import { BilledCost } from "@/components/billed-cost";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -28,9 +25,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useMyStatistics } from "@/lib/statistics.query";
 
-/** Models shown as badges before the rest collapse into a "+N" tooltip. */
-const MODEL_BADGE_LIMIT = 3;
-
 const spendChartConfig = {
   value: { label: "Your spend", color: "var(--chart-1)" },
 } satisfies ChartConfig;
@@ -41,8 +35,8 @@ const spendChartConfig = {
  * Everyone sees this, including people with no `llmCost:read` — it reports the
  * caller's own activity and nothing about anyone else's, which is why the
  * endpoint behind it carries no cost permission. For those users it is the whole
- * page, so it has to stand on its own: headline figures, the model mix behind
- * them, and the shape of the spend over the selected timeframe.
+ * page, so it has to stand on its own: headline figures and the shape of the
+ * spend over the selected timeframe.
  */
 export function MyUsageSummary({
   timeframe,
@@ -71,22 +65,10 @@ export function MyUsageSummary({
       <CardHeader>
         <CardTitle>Your usage</CardTitle>
         <CardDescription>
-          Your own activity over the selected timeframe. Only you and people who
-          can read organization-wide costs see these figures.
+          Your own activity over the selected timeframe. These figures are
+          personal to you; organization cost readers can also see them in the
+          organization breakdown.
         </CardDescription>
-        {/*
-          The headline answers "how much"; the question people ask next is
-          "what from", and that lives on its own page under Personal Settings
-          because it reports on a person rather than on the organization.
-        */}
-        <CardAction>
-          <Link
-            href="/account/usage"
-            className="text-sm font-medium underline-offset-4 hover:underline"
-          >
-            What drove this
-          </Link>
-        </CardAction>
       </CardHeader>
       <CardContent>
         {isPending ? (
@@ -160,40 +142,6 @@ export function MyUsageSummary({
                 </span>
               </SummaryTile>
             </div>
-
-            {stats.models.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-muted-foreground text-sm">Models</span>
-                {stats.models.slice(0, MODEL_BADGE_LIMIT).map((model) => (
-                  <Badge
-                    key={model.model}
-                    variant="secondary"
-                    className="max-w-full font-normal"
-                    title={model.model}
-                  >
-                    <span className="truncate">{model.model}</span>
-                  </Badge>
-                ))}
-                {stats.models.length > MODEL_BADGE_LIMIT && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="cursor-default font-normal"
-                      >
-                        +{stats.models.length - MODEL_BADGE_LIMIT}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      {stats.models
-                        .slice(MODEL_BADGE_LIMIT)
-                        .map((model) => model.model)
-                        .join(", ")}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            )}
 
             {showSpendChart && (
               <ChartContainer

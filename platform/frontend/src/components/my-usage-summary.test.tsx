@@ -114,28 +114,6 @@ describe("MyUsageSummary", () => {
     expect(screen.queryByText(/no recorded activity/i)).not.toBeInTheDocument();
   });
 
-  it("collapses the model mix past the badge limit rather than overflowing", () => {
-    mockStats({
-      ...baseStats,
-      models: ["a", "b", "c", "d", "e"].map((model) => ({
-        model,
-        requests: 1,
-        inputTokens: 1,
-        outputTokens: 1,
-        cacheReadTokens: 0,
-        billedCost: 0.1,
-        subscriptionCost: 0,
-      })),
-    });
-
-    render(<MyUsageSummary timeframe="30d" />);
-
-    expect(screen.getByText("a")).toBeInTheDocument();
-    expect(screen.getByText("c")).toBeInTheDocument();
-    expect(screen.queryByText("d")).not.toBeInTheDocument();
-    expect(screen.getByText("+2")).toBeInTheDocument();
-  });
-
   it("holds the request until the page has resolved its timeframe", () => {
     mockStats(undefined, { isPending: true });
 

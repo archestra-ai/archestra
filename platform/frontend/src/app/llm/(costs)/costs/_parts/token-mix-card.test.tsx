@@ -18,7 +18,7 @@ function makeMix(overrides: Partial<TokenMix> = {}): TokenMix {
   };
 }
 
-describe("TokenMixCard", () => {
+describe("My Usage TokenMixCard", () => {
   it("reports the share of readable context that came from cache", () => {
     render(
       <TokenMixCard

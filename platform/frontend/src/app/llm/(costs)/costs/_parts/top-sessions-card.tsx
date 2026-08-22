@@ -3,11 +3,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { format } from "date-fns";
 import {
-  formatCost,
   formatDuration,
   formatTokens,
   percentOf,
-} from "@/app/account/usage/_parts/usage-format";
+} from "@/app/llm/(costs)/costs/_parts/usage-format";
+import { BilledCost } from "@/components/billed-cost";
 import {
   Card,
   CardContent,
@@ -55,7 +55,7 @@ export function TopSessionsCard({
           {sessions.length > 0 ? (
             <span>
               These {sessions.length} sessions account for {listedShare}% of
-              your usage in this timeframe.
+              your list-price usage in this timeframe.
               {unsessionedRequests > 0 ? (
                 <span>
                   {" "}
@@ -85,7 +85,7 @@ export function TopSessionsCard({
                   <TableHead className="text-right">Requests</TableHead>
                   <TableHead className="text-right">Duration</TableHead>
                   <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
+                  <TableHead className="text-right">Spend</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -122,7 +122,17 @@ export function TopSessionsCard({
                       {formatTokens(session.tokens)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCost(session.cost)}
+                      <BilledCost
+                        cost={String(session.cost)}
+                        billedCost={String(session.billedCost)}
+                        subscriptionCost={String(
+                          Math.max(0, session.cost - session.billedCost),
+                        )}
+                        baselineCost={String(session.billedCost)}
+                        tooltip="hover"
+                        format="number"
+                        className="justify-end whitespace-nowrap"
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

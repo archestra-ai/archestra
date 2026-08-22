@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { usePermissionMap } from "@/lib/auth/auth.query";
 import CostsLayout from "./layout";
 
 vi.mock("next/navigation");
@@ -36,18 +36,13 @@ vi.mock("@/components/external-docs-link", () => ({
 const setPermissions = ({
   canReadCosts,
   canReadLimits,
-  canReadOptimizationRules,
 }: {
   canReadCosts: boolean;
   canReadLimits: boolean;
-  canReadOptimizationRules: boolean;
 }) => {
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: canReadCosts,
-  } as unknown as ReturnType<typeof useHasPermissions>);
   vi.mocked(usePermissionMap).mockReturnValue({
+    "/llm/costs/organization": canReadCosts,
     "/llm/limits": canReadLimits,
-    "/llm/optimization-rules": canReadOptimizationRules,
   } as unknown as ReturnType<typeof usePermissionMap>);
 };
 
@@ -61,46 +56,43 @@ describe("CostsLayout", () => {
     setPermissions({
       canReadCosts: false,
       canReadLimits: false,
-      canReadOptimizationRules: false,
     });
 
     render(<CostsLayout>content</CostsLayout>);
 
-    // Costs is ungated now, so it stays; the siblings would only ever render a
+    // My Usage is ungated, so it stays; the siblings would only ever render a
     // forbidden page for this reader.
     expect(screen.getByTestId("tabs")).toHaveTextContent("/llm/costs");
-    expect(screen.getByTestId("tabs")).not.toHaveTextContent("/llm/limits");
     expect(screen.getByTestId("tabs")).not.toHaveTextContent(
-      "/llm/optimization-rules",
+      "/llm/costs/organization",
     );
+    expect(screen.getByTestId("tabs")).not.toHaveTextContent("/llm/limits");
   });
 
   it("keeps every tab for a reader who may open them all", () => {
     setPermissions({
       canReadCosts: true,
       canReadLimits: true,
-      canReadOptimizationRules: true,
     });
 
     render(<CostsLayout>content</CostsLayout>);
 
     const tabs = screen.getByTestId("tabs");
     expect(tabs).toHaveTextContent("/llm/costs");
+    expect(tabs).toHaveTextContent("/llm/costs/organization");
     expect(tabs).toHaveTextContent("/llm/limits");
-    expect(tabs).toHaveTextContent("/llm/optimization-rules");
   });
 
-  it("describes the page as personal when organization-wide costs are out of reach", () => {
+  it("describes My Usage as personal", () => {
     setPermissions({
       canReadCosts: false,
       canReadLimits: false,
-      canReadOptimizationRules: false,
     });
 
     render(<CostsLayout>content</CostsLayout>);
 
     expect(screen.getByTestId("description")).toHaveTextContent(
-      /your own llm usage and spend/i,
+      /your own llm activity/i,
     );
     // No promise of figures this reader will not see.
     expect(screen.getByTestId("description")).not.toHaveTextContent(
@@ -109,10 +101,10 @@ describe("CostsLayout", () => {
   });
 
   it("describes the organization-wide view when the reader may see it", () => {
+    vi.mocked(usePathname).mockReturnValue("/llm/costs/organization");
     setPermissions({
       canReadCosts: true,
       canReadLimits: true,
-      canReadOptimizationRules: true,
     });
 
     render(<CostsLayout>content</CostsLayout>);

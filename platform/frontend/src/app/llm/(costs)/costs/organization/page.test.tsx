@@ -2,8 +2,7 @@ import type { StatisticsTimeFrame } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import StatisticsPage from "./page";
+import OrganizationCostsPage from "./page";
 
 const mockRouterPush = vi.fn();
 let mockSearchParams = new URLSearchParams();
@@ -16,11 +15,9 @@ const mockUseCostSavingsStatistics = vi.fn();
 const mockUseUserStatistics = vi.fn();
 const mockUseAppStatistics = vi.fn();
 const mockUseSkillStatistics = vi.fn();
-const mockUseMyStatistics = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/app/llm/(costs)/layout", () => ({
   useSetCostsAction: () => mockSetCostsAction,
@@ -46,8 +43,6 @@ vi.mock("@/lib/statistics.query", () => ({
     mockUseAppStatistics(params),
   useSkillStatistics: (params: StatisticsHookParams) =>
     mockUseSkillStatistics(params),
-  useMyStatistics: (params: StatisticsHookParams) =>
-    mockUseMyStatistics(params),
 }));
 
 vi.mock("recharts", () => ({
@@ -99,14 +94,7 @@ vi.mock("@/components/ui/custom-date-time-range-dialog", () => ({
   CustomDateTimeRangeDialog: () => null,
 }));
 
-/** Grants or denies `llmCost:read`, which decides what the page renders. */
-const setCanReadOrganizationCosts = (canRead: boolean) => {
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: canRead,
-  } as unknown as ReturnType<typeof useHasPermissions>);
-};
-
-describe("StatisticsPage", () => {
+describe("OrganizationCostsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -137,87 +125,54 @@ describe("StatisticsPage", () => {
     mockUseSkillStatistics.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
-    mockUseMyStatistics.mockReturnValue({
+  });
+
+  it("shows the organization-wide analytics", async () => {
+    render(<OrganizationCostsPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("People").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("my-usage-summary")).not.toBeInTheDocument();
+  });
+
+  it("summarizes billed, subscription-covered, request, and token totals", () => {
+    mockUseCostSavingsStatistics.mockReturnValue({
       data: {
-        requests: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        totalTokens: 0,
-        billedCost: 0,
-        subscriptionCost: 0,
-        activeDays: 0,
-        lastActiveAt: null,
-        models: [],
+        totalBaselineCost: 12,
+        totalActualCost: 8.25,
+        totalSavings: 3.75,
+        totalSubscriptionCost: 14.5,
+        totalToonSavings: 2,
+        totalCacheSavings: 1.75,
         timeSeries: [],
       },
-      isPending: false,
     });
-    setCanReadOrganizationCosts(true);
-  });
-
-  it("keeps the personal summary for a caller who cannot read organization-wide costs", async () => {
-    setCanReadOrganizationCosts(false);
-
-    render(<StatisticsPage />);
-
-    // The whole reason the page is reachable without `llmCost:read`.
-    await waitFor(() => {
-      expect(screen.getByTestId("my-usage-summary")).toBeInTheDocument();
-    });
-    // ...and nothing that reports on anyone else.
-    expect(screen.queryAllByText("People")).toHaveLength(0);
-    expect(screen.queryAllByText("Teams")).toHaveLength(0);
-    expect(screen.queryAllByText("Cost Savings")).toHaveLength(0);
-  });
-
-  it("does not request organization-wide statistics it may not read", async () => {
-    setCanReadOrganizationCosts(false);
-
-    render(<StatisticsPage />);
-
-    await waitFor(() => {
-      expect(mockUseMyStatistics).toHaveBeenCalled();
+    mockUseModelStatistics.mockReturnValue({
+      data: [
+        {
+          model: "example/model-a",
+          requests: 10,
+          inputTokens: 1_000,
+          outputTokens: 200,
+          cacheReadTokens: 4_000,
+          cost: 8.25,
+          percentage: 100,
+          timeSeries: [],
+        },
+      ],
     });
 
-    // Those endpoints would answer 403, so the queries stay disabled rather
-    // than firing a round of requests whose only outcome is a rejection.
-    for (const hook of [
-      mockUseTeamStatistics,
-      mockUseProfileStatistics,
-      mockUseModelStatistics,
-      mockUseCostSavingsStatistics,
-      mockUseUserStatistics,
-      mockUseAppStatistics,
-      mockUseSkillStatistics,
-    ]) {
-      expect(
-        hook.mock.calls.every(([params]) => params.enabled === false),
-      ).toBe(true);
-    }
-  });
+    render(<OrganizationCostsPage />);
 
-  it("shows the organization-wide charts alongside the summary when permitted", async () => {
-    render(<StatisticsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("my-usage-summary")).toBeInTheDocument();
-    });
-    expect(screen.getAllByText("People").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
-  });
-
-  it("asks for the caller's own usage on the same timeframe as the rest of the page", async () => {
-    mockSearchParams = new URLSearchParams([["timeframe", "7d"]]);
-
-    render(<StatisticsPage />);
-
-    await waitFor(() => {
-      expect(mockUseMyStatistics).toHaveBeenLastCalledWith({
-        timeframe: "7d",
-        enabled: true,
-      });
-    });
+    expect(screen.getAllByText("$8.25")).not.toHaveLength(0);
+    expect(screen.getByText("$14.50")).toBeInTheDocument();
+    expect(screen.getByText("5,200")).toBeInTheDocument();
+    expect(
+      screen.getByText("Metered usage charged at API rates"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("List-price value not billed")).toBeInTheDocument();
   });
 
   it("queries statistics with the selected custom timeframe", async () => {
@@ -225,7 +180,7 @@ describe("StatisticsPage", () => {
       "custom:2026-07-01T00:00:00.000Z_2026-07-31T23:59:59.999Z";
     mockSearchParams = new URLSearchParams([["timeframe", customTimeframe]]);
 
-    render(<StatisticsPage />);
+    render(<OrganizationCostsPage />);
 
     await waitFor(() => {
       expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
@@ -256,7 +211,7 @@ describe("StatisticsPage", () => {
   it("never enables the queries for the default timeframe when a persisted one exists", async () => {
     localStorage.setItem("cost-statistics-timeframe", "30d");
 
-    render(<StatisticsPage />);
+    render(<OrganizationCostsPage />);
 
     await waitFor(() => {
       expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
@@ -287,8 +242,8 @@ describe("StatisticsPage", () => {
         data: [
           {
             userId: "user-1",
-            userName: "Dana Reyes",
-            userEmail: "dana@example.com",
+            userName: "Example User A",
+            userEmail: "user-a@example.test",
             requests: 42,
             inputTokens: 900,
             outputTokens: 100,
@@ -309,11 +264,11 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findByText, getByText } = render(<StatisticsPage />);
+    const { findByText, getByText } = render(<OrganizationCostsPage />);
 
-    expect(await findByText("Dana Reyes")).toBeInTheDocument();
+    expect(await findByText("Example User A")).toBeInTheDocument();
     // Email is rendered so the row can be reconciled against an external roster.
-    expect(getByText("dana@example.com")).toBeInTheDocument();
+    expect(getByText("user-a@example.test")).toBeInTheDocument();
     expect(getByText("1,000")).toBeInTheDocument();
     expect(getByText("claude-sonnet-4")).toBeInTheDocument();
     // Usage is visible even though billed spend is $0.
@@ -327,7 +282,7 @@ describe("StatisticsPage", () => {
       ["timeframe", "custom:not-a-date_also-not-a-date"],
     ]);
 
-    const { findByText } = render(<StatisticsPage />);
+    const { findByText } = render(<OrganizationCostsPage />);
 
     expect(await findByText("Cost Savings")).toBeInTheDocument();
   });
@@ -355,7 +310,7 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findAllByTestId } = render(<StatisticsPage />);
+    const { findAllByTestId } = render(<OrganizationCostsPage />);
 
     const [axis] = await findAllByTestId("chart-axis-labels");
     const labels = (axis.textContent ?? "").split("|");
@@ -370,8 +325,8 @@ describe("StatisticsPage", () => {
         data: [
           {
             userId: "user-2",
-            userName: "Joey Orlando",
-            userEmail: "joey@example.com",
+            userName: "Example User B",
+            userEmail: "user-b@example.test",
             requests: 15260,
             inputTokens: 19000000,
             outputTokens: 572756,
@@ -389,7 +344,7 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findByText, queryByText } = render(<StatisticsPage />);
+    const { findByText, queryByText } = render(<OrganizationCostsPage />);
 
     // The Cost column must read as spend. It rendered the savings percentage
     // ("0%") for everyone without subscription usage while `tooltip` was left
@@ -404,8 +359,8 @@ describe("StatisticsPage", () => {
         data: [
           {
             userId: "user-3",
-            userName: "Ildar Iskhakov",
-            userEmail: "ildar@example.com",
+            userName: "Example User C",
+            userEmail: "user-c@example.test",
             requests: 118,
             inputTokens: 3000000,
             outputTokens: 883994,
@@ -422,8 +377,8 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findByText, container } = render(<StatisticsPage />);
-    await findByText("Ildar Iskhakov");
+    const { findByText, container } = render(<OrganizationCostsPage />);
+    await findByText("Example User C");
 
     // `table-fixed` splits width equally without explicit widths, which left
     // the Models and Cost columns narrower than their badges — the badges then
@@ -462,7 +417,7 @@ describe("StatisticsPage", () => {
       ],
     });
 
-    const { getAllByTestId } = render(<StatisticsPage />);
+    const { getAllByTestId } = render(<OrganizationCostsPage />);
 
     // The Models chart is the one whose config labels are model ids.
     const chart = getAllByTestId("chart").find((el) =>
@@ -553,7 +508,7 @@ describe("StatisticsPage", () => {
       ],
     });
 
-    const { container } = render(<StatisticsPage />);
+    const { container } = render(<OrganizationCostsPage />);
 
     const tablePanels = Array.from(
       container.querySelectorAll(".max-h-\\[280px\\]"),
@@ -573,7 +528,7 @@ describe("StatisticsPage", () => {
           {
             appId: "app-1",
             appName: "Sales Dashboard",
-            authorName: "Dana Reyes",
+            authorName: "Example User A",
             createdAt: "2026-07-20T10:00:00.000Z",
             buildRequests: 6,
             buildInputTokens: 20000,
@@ -598,7 +553,9 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { container, findByText, getByText } = render(<StatisticsPage />);
+    const { container, findByText, getByText } = render(
+      <OrganizationCostsPage />,
+    );
 
     expect(await findByText("Sales Dashboard")).toBeInTheDocument();
     // Build and runtime spend are reported separately: an app is not LLM-free
@@ -649,7 +606,7 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findByText, getByText } = render(<StatisticsPage />);
+    const { findByText, getByText } = render(<OrganizationCostsPage />);
 
     expect(await findByText("Made In The UI")).toBeInTheDocument();
     // An em dash, not $0.00: nothing was spent building it *that we know of*.
@@ -680,7 +637,7 @@ describe("StatisticsPage", () => {
       },
     });
 
-    const { findByText, getByText } = render(<StatisticsPage />);
+    const { findByText, getByText } = render(<OrganizationCostsPage />);
 
     expect(await findByText("PDF Extraction")).toBeInTheDocument();
     expect(getByText("6,420")).toBeInTheDocument();

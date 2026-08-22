@@ -481,6 +481,14 @@ describe("GET /api/statistics/me", () => {
       "claude-opus-4",
       "gpt-4o",
     ]);
+    expect(body.models[0]).toMatchObject({
+      totalTokens: 500,
+      percentage: expect.closeTo(83.333333, 5),
+    });
+    expect(body.models[1]).toMatchObject({
+      totalTokens: 100,
+      percentage: expect.closeTo(16.666667, 5),
+    });
     expect(body.timeSeries.length).toBeGreaterThan(0);
   });
 
@@ -782,15 +790,64 @@ describe("GET /api/statistics/me/breakdown", () => {
     expect(top).toMatchObject({
       requests: 2,
       model: "claude-opus-4",
-      client: "anthropic_claude",
+      client: "Claude",
       durationMinutes: 30,
     });
     expect(top.cost).toBeCloseTo(8, 10);
+
+    expect(body.clients).toEqual([
+      expect.objectContaining({
+        client: "Claude",
+        requests: 3,
+        totalTokens: 420,
+        percentage: expect.closeTo(95.454545, 5),
+      }),
+      expect.objectContaining({
+        client: null,
+        requests: 1,
+        totalTokens: 20,
+        percentage: expect.closeTo(4.545455, 5),
+      }),
+    ]);
 
     // The denominator covers everything in the timeframe, including the
     // unsessioned request, so "these sessions were N% of your usage" is honest.
     expect(body.totalCost).toBeCloseTo(9.5, 10);
     expect(body.unsessionedRequests).toBe(1);
+  });
+
+  test("resolves internal agent ids instead of exposing opaque client labels", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const servingAgent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+    });
+    const callingAgent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      name: "Example calling agent",
+    });
+    await makeInteraction(servingAgent.id, {
+      userId: currentUser.id,
+      sessionId: "agent-session",
+      inputTokens: 100,
+      outputTokens: 20,
+      cost: "1.0000000000",
+      externalAgentId: callingAgent.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.clients[0].client).toBe("Agent: Example calling agent");
+    expect(body.topSessions[0].client).toBe("Agent: Example calling agent");
+    expect(JSON.stringify(body)).not.toContain(callingAgent.id);
   });
 
   test("never reports anyone else's usage", async ({

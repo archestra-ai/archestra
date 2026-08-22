@@ -51,6 +51,24 @@ export const UserModelUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Share of this user's input + output tokens. */
+  percentage: z.number(),
+  billedCost: z.number(),
+  subscriptionCost: z.number(),
+});
+
+/** One client application's slice of the caller's usage. */
+export const MyClientUsageSchema = z.object({
+  /** Known client-family label, raw attribution value, or null when absent. */
+  client: z.string().nullable(),
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Share of the caller's input + output tokens. */
+  percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
 });
@@ -193,7 +211,7 @@ export const MySessionCostSchema = z.object({
   durationMinutes: z.number(),
   /** Heaviest model in the session, by request count. */
   model: z.string().nullable(),
-  /** Client attribution (`external_agent_id`), when the caller supplied one. */
+  /** Human-readable client attribution, when one could be resolved. */
   client: z.string().nullable(),
 });
 
@@ -208,6 +226,8 @@ export const MySessionCostSchema = z.object({
  */
 export const MyUsageBreakdownSchema = z.object({
   tokenMix: MyTokenMixSchema,
+  /** The caller's usage grouped by client application, heaviest first. */
+  clients: z.array(MyClientUsageSchema),
   /** Ascending by band; bands with no activity are omitted. */
   contextBuckets: z.array(MyContextBucketSchema),
   /** The caller's costliest sessions in the timeframe, heaviest first. */
@@ -460,6 +480,7 @@ export type AgentStatistics = z.infer<typeof AgentStatisticsSchema>;
 export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type UserStatistics = z.infer<typeof UserStatisticsSchema>;
 export type UserModelUsage = z.infer<typeof UserModelUsageSchema>;
+export type MyClientUsage = z.infer<typeof MyClientUsageSchema>;
 export type MyStatistics = z.infer<typeof MyStatisticsSchema>;
 export type MyContextBucketId = z.infer<typeof MyContextBucketSchema>["bucket"];
 export type MyUsageBreakdown = z.infer<typeof MyUsageBreakdownSchema>;

@@ -2081,11 +2081,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
-  // Intentionally ungated: the page leads with the caller's own cost and usage
-  // summary, which everyone may see. The organization-wide charts on it are
-  // gated in-page on `llmCost:read` instead (see the Costs page), and the
-  // statistics endpoints behind them enforce the same permission server-side.
+  // Intentionally ungated: this page is fixed to the caller's own usage.
   "/llm/costs": {},
+  "/llm/costs/organization": { llmCost: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

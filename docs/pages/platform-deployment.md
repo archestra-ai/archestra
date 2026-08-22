@@ -1185,6 +1185,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
   - Default: `true`
   - When on, traffic fulfilled by a subscription credential — detected from the credential format, e.g. Anthropic `sk-ant-oat…` OAuth tokens from a Claude Max/Pro login — is recorded as `subscription` billing mode and reported as $0 billed spend, keeping its list-price estimate for comparison
+  - Anthropic responses fulfilled from paid usage credits after a Max/Pro allowance is exhausted are reclassified as `metered` from the upstream rate-limit headers, because those requests are charged at API rates
   - Set to `false` to treat all traffic as metered
   - See: [Costs and Limits](/docs/platform-costs-and-limits#subscription-vs-metered-cost)
 

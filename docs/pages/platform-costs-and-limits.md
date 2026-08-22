@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-21
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,7 +11,7 @@ Archestra tracks LLM usage costs, enforces usage limits, and records savings fro
 
 ## Statistics
 
-The statistics view is the rollup layer for LLM traffic. It aggregates usage by time range, team, profile, and model so you can answer questions like:
+The **Costs** tab is the organization-wide rollup for LLM traffic. It starts with billed spend, subscription-covered usage, request, and token totals, then breaks the same timeframe down by team, agent, LLM proxy, model, person, app, and skill. Use it to answer questions like:
 
 - which teams are driving spend
 - which models are responsible for the largest share of cost
@@ -26,13 +26,25 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
-## Your Own Usage
+Reading organization-wide costs requires the `llmCost:read` permission. The **My Usage** tab remains available without it.
 
-The Costs page opens with a summary of your own activity: what you spent, how many requests you made, how many tokens they used, and how many days you were active. It also shows the models you reach for and how your spend moved over the selected timeframe.
+![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
 
-Everyone sees this summary. The Costs page stays reachable without permission to read organization-wide costs — a reader without it sees their own figures and none of the other charts.
+## My Usage
 
-The same data is available from the API at `GET /api/statistics/me`. It reports only the calling user's activity, so it needs no cost permission.
+The **My Usage** tab shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
+
+The lower sections explain the shape of that usage:
+
+- **Token mix** separates fresh input, cache reads, cache writes, and output.
+- **Context size** groups requests by how much context the model received.
+- **Top sessions** shows which sessions concentrated the most list-price usage, along with their dominant model and client.
+
+Everyone can open **My Usage**. A user who cannot read organization-wide costs still sees the **Costs & Limits** sidebar item and the **My Usage** tab, but the permission-gated **Costs** and **Limits** tabs are hidden.
+
+![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-costs-and-limits_my-usage.webp)
+
+The same data is available from `GET /api/statistics/me` and `GET /api/statistics/me/breakdown`. Both endpoints report only the calling user's activity, so neither needs the organization-wide cost permission.
 
 Your summary counts every request Archestra attributed to you in the current organization, whichever agent served it.
 
@@ -80,7 +92,11 @@ Each interaction records a billing mode. Metered traffic is billed per token, so
 
 The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
 
-Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example), ChatGPT subscription logins (Codex), and X Premium (SuperGrok) logins on xAI use credentials with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
+Archestra initially detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example), ChatGPT subscription logins (Codex), and X Premium (SuperGrok) logins on xAI use credentials with a distinct format, so no configuration is needed.
+
+Claude Max and Pro users can enable paid usage credits after their included allowance is exhausted. Anthropic identifies a successful response fulfilled from those credits in its rate-limit response headers. Archestra records that interaction as metered, because it is charged at API rates, while responses fulfilled from the plan remain subscription-covered. If those headers are missing or unfamiliar, Archestra keeps the credential-derived classification.
+
+Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
 
 Detection applies to new interactions. Traffic recorded before detection existed stays metered.
 

@@ -241,7 +241,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMyUsageBreakdown,
         description:
-          "Explain the calling user's own usage: the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.",
+          "Explain the calling user's own usage: the client applications that generated it, the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(MyUsageBreakdownSchema),

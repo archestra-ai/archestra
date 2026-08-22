@@ -1,4 +1,5 @@
 import {
+  clientForExternalAgentIds,
   getStatisticsBucketIntervalMinutes,
   type PaginationQuery,
   parseCustomStatisticsTimeframe,
@@ -32,6 +33,7 @@ import type {
   ChatCostBaseline,
   CostSavingsStatistics,
   ModelStatistics,
+  MyClientUsage,
   MyContextBucketId,
   MyStatistics,
   MyUsageBreakdown,
@@ -47,6 +49,7 @@ import type {
   UserStatistics,
   UserStatisticsSortBy,
 } from "@/types";
+import { isUuid } from "@/utils/uuid";
 import AgentTeamModel from "./agent-team";
 
 class StatisticsModel {
@@ -931,7 +934,7 @@ class StatisticsModel {
     const listCostExpr = sql<number>`CAST(COALESCE(SUM(${interactions.cost}), 0) AS DOUBLE PRECISION)`;
     const tokensExpr = sql<number>`CAST(COALESCE(SUM(${interactions.inputTokens}), 0) + COALESCE(SUM(${interactions.outputTokens}), 0) AS DOUBLE PRECISION)`;
 
-    const [[mix], buckets, sessions] = await Promise.all([
+    const [[mix], buckets, sessions, clientRows] = await Promise.all([
       db
         .select({
           freshInputTokens: tokenSum(interactions.inputTokens),
@@ -972,6 +975,19 @@ class StatisticsModel {
         .groupBy(interactions.sessionId)
         .orderBy(desc(listCostExpr))
         .limit(sessionLimit),
+      db
+        .select({
+          client: interactions.externalAgentId,
+          requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          inputTokens: tokenSum(interactions.inputTokens),
+          outputTokens: tokenSum(interactions.outputTokens),
+          cacheReadTokens: tokenSum(interactions.cacheReadTokens),
+          billedCost: billedSum(interactions.cost, "DOUBLE PRECISION"),
+          subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+        })
+        .from(interactions)
+        .where(whereClause)
+        .groupBy(interactions.externalAgentId),
     ]);
 
     const sessionIds = sessions
@@ -1006,6 +1022,63 @@ class StatisticsModel {
       ]),
     );
 
+    const clientAgentIds = [
+      ...new Set(
+        [
+          ...clientRows.map(({ client }) => client),
+          ...labels.map(({ client }) => client),
+        ]
+          .map(extractUsageClientAgentId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const clientAgentRows = clientAgentIds.length
+      ? await db
+          .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+          .from(schema.agentsTable)
+          .where(inArray(schema.agentsTable.id, clientAgentIds))
+      : [];
+    const clientAgentNames = new Map(
+      clientAgentRows.map(({ id, name }) => [id, name]),
+    );
+
+    const clientsByLabel = new Map<string | null, MyClientUsage>();
+    for (const row of clientRows) {
+      const client = formatUsageClient(row.client, clientAgentNames);
+      const current = clientsByLabel.get(client) ?? {
+        client,
+        requests: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 0,
+        percentage: 0,
+        billedCost: 0,
+        subscriptionCost: 0,
+      };
+      current.requests += Number(row.requests) || 0;
+      current.inputTokens += Number(row.inputTokens) || 0;
+      current.outputTokens += Number(row.outputTokens) || 0;
+      current.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      current.totalTokens = current.inputTokens + current.outputTokens;
+      current.billedCost += Number(row.billedCost) || 0;
+      current.subscriptionCost += Number(row.subscriptionCost) || 0;
+      clientsByLabel.set(client, current);
+    }
+    const clientTotalTokens = Array.from(clientsByLabel.values()).reduce(
+      (sum, client) => sum + client.totalTokens,
+      0,
+    );
+    const clients = Array.from(clientsByLabel.values())
+      .map((client) => ({
+        ...client,
+        percentage:
+          clientTotalTokens > 0
+            ? (client.totalTokens / clientTotalTokens) * 100
+            : 0,
+      }))
+      .sort((a, b) => b.totalTokens - a.totalTokens);
+
     return {
       tokenMix: {
         freshInputTokens: Number(mix?.freshInputTokens) || 0,
@@ -1015,6 +1088,7 @@ class StatisticsModel {
         cacheCost: Number(mix?.cacheCost) || 0,
         cacheSavings: Number(mix?.cacheSavings) || 0,
       },
+      clients,
       contextBuckets: CONTEXT_BUCKET_ORDER.flatMap((bucket) => {
         const row = buckets.find((candidate) => candidate.bucket === bucket);
         return row
@@ -1051,7 +1125,10 @@ class StatisticsModel {
               ),
             ),
             model: labelBySession.get(sessionId)?.model ?? null,
-            client: labelBySession.get(sessionId)?.client ?? null,
+            client: formatUsageClient(
+              labelBySession.get(sessionId)?.client ?? null,
+              clientAgentNames,
+            ),
           },
         ];
       }),
@@ -2139,10 +2216,24 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cacheReadTokens: Number(row.cacheReadTokens) || 0,
+        totalTokens:
+          (Number(row.inputTokens) || 0) + (Number(row.outputTokens) || 0),
+        percentage: 0,
         billedCost: Number(row.billedCost) || 0,
         subscriptionCost: Number(row.subscriptionCost) || 0,
       });
       byUser.set(row.userId, entries);
+    }
+
+    for (const entries of byUser.values()) {
+      const totalTokens = entries.reduce(
+        (sum, entry) => sum + entry.totalTokens,
+        0,
+      );
+      for (const entry of entries) {
+        entry.percentage =
+          totalTokens > 0 ? (entry.totalTokens / totalTokens) * 100 : 0;
+      }
     }
     return byUser;
   }
@@ -2164,6 +2255,34 @@ class StatisticsModel {
  */
 function tokenSum(column: AnyColumn): SQL<number> {
   return sql<number>`CAST(COALESCE(SUM(${column}), 0) AS DOUBLE PRECISION)`;
+}
+
+/** Resolve the executing agent UUID from a direct id or delegation chain. */
+function extractUsageClientAgentId(
+  externalAgentId: string | null,
+): string | null {
+  if (!externalAgentId) return null;
+  const candidate = externalAgentId.split(":").at(-1);
+  return candidate && isUuid(candidate) ? candidate : null;
+}
+
+/** Turn stored client attribution into a useful, non-opaque display label. */
+function formatUsageClient(
+  externalAgentId: string | null,
+  agentNames: Map<string, string>,
+): string | null {
+  if (!externalAgentId) return null;
+
+  const family = clientForExternalAgentIds([externalAgentId]);
+  if (family) return family.label;
+
+  const agentId = extractUsageClientAgentId(externalAgentId);
+  if (agentId) {
+    const agentName = agentNames.get(agentId);
+    return agentName ? `Agent: ${agentName}` : "Archestra agent";
+  }
+
+  return externalAgentId;
 }
 
 /**

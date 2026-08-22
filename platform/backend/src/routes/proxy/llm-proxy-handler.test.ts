@@ -1071,6 +1071,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let testAgent: Agent;
   let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: AnthropicStubOptions;
+  let anthropicResponseHeaders: Headers | undefined;
 
   beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
@@ -1081,12 +1082,18 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
 
     openAiStubOptions = {};
     anthropicStubOptions = {};
+    anthropicResponseHeaders = undefined;
 
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient(openAiStubOptions) as never,
     );
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
-      () => createAnthropicTestClient(anthropicStubOptions) as never,
+      (_apiKey, options) => {
+        if (anthropicResponseHeaders) {
+          options.onResponseHeaders?.(anthropicResponseHeaders);
+        }
+        return createAnthropicTestClient(anthropicStubOptions) as never;
+      },
     );
 
     testAgent = await makeAgent({ name: "Blocked Tools Agent" });
@@ -1723,6 +1730,35 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       );
       expect(interactions).toHaveLength(1);
       expect(interactions[0].billingMode).toBe(expected);
+    });
+
+    test("persists OAuth traffic fulfilled from usage credits as metered", async () => {
+      mockEvaluatePolicies.mockResolvedValue(null);
+      anthropicResponseHeaders = new Headers({
+        "anthropic-ratelimit-unified-status": "rejected",
+        "anthropic-ratelimit-unified-overage-status": "allowed",
+      });
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "sk-ant-oat-token",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].billingMode).toBe("metered");
     });
 
     test("a refusal replaces the entire buffered message", async () => {

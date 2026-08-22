@@ -89386,6 +89386,8 @@ export type GetUserStatisticsResponses = {
                 inputTokens: number;
                 outputTokens: number;
                 cacheReadTokens: number;
+                totalTokens: number;
+                percentage: number;
                 billedCost: number;
                 subscriptionCost: number;
             }>;
@@ -89501,6 +89503,8 @@ export type GetMyStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            totalTokens: number;
+            percentage: number;
             billedCost: number;
             subscriptionCost: number;
         }>;
@@ -89600,6 +89604,17 @@ export type GetMyUsageBreakdownResponses = {
             cacheCost: number;
             cacheSavings: number;
         };
+        clients: Array<{
+            client: string | null;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            totalTokens: number;
+            percentage: number;
+            billedCost: number;
+            subscriptionCost: number;
+        }>;
         contextBuckets: Array<{
             bucket: 'under32k' | 'under128k' | 'under256k' | 'over256k';
             requests: number;

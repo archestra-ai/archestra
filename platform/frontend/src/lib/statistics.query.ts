@@ -46,11 +46,11 @@ export function useMyStatistics({
 }
 
 /**
- * What produced the signed-in user's usage: token price bands, context-size
- * distribution and their costliest sessions.
+ * What produced the signed-in user's usage: clients, token price bands,
+ * context-size distribution, and costliest sessions.
  *
  * Separate from {@link useMyStatistics} because it is separate server-side —
- * three more aggregations over the largest table, which only the detail page
+ * several more aggregations over the largest table, which only the detail page
  * asks for. Needs no `llmCost:read` for the same reason its sibling doesn't.
  */
 export function useMyUsageBreakdown({

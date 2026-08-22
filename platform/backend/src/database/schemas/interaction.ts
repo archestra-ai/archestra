@@ -21,6 +21,7 @@ import type {
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
+  ToolCallBlock,
   ToonSkipReason,
   UnsafeContextBoundary,
 } from "@/types";
@@ -216,6 +217,17 @@ const interactionsTable = pgTable(
     unsafeContextBoundary: jsonb(
       "unsafe_context_boundary",
     ).$type<UnsafeContextBoundary>(),
+    /**
+     * Non-null when a guardrail refused this turn's tool calls. Lets a refused
+     * turn be told apart from a healthy one — and counted per session — without
+     * decrypting anything, which nothing else on the row allows.
+     *
+     * Metadata only, and deliberately NOT one of the encrypted content columns:
+     * it carries the block reason and a count, never tool names or arguments.
+     * No index — this is analytics, not a hot-path lookup, and `interactions`
+     * is far too large to take a non-concurrent index build in a migration.
+     */
+    toolCallBlock: jsonb("tool_call_block").$type<ToolCallBlock>(),
     /**
      * Non-null marks this row's five content columns (request, processedRequest,
      * response, dualLlmAnalyses, unsafeContextBoundary) as encrypted under an

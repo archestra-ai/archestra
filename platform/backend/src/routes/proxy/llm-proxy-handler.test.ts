@@ -1531,6 +1531,47 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       );
     });
 
+    // The streaming path decides the refusal inside a try and writes the
+    // interaction in the finally, so the marker has to survive that hop — a row
+    // that does not say it was refused is indistinguishable from a healthy one.
+    test("a streamed refusal marks the interaction row", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolCallCount: 1,
+      });
+    });
+
     // A refusal replaces the recorded turn with the refusal text alone, so the
     // text the client already saw streaming is not in the record. Pinned as the
     // existing behaviour: withholding tool calls does not change it either way.

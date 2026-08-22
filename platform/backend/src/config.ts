@@ -2041,9 +2041,7 @@ const config = {
      * Skills through gateways and projecting external Skills from installed
      * servers. Deployment-global; blank falls back to ARCHESTRA_BETA.
      */
-    skillsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_MCP_SKILLS_ENABLED,
-    ),
+    skillsEnabled: betaFeatureEnabled(process.env.ARCHESTRA_MCP_SKILLS_ENABLED),
   },
   mcpServer: {
     /**

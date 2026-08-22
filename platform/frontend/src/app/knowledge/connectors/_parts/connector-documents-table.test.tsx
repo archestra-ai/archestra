@@ -127,6 +127,22 @@ describe("ConnectorDocumentsTable", () => {
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
   });
 
+  it("reaches the source through a row action instead of a column of near-identical URLs", () => {
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
+
+    // Every document on one connector shares a host and a URL shape, so the
+    // spelled-out column was dead weight; the link itself is what it was for.
+    expect(
+      screen.queryByText("https://example.com/quarterly-plan"),
+    ).not.toBeInTheDocument();
+    const openLink = screen.getAllByLabelText(/^Open at source/)[0];
+    expect(openLink).toHaveAttribute(
+      "href",
+      "https://example.com/quarterly-plan",
+    );
+    expect(openLink).toHaveAttribute("target", "_blank");
+  });
+
   it("opens preview dialog from row action", async () => {
     const user = userEvent.setup();
     render(<ConnectorDocumentsTable connectorId="connector-1" />);

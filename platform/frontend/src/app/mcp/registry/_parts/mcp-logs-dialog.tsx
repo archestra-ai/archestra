@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LogConsole } from "@/components/log-console";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -147,7 +148,6 @@ export function McpLogsContent({
   const setActiveTab = (tab: McpLogsTab) => {
     if (!controlledTab) setInternalTab(tab);
   };
-  const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -407,17 +407,6 @@ export function McpLogsContent({
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const handleCopyLogs = useCallback(async () => {
-    try {
-      await copyToClipboard(streamedLogs);
-      setCopied(true);
-      toast.success("Logs copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    } catch (_error) {
-      toast.error("Failed to copy logs");
-    }
-  }, [streamedLogs]);
-
   const handleCopyCommand = useCallback(async () => {
     try {
       await copyToClipboard(command);
@@ -575,82 +564,53 @@ export function McpLogsContent({
                 </div>
               </div>
 
-              <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
-                <ScrollArea
-                  ref={scrollAreaRef}
-                  className="flex-1 overflow-auto"
-                >
-                  <div className="p-4">
-                    {streamError ? (
-                      <div
-                        className="text-red-400 font-mono text-sm"
-                        data-testid={E2eTestId.McpLogsError}
-                      >
-                        Error loading logs: {streamError}
+              <LogConsole
+                className="flex-1"
+                scrollAreaRef={scrollAreaRef}
+                content={isWaitingForLogs ? "" : streamedLogs}
+                contentTestId={E2eTestId.McpLogsContent}
+                errorTestId={E2eTestId.McpLogsError}
+                error={
+                  streamError ? `Error loading logs: ${streamError}` : null
+                }
+                placeholder={
+                  isWaitingForLogs ? (
+                    <div className="text-emerald-400 font-mono text-sm">
+                      {streamingText}
+                    </div>
+                  ) : isDeploymentFailed && currentDeploymentStatus?.error ? (
+                    <div className="text-red-400 font-mono text-sm">
+                      <div className="mb-2">
+                        Deployment failed: {currentDeploymentStatus.error}
                       </div>
-                    ) : isWaitingForLogs ? (
-                      <div className="text-emerald-400 font-mono text-sm">
-                        {streamingText}
+                      <div className="text-slate-400">
+                        No container logs available. Use the manual command
+                        below to inspect the pod.
                       </div>
-                    ) : streamedLogs ? (
-                      <pre
-                        className="text-emerald-400 font-mono text-xs whitespace-pre-wrap"
-                        data-testid={E2eTestId.McpLogsContent}
-                      >
-                        {streamedLogs}
-                      </pre>
-                    ) : isDeploymentFailed && currentDeploymentStatus?.error ? (
-                      <div className="text-red-400 font-mono text-sm">
-                        <div className="mb-2">
-                          Deployment failed: {currentDeploymentStatus.error}
-                        </div>
-                        <div className="text-slate-400">
-                          No container logs available. Use the manual command
-                          below to inspect the pod.
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-slate-400 font-mono text-sm">
-                        No logs available
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
-                  {
-                    /* SPDX-SnippetBegin */
-                    /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
-                    /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
-                    noPodToStream ? (
-                      <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono">
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600" />
-                        <span>No pod</span>
-                      </div>
-                    ) : // SPDX-SnippetEnd
-                    isStreaming && !streamError ? (
-                      <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                        </span>
-                        <span>Streaming</span>
-                      </div>
-                    ) : (
-                      <div />
-                    )
-                  }
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyLogs}
-                    disabled={!!streamError || !streamedLogs}
-                    className="h-6 px-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                  >
-                    <Copy className="h-3 w-3 mr-1" />
-                    {copied ? "Copied!" : "Copy"}
-                  </Button>
-                </div>
-              </div>
+                    </div>
+                  ) : undefined
+                }
+                status={
+                  /* SPDX-SnippetBegin */
+                  /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                  /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                  noPodToStream ? (
+                    <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono">
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600" />
+                      <span>No pod</span>
+                    </div>
+                  ) : // SPDX-SnippetEnd
+                  isStreaming && !streamError ? (
+                    <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                      </span>
+                      <span>Streaming</span>
+                    </div>
+                  ) : null
+                }
+              />
             </div>
 
             {command && (

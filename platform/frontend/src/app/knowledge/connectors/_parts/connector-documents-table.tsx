@@ -2,12 +2,11 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
-import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AclBadges } from "@/app/knowledge/connectors/_parts/acl-badges";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { RelativeTime } from "@/components/relative-time";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TableFilters } from "@/components/table-filters";
@@ -37,7 +36,6 @@ import {
   useConnectorDocuments,
   useDeleteConnectorDocument,
 } from "@/lib/knowledge/kb-document.query";
-import { formatDate } from "@/lib/utils";
 import { GROUP_ROSTER_NOUN, type RosterNoun } from "./roster-noun";
 
 type PaginationMeta =
@@ -180,9 +178,12 @@ export function ConnectorDocumentsTable({
         id: "title",
         accessorKey: "title",
         header: "Title",
-        size: 280,
+        // The one cell with genuinely variable content, so it takes the width
+        // the spelled-out Source URL column used to occupy.
+        size: 460,
+        minSize: 240,
         cell: ({ row }) => (
-          <div className="flex items-center gap-2 max-w-[400px]">
+          <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
             <button
               type="button"
@@ -191,36 +192,16 @@ export function ConnectorDocumentsTable({
                 event.stopPropagation();
                 openPreviewDialog(row.original);
               }}
-              title={row.original.title}
+              title={
+                row.original.sourceUrl
+                  ? `${row.original.title}\n${row.original.sourceUrl}`
+                  : row.original.title
+              }
             >
               {row.original.title}
             </button>
           </div>
         ),
-      },
-      {
-        id: "sourceUrl",
-        accessorKey: "sourceUrl",
-        header: "Source URL",
-        size: 240,
-        cell: ({ row }) =>
-          row.original.sourceUrl ? (
-            <Link
-              href={row.original.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 min-w-0 text-sm text-muted-foreground hover:text-foreground hover:underline"
-              onClick={(event) => event.stopPropagation()}
-              title={row.original.sourceUrl}
-            >
-              <span className="truncate max-w-[300px]">
-                {row.original.sourceUrl}
-              </span>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            </Link>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
-          ),
       },
       {
         id: "acl",
@@ -242,26 +223,31 @@ export function ConnectorDocumentsTable({
         header: "Last Updated",
         size: 160,
         cell: ({ row }) => (
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Clock className="h-3.5 w-3.5 shrink-0" />
-            <span title={formatDate({ date: row.original.updatedAt })}>
-              {formatDistanceToNow(new Date(row.original.updatedAt), {
-                addSuffix: true,
-              })}
-            </span>
-          </div>
+          <RelativeTime date={row.original.updatedAt} showIcon />
         ),
       },
       {
         id: "actions",
         header: "Actions",
-        size: 90,
+        size: 130,
         cell: ({ row }) => {
+          const { sourceUrl } = row.original;
           const actions: TableRowAction[] = [
             {
               icon: <Eye className="h-4 w-4" />,
               label: "Preview",
               onClick: () => openPreviewDialog(row.original),
+            },
+            // Every document on one connector shares a host and a URL shape,
+            // so a column spelling each one out was a column of near-identical
+            // strings. The link itself is what anyone wanted from it.
+            {
+              icon: <ExternalLink className="h-4 w-4" />,
+              label: "Open at source",
+              href: sourceUrl ?? undefined,
+              external: true,
+              disabled: !sourceUrl,
+              disabledTooltip: "This document has no source URL",
             },
             {
               icon: <Trash2 className="h-4 w-4" />,

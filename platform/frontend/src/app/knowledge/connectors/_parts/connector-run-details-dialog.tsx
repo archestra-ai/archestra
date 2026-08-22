@@ -1,7 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { contentRunPhase } from "@/app/knowledge/connectors/_parts/content-run-phase";
+import { formatRunDuration } from "@/app/knowledge/connectors/_parts/run-duration";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { LogConsole } from "@/components/log-console";
+import { RelativeTime } from "@/components/relative-time";
 import {
   Dialog,
   DialogBody,
@@ -10,8 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { useConnectorRun } from "@/lib/knowledge/connector.query";
-import { formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface ConnectorRunDetailsDialogProps {
   connectorId: string;
@@ -28,6 +33,14 @@ export function ConnectorRunDetailsDialog({
   const formattedLogs = run?.logs ? formatConnectorRunLogs(run.logs) : null;
   const isPermissionRun = run?.runType === "permission";
   const phase = run ? contentRunPhase(run) : null;
+  const isRunning = run?.status === "running";
+  const progressPercent =
+    run?.totalItems != null && run.totalItems > 0
+      ? Math.min(
+          100,
+          Math.round(((run.documentsProcessed ?? 0) / run.totalItems) * 100),
+        )
+      : null;
 
   return (
     <Dialog
@@ -53,164 +66,111 @@ export function ConnectorRunDetailsDialog({
 
         <DialogBody>
           {run ? (
-            <div className="flex flex-col gap-4">
-              {/* Run metadata — content runs show document/ingest progress;
-                  permission runs show ACL reconcile stats instead (their
-                  document counters are always 0). */}
-              <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-                <div>
-                  <span className="text-muted-foreground">Started:</span>{" "}
-                  {formatDate({ date: run.startedAt })}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Completed:</span>{" "}
-                  {run.completedAt
-                    ? formatDate({ date: run.completedAt })
-                    : "-"}
-                </div>
+            <div className="flex flex-col gap-5">
+              {/* Run metadata as a stat grid — label above value, so ten
+                  permission counters read as a block rather than ten
+                  colon-separated sentences wrapping into each other. */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                <RunStat label="Started">
+                  <RelativeTime
+                    date={run.startedAt}
+                    className="text-sm text-foreground"
+                  />
+                </RunStat>
+                <RunStat label={isRunning ? "Running for" : "Duration"}>
+                  {formatRunDuration({
+                    startedAt: run.startedAt,
+                    completedAt: run.completedAt,
+                  }) ?? "-"}
+                </RunStat>
                 {!isPermissionRun && (
                   <>
-                    <div>
-                      <span className="text-muted-foreground">Progress:</span>{" "}
-                      {run.documentsProcessed ?? 0}
+                    <RunStat label="Processed">
+                      {(run.documentsProcessed ?? 0).toLocaleString()}
                       {run.totalItems != null &&
                         run.totalItems > 0 &&
-                        ` / ${run.totalItems}`}{" "}
-                      processed
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Ingested:</span>{" "}
-                      {run.documentsIngested ?? 0}
-                    </div>
-                    {phase && (
-                      <div className="col-span-2">
-                        <span className="text-muted-foreground">Phase:</span>{" "}
-                        {phase.label}
-                      </div>
+                        ` / ${run.totalItems.toLocaleString()}`}
+                    </RunStat>
+                    <RunStat label="Ingested">
+                      {(run.documentsIngested ?? 0).toLocaleString()}
+                    </RunStat>
+                    {phase && <RunStat label="Phase">{phase.label}</RunStat>}
+                    {(run.itemErrors ?? 0) > 0 && (
+                      <RunStat label="Item errors" tone="warn">
+                        {run.itemErrors}
+                      </RunStat>
+                    )}
+                    {(run.itemsSkipped ?? 0) > 0 && (
+                      <RunStat label="Skipped">{run.itemsSkipped}</RunStat>
+                    )}
+                    {(run.documentsWithoutText ?? 0) > 0 && (
+                      <RunStat label="No text extracted" tone="warn">
+                        {run.documentsWithoutText}
+                      </RunStat>
                     )}
                   </>
                 )}
                 {isPermissionRun && run.stats && (
                   <>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Documents checked:
-                      </span>{" "}
+                    <RunStat label="Documents checked">
                       {run.stats.docsScanned.toLocaleString()}
                       {run.stats.totalDocs > 0 &&
                         ` / ${run.stats.totalDocs.toLocaleString()}`}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Access lists checked:
-                      </span>{" "}
+                    </RunStat>
+                    <RunStat label="Access lists checked">
                       {(run.stats.containersSynced ?? 0).toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Access lists updated:
-                      </span>{" "}
+                    </RunStat>
+                    <RunStat label="Access lists updated">
                       {(run.stats.containersChanged ?? 0).toLocaleString()}
-                    </div>
+                    </RunStat>
                     {(run.stats.containerAudienceFailures ?? 0) > 0 && (
-                      <div>
-                        <span className="text-muted-foreground">
-                          Access lists unreadable:
-                        </span>{" "}
-                        <span className="text-destructive">
-                          {(
-                            run.stats.containerAudienceFailures ?? 0
-                          ).toLocaleString()}
-                        </span>
-                      </div>
+                      <RunStat label="Access lists unreadable" tone="error">
+                        {(
+                          run.stats.containerAudienceFailures ?? 0
+                        ).toLocaleString()}
+                      </RunStat>
                     )}
-                    <div>
-                      <span className="text-muted-foreground">
-                        Document permissions updated:
-                      </span>{" "}
+                    <RunStat label="Document permissions updated">
                       {run.stats.aclsChanged.toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Search entries updated:
-                      </span>{" "}
+                    </RunStat>
+                    <RunStat label="Search entries updated">
                       {run.stats.chunksRewritten.toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Documents locked:
-                      </span>{" "}
-                      <span
-                        className={
-                          run.stats.failClosed > 0
-                            ? "text-amber-600"
-                            : undefined
-                        }
-                      >
-                        {run.stats.failClosed.toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Groups checked:
-                      </span>{" "}
-                      <span
-                        className={
-                          run.stats.groupSyncFailed
-                            ? "text-amber-600"
-                            : undefined
-                        }
-                      >
-                        {run.stats.groupsSynced.toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Group members updated:
-                      </span>{" "}
-                      <span
-                        className={
-                          run.stats.groupSyncFailed
-                            ? "text-amber-600"
-                            : undefined
-                        }
-                      >
-                        {run.stats.membershipsUpserted.toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Group members removed:
-                      </span>{" "}
+                    </RunStat>
+                    <RunStat
+                      label="Documents locked"
+                      tone={run.stats.failClosed > 0 ? "warn" : undefined}
+                    >
+                      {run.stats.failClosed.toLocaleString()}
+                    </RunStat>
+                    <RunStat
+                      label="Groups checked"
+                      tone={run.stats.groupSyncFailed ? "warn" : undefined}
+                    >
+                      {run.stats.groupsSynced.toLocaleString()}
+                    </RunStat>
+                    <RunStat
+                      label="Group members updated"
+                      tone={run.stats.groupSyncFailed ? "warn" : undefined}
+                    >
+                      {run.stats.membershipsUpserted.toLocaleString()}
+                    </RunStat>
+                    <RunStat label="Group members removed">
                       {(run.stats.membershipsRemoved ?? 0).toLocaleString()}
-                    </div>
+                    </RunStat>
                   </>
                 )}
-                {!isPermissionRun && (run.itemErrors ?? 0) > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Item errors:</span>{" "}
-                    <span className="text-amber-600">{run.itemErrors}</span>
-                  </div>
-                )}
-                {!isPermissionRun && (run.itemsSkipped ?? 0) > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Skipped:</span>{" "}
-                    <span className="text-muted-foreground">
-                      {run.itemsSkipped}
-                    </span>
-                  </div>
-                )}
-                {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">
-                      No text extracted:
-                    </span>{" "}
-                    <span className="text-amber-600">
-                      {run.documentsWithoutText}
-                    </span>
-                  </div>
-                )}
               </div>
+
+              {/* Only while there is progress left to make: a full bar reading
+                  100% under a settled run is decoration. */}
+              {isRunning && progressPercent !== null && (
+                <div className="space-y-1">
+                  <Progress value={progressPercent} className="h-1.5" />
+                  <div className="text-xs text-muted-foreground">
+                    {progressPercent}%
+                  </div>
+                </div>
+              )}
 
               {isPermissionRun &&
                 (run.stats?.containerAudienceFailures ?? 0) > 0 && (
@@ -266,26 +226,6 @@ export function ConnectorRunDetailsDialog({
                 </p>
               )}
 
-              {/* Progress bar when totalItems is known */}
-              {run.totalItems != null && run.totalItems > 0 && (
-                <div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-500"
-                      style={{
-                        width: `${Math.min(100, ((run.documentsProcessed ?? 0) / run.totalItems) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {Math.round(
-                      ((run.documentsProcessed ?? 0) / run.totalItems) * 100,
-                    )}
-                    %
-                  </div>
-                </div>
-              )}
-
               {/* Superseded runs carry an explanatory note, not a real error —
                   render it neutrally so it doesn't read as a failure. */}
               {run.error &&
@@ -307,14 +247,14 @@ export function ConnectorRunDetailsDialog({
                   </div>
                 ))}
 
-              {formattedLogs && (
-                <div>
-                  <h4 className="mb-1 text-sm font-medium">Logs</h4>
-                  <pre className="max-h-80 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
-                    <code>{formattedLogs}</code>
-                  </pre>
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <h4 className="text-sm font-medium">Logs</h4>
+                <LogConsole
+                  content={formattedLogs}
+                  emptyMessage="This run recorded no logs."
+                  className="h-80"
+                />
+              </div>
             </div>
           ) : isLoading ? (
             <div className="text-sm text-muted-foreground">
@@ -329,6 +269,34 @@ export function ConnectorRunDetailsDialog({
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ===== Internal pieces =====
+
+/** One label-above-value cell of the run's stat grid. */
+function RunStat({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone?: "warn" | "error";
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          "truncate text-sm tabular-nums",
+          tone === "warn" && "text-amber-600",
+          tone === "error" && "text-destructive",
+        )}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 

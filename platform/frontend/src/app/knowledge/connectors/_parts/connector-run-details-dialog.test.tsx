@@ -38,8 +38,19 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
   formatDate: ({ date }: { date: string }) => date,
+}));
+
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 describe("ConnectorRunDetailsDialog", () => {
@@ -101,7 +112,7 @@ describe("ConnectorRunDetailsDialog", () => {
       />,
     );
 
-    expect(screen.getByText("Phase:")).toBeInTheDocument();
+    expect(screen.getByText("Phase")).toBeInTheDocument();
     expect(screen.getByText("Embedding batch 431/433")).toBeInTheDocument();
   });
 
@@ -138,14 +149,14 @@ describe("ConnectorRunDetailsDialog", () => {
     );
 
     expect(screen.getByText("Permission Sync Run Details")).toBeInTheDocument();
-    expect(screen.getByText("Documents checked:")).toBeInTheDocument();
+    expect(screen.getByText("Documents checked")).toBeInTheDocument();
     expect(
-      screen.getByText("Document permissions updated:"),
+      screen.getByText("Document permissions updated"),
     ).toBeInTheDocument();
     expect(screen.getByText("13,831")).toBeInTheDocument();
     // Content counters are hidden — they are always 0 for permission runs.
-    expect(screen.queryByText("Progress:")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ingested:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Processed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ingested")).not.toBeInTheDocument();
     // The during-backfill note explains partial coverage.
     expect(
       screen.getByText(/only covered documents ingested before it started/),
@@ -176,7 +187,7 @@ describe("ConnectorRunDetailsDialog", () => {
       />,
     );
 
-    expect(screen.getByText("No text extracted:")).toBeInTheDocument();
+    expect(screen.getByText("No text extracted")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     // The explanation states the count is a subset of the skipped total.
     expect(

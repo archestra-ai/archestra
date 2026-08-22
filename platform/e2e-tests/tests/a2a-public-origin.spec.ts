@@ -16,15 +16,23 @@ import { test } from "./api-fixtures";
 test.describe("A2A over the public origin", () => {
   test("serves JSON, not the frontend's HTML shell", async ({
     request,
-    createAgent,
     deleteAgent,
     makeApiRequest,
   }) => {
-    const agentResponse = await createAgent(
+    // Not the createAgent fixture: it omits agentType, and the column default
+    // is mcp_gateway. A2A is only served for internal agents, so a defaulted
+    // row makes the card endpoint answer 400 before routing is ever exercised.
+    const agentResponse = await makeApiRequest({
       request,
-      `A2A Public Origin ${Date.now()}`,
-      "personal",
-    );
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: `A2A Public Origin ${Date.now()}`,
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      },
+    });
     const agent = await agentResponse.json();
 
     try {

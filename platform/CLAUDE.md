@@ -71,8 +71,11 @@ Load these project skills when the task matches their domain:
 
 ```bash
 # Development
-tilt up                                 # Start full development environment
+tilt up                                 # Start full development environment (also installs git hooks)
 pnpm dev                                # Start all workspaces
+pnpm run prepare                        # Install the husky pre-commit hook. `tilt up` does this for you;
+                                        # run it by hand if you skip Tilt. `pnpm install` will NOT do it,
+                                        # because ignoreScripts blocks lifecycle scripts (see below).
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests

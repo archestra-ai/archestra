@@ -145128,6 +145128,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -146169,6 +146188,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -146920,6 +146958,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -147659,6 +147716,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -148400,6 +148476,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -149140,6 +149235,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -149748,6 +149862,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -150368,6 +150501,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -153042,6 +153194,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -156357,6 +156528,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -156976,6 +157166,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -157597,6 +157806,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -158216,6 +158444,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -158837,6 +159084,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -159456,6 +159722,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -160077,6 +160362,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -160697,6 +161001,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -161305,6 +161628,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -161915,6 +162257,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -162523,6 +162884,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -163144,6 +163524,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -163763,6 +164162,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -166784,6 +167202,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -169798,6 +170235,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -172819,6 +173275,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -173438,6 +173913,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -174294,6 +174788,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -175336,6 +175849,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -176377,6 +176909,25 @@
                                   }
                                 ]
                               },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -177408,6 +177959,25 @@
                                     "additionalProperties": false
                                   }
                                 ]
+                              },
+                              "toolCallBlock": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "blockedToolCallCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "reason",
+                                  "blockedToolCallCount"
+                                ],
+                                "additionalProperties": false
                               },
                               "type": {
                                 "type": "string",
@@ -179597,6 +180167,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -180638,6 +181227,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -181389,6 +181997,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -182128,6 +182755,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -182869,6 +183515,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -183609,6 +184274,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -184217,6 +184901,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -184837,6 +185540,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -187511,6 +188233,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -190826,6 +191567,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -191445,6 +192205,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -192066,6 +192845,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -192685,6 +193483,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -193306,6 +194123,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -193925,6 +194761,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -194546,6 +195401,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -195166,6 +196040,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -195774,6 +196667,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -196384,6 +197296,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -196992,6 +197923,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -197613,6 +198563,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -198232,6 +199201,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -201253,6 +202241,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -204267,6 +205274,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -207288,6 +208314,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -207907,6 +208952,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -208763,6 +209827,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",
@@ -209805,6 +210888,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -210846,6 +211948,25 @@
                             }
                           ]
                         },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
+                        },
                         "type": {
                           "type": "string",
                           "enum": [
@@ -211877,6 +212998,25 @@
                               "additionalProperties": false
                             }
                           ]
+                        },
+                        "toolCallBlock": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blockedToolCallCount": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "reason",
+                            "blockedToolCallCount"
+                          ],
+                          "additionalProperties": false
                         },
                         "type": {
                           "type": "string",

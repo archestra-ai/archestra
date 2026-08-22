@@ -17,20 +17,20 @@ import { cn } from "@/lib/utils";
 
 const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
   "failed-to-start":
-    "border border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-300",
+    "border border-red-500/15 bg-red-500/5 text-red-800/80 dark:text-red-300/85",
   "not-running":
-    "border border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-300",
+    "border border-red-500/15 bg-red-500/5 text-red-800/80 dark:text-red-300/85",
   "needs-reauth":
-    "border border-cyan-500/20 bg-cyan-500/8 text-cyan-800 dark:text-cyan-300",
+    "border border-orange-500/15 bg-orange-500/5 text-orange-900/80 dark:text-orange-300/85",
 };
 
 /**
  * One status pill for one issue: the vocabulary label, tinted by the kind of
- * attention it needs. Runtime failures use red; re-authentication uses cyan so
- * alert state cannot be confused with the blue, green, amber, and purple scope
- * colors in the neighboring visibility column. When the issue carries a cause
- * it is exposed through a tooltip on a focusable trigger, so keyboard and touch
- * users can reach it too.
+ * attention it needs. Runtime failures use red; re-authentication uses orange,
+ * the familiar action-needed warning color, kept distinct from the blue, green,
+ * amber, and purple scope colors in the neighboring visibility column. When the
+ * issue carries a cause it is exposed through a tooltip on a focusable trigger,
+ * so keyboard and touch users can reach it too.
  *
  * The trigger is a focusable note, not a button: pressing it does nothing, and
  * a control announced as a button that answers no press is worse than a label.

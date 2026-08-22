@@ -6,7 +6,9 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("mcpServerId=server-1"),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({ useExternalMcpSkill: vi.fn() }));
-vi.mock("@/lib/hooks/use-app-name", () => ({ useAppName: () => "Archestra" }));
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Workspace",
+}));
 vi.mock("../../_parts/skill-content-editor", () => ({
   SkillContentEditor: ({ readOnly }: { readOnly?: boolean }) => (
     <div data-testid="content" data-read-only={readOnly} />
@@ -51,6 +53,7 @@ describe("ExternalMcpSkillPage", () => {
       screen.getByRole("link", { name: "Operations server" }),
     ).toHaveAttribute("href", "/mcp/registry/catalog-1");
     expect(screen.getByText(/not copied or versioned/)).toBeInTheDocument();
+    expect(screen.getByText(/versioned in Workspace/)).toBeInTheDocument();
     expect(screen.getByTestId("content")).toHaveAttribute(
       "data-read-only",
       "true",

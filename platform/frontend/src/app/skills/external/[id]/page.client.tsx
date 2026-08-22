@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import { useExternalMcpSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
@@ -17,6 +18,7 @@ import {
 } from "../../_parts/skill-page-shell";
 
 export function ExternalMcpSkillPage({ id }: { id: string }) {
+  const appName = useAppName();
   const search = useSearchParams();
   const mcpServerId = search.get("mcpServerId");
   const { data: skill, isPending } = useExternalMcpSkill({ id, mcpServerId });
@@ -66,7 +68,7 @@ export function ExternalMcpSkillPage({ id }: { id: string }) {
           >
             {skill.serverName}
           </Link>
-          . Its content is not copied or versioned in Archestra; reload this
+          . Its content is not copied or versioned in {appName}; reload this
           page to read the latest source bytes.
         </p>
       </div>

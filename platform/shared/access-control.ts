@@ -78,7 +78,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // frozen at creation and never gained the new action.
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
-  optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
@@ -213,7 +212,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
-  optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
@@ -308,7 +306,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmOauthClient: ["read"],
   llmModel: ["read"],
   llmLimit: [],
-  optimizationRule: [],
   llmCost: [],
 
   // MCP
@@ -573,10 +570,6 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
   "llmLimit:delete": "Remove usage limits",
-  "optimizationRule:read": "View optimization rules",
-  "optimizationRule:create": "Create new optimization rules",
-  "optimizationRule:update": "Modify optimization rules",
-  "optimizationRule:delete": "Remove optimization rules",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
@@ -1374,21 +1367,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteDefaultUserLimit]: {
     llmLimit: ["delete"],
   },
-  [RouteId.GetOptimizationRules]: {
-    optimizationRule: ["read"],
-  },
-  [RouteId.GetOptimizationRule]: {
-    optimizationRule: ["read"],
-  },
-  [RouteId.CreateOptimizationRule]: {
-    optimizationRule: ["create"],
-  },
-  [RouteId.UpdateOptimizationRule]: {
-    optimizationRule: ["update"],
-  },
-  [RouteId.DeleteOptimizationRule]: {
-    optimizationRule: ["delete"],
-  },
   [RouteId.UpdateAppearanceSettings]: {
     organizationSettings: ["update"],
   },
@@ -2066,7 +2044,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
-  "/llm/optimization-rules": { optimizationRule: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

@@ -193,7 +193,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  *
  * `SupportedProvider` is otherwise a list of *chat* providers, and a good deal
  * of the platform (the model router, the connection page's proxy instructions,
- * tokenizers, optimization rules) reasonably assumes every member can hold a
+ * tokenizers, cost limits) reasonably assumes every member can hold a
  * conversation. Rather than let those surfaces advertise a provider that would
  * 404 on every chat request, they filter on this set. The chat/embedding split
  * at the *model* level is separate and already handled by

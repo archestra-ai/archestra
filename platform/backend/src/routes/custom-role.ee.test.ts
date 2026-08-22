@@ -529,7 +529,7 @@ describe("custom role routes", () => {
       .set({
         permission: JSON.stringify({
           log: ["read", "create", "update", "delete"],
-          optimizationRule: ["team-admin"],
+          llmLimit: ["team-admin"],
           unknownResource: ["read"],
         }),
       })

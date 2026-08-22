@@ -22,7 +22,6 @@ import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
-import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ProjectModel from "@/models/project";
@@ -499,16 +498,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "defaultUserLimit",
     fetchById: (id, orgId) =>
       EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
-  },
-
-  // Optimization Rules
-  "/api/optimization-rules": {
-    resourceType: "optimizationRule",
-    fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
-  },
-  "/api/optimization-rules/:id": {
-    resourceType: "optimizationRule",
-    fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
   },
 
   // Projects. Delete soft-deletes and restore is a project:admin action on

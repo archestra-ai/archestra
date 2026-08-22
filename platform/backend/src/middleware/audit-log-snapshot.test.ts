@@ -1001,7 +1001,6 @@ describe("AUDITABLE_ROUTES registry", () => {
       "/api/knowledge-bases",
       "/api/connectors",
       "/api/limits",
-      "/api/optimization-rules",
       "/api/schedule-triggers",
       "/api/roles",
       "/api/skills",

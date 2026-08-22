@@ -19,10 +19,8 @@ import {
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
-  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
-  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -54,7 +52,6 @@ import {
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -145,7 +142,6 @@ const {
 export interface LLMProxyContext<TRequest> {
   agent: GatewayAgent;
   originalRequest: TRequest;
-  baselineModel: string;
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
@@ -822,75 +818,17 @@ export async function handleLLMProxy<
       }
     }
 
-    // Cost optimization - potentially switch to cheaper model
     // A client may mark a Claude id with a context variant (`…[1m]`). It names
     // the same model at the same price, so it is dropped for bookkeeping —
     // otherwise the request records a model no catalog lists, which can never be
     // priced. The request itself is forwarded with the id the client sent.
-    const baselineModel = stripClaudeContextVariantSuffix(
-      requestAdapter.getModel(),
-    );
-    const hasTools = requestAdapter.hasTools();
-    const tools = requestAdapter.getTools();
-    // Cast messages since getOptimizedModel expects specific provider types
-    // but our generic adapter provides the correct type at runtime
-    const optimizedModel = await utils.costOptimization.getOptimizedModel(
-      resolvedAgent,
-      requestAdapter.getProviderMessages() as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[1],
-      providerName as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[2],
-      hasTools,
-      tools,
-    );
-
-    // A cost-optimization rule names a model, not an endpoint. On providers
-    // whose keys are servers, the credential and base URL were already resolved
-    // for the model the client asked for, so substituting one this endpoint
-    // does not host would send the request somewhere it cannot be answered.
-    // Keeping the baseline model costs an optimization; taking it would cost
-    // the whole call.
-    const optimizedModelServedHere =
-      optimizedModel &&
-      perKeyChatApiKeyId &&
-      providerHasEndpointLocalModels(providerName)
-        ? await endpointServesModel({
-            apiKeyId: perKeyChatApiKeyId,
-            provider: providerName,
-            modelId: optimizedModel,
-          })
-        : true;
-
-    if (optimizedModel && optimizedModelServedHere) {
-      requestAdapter.setModel(optimizedModel);
-      logger.info(
-        { resolvedAgentId, optimizedModel },
-        "Optimized model selected",
-      );
-    } else if (optimizedModel) {
-      logger.info(
-        { resolvedAgentId, optimizedModel, baselineModel },
-        "Optimized model is not served by the resolved endpoint, keeping the baseline model",
-      );
-    } else {
-      logger.info(
-        { resolvedAgentId, baselineModel },
-        "No matching optimized model found, proceeding with baseline model",
-      );
-    }
-
     const actualModel = stripClaudeContextVariantSuffix(
       requestAdapter.getModel(),
     );
 
-    // Ensure model entries exist for cost tracking
+    // Ensure a model entry exists for cost tracking
     const discovered = [
-      await ModelModel.ensureModelExists(baselineModel, providerName),
-      actualModel !== baselineModel
-        ? await ModelModel.ensureModelExists(actualModel, providerName)
-        : null,
+      await ModelModel.ensureModelExists(actualModel, providerName),
     ].filter((model) => model !== null);
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
@@ -1315,7 +1253,6 @@ export async function handleLLMProxy<
     const ctx: LLMProxyContext<TRequest> = {
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
-      baselineModel,
       actualModel,
       contextIsTrusted,
       enabledToolNames,
@@ -1395,6 +1332,8 @@ export async function handleLLMProxy<
         processedRequest: null,
         response: { error: errorMessage },
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        // Mirrors `model`, as every write path does now that nothing rewrites
+        // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
@@ -1446,7 +1385,6 @@ async function handleStreaming<
   const {
     agent,
     originalRequest,
-    baselineModel,
     actualModel,
     contextIsTrusted,
     enabledToolNames,
@@ -1517,7 +1455,6 @@ async function handleStreaming<
         processedRequest: request as InteractionRequest,
         response: response as InteractionResponse,
         model: actualModel,
-        baselineModel,
         inputTokens: 0,
         outputTokens: 0,
       };
@@ -1923,7 +1860,6 @@ async function handleStreaming<
       });
 
       const costs = await calculateInteractionCosts({
-        baselineModel,
         actualModel,
         usage,
         providerName,
@@ -1970,7 +1906,6 @@ async function handleStreaming<
           processedRequest: request,
           response: streamAdapter.toProviderResponse(),
           actualModel,
-          baselineModel,
           usage,
           costs,
           toonStats,
@@ -2020,7 +1955,6 @@ async function handleNonStreaming<
   const {
     agent,
     originalRequest,
-    baselineModel,
     actualModel,
     contextIsTrusted,
     enabledToolNames,
@@ -2271,7 +2205,6 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
-        baselineModel,
         actualModel,
         usage,
         providerName,
@@ -2317,7 +2250,6 @@ async function handleNonStreaming<
         processedRequest: request,
         response: refusalResponse,
         actualModel,
-        baselineModel,
         usage,
         costs,
         toonStats,
@@ -2360,7 +2292,6 @@ async function handleNonStreaming<
   // );
 
   const costs = await calculateInteractionCosts({
-    baselineModel,
     actualModel,
     usage,
     providerName,
@@ -2410,7 +2341,6 @@ async function handleNonStreaming<
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
       actualModel,
-      baselineModel,
       usage,
       costs,
       toonStats,
@@ -2534,29 +2464,6 @@ function createDownstreamAbortSignal(params: {
  */
 function providerSuppliesServerCredential(providerName: string): boolean {
   return providerName === "gemini" && isVertexAiEnabled();
-}
-
-/**
- * Whether a resolved endpoint can run a model, for providers whose keys are
- * servers. Conservative: only a model the catalog places on other endpoints and
- * not this one counts as unserved. A model nothing has synced — one an operator
- * has just deployed, say — is left to the endpoint to accept or reject.
- */
-async function endpointServesModel(params: {
-  apiKeyId: string;
-  provider: SupportedProvider;
-  modelId: string;
-}): Promise<boolean> {
-  const servingKeyIds =
-    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
-      provider: params.provider,
-      modelId: params.modelId,
-    });
-
-  if (servingKeyIds === null || servingKeyIds.length === 0) {
-    return true;
-  }
-  return servingKeyIds.includes(params.apiKeyId);
 }
 
 function shouldUseKeylessProviderApiKey(params: {

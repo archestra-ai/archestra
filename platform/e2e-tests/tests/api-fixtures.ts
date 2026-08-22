@@ -62,9 +62,6 @@ export interface TestFixtures {
   addTeamMember: typeof addTeamMember;
   removeTeamMember: typeof removeTeamMember;
   getActiveOrganizationId: typeof getActiveOrganizationId;
-  createOptimizationRule: typeof createOptimizationRule;
-  deleteOptimizationRule: typeof deleteOptimizationRule;
-  updateOptimizationRule: typeof updateOptimizationRule;
   createLimit: typeof createLimit;
   deleteLimit: typeof deleteLimit;
   getLimits: typeof getLimits;
@@ -854,70 +851,6 @@ const getActiveOrganizationId = async (
 };
 
 /**
- * Optimization rule condition types
- */
-type OptimizationRuleCondition = { maxLength: number } | { hasTools: boolean };
-
-/**
- * Create an optimization rule
- * (authnz is handled by the authenticated session)
- */
-const createOptimizationRule = async (
-  request: APIRequestContext,
-  rule: {
-    entityType: "organization" | "team" | "agent";
-    entityId: string;
-    provider: SupportedProvider;
-    conditions: OptimizationRuleCondition[];
-    targetModel: string;
-    enabled?: boolean;
-  },
-) =>
-  makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: "/api/optimization-rules",
-    data: {
-      ...rule,
-      enabled: rule.enabled ?? true,
-    },
-  });
-
-/**
- * Update an optimization rule
- * (authnz is handled by the authenticated session)
- */
-const updateOptimizationRule = async (
-  request: APIRequestContext,
-  ruleId: string,
-  updates: {
-    conditions?: OptimizationRuleCondition[];
-    targetModel?: string;
-    enabled?: boolean;
-  },
-) =>
-  makeApiRequest({
-    request,
-    method: "put",
-    urlSuffix: `/api/optimization-rules/${ruleId}`,
-    data: updates,
-  });
-
-/**
- * Delete an optimization rule
- * (authnz is handled by the authenticated session)
- */
-const deleteOptimizationRule = async (
-  request: APIRequestContext,
-  ruleId: string,
-) =>
-  makeApiRequest({
-    request,
-    method: "delete",
-    urlSuffix: `/api/optimization-rules/${ruleId}`,
-  });
-
-/**
  * Create a limit (token cost, mcp_server_calls, or tool_calls)
  * (authnz is handled by the authenticated session)
  */
@@ -1370,15 +1303,6 @@ export const test = base.extend<TestFixtures>({
   },
   getActiveOrganizationId: async ({}, use) => {
     await use(getActiveOrganizationId);
-  },
-  createOptimizationRule: async ({}, use) => {
-    await use(createOptimizationRule);
-  },
-  deleteOptimizationRule: async ({}, use) => {
-    await use(deleteOptimizationRule);
-  },
-  updateOptimizationRule: async ({}, use) => {
-    await use(updateOptimizationRule);
   },
   createLimit: async ({}, use) => {
     await use(createLimit);

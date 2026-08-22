@@ -10,7 +10,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
-  { label: "Optimization Rules", href: "/llm/optimization-rules" },
 ];
 
 const PAGE_CONFIG: Record<
@@ -34,11 +33,6 @@ const PAGE_CONFIG: Record<
     title: "Limits",
     description:
       "Control LLM spend with token-cost limits scoped to the organization, teams, agents, users, virtual keys, or environments.",
-  },
-  "/llm/optimization-rules": {
-    title: "Optimization Rules",
-    description:
-      "Route requests to lower-cost models based on provider, model, and request conditions.",
   },
 };
 

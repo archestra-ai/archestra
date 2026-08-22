@@ -54,7 +54,7 @@ interface EffectivePricing {
  *    that the value should be updated later with the correct pricing.
  * 2. Companies may have custom pricing. If we used the “official” model prices here,
  *    it would be harder to notice when the pricing is incorrect.
- * 3. Smaller models may be used in Optimization Rules. Even if pricing isn’t configured,
+ * 3. Cheaper models are still worth pricing distinctly. Even if pricing isn’t configured,
  *    we still want to surface potential cost savings.
  */
 function getDefaultModelPrice(model: string): {

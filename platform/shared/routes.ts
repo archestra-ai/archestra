@@ -603,13 +603,6 @@ export const RouteId = {
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 
-  // Optimization Rule Routes
-  GetOptimizationRules: "getOptimizationRules",
-  GetOptimizationRule: "getOptimizationRule",
-  CreateOptimizationRule: "createOptimizationRule",
-  UpdateOptimizationRule: "updateOptimizationRule",
-  DeleteOptimizationRule: "deleteOptimizationRule",
-
   // Secrets Routes
   GetSecretsType: "getSecretsType",
   GetSecret: "getSecret",

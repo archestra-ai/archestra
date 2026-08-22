@@ -161,7 +161,6 @@ export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
-export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as processedEmailsTable } from "./processed-email";

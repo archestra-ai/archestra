@@ -438,10 +438,8 @@ describe("normalizeToolCallsForPolicy", () => {
 // calculateInteractionCosts
 // --------------------------------------------------------------------------
 describe("calculateInteractionCosts", () => {
-  test("returns both costs when models differ", async () => {
-    mockCalculateCost
-      .mockResolvedValueOnce(0.001) // baseline
-      .mockResolvedValueOnce(0.0005); // actual
+  test("prices the model actually used, once", async () => {
+    mockCalculateCost.mockResolvedValue(0.0005);
     mockCalculateCacheCost.mockResolvedValue({
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
@@ -449,49 +447,29 @@ describe("calculateInteractionCosts", () => {
     });
 
     const result = await calculateInteractionCosts({
-      baselineModel: "gpt-4",
       actualModel: "gpt-3.5-turbo",
       usage: { inputTokens: 100, outputTokens: 50 },
       providerName: "openai",
     });
 
     expect(result).toEqual({
-      baselineCost: 0.001,
       actualCost: 0.0005,
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
       cacheReadSavings: 0.001,
     });
-    expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
-    expect(mockCalculateCost).toHaveBeenCalledWith(
-      "gpt-4",
-      100,
-      50,
-      "openai",
-      cacheTokens,
-    );
+    expect(mockCalculateCost).toHaveBeenCalledTimes(1);
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-3.5-turbo",
       100,
       50,
       "openai",
-      cacheTokens,
+      {
+        readTokens: 0,
+        writeTokens: 0,
+        write1hTokens: 0,
+      },
     );
-  });
-
-  test("returns same cost for both when models match", async () => {
-    mockCalculateCost.mockResolvedValue(0.002);
-
-    const result = await calculateInteractionCosts({
-      baselineModel: "gpt-4",
-      actualModel: "gpt-4",
-      usage: { inputTokens: 200, outputTokens: 100 },
-      providerName: "openai",
-    });
-
-    expect(result.baselineCost).toBe(0.002);
-    expect(result.actualCost).toBe(0.002);
   });
 
   test("handles undefined costs (model not found)", async () => {
@@ -499,14 +477,12 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCacheCost.mockResolvedValue(undefined);
 
     const result = await calculateInteractionCosts({
-      baselineModel: "unknown-model",
       actualModel: "unknown-model",
       usage: { inputTokens: 100, outputTokens: 50 },
       providerName: "openai",
     });
 
     expect(result).toEqual({
-      baselineCost: undefined,
       actualCost: undefined,
       cacheCost: undefined,
       cacheSavings: undefined,
@@ -531,7 +507,6 @@ describe("buildInteractionRecord", () => {
     processedRequest: { messages: [], model: "gpt-4" },
     response: { id: "resp-1" },
     actualModel: "gpt-3.5-turbo",
-    baselineModel: "gpt-4",
     usage: {
       inputTokens: 100,
       outputTokens: 50,
@@ -539,7 +514,6 @@ describe("buildInteractionRecord", () => {
       cacheWriteTokens: 20,
     },
     costs: {
-      baselineCost: 0.001,
       actualCost: 0.0005,
       cacheCost: 0.0002,
       cacheSavings: 0.0018,
@@ -578,7 +552,8 @@ describe("buildInteractionRecord", () => {
     expect(record.processedRequest).toEqual({ messages: [], model: "gpt-4" });
     expect(record.response).toEqual({ id: "resp-1" });
     expect(record.model).toBe("gpt-3.5-turbo");
-    expect(record.baselineModel).toBe("gpt-4");
+    // Nothing rewrites the model any more, so the baseline mirrors it.
+    expect(record.baselineModel).toBe("gpt-3.5-turbo");
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
@@ -609,7 +584,7 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord(baseParams);
 
     expect(record.cost).toBe("0.0005000000");
-    expect(record.baselineCost).toBe("0.0010000000");
+    expect(record.baselineCost).toBe("0.0005000000");
     expect(record.cacheCost).toBe("0.0002000000");
     expect(record.cacheSavings).toBe("0.0018000000");
     expect(record.cacheReadTokens).toBe(80);
@@ -620,7 +595,6 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord({
       ...baseParams,
       costs: {
-        baselineCost: undefined,
         actualCost: undefined,
         cacheCost: undefined,
         cacheSavings: undefined,

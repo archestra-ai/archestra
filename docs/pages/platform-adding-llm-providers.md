@@ -138,24 +138,13 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 
 > **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
 
-Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
+Tokenizers estimate token counts for provider messages. Used by token cost limits and Tool Results Compression.
 
 | File                              | Description                                                                                                   |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                          |
 | `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                            |
 | `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fall back to `TiktokenTokenizer`) |
-
-### Model Optimization
-
-> **Note:** This is a known abstraction leak that we're planning to address in future versions. Thanks for bearing with us!
-
-Model optimization evaluates token counts to switch to cheaper models when possible.
-
-| File                                                  | Description                                                                                                       |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/proxy/utils/cost-optimization.ts` | Add provider to `ProviderMessages` type mapping (e.g., `gemini: Gemini.Types.GenerateContentRequest["contents"]`) |
-| `backend/src/models/optimization-rule.ts`             | Add provider to default optimization rules structure (empty array placeholder for new providers)                  |
 
 ### Tool Results Compression
 
@@ -213,7 +202,6 @@ The backend matrix covers:
 - declared tool persistence
 - execution ID persistence
 - streaming tool call handling
-- model optimization
 - token cost limit enforcement
 - TOON compression
 

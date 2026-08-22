@@ -198,6 +198,9 @@ describe("McpServerTable uninstall permission", () => {
       name: "Dismiss alert some-remote-server",
     });
     expect(screen.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(screen.getByTestId("mcp-server-issue-needs-reauth")).toHaveClass(
+      "bg-tone-attention/12",
+    );
     expect(
       screen.queryByText(
         "The provider rejected the stored token, so this connection's tools fail.",

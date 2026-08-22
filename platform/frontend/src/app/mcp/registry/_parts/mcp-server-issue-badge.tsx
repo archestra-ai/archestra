@@ -16,11 +16,18 @@ import {
 } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils";
 
+const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
+  "failed-to-start": STATUS_TONE.down,
+  "not-running": STATUS_TONE.down,
+  "needs-reauth": STATUS_TONE.attention,
+};
+
 /**
- * One status pill for one issue: the vocabulary label, tinted in the "down"
- * tone — every flagged issue is an error that stopped the server. When the
- * issue carries a cause it is exposed through a tooltip on a focusable
- * trigger, so keyboard and touch users can reach it too.
+ * One status pill for one issue: the vocabulary label, tinted by the kind of
+ * attention it needs. Runtime failures use the down tone; re-authentication is
+ * actionable attention rather than a broken runtime. When the issue carries a
+ * cause it is exposed through a tooltip on a focusable trigger, so keyboard
+ * and touch users can reach it too.
  *
  * The trigger is a focusable note, not a button: pressing it does nothing, and
  * a control announced as a button that answers no press is worse than a label.
@@ -45,7 +52,7 @@ export function McpServerIssueBadge({
   const badge = (
     <Badge
       variant="secondary"
-      className={cn("max-w-full", STATUS_TONE.down, className)}
+      className={cn("max-w-full", ISSUE_TONE[issue.kind], className)}
       data-testid={`mcp-server-issue-${issue.kind}`}
     >
       {issue.muted && <BellOff aria-hidden className="size-3" />}

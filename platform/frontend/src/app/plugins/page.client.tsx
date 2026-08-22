@@ -744,6 +744,14 @@ function PluginsList() {
               onRowSelectionChange={bulkSelection.setRowSelection}
               onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
               isLoading={isFetching}
+              fixedWidthColumnIds={[
+                "client",
+                "visibility",
+                "platforms",
+                "files",
+                "updatedAt",
+              ]}
+              flexibleColumnIds={["displayName"]}
             />
           </>
         )}

@@ -886,6 +886,8 @@ function SkillsList() {
                     rowSelection={rowSelection}
                     onRowSelectionChange={setRowSelection}
                     isLoading={isFetching}
+                    fixedWidthColumnIds={["visibility", "files", "usageCount"]}
+                    flexibleColumnIds={["name"]}
                   />
                 </section>
               )}

@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ChartColumn,
+  ChevronDown,
   Github,
   History,
   MoreHorizontal,
@@ -11,32 +12,54 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { PermissionButton } from "@/components/ui/permission-button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSession } from "@/lib/auth/auth.query";
+import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import {
+  backToListLabel,
+  notYoursToChange,
+} from "@/lib/design/resource-lexicon";
+import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import { useSkill } from "@/lib/skills/skill.query";
-import { formatDate } from "@/lib/utils";
+import { useSkillAccess } from "@/lib/skills/use-skill-access";
+import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
 import type { SkillDetail } from "../_parts/github-sync-panel";
-import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  getSkillActionModel,
+  skillAction,
+  skillActionHref,
+} from "../_parts/skill-actions-model";
+import {
+  SKILL_DETAIL_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../_parts/skill-content-editor";
 import { isSyncedGithubSkill } from "../_parts/skill-draft";
 import {
   SKILL_DESCRIPTION_FALLBACK,
-  skillEditHref,
   skillGithubSourceRepo,
 } from "../_parts/skill-page-config";
 import {
@@ -86,11 +109,41 @@ function SkillDetailView({
 }) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: canDelete } = useHasPermissions({ skill: ["delete"] });
-  const { data: canUpdate } = useHasPermissions({ skill: ["update"] });
+  // RBAC alone showed Edit and Delete to any `skill:update`/`skill:delete`
+  // holder, whoever the skill belonged to, and the save came back 403.
+  const {
+    canModify,
+    canUpdate,
+    canEdit,
+    canDelete,
+    isPending: isAccessPending,
+  } = useSkillAccess(skill);
+  // The sentence for a reader the scope check refused. A reader who holds no
+  // `skill:update` at all is refused by RBAC instead, and `PermissionButton`
+  // states that constraint, which is the one actually refusing them.
+  const notYours = notYoursToChange({
+    resource: "skill",
+    scope: skill.scope,
+  });
+  // `canDelete` is the delete permission AND the scope check, so which of the
+  // two refused decides which sentence is the true one.
+  const deleteReason = canDelete
+    ? undefined
+    : canModify
+      ? formatPermissionConstraint({ skill: ["delete"] })
+      : notYours;
+  const deleteReasonId = useId();
 
   const isGithubSkill = skill.sourceType === "github";
+  // A team- or user-shared skill has names the scope badge cannot carry; a
+  // private one has nothing to add.
+  const isShared = skill.teams.length > 0 || (skill.users ?? []).length > 0;
   const manifest = useMemo(() => composeManifest(skill), [skill]);
+  const actionModel = getSkillActionModel(skill.id);
+  const editAction = skillAction(actionModel, "edit");
+  const usageAction = skillAction(actionModel, "usage");
+  const historyAction = skillAction(actionModel, "history");
+  const deleteAction = skillAction(actionModel, "delete");
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -119,125 +172,161 @@ function SkillDetailView({
       }
       documentTitle={skill.name}
       description={skill.description || SKILL_DESCRIPTION_FALLBACK}
-      backLink={<SkillBackLink href="/skills" label="Skills" />}
+      backLink={
+        <SkillBackLink href="/skills" label={backToListLabel("skill")} />
+      }
       maxWidth="wizard"
       actionButton={
+        // One primary (Edit), one secondary (Chat), everything else in the
+        // kebab with the destructive item under a divider. This header used to
+        // carry four buttons — Chat, History, Usage, Edit — where the agent
+        // pages carry two, which made the same header look like a different
+        // product on each page.
         <div className="flex shrink-0 items-center gap-2">
           <ChatWithSkillButton skillId={skill.id} />
-          <Button variant="outline" onClick={() => setHistoryOpen(true)}>
-            <History className="h-4 w-4" />
-            History
-          </Button>
-          <Button variant="outline" onClick={() => setUsageOpen(true)}>
-            <ChartColumn className="h-4 w-4" />
-            Usage
-          </Button>
-          {canUpdate && (
-            <Button asChild>
-              <Link href={skillEditHref(skill.id)}>
+          {/* Undecided is not refused: while the permission reads are in flight
+              the header holds the button's space rather than telling the
+              skill's own author it is not theirs. */}
+          {isAccessPending ? (
+            <Skeleton className="h-9 w-20" />
+          ) : canEdit ? (
+            <PermissionButton permissions={editAction.permissions} asChild>
+              <Link href={skillActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
-                Edit
+                {editAction.label}
               </Link>
-            </Button>
+            </PermissionButton>
+          ) : (
+            // Refused, not removed: a reader who simply cannot see Edit has no
+            // way to learn the skill is not theirs to change.
+            <PermissionButton
+              permissions={editAction.permissions}
+              disabled={canUpdate}
+              tooltip={canUpdate ? notYours : undefined}
+            >
+              <Pencil className="h-4 w-4" />
+              {editAction.label}
+            </PermissionButton>
           )}
-          {canDelete && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">More actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDeleteRequested(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">More actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setUsageOpen(true)}>
+                <ChartColumn className="h-4 w-4" />
+                {usageAction.label}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="h-4 w-4" />
+                {historyAction.label}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* `aria-disabled` rather than Radix's `disabled`, so the item
+                  keeps its place in the menu's roving focus and the reason
+                  below stays reachable by keyboard. */}
+              <DropdownMenuItem
+                variant="destructive"
+                aria-disabled={!canDelete || undefined}
+                aria-describedby={deleteReason ? deleteReasonId : undefined}
+                className={
+                  canDelete ? undefined : "cursor-not-allowed opacity-50"
+                }
+                onSelect={(event) => {
+                  if (!canDelete) event.preventDefault();
+                }}
+                onClick={(event) => {
+                  if (!canDelete) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setDeleteRequested(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleteAction.label}
+                {/* The reason as text, not only as a tooltip: a menu item
+                    reached by keyboard never opens one. `aria-hidden` keeps it
+                    out of the accessible name, where it would duplicate the
+                    description a screen reader already reads from
+                    `aria-describedby`. */}
+                {deleteReason && (
+                  <span
+                    id={deleteReasonId}
+                    aria-hidden="true"
+                    className="sr-only"
+                  >
+                    {deleteReason}
+                  </span>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
     >
-      {/* One panel, the wizard's column wide: the skill's facts as its
-          heading section, then the wizard's Content step read-only — who can
-          use it (its Access step) is among the facts. */}
-      <div className="divide-y rounded-lg border bg-card">
-        <section className="grid gap-x-6 gap-y-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <Fact label="Accessible to">
-            <ResourceVisibilityBadge
-              scope={skill.scope}
-              teams={skill.teams}
-              users={skill.users}
-              authorId={skill.authorId}
-              authorName={undefined}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
-          </Fact>
-          <Fact label="Environments">
-            {skill.environments.length === 0 ? (
-              <span>All environments</span>
-            ) : (
-              <ul className="flex flex-wrap gap-1.5">
-                {skill.environments.map((environment) => (
-                  <li key={environment.id}>
-                    <Badge variant="outline" className="font-normal">
-                      {environment.name}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Fact>
-          <Fact label="Source">
-            <SourceFact skill={skill} />
-          </Fact>
-          <Fact label="Version">
-            <span>v{skill.latestVersion}</span>
-          </Fact>
-          <Fact label="Used">
-            {skill.usageCount === 0 ? (
-              <span>Never</span>
-            ) : (
-              <span>
-                {skill.usageCount} {skill.usageCount === 1 ? "time" : "times"}
-                {skill.lastUsedAt ? (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · last{" "}
-                    {formatRelativeTimeFromNow(skill.lastUsedAt).toLowerCase()}
-                  </span>
-                ) : null}
-              </span>
-            )}
-          </Fact>
-          <Fact label="Created">
-            <span>
-              {formatDate({ date: skill.createdAt, dateFormat: "PP" })}
-            </span>
-          </Fact>
-          {skill.updatedAt !== skill.createdAt && (
-            <Fact label="Last updated">
-              <span>
-                {formatDate({ date: skill.updatedAt, dateFormat: "PPp" })}
-              </span>
-            </Fact>
-          )}
+      <div className="space-y-10">
+        <section aria-labelledby="skill-overview-heading">
+          <Collapsible>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+              <h2
+                id="skill-overview-heading"
+                className="text-base font-semibold tracking-tight text-foreground"
+              >
+                Overview
+              </h2>
+              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <section className="space-y-4 rounded-lg border bg-card p-4">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Access and source
+                </h3>
+                <FactGrid>
+                  <Fact label="Environment">
+                    {skill.environments.length === 0 ? (
+                      <span>All environments</span>
+                    ) : (
+                      <ul className="flex flex-wrap gap-1.5">
+                        {skill.environments.map((environment) => (
+                          <li key={environment.id}>
+                            <Badge variant="outline" className="font-normal">
+                              {environment.name}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Fact>
+                  {isShared && (
+                    <Fact label="Shared with">
+                      <ResourceVisibilityBadge
+                        scope={skill.scope}
+                        teams={skill.teams}
+                        users={skill.users}
+                        authorId={skill.authorId}
+                        authorName={undefined}
+                        currentUserId={currentUserId}
+                        showSelfAsMe={false}
+                      />
+                    </Fact>
+                  )}
+                  <Fact label="Source">
+                    <SourceFact skill={skill} />
+                  </Fact>
+                  <Fact label="Version">
+                    <span>v{skill.latestVersion}</span>
+                  </Fact>
+                </FactGrid>
+              </section>
+            </CollapsibleContent>
+          </Collapsible>
         </section>
 
-        {/* The wizard's own Content step, so its heading ranks a level
-            above sections inside a step (h2 to their h3). */}
-        <section className="space-y-4 p-4 pt-5">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold tracking-tight">Content</h2>
-            <p className="text-xs text-muted-foreground">
-              The SKILL.md instruction set beside its resource files.
-            </p>
-          </div>
+        <SkillCard title="Instructions and files" spacious>
           <SkillContentEditor
             manifest={manifest}
             files={skill.files}
@@ -245,9 +334,9 @@ function SkillDetailView({
             onFilesChange={noop}
             readOnly
             readOnlyMarker={false}
-            className="h-[calc(100vh-28rem)] min-h-[24rem]"
+            className={SKILL_DETAIL_EDITOR_CLASS}
           />
-        </section>
+        </SkillCard>
       </div>
 
       {historyOpen && (
@@ -312,7 +401,7 @@ function SourceFact({ skill }: { skill: SkillDetail }) {
           <span>GitHub</span>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className={typeRole({ role: "meta" })}>
         {synced ? (
           skill.lastSyncError ? (
             <span className="text-destructive">
@@ -332,11 +421,44 @@ function SourceFact({ skill }: { skill: SkillDetail }) {
   );
 }
 
+/** One subject card. Editing starts from the page header, not each card. */
+function SkillCard({
+  title,
+  spacious = false,
+  children,
+}: {
+  title: string;
+  spacious?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "space-y-4 rounded-lg border bg-card",
+        spacious ? "p-6" : "p-4",
+      )}
+    >
+      <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function FactGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+      {children}
+    </div>
+  );
+}
+
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 space-y-1">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="break-words">{children}</div>
+      <div className={typeRole({ role: "label" })}>{label}</div>
+      <div className={cn(typeRole({ role: "body" }), "break-words")}>
+        {children}
+      </div>
     </div>
   );
 }

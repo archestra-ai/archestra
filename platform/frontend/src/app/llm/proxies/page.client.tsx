@@ -196,6 +196,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const { data: isTeamAdmin } = useHasPermissions({
     llmProxy: ["team-admin"],
   });
+  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isLegacyTeamAdmin } = useHasPermissions({
+    agent: ["team-admin"],
+  });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
@@ -388,10 +392,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const isLegacy = agent.agentType === "profile";
         const canModify = computeCanModifyAgent({
           agent,
-          isAdmin: !!isAdmin,
-          isTeamAdmin: !!isTeamAdmin,
+          isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
+          isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
           currentUserId,
           userTeamIds: userTeamIdSet,
         });
@@ -402,9 +407,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             <LlmProxyActions
               agent={agent}
               canModify={canModify}
-              onConnect={(target) =>
-                router.push(agentDetailHref("llm_proxy", target.id, "connect"))
-              }
               onEdit={(target) =>
                 router.push(agentEditHref("llm_proxy", target.id))
               }

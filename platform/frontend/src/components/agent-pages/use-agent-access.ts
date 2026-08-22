@@ -66,16 +66,23 @@ export function useAgentAccess(
   const { data: isAdmin, isPending: isAdminPending } = useHasPermissions({
     [resource]: ["admin"],
   });
-  const { data: isTeamAdmin } = useHasPermissions({
-    [resource]: ["team-admin"],
-  });
+  const { data: isTeamAdmin, isPending: isTeamAdminPending } =
+    useHasPermissions({
+      [resource]: ["team-admin"],
+    });
   const { data: canUpdate, isPending: isUpdatePending } = useHasPermissions({
     [resource]: ["update"],
   });
   const { data: canCreate } = useHasPermissions({ [resource]: ["create"] });
   const { data: canDelete } = useHasPermissions({ [resource]: ["delete"] });
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
+  const { data: canReadTeams, isPending: isTeamsPermissionPending } =
+    useHasPermissions({ team: ["read"] });
+  // `isLoading`, not `isPending`: the query is disabled until the team:read
+  // answer lands, and a disabled query stays `pending` forever, which would
+  // leave the whole hook undecided for anyone without that permission.
+  const { data: userTeams, isLoading: isTeamsLoading } = useMyTeams({
+    enabled: !!canReadTeams,
+  });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -96,6 +103,12 @@ export function useAgentAccess(
      */
     resource,
     canModify,
+    /**
+     * The RBAC half alone. A control refused because the record is not the
+     * caller's needs a different sentence from one refused because the caller
+     * holds no update permission at all, and only this tells them apart.
+     */
+    canUpdate: !!canUpdate,
     // Built-ins belong to nobody and are org-scoped; the backend lets only
     // resource admins update them (`requireAgentModifyPermission`).
     canEdit: !!canUpdate && (isBuiltIn ? !!isAdmin : canModify),
@@ -103,6 +116,15 @@ export function useAgentAccess(
     canDelete: !!canDelete && canModify && !isBuiltIn,
     isBuiltIn,
     currentUserId,
-    isPending: isAdminPending || isUpdatePending,
+    // Every read `canModify` is composed from, not just the permission ones:
+    // the teams query decides the team-admin branch, so while it is in flight
+    // a team admin's own record reads as "not yours" and the control it gates
+    // would flicker from refused to enabled once the answer lands.
+    isPending:
+      isAdminPending ||
+      isUpdatePending ||
+      isTeamAdminPending ||
+      isTeamsPermissionPending ||
+      isTeamsLoading,
   };
 }

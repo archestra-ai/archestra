@@ -7,11 +7,16 @@ const { getUserPermissionsMock, getServerApiHeadersMock } = vi.hoisted(() => ({
   getServerApiHeadersMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getUserPermissions: getUserPermissionsMock,
-  },
-}));
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: {
+      ...actual.archestraApiSdk,
+      getUserPermissions: getUserPermissionsMock,
+    },
+  };
+});
 
 vi.mock("@archestra/shared/access-control", () => ({
   requiredPagePermissionsMap: {

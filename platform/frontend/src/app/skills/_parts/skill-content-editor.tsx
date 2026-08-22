@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, isSpecCompliantSkillName } from "@archestra/shared";
+import { DocsPage } from "@archestra/shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -53,6 +53,14 @@ description: One line on when an agent should use this skill.
 Step-by-step instructions for the agent...`;
 
 const ROOT_ADD_KEY = "";
+
+/** Reading viewport below the detail header and collapsed Overview. */
+export const SKILL_DETAIL_EDITOR_CLASS =
+  "h-[calc(100vh-30rem)] min-h-[24rem] max-h-[42rem] flex-none";
+
+/** Editing viewport with room left for wizard navigation and actions. */
+export const SKILL_WIZARD_EDITOR_CLASS =
+  "h-[calc(100vh-22rem)] min-h-[28rem] max-h-[64rem] flex-none";
 
 /**
  * The content half of a skill: SKILL.md manifest plus resource files, as a
@@ -230,11 +238,11 @@ export function SkillContentEditor({
   return (
     <div
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3",
+        "grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(8rem,auto)_minmax(20rem,1fr)] gap-3 overflow-y-auto md:grid-cols-[240px_1fr] md:grid-rows-1 md:overflow-hidden",
         className,
       )}
     >
-      <div className="flex min-h-0 flex-col rounded-md border">
+      <div className="flex max-h-48 min-h-0 flex-col rounded-md border md:max-h-none">
         <div className="flex-1 overflow-y-auto p-2">
           <ul className="space-y-0.5">
             <ManifestRow
@@ -407,16 +415,6 @@ export function SkillContentEditor({
             </Tooltip>
           )}
         </div>
-        {!openFile &&
-          parsed.name !== null &&
-          !isSpecCompliantSkillName(parsed.name) && (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
-              This name cannot be published over MCP: the Agent Skills
-              specification allows only lowercase letters, digits, and single
-              hyphens (max 64 characters). The skill still works everywhere
-              else.
-            </p>
-          )}
         {openFile && openFile.encoding === "base64" ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border bg-muted/30 text-center text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Binary asset</span>

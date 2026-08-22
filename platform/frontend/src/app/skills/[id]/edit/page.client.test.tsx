@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+// The scope check behind Edit/Delete asks which teams the caller belongs to.
+vi.mock("@/lib/teams/team.query");
 // Monaco does not render in jsdom; the canonical mock is a textarea.
 vi.mock("@/components/editor");
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -38,6 +40,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { SkillEditPage } from "./page.client";
 
 const updateMutateAsync = vi.fn();
@@ -112,6 +115,10 @@ describe("SkillEditPage", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
     vi.mocked(useUpdateSkill).mockReturnValue({
       mutateAsync: updateMutateAsync,
       isPending: false,

@@ -10,7 +10,7 @@ import {
 } from "./agent-page-config";
 
 describe("getAgentSetupSteps", () => {
-  it("walks an agent through configuration, tools and advanced — connecting is the detail page's tab, not a step", () => {
+  it("walks an agent through configuration, tools and advanced — connecting is the detail page's section, not a step", () => {
     expect(
       getAgentSetupSteps({ agentType: "agent", builtIn: false }).map(
         (s) => s.id,
@@ -87,7 +87,7 @@ describe("route families", () => {
   it("builds the detail and edit hrefs off the family's list route", () => {
     expect(agentDetailHref("llm_proxy", "p1")).toBe("/llm/proxies/p1");
     expect(agentDetailHref("llm_proxy", "p1", "connect")).toBe(
-      "/llm/proxies/p1?tab=connect",
+      "/llm/proxies/p1#connect",
     );
     expect(agentEditHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1/edit");
     expect(agentEditHref("agent", "a 1", "tools")).toBe(

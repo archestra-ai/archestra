@@ -3,7 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 9
 description: Invoke agents over HTTP using the A2A protocol
-lastUpdated: 2026-08-02
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,7 +32,7 @@ Each agent has its own card, so the path is scoped to an agent:
 GET /v2/a2a/{agentId}/.well-known/agent-card.json
 ```
 
-This differs from the convention in [RFC 8615](https://datatracker.ietf.org/doc/html/rfc8615), where a `.well-known` path sits at the root of a domain. One deployment hosts many agents, and a card describes exactly one — a card at the domain root could not say which agent it meant. A client that builds the URL by appending `/.well-known/agent-card.json` to a hostname gets a `401`, not a card — and not a `404`, so the failure reads like a credentials problem when it is really a path problem. Give the client the agent-scoped URL instead. You can copy it from the agent's Connect dialog.
+This differs from the convention in [RFC 8615](https://datatracker.ietf.org/doc/html/rfc8615), where a `.well-known` path sits at the root of a domain. One deployment hosts many agents, and a card describes exactly one — a card at the domain root could not say which agent it meant. A client that builds the URL by appending `/.well-known/agent-card.json` to a hostname gets a `401`, not a card — and not a `404`, so the failure reads like a credentials problem when it is really a path problem. Give the client the agent-scoped URL instead. You can copy it from the agent's Connect section.
 
 ### The Registry
 

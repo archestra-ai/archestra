@@ -18,6 +18,7 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -28,14 +29,14 @@ import {
   agentListHref,
   getAgentSetupSteps,
 } from "./agent-page-config";
-import { AgentPageShell, AgentWizardFooter } from "./agent-page-shell";
+import { AgentPageShell } from "./agent-page-shell";
 
 /**
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
  * Every step fills one form that lives for the whole wizard; nothing reaches
  * the backend until the last step's Create, which writes the record and
  * everything picked for it together, then lands on the detail page's Connect
- * tab — the way the skills wizard collects a draft and creates at the end.
+ * section — the way the skills wizard collects a draft and creates at the end.
  */
 export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
   const config = AGENT_PAGE_CONFIGS[kind];
@@ -110,7 +111,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
           </EmptyHeader>
         </Empty>
       ) : created ? (
-        // Created, and on its way to the Connect tab as soon as the read
+        // Created, and on its way to the Connect section as soon as the read
         // permission answers. The form stays unmounted so it cannot be
         // submitted a second time.
         <Empty className="border">
@@ -164,7 +165,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
               setCreated(record);
             }}
             footer={({ isSaving, canSubmit }) => (
-              <AgentWizardFooter>
+              <WizardFooter>
                 <div>
                   {prevStep ? (
                     <Button
@@ -222,7 +223,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
                     </span>
                   </Button>
                 )}
-              </AgentWizardFooter>
+              </WizardFooter>
             )}
           />
         </>

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PageLayout } from "@/components/page-layout";
@@ -88,4 +89,144 @@ describe("PageLayout tabs", () => {
       document.querySelectorAll("[data-testid]:not([data-testid=''])"),
     ).toHaveLength(0);
   });
+
+  /**
+   * Below `md` the tab row shows the first `mobileVisibleCount` tabs and folds
+   * the rest into a popover. Both rows are in the DOM at once, so a tab past
+   * the cut appears exactly once (the desktop row) until the popover is opened.
+   */
+  it("folds tabs past the mobile cut into an overflow popover", async () => {
+    const user = userEvent.setup();
+    render(
+      <PageLayout title="Server" description="" tabs={FIVE_TABS}>
+        <div />
+      </PageLayout>,
+    );
+
+    // The first three are in both rows; the last two only in the desktop one.
+    expect(screen.getAllByText("Overview")).toHaveLength(2);
+    expect(screen.getAllByText("Logs")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: /More/ }));
+
+    expect(screen.getAllByText("Logs")).toHaveLength(2);
+  });
+
+  it("names the overflow trigger after the active tab rather than 'More'", () => {
+    // Otherwise a mobile reader on a folded tab sees no indication of where
+    // they are: every tab in the visible row reads inactive.
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/abc/logs");
+    render(
+      <PageLayout title="Server" description="" tabs={FIVE_TABS}>
+        <div />
+      </PageLayout>,
+    );
+
+    expect(screen.queryByRole("button", { name: /More/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
+  });
 });
+
+/**
+ * `status` arrived long after the 40-odd call sites that do not pass it, so
+ * what it must not do is as much of the contract as what it does.
+ */
+describe("PageLayout header", () => {
+  beforeEach(() => {
+    vi.mocked(usePathname).mockReturnValue("/agents/abc");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+  });
+
+  it("renders a legacy caller's header with nothing extra in it", () => {
+    render(
+      <PageLayout
+        title="Agents"
+        description="Agents are AI assistants."
+        actionButton={<button type="button">Create Agent</button>}
+      >
+        <div>body</div>
+      </PageLayout>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("Agents");
+    expect(screen.getByText("Agents are AI assistants.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create Agent" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("body")).toBeInTheDocument();
+    // No empty status shell: an "Active" pill on every record is the row this
+    // prop exists to keep optional.
+    expect(heading.parentElement?.children).toHaveLength(1);
+  });
+
+  it("keeps a composed title's icon and badges inside the heading", () => {
+    // Detail pages pass markup as `title`, not a string, and the heading row
+    // has to stay a container for it rather than assuming a bare name.
+    render(
+      <PageLayout
+        title={
+          <span>
+            <svg role="img" aria-label="agent icon" />
+            <span>Support Bot</span>
+            <span>Personal</span>
+          </span>
+        }
+        documentTitle="Support Bot"
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("Support Bot");
+    expect(heading).toHaveTextContent("Personal");
+    expect(heading.querySelector("[aria-label='agent icon']")).not.toBeNull();
+  });
+
+  it("puts the status pill beside the heading, never inside its name", () => {
+    render(
+      <PageLayout
+        title="filesystem"
+        status={<span>Not reachable</span>}
+        description="An MCP server."
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("filesystem");
+    // A live probe result folded into the heading would rename the page every
+    // time the probe changed.
+    expect(heading).not.toHaveTextContent("Not reachable");
+    expect(screen.getByText("Not reachable")).toBeInTheDocument();
+  });
+
+  it("lets a long title shrink instead of pushing the actions off the row", () => {
+    // The heading is a flex item now that the status pill sits beside it, and
+    // a flex item without `min-w-0` refuses to shrink below its content: the
+    // title would keep its full width and shove the action button out of the
+    // header instead of truncating.
+    render(
+      <PageLayout
+        title={"A gateway with a very long name ".repeat(8)}
+        actionButton={<button type="button">Edit</button>}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveClass("min-w-0");
+  });
+});
+
+const FIVE_TABS = [
+  { label: "Overview", href: "/mcp/registry/abc" },
+  { label: "Tools", href: "/mcp/registry/abc/tools" },
+  { label: "Credentials", href: "/mcp/registry/abc/credentials" },
+  { label: "Logs", href: "/mcp/registry/abc/logs" },
+  { label: "Settings", href: "/mcp/registry/abc/settings" },
+];

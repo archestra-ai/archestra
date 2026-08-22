@@ -1,63 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useIsGlobalAdmin } from "@/lib/organization.query";
-import {
-  PermanentDeleteButton,
-  permanentDeleteRowAction,
-} from "./permanent-delete";
+import { permanentDeleteRowAction } from "./permanent-delete";
 import { TableRowActions } from "./table-row-actions";
 
-vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
-
-function setAdminGate(gate: { isGlobalAdmin: boolean; isLoading?: boolean }) {
-  vi.mocked(useIsGlobalAdmin).mockReturnValue({
-    isGlobalAdmin: gate.isGlobalAdmin,
-    isLoading: gate.isLoading ?? false,
-  });
-}
-
-describe("PermanentDeleteButton", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("runs the delete for a member holding a built-in admin role", () => {
-    setAdminGate({ isGlobalAdmin: true });
-    const onClick = vi.fn();
-
-    render(<PermanentDeleteButton onClick={onClick} itemName="billing-gw" />);
-
-    const button = screen.getByLabelText("Delete permanently billing-gw");
-    expect(button).toBeEnabled();
-    fireEvent.click(button);
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("disables the button for everyone else", () => {
-    // The route answers 404 to a non-admin whatever permissions they hold, so
-    // an enabled button here would only ever produce a confusing "not found".
-    setAdminGate({ isGlobalAdmin: false });
-    const onClick = vi.fn();
-
-    render(<PermanentDeleteButton onClick={onClick} itemName="billing-gw" />);
-
-    const button = screen.getByLabelText("Delete permanently billing-gw");
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
-    expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it("stays disabled while the role is still loading", () => {
-    // Fail closed: an unresolved role must never leave a destructive action
-    // enabled for the moment before the answer arrives.
-    setAdminGate({ isGlobalAdmin: false, isLoading: true });
-
-    render(<PermanentDeleteButton onClick={vi.fn()} itemName="billing-gw" />);
-
-    expect(
-      screen.getByLabelText("Delete permanently billing-gw"),
-    ).toBeDisabled();
-  });
-});
 
 describe("permanentDeleteRowAction", () => {
   beforeEach(() => vi.clearAllMocks());

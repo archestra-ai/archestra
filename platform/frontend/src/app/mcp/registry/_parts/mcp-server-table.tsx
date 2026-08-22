@@ -239,7 +239,11 @@ export function McpServerTable({
         const issues = issuesByCatalog.get(item.id) ?? [];
         const issue = issues.find((i) => !i.muted) ?? issues[0];
         if (issue) {
-          return <McpServerIssueBadge issue={issue} showDetail={false} />;
+          return (
+            <div className="flex min-h-9 items-center">
+              <McpServerIssueBadge issue={issue} showDetail={false} />
+            </div>
+          );
         }
         // Nothing installed means there is no runtime to have a status, and a
         // catalog entry nobody has connected is not "Healthy" — it is nothing.

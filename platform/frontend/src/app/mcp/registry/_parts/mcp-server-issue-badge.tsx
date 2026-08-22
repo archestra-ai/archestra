@@ -17,11 +17,11 @@ import { cn } from "@/lib/utils";
 
 const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
   "failed-to-start":
-    "border border-tone-down/25 bg-tone-down/8 text-tone-down-foreground",
+    "border border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-300",
   "not-running":
-    "border border-tone-down/25 bg-tone-down/8 text-tone-down-foreground",
+    "border border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-300",
   "needs-reauth":
-    "border border-tone-attention/25 bg-tone-attention/8 text-tone-attention-foreground",
+    "border border-amber-500/20 bg-amber-500/8 text-amber-800 dark:text-amber-300",
 };
 
 /**

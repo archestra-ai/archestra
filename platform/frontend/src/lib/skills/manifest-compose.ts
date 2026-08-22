@@ -56,16 +56,24 @@ export function parseManifestFields(raw: string): {
   templated: boolean;
   /** The frontmatter `name` value, unquoted — null when absent. */
   name: string | null;
+  /** The frontmatter `description` value, unquoted — null when absent. */
+  description: string | null;
 } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const frontmatter = match?.[1] ?? "";
   const nameMatch = frontmatter.match(/^name:\s*(\S.*?)\s*$/m);
+  const descriptionMatch = frontmatter.match(/^description:\s*(\S.*?)\s*$/m);
+  const name = nameMatch ? unquoteScalar(nameMatch[1]) : null;
+  const description = descriptionMatch
+    ? unquoteScalar(descriptionMatch[1])
+    : null;
   return {
-    hasName: /^name:\s*\S/m.test(frontmatter),
-    hasDescription: /^description:\s*\S/m.test(frontmatter),
+    hasName: Boolean(name?.trim()),
+    hasDescription: Boolean(description?.trim()),
     // the backend parser also accepts a quoted "true"; keep the hint in sync
     templated: /^templated:\s*['"]?true['"]?\s*$/m.test(frontmatter),
-    name: nameMatch ? unquoteScalar(nameMatch[1]) : null,
+    name,
+    description,
   };
 }
 

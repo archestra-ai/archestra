@@ -52,7 +52,16 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
   nonInteractiveArgPatterns: ["-p", "--print"],
   mcpDisconnectCommands: `      command claude mcp remove --scope user "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
       command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
-  skillsDisconnectCommands: `      command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsDisconnectCommands: `      printf '%s\n' "$PLUGIN_NAMES" | while IFS= read -r arch_plugin; do
+        [ -n "$arch_plugin" ] || continue
+        command claude plugin uninstall "$arch_plugin@$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
+      done
+      command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsRefreshCommands: `  command claude plugin marketplace update "$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || return 1
+  printf '%s\n' "$arch_refresh_plugin_names" | while IFS= read -r arch_plugin; do
+    [ -n "$arch_plugin" ] || continue
+    command claude plugin update -y "$arch_plugin@$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || exit 1
+  done || return 1`,
   // Connect registers the gateway at user scope, which lives in
   // `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`) under `mcpServers`;
   // marketplaces are indexed in `plugins/known_marketplaces.json` by name. A
@@ -77,8 +86,17 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
         try { & $archRealExe.Source mcp remove --scope local $McpServerName 2>$null | Out-Null } catch { }
       }`,
     skillsDisconnect: `      if ($archRealExe) {
+        foreach ($archPlugin in $PluginNames) {
+          try { & $archRealExe.Source plugin uninstall ($archPlugin + '@' + $SkillsMarketplaceName) 2>$null | Out-Null } catch { }
+        }
         try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { }
       }`,
+    skillsRefreshCommands: `  & $archRefreshReal.Source plugin marketplace update $ArchRefreshMarketplace 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { return $false }
+  foreach ($archPlugin in $ArchRefreshPluginNames) {
+    & $archRefreshReal.Source plugin update -y ($archPlugin + '@' + $ArchRefreshMarketplace) 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+  }`,
     mcpDisconnectVerify: windowsJsonMemberGoneVerify({
       configPath:
         "Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $env:USERPROFILE }) '.claude.json'",
@@ -230,7 +248,17 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
   // `codex exec …` is Codex's non-interactive one-shot subcommand.
   nonInteractiveArgPatterns: ["exec"],
   mcpDisconnectCommands: `      command codex mcp remove "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
-  skillsDisconnectCommands: `      command codex plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsDisconnectCommands: `      printf '%s\n' "$PLUGIN_NAMES" | while IFS= read -r arch_plugin; do
+        [ -n "$arch_plugin" ] || continue
+        command codex plugin remove "$arch_plugin@$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
+      done
+      command codex plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsRefreshCommands: `  command codex plugin marketplace upgrade "$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || return 1
+  printf '%s\n' "$arch_refresh_plugin_names" | while IFS= read -r arch_plugin; do
+    [ -n "$arch_plugin" ] || continue
+    command codex plugin remove "$arch_plugin@$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || true
+    command codex plugin add "$arch_plugin@$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || exit 1
+  done || return 1`,
   mcpDisconnectVerify: codexVerifyTableGone(
     "mcp_servers",
     "$MCP_SERVER_NAME",
@@ -244,7 +272,19 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
   renderProxyDisconnect: codexProxyDisconnect,
   windows: {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
-    skillsDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { } }`,
+    skillsDisconnect: `      if ($archRealExe) {
+        foreach ($archPlugin in $PluginNames) {
+          try { & $archRealExe.Source plugin remove ($archPlugin + '@' + $SkillsMarketplaceName) 2>$null | Out-Null } catch { }
+        }
+        try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { }
+      }`,
+    skillsRefreshCommands: `  & $archRefreshReal.Source plugin marketplace upgrade $ArchRefreshMarketplace 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { return $false }
+  foreach ($archPlugin in $ArchRefreshPluginNames) {
+    & $archRefreshReal.Source plugin remove ($archPlugin + '@' + $ArchRefreshMarketplace) 2>$null | Out-Null
+    & $archRefreshReal.Source plugin add ($archPlugin + '@' + $ArchRefreshMarketplace) 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+  }`,
     mcpDisconnectVerify: codexWindowsVerifyTableGone(
       "mcp_servers",
       "$McpServerName",
@@ -429,7 +469,16 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
   // Copilot CLI's non-interactive one-shot flag.
   nonInteractiveArgPatterns: ["-p", "--prompt"],
   mcpDisconnectCommands: `      command copilot mcp remove "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
-  skillsDisconnectCommands: `      command copilot plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsDisconnectCommands: `      printf '%s\n' "$PLUGIN_NAMES" | while IFS= read -r arch_plugin; do
+        [ -n "$arch_plugin" ] || continue
+        command copilot plugin uninstall "$arch_plugin@$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
+      done
+      command copilot plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  skillsRefreshCommands: `  command copilot plugin marketplace update "$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || return 1
+  printf '%s\n' "$arch_refresh_plugin_names" | while IFS= read -r arch_plugin; do
+    [ -n "$arch_plugin" ] || continue
+    command copilot plugin update "$arch_plugin@$arch_refresh_marketplace" </dev/null >/dev/null 2>&1 || exit 1
+  done || return 1`,
   // Copilot CLI keeps MCP servers in `~/.copilot/mcp-config.json` under
   // `mcpServers` and registered marketplaces in `~/.copilot/settings.json`
   // under `extraKnownMarketplaces` (both verified against a live install).
@@ -448,7 +497,18 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
   renderProxyDisconnect: copilotProxyDisconnect,
   windows: {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
-    skillsDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { } }`,
+    skillsDisconnect: `      if ($archRealExe) {
+        foreach ($archPlugin in $PluginNames) {
+          try { & $archRealExe.Source plugin uninstall ($archPlugin + '@' + $SkillsMarketplaceName) 2>$null | Out-Null } catch { }
+        }
+        try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { }
+      }`,
+    skillsRefreshCommands: `  & $archRefreshReal.Source plugin marketplace update $ArchRefreshMarketplace 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { return $false }
+  foreach ($archPlugin in $ArchRefreshPluginNames) {
+    & $archRefreshReal.Source plugin update ($archPlugin + '@' + $ArchRefreshMarketplace) 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+  }`,
     mcpDisconnectVerify: windowsJsonMemberGoneVerify({
       configPath: "Join-Path $env:USERPROFILE '.copilot\\mcp-config.json'",
       member: "mcpServers",

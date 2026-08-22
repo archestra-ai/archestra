@@ -1,7 +1,7 @@
 ---
 title: Code Sandbox
 category: Agents
-order: 5
+order: 6
 description: A private Linux container where an agent runs code during a chat
 lastUpdated: 2026-07-20
 ---

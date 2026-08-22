@@ -307,6 +307,142 @@ describe("renderSetupScript", () => {
     });
   }
 
+  test("plugin-only marketplaces install each plugin per client", async () => {
+    const pluginRef = "plugin-session-attribution-12345678@acme-skills";
+    const context = (
+      clientId: SetupScriptContext["clientId"],
+    ): SetupScriptContext => ({
+      clientId,
+      platform: "linux",
+      appName: "Archestra",
+      mcp: null,
+      proxy: null,
+      skills: {
+        ...SKILLS,
+        hasSkills: false,
+        pluginNames: ["plugin-session-attribution-12345678"],
+      },
+    });
+
+    const claude = renderSetupScript(context("claude-code"));
+    await expectValidBash(claude);
+    expect(claude).toContain(`cli claude plugin install '${pluginRef}'`);
+    expect(claude).not.toContain(
+      "cli claude plugin install 'acme-skills@acme-skills'",
+    );
+    expect(claude).toContain("Configures: Plugins marketplace");
+    expect(claude).toContain("1 plugin is installed");
+    expect(claude).toContain("Plugins marketplace (acme-skills)");
+    expect(claude).not.toContain("The shared skills are installed");
+
+    const codex = renderSetupScript(context("codex"));
+    await expectValidBash(codex);
+    expect(codex).toContain(`cli codex plugin add '${pluginRef}'`);
+    expect(codex).toContain("approve each delivered hook");
+
+    const copilot = renderSetupScript(context("copilot-cli"));
+    await expectValidBash(copilot);
+    expect(copilot).toContain(`cli copilot plugin install '${pluginRef}'`);
+
+    const cursor = renderSetupScript(context("cursor"));
+    await expectValidBash(cursor);
+    expect(cursor).toContain("plugin-session-attribution-12345678");
+    expect(cursor).not.toContain("cli cursor");
+  });
+
+  test("Windows plugin-only marketplaces install and refresh supported clients", () => {
+    const pluginName = "plugin-windows-terminal-hooks-12345678";
+    const pluginRef = `${pluginName}@acme-skills`;
+    const context = (
+      clientId: SetupScriptContext["clientId"],
+    ): SetupScriptContext => ({
+      clientId,
+      platform: "windows",
+      appName: "Archestra",
+      mcp: null,
+      proxy: null,
+      skills: {
+        ...SKILLS,
+        hasSkills: false,
+        pluginNames: [pluginName],
+      },
+    });
+
+    const claude = renderSetupScript(context("claude-code"));
+    expect(claude).toContain(`claude plugin install '${pluginRef}'`);
+    expect(claude).toContain(
+      "plugin marketplace update $ArchRefreshMarketplace",
+    );
+    expect(claude).toContain("plugin update -y");
+    expect(claude).toContain("'Application', 'ExternalScript'");
+    expect(claude).toContain("Configures: Plugins marketplace");
+    expect(claude).toContain("1 plugin is installed");
+    expect(claude).toContain("Plugins marketplace (acme-skills)");
+    expect(claude).not.toContain("The shared skills are installed");
+    expect(claude).not.toContain("on the Skills page");
+
+    const codex = renderSetupScript(context("codex"));
+    expect(codex).toContain(`codex plugin add '${pluginRef}'`);
+    expect(codex).toContain(
+      "plugin marketplace upgrade $ArchRefreshMarketplace",
+    );
+    expect(codex).toContain("plugin remove ($archPlugin + '@'");
+
+    const copilot = renderSetupScript(context("copilot-cli"));
+    expect(copilot).toContain(`copilot plugin install '${pluginRef}'`);
+    expect(copilot).toContain(
+      "plugin marketplace update $ArchRefreshMarketplace",
+    );
+    expect(copilot).toContain("plugin update ($archPlugin + '@'");
+
+    const cursor = renderSetupScript(context("cursor"));
+    expect(cursor).toContain(pluginName);
+    expect(cursor).toContain("Customize -> Plugins");
+  });
+
+  test("refreshes installed marketplace plugins after interactive sessions, never before startup", () => {
+    const claude = renderSetupScript({
+      ...fullContext("claude-code"),
+      skills: {
+        ...SKILLS,
+        hasSkills: true,
+        pluginNames: ["plugin-session-attribution-12345678"],
+      },
+    });
+    const launchAt = claude.indexOf('command claude "$@"');
+    const refreshAt = claude.indexOf(
+      'archestra_refresh_claude_marketplace "$@"',
+    );
+    expect(refreshAt).toBeGreaterThan(launchAt);
+    expect(claude).toContain(
+      'command claude plugin marketplace update "$arch_refresh_marketplace"',
+    );
+    expect(claude).toContain(
+      'command claude plugin update -y "$arch_plugin@$arch_refresh_marketplace"',
+    );
+    expect(claude).toContain('case "$archestra_arg" in -p|--print) return 0');
+    expect(claude).toContain('" -lt 86400 ] && return 0');
+
+    const codex = renderSetupScript({
+      ...fullContext("codex"),
+      skills: {
+        ...SKILLS,
+        hasSkills: false,
+        pluginNames: ["plugin-session-attribution-12345678"],
+      },
+    });
+    expect(codex).toContain(
+      'command codex plugin marketplace upgrade "$arch_refresh_marketplace"',
+    );
+    const removeAt = codex.indexOf(
+      'command codex plugin remove "$arch_plugin@$arch_refresh_marketplace"',
+    );
+    const addAt = codex.indexOf(
+      'command codex plugin add "$arch_plugin@$arch_refresh_marketplace"',
+    );
+    expect(addAt).toBeGreaterThan(removeAt);
+  });
+
   test("bash: `cli` detaches a command's stdout from the terminal", async () => {
     // Control + subject in one run. At script level stdout is a real tty (the
     // pty harness is faithful), so the control prints TTY-AT-SCRIPT. Through
@@ -405,7 +541,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(
       `cli claude plugin marketplace add '${SKILLS.cloneUrl}'`,
     );
-    // The skill bundle is installed by the script, not via a manual browse step.
+    // The skill plugin is installed by the script, not via a manual browse step.
     expect(script).toContain(
       `cli claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
     );
@@ -529,7 +665,8 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       // the guard .ps1 is written and the client's own wrapper hooked
       expect(script).toContain(`${binary}-startup-guard.ps1`);
       expect(script).toContain(`function ${binary} {`);
-      expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { exit 0 }`);
+      expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { return }`);
+      expect(script).not.toContain("exit 0");
       // unshadow runs before the CLI, install (with in-session arming) after
       const unshadowAt = script.indexOf(
         `Remove-Item Function:${binary} -ErrorAction SilentlyContinue`,

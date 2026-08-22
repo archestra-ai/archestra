@@ -49,6 +49,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "chatOpsBinding.refreshed": "ChatOps binding refreshed",
   // ChatOps config
   "chatOpsConfig.updated": "ChatOps config updated",
+  // Plugin
+  "plugin.created": "Plugin created",
+  "plugin.updated": "Plugin updated",
+  "plugin.deleted": "Plugin deleted",
+  "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
@@ -171,6 +176,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.restored": "Skill restored",
   "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
+  "skillShareLink.created": "Marketplace link created",
+  "skillShareLink.rotated": "Marketplace link rotated",
+  "skillShareLink.revoked": "Marketplace link revoked",
   // Team
   "team.created": "Team created",
   "team.updated": "Team updated",
@@ -317,6 +325,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "auth",
   "chatOpsBinding",
   "chatOpsConfig",
+  "plugin",
   "connector",
   "defaultUserLimit",
   "environment",
@@ -342,6 +351,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "scheduleTrigger",
   "serviceAccount",
   "skill",
+  "skillShareLink",
   "team",
   "teamToken",
   "tool",
@@ -358,6 +368,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   auth: "Auth",
   chatOpsBinding: "ChatOps channel binding",
   chatOpsConfig: "ChatOps configuration",
+  plugin: "Plugin",
   githubAppConfig: "GitHub App configuration",
   githubPat: "GitHub PAT",
   internalMcpCatalog: "Internal MCP catalog",
@@ -376,6 +387,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   organization: "Organization",
   scheduleTrigger: "Scheduled task",
   skill: "Agent skill",
+  skillShareLink: "Marketplace link",
   teamToken: "Team / org token",
   tool: "Discovered tool",
   toolInvocationPolicy: "Tool invocation policy",

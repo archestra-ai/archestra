@@ -1,7 +1,7 @@
 ---
 title: Telegram
 category: Agents
-order: 6
+order: 7
 description: Connect Archestra agents to Telegram chats and groups
 lastUpdated: 2026-07-21
 ---

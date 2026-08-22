@@ -43,8 +43,8 @@ export interface SkillPreview {
 }
 
 const BLANK_SKILL_TEMPLATE = `---
-name: template-skill
-description: Replace with description of the skill and when Agents should use it.
+name: ""
+description: ""
 ---
 
 # Insert instructions below

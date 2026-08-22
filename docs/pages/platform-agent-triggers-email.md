@@ -1,7 +1,7 @@
 ---
 title: Incoming Email
 category: Agents
-order: 8
+order: 9
 description: Invoke agents by sending emails to auto-generated addresses
 lastUpdated: 2026-07-03
 ---

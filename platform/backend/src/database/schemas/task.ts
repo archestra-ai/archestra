@@ -58,6 +58,11 @@ const tasksTable = pgTable(
       .where(
         sql`${table.taskType} = 'batch_embedding' AND ${table.status} IN ('pending', 'processing')`,
       ),
+    uniqueIndex("tasks_plugin_github_sync_single_flight_idx")
+      .on(sql`(${table.payload} ->> 'pluginId')`)
+      .where(
+        sql`${table.taskType} = 'plugin_github_sync' AND ${table.status} IN ('pending', 'processing')`,
+      ),
   ],
 );
 

@@ -2,13 +2,18 @@ import { describe, expect, test } from "vitest";
 import {
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
+  buildCodexPluginMarketplaceEntry,
+  buildCodexPluginPayloadManifest,
+  buildPluginMarketplaceEntry,
+  buildPluginPayloadManifest,
   buildSimpleMarketplaceManifest,
   buildSimplePluginManifest,
   isReservedMarketplaceName,
   type MarketplaceSkillInput,
   RESERVED_MARKETPLACE_NAMES,
-  resolveBundleVersion,
   resolveMarketplaceSkills,
+  resolvePluginName,
+  resolvePluginVersion,
 } from "./manifest";
 
 function makeSkill(
@@ -23,46 +28,20 @@ function makeSkill(
   };
 }
 
-describe("resolveBundleVersion", () => {
-  test("emits 0.0.0+<12 hex> for a non-empty input", () => {
-    expect(resolveBundleVersion([makeSkill()])).toMatch(
-      /^0\.0\.0\+[a-f0-9]{12}$/,
+describe("resolvePluginVersion", () => {
+  test("emits a real monotonic SemVer from the revision sequence", () => {
+    expect(resolvePluginVersion(0)).toBe("0.0.0");
+    expect(resolvePluginVersion(1)).toBe("0.1.0");
+    expect(resolvePluginVersion(2)).toBe("0.2.0");
+  });
+
+  test("rejects invalid revision sequences", () => {
+    expect(() => resolvePluginVersion(-1)).toThrow(
+      "revisionSequence must be a non-negative safe integer",
     );
-  });
-
-  test("is deterministic across calls with the same input", () => {
-    const skills = [
-      makeSkill({ id: "a", name: "Alpha" }),
-      makeSkill({ id: "b", name: "Beta" }),
-    ];
-    expect(resolveBundleVersion(skills)).toBe(resolveBundleVersion(skills));
-  });
-
-  test("is independent of input order (sorted internally)", () => {
-    const ordered = [
-      makeSkill({ id: "a", name: "Alpha" }),
-      makeSkill({ id: "b", name: "Beta" }),
-    ];
-    const reversed = [...ordered].reverse();
-    expect(resolveBundleVersion(ordered)).toBe(resolveBundleVersion(reversed));
-  });
-
-  test("changes when any skill's updatedAt changes", () => {
-    const a = resolveBundleVersion([makeSkill()]);
-    const b = resolveBundleVersion([
-      makeSkill({ updatedAt: new Date("2026-06-01T00:00:00.000Z") }),
-    ]);
-    expect(a).not.toBe(b);
-  });
-
-  test("changes when the set of skill ids changes", () => {
-    const a = resolveBundleVersion([makeSkill({ id: "x" })]);
-    const b = resolveBundleVersion([makeSkill({ id: "y" })]);
-    expect(a).not.toBe(b);
-  });
-
-  test("empty input returns a stable sentinel", () => {
-    expect(resolveBundleVersion([])).toBe("0.0.0+empty");
+    expect(() => resolvePluginVersion(1.5)).toThrow(
+      "revisionSequence must be a non-negative safe integer",
+    );
   });
 });
 
@@ -132,7 +111,7 @@ describe("resolveMarketplaceSkills", () => {
 });
 
 describe("buildSimpleMarketplaceManifest (Claude Code + Cursor)", () => {
-  test("emits a single bundle plugin pointing at plugins/<marketplaceName>", () => {
+  test("emits a single skills plugin pointing at plugins/<marketplaceName>", () => {
     const manifest = buildSimpleMarketplaceManifest({
       marketplaceName: "archestra-acme-skills",
       ownerName: "Acme Corp",
@@ -140,6 +119,7 @@ describe("buildSimpleMarketplaceManifest (Claude Code + Cursor)", () => {
         makeSkill({ id: "a", name: "PDF Helper" }),
         makeSkill({ id: "b", name: "CSV Tools" }),
       ],
+      version: "0.7.0",
     });
     expect(manifest).toEqual({
       name: "archestra-acme-skills",
@@ -149,7 +129,7 @@ describe("buildSimpleMarketplaceManifest (Claude Code + Cursor)", () => {
           name: "archestra-acme-skills",
           source: "./plugins/archestra-acme-skills",
           description: "2 skills shared from Acme Corp",
-          version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
+          version: "0.7.0",
         },
       ],
     });
@@ -160,17 +140,19 @@ describe("buildSimpleMarketplaceManifest (Claude Code + Cursor)", () => {
       marketplaceName: "m",
       ownerName: "Owner",
       skills: [makeSkill()],
+      version: "0.1.0",
     });
     expect(manifest.plugins[0].description).toBe("1 skill shared from Owner");
   });
 });
 
 describe("buildCodexMarketplaceManifest", () => {
-  test("emits a single bundle plugin with Codex policy + category", () => {
+  test("emits a single Codex skills plugin with policy and category", () => {
     const manifest = buildCodexMarketplaceManifest({
       marketplaceName: "archestra-acme-skills",
       displayName: "Acme Skills",
       skills: [makeSkill({ name: "PDF Helper" })],
+      version: "0.4.0",
     });
     expect(manifest).toEqual({
       name: "archestra-acme-skills",
@@ -187,7 +169,7 @@ describe("buildCodexMarketplaceManifest", () => {
             authentication: "ON_INSTALL",
           },
           category: "Skill",
-          version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
+          version: "0.4.0",
           description: "1 skill shared from Acme Skills",
         },
       ],
@@ -196,7 +178,7 @@ describe("buildCodexMarketplaceManifest", () => {
 });
 
 describe("buildSimplePluginManifest (Claude Code + Cursor)", () => {
-  test("returns the bundle's name/description/version", () => {
+  test("returns the plugin's name/description/version", () => {
     const skills = [
       makeSkill({ id: "a", name: "Alpha" }),
       makeSkill({ id: "b", name: "Beta" }),
@@ -206,11 +188,12 @@ describe("buildSimplePluginManifest (Claude Code + Cursor)", () => {
         marketplaceName: "archestra-acme-skills",
         ownerName: "Acme Corp",
         skills,
+        version: "0.2.0",
       }),
     ).toEqual({
       name: "archestra-acme-skills",
       description: "2 skills shared from Acme Corp",
-      version: resolveBundleVersion(skills),
+      version: "0.2.0",
     });
   });
 });
@@ -223,14 +206,57 @@ describe("buildCodexPluginManifest", () => {
         marketplaceName: "archestra-acme-skills",
         displayName: "Acme Skills",
         skills,
+        version: "0.3.0",
       }),
     ).toEqual({
       name: "archestra-acme-skills",
-      version: resolveBundleVersion(skills),
+      version: "0.3.0",
       description: "1 skill shared from Acme Skills",
       skills: "./skills/",
       interface: { displayName: "Acme Skills" },
     });
+  });
+});
+
+describe("plugin manifests", () => {
+  test("authors metadata only and never models hook semantics", () => {
+    const simpleEntry = buildPluginMarketplaceEntry({
+      pluginName: "plugin-session-attribution-12345678",
+      description: "Attributes sessions",
+      version: "0.8.0",
+    });
+    const simplePlugin = buildPluginPayloadManifest({
+      pluginName: simpleEntry.name,
+      description: simpleEntry.description,
+      version: simpleEntry.version,
+    });
+    const codexEntry = buildCodexPluginMarketplaceEntry({
+      pluginName: simpleEntry.name,
+      description: simpleEntry.description,
+      version: simpleEntry.version,
+    });
+    const codexPlugin = buildCodexPluginPayloadManifest({
+      pluginName: simpleEntry.name,
+      displayName: "Session attribution",
+      description: simpleEntry.description,
+      version: simpleEntry.version,
+    });
+
+    expect(simpleEntry.source).toBe(
+      "./plugins/plugin-session-attribution-12345678",
+    );
+    expect(codexEntry.category).toBe("Hooks");
+    expect(codexEntry.source).toEqual({
+      source: "local",
+      path: "./plugins/plugin-session-attribution-12345678",
+    });
+    expect(simplePlugin).not.toHaveProperty("hooks");
+    expect(codexPlugin).not.toHaveProperty("hooks");
+    expect(codexPlugin).not.toHaveProperty("skills");
+  });
+
+  test("keeps plugin identity under the shared 64-character cap", () => {
+    expect(resolvePluginName("x".repeat(48))).toHaveLength(48);
   });
 });
 

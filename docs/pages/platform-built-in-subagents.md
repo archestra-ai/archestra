@@ -1,7 +1,7 @@
 ---
 title: Built-in Subagents
 category: Agents
-order: 10
+order: 11
 description: The system subagents Archestra seeds into every organization, and what each one does
 lastUpdated: 2026-08-20
 ---

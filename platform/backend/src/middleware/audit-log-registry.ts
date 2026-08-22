@@ -24,10 +24,12 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
+import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -598,6 +600,61 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/skills/github/import": {
     resourceType: "skill",
     action: "skill.imported",
+  },
+
+  // Marketplace share links (bearer capabilities; snapshots are redacted)
+  "/api/skill-share-links": {
+    resourceType: "skillShareLink",
+    action: "skillShareLink.created",
+    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
+  },
+  "/api/skill-share-links/:id/rotate": {
+    resourceType: "skillShareLink",
+    action: "skillShareLink.rotated",
+    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
+  },
+  "/api/skill-share-links/:id": {
+    resourceType: "skillShareLink",
+    action: "skillShareLink.revoked",
+    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
+  },
+
+  // Plugins
+  "/api/plugins": {
+    resourceType: "plugin",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id": {
+    resourceType: "plugin",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/github/import": {
+    resourceType: "plugin",
+    action: "plugin.created",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/github/marketplace/import": {
+    resourceType: "plugin",
+    action: "plugin.created",
+  },
+  "/api/plugins/:id/github/apply-update": {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id/github/preview-update": {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id/github/sync": {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  "/api/plugins/:id/github/check": {
+    resourceType: "plugin",
+    action: "plugin.syncTriggered",
   },
 
   // Scheduled agent triggers (sub-routes resolve via `resolveAuditableRouteConfig`)

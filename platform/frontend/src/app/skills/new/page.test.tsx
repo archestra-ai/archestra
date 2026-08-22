@@ -152,7 +152,19 @@ describe("NewSkillPage wizard", () => {
 
     await user.click(screen.getByText("Blank template"));
     expect(contentEditor()).toBeInTheDocument();
-    // The blank template already carries a name and description.
+    expect(screen.getByLabelText("Skill name")).toHaveValue("");
+    expect(screen.getByLabelText("Skill name")).toHaveAttribute(
+      "placeholder",
+      "release-checklist",
+    );
+    expect(screen.getByLabelText("Description")).toHaveValue("");
+    await user.clear(screen.getByLabelText("Skill name"));
+    await user.type(screen.getByLabelText("Skill name"), "release-checklist");
+    await user.clear(screen.getByLabelText("Description"));
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Verify a release before shipping.",
+    );
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(screen.getByTestId("skill-access-fields")).toBeInTheDocument();
@@ -163,7 +175,10 @@ describe("NewSkillPage wizard", () => {
     const body = createMutateAsync.mock.calls[0][0];
     expect(body).not.toHaveProperty("baseVersion");
     expect(body).toMatchObject({ scope: "personal", files: [] });
-    expect(body.content).toContain("name: template-skill");
+    expect(body.content).toContain('name: "release-checklist"');
+    expect(body.content).toContain(
+      'description: "Verify a release before shipping."',
+    );
     expect(routerPush).toHaveBeenCalledWith("/skills/skill-new");
   });
 

@@ -31,6 +31,7 @@ export const actions = [
 export const resources = [
   "agent",
   "skill",
+  "plugin",
   "app",
   "sandbox",
   "mcpGateway",
@@ -95,6 +96,7 @@ export const resources = [
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
   skill: "Skills",
+  plugin: "Plugins",
   app: "Apps",
   sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
@@ -144,7 +146,8 @@ export const resourceLabels: Record<Resource, string> = {
 
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
-  skill: "Agent skills — reusable SKILL.md instruction bundles",
+  skill: "Agent skills — reusable SKILL.md instruction plugins",
+  plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   sandbox:
     "Code execution sandboxes — run commands, upload/download files, run activated skills",
@@ -217,6 +220,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Agents: [
     "agent",
     "skill",
+    "plugin",
     "skillsSettings",
     "app",
     "sandbox",

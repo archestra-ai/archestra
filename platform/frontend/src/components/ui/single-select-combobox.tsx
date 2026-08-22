@@ -25,6 +25,7 @@ export interface SingleSelectOption {
 }
 
 interface SingleSelectComboboxProps {
+  id?: string;
   options: SingleSelectOption[];
   value: string;
   onChange: (value: string) => void;
@@ -42,6 +43,7 @@ interface SingleSelectComboboxProps {
  * carry icons.
  */
 export function SingleSelectCombobox({
+  id,
   options,
   value,
   onChange,
@@ -58,6 +60,7 @@ export function SingleSelectCombobox({
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
           disabled={disabled}
           aria-expanded={open}

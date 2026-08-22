@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
 
 /**
  * The multiselect checkbox column, so every table that grows a bulk affordance
@@ -32,8 +33,9 @@ export function createSelectColumn<T>({
 }): ColumnDef<T> {
   return {
     id: "select",
-    size: 40,
-    minSize: 44,
+    size: DATA_TABLE_SELECT_COLUMN_SIZE,
+    minSize: DATA_TABLE_SELECT_COLUMN_SIZE,
+    maxSize: DATA_TABLE_SELECT_COLUMN_SIZE,
     enableSorting: false,
     header: ({ table }) => (
       <Checkbox

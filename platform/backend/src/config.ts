@@ -2074,6 +2074,14 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
+  plugins: {
+    /**
+     * Opaque plugins execute on connected developer machines, so
+     * authoring and automatic connection delivery ship off by default. Blank
+     * follows the ARCHESTRA_BETA master switch; an explicit false wins.
+     */
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PLUGINS_ENABLED),
+  },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
   },

@@ -5,9 +5,11 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   SkillShareLink,
+  SkillShareLinkPluginSummary,
   SkillShareLinkSkillSummary,
   SkillShareLinkWithSkills,
 } from "@/types";
+import type { ClientType, PluginPlatform } from "@/types/plugin";
 
 /**
  * Token prefix is share-link specific; deliberately distinct from team-token prefix.
@@ -25,6 +27,9 @@ interface CreateSkillShareLinkParams {
   organizationId: string;
   createdByUserId: string;
   skillIds: string[];
+  pluginIds?: string[];
+  pluginClientType?: ClientType | null;
+  pluginPlatform?: PluginPlatform | null;
   marketplaceName: string;
   name?: string | null;
   expiresAt?: Date | null;
@@ -45,14 +50,17 @@ interface CreateSkillShareLinkResult {
 interface ValidateSkillShareLinkResult {
   link: SkillShareLink;
   skills: SkillShareLinkSkillSummary[];
+  plugins: SkillShareLinkPluginSummary[];
 }
 
 class SkillShareLinkModel {
   static async create(
     params: CreateSkillShareLinkParams,
   ): Promise<CreateSkillShareLinkResult> {
-    if (params.skillIds.length === 0) {
-      throw new Error("skillIds must be non-empty");
+    if (params.skillIds.length === 0 && (params.pluginIds?.length ?? 0) === 0) {
+      throw new Error(
+        "skillIds must be non-empty unless pluginIds is non-empty",
+      );
     }
 
     const rawToken = generateRawToken();
@@ -69,17 +77,31 @@ class SkillShareLinkModel {
           tokenStart,
           name: params.name ?? null,
           marketplaceName: params.marketplaceName,
+          pluginClientType: params.pluginClientType ?? null,
+          pluginPlatform: params.pluginPlatform ?? null,
           expiresAt: params.expiresAt ?? null,
         })
         .returning();
 
       const uniqueSkillIds = Array.from(new Set(params.skillIds));
-      await tx.insert(schema.skillShareLinkSkillsTable).values(
-        uniqueSkillIds.map((skillId) => ({
-          shareLinkId: created.id,
-          skillId,
-        })),
-      );
+      if (uniqueSkillIds.length > 0) {
+        await tx.insert(schema.skillShareLinkSkillsTable).values(
+          uniqueSkillIds.map((skillId) => ({
+            shareLinkId: created.id,
+            skillId,
+          })),
+        );
+      }
+
+      const uniquePluginIds = Array.from(new Set(params.pluginIds ?? []));
+      if (uniquePluginIds.length > 0) {
+        await tx.insert(schema.skillShareLinkPluginsTable).values(
+          uniquePluginIds.map((pluginId) => ({
+            shareLinkId: created.id,
+            pluginId,
+          })),
+        );
+      }
 
       return created;
     };
@@ -90,9 +112,16 @@ class SkillShareLinkModel {
 
     // Read on the same executor: with a caller tx the junction rows are not
     // yet visible outside the transaction.
-    const skills = await loadSkillsForLinks([link.id], params.tx);
+    const [skills, plugins] = await Promise.all([
+      loadSkillsForLinks([link.id], params.tx),
+      loadPluginsForLinks([link.id], params.tx),
+    ]);
     return {
-      link: { ...link, skills: skills.get(link.id) ?? [] },
+      link: {
+        ...link,
+        skills: skills.get(link.id) ?? [],
+        plugins: plugins.get(link.id) ?? [],
+      },
       rawToken,
     };
   }
@@ -104,6 +133,50 @@ class SkillShareLinkModel {
       .where(eq(schema.skillShareLinksTable.id, id))
       .limit(1);
     return row ?? null;
+  }
+
+  static async findByIdWithResources(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<SkillShareLinkWithSkills | null> {
+    const link = await SkillShareLinkModel.findById(params.id);
+    if (!link || link.organizationId !== params.organizationId) return null;
+    const [skillsByLink, pluginsByLink] = await Promise.all([
+      loadSkillsForLinks([link.id]),
+      loadPluginsForLinks([link.id]),
+    ]);
+    return {
+      ...link,
+      skills: skillsByLink.get(link.id) ?? [],
+      plugins: pluginsByLink.get(link.id) ?? [],
+    };
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const link = await SkillShareLinkModel.findByIdWithResources({
+      id,
+      organizationId,
+    });
+    if (!link) return null;
+    const { tokenHash: _tokenHash, ...safe } = link;
+    return {
+      ...safe,
+      skills: link.skills.map(({ id: skillId, name }) => ({
+        id: skillId,
+        name,
+      })),
+      plugins: link.plugins.map(
+        ({ id: pluginId, pluginSlug, clientType, contentHash }) => ({
+          id: pluginId,
+          pluginSlug,
+          clientType,
+          contentHash,
+        }),
+      ),
+    };
   }
 
   static async listByOrganization(params: {
@@ -139,10 +212,15 @@ class SkillShareLinkModel {
 
     if (links.length === 0) return [];
 
-    const skillsByLink = await loadSkillsForLinks(links.map((row) => row.id));
+    const linkIds = links.map((row) => row.id);
+    const [skillsByLink, pluginsByLink] = await Promise.all([
+      loadSkillsForLinks(linkIds),
+      loadPluginsForLinks(linkIds),
+    ]);
     return links.map((link) => ({
       ...link,
       skills: skillsByLink.get(link.id) ?? [],
+      plugins: pluginsByLink.get(link.id) ?? [],
     }));
   }
 
@@ -165,7 +243,10 @@ class SkillShareLinkModel {
     if (link.revokedAt) return null;
     if (link.expiresAt && link.expiresAt.getTime() <= Date.now()) return null;
 
-    const skillsByLink = await loadSkillsForLinks([link.id]);
+    const [skillsByLink, pluginsByLink] = await Promise.all([
+      loadSkillsForLinks([link.id]),
+      loadPluginsForLinks([link.id]),
+    ]);
 
     // fire-and-forget last-used bookkeeping; do not block the response.
     // explicitly preserve updatedAt to prevent drizzle's $onUpdate hook from
@@ -188,7 +269,11 @@ class SkillShareLinkModel {
         );
       });
 
-    return { link, skills: skillsByLink.get(link.id) ?? [] };
+    return {
+      link,
+      skills: skillsByLink.get(link.id) ?? [],
+      plugins: pluginsByLink.get(link.id) ?? [],
+    };
   }
 
   /** Returns IDs of non-revoked, non-expired links. Used for orphan repo sweeps at startup. */
@@ -290,6 +375,54 @@ async function loadSkillsForLinks(
         { id: row.id, name: row.name, description: row.description },
       ]);
     }
+  }
+  return map;
+}
+
+async function loadPluginsForLinks(
+  linkIds: string[],
+  tx?: Transaction,
+): Promise<Map<string, SkillShareLinkPluginSummary[]>> {
+  const map = new Map<string, SkillShareLinkPluginSummary[]>();
+  if (linkIds.length === 0) return map;
+
+  const rows = await (tx ?? db)
+    .select({
+      shareLinkId: schema.skillShareLinkPluginsTable.shareLinkId,
+      id: schema.pluginsTable.id,
+      pluginSlug: schema.pluginsTable.pluginSlug,
+      displayName: schema.pluginsTable.displayName,
+      description: schema.pluginsTable.description,
+      clientType: schema.pluginsTable.clientType,
+      contentHash: schema.pluginsTable.contentHash,
+    })
+    .from(schema.skillShareLinkPluginsTable)
+    .innerJoin(
+      schema.pluginsTable,
+      and(
+        eq(schema.skillShareLinkPluginsTable.pluginId, schema.pluginsTable.id),
+        eq(schema.pluginsTable.enabled, true),
+        eq(
+          schema.pluginsTable.approvedContentHash,
+          schema.pluginsTable.contentHash,
+        ),
+        notDeleted(schema.pluginsTable),
+      ),
+    )
+    .where(inArray(schema.skillShareLinkPluginsTable.shareLinkId, linkIds))
+    .orderBy(schema.pluginsTable.pluginSlug, schema.pluginsTable.id);
+
+  for (const row of rows) {
+    const list = map.get(row.shareLinkId) ?? [];
+    list.push({
+      id: row.id,
+      pluginSlug: row.pluginSlug,
+      displayName: row.displayName,
+      description: row.description,
+      clientType: row.clientType,
+      contentHash: row.contentHash,
+    });
+    map.set(row.shareLinkId, list);
   }
   return map;
 }

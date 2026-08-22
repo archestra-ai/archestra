@@ -56,6 +56,8 @@ declare module "fastify" {
      * hook uses this verbatim instead of calling `fetchById`.
      */
     auditAfter?: Record<string, unknown> | null;
+    /** Skip a registered mutation audit when the handler proves it was a no-op. */
+    auditSkip?: boolean;
     /** Timestamp captured at the start of preHandler, before the route handler executes. */
     auditOccurredAt?: Date;
     /** ID extracted from the POST response body; set by the audit onSend hook. */

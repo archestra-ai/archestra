@@ -44,7 +44,7 @@ export function BulkVisibilityDialog({
   onApply,
   isPending,
 }: {
-  items: BulkVisibilityItem[];
+  items: readonly BulkVisibilityItem[];
   noun: string;
   plural?: string;
   open: boolean;
@@ -126,7 +126,7 @@ export function BulkVisibilityDialog({
  * applying replaces those lists wholesale.
  */
 function commonVisibility(
-  items: BulkVisibilityItem[],
+  items: readonly BulkVisibilityItem[],
 ): BulkVisibilityChange | null {
   const [first, ...rest] = items;
   if (!first) return null;

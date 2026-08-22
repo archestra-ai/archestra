@@ -22,6 +22,7 @@ import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 type TableRowAction = {
   icon: React.ReactNode;
   label: string;
+  className?: string;
   onClick?: () => void;
   permissions?: Permissions | Readonly<Record<string, readonly string[]>>;
   disabled?: boolean;
@@ -136,6 +137,7 @@ function ActionButton({
           aria-label={accessibleLabel}
           variant="outline"
           size={size}
+          className={action.className}
           asChild
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           data-testid={action.testId}
@@ -154,6 +156,7 @@ function ActionButton({
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
+        className={action.className}
         disabled={action.disabled}
         data-testid={action.testId}
         onClick={(e: React.MouseEvent) => {
@@ -172,6 +175,7 @@ function ActionButton({
       <Button
         variant="outline"
         size={size}
+        className={action.className}
         aria-label={accessibleLabel}
         asChild
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -186,6 +190,7 @@ function ActionButton({
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
+        className={action.className}
         disabled={action.disabled}
         data-testid={action.testId}
         onClick={(e: React.MouseEvent) => {

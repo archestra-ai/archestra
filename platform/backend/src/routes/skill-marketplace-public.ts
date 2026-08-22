@@ -7,13 +7,20 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   OrganizationModel,
+  PluginModel,
   SkillFileModel,
   SkillModel,
   SkillShareLinkModel,
 } from "@/models";
+import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { serveGitHttpRequest } from "@/skills/marketplace/git-http-backend";
-import type { MaterializeSkillInput } from "@/skills/marketplace/materialize";
+import type {
+  MaterializePluginInput,
+  MaterializeSkillInput,
+} from "@/skills/marketplace/materialize";
+import { MarketplaceMaterializationConflictError } from "@/skills/marketplace/materialize";
+import { type PluginPlatform, PluginPlatformSchema } from "@/types";
 
 /**
  * Public, unauthenticated git smart-HTTP endpoint that serves a per-share-link
@@ -101,6 +108,7 @@ const skillMarketplacePublicRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           shareLinkId: ctx.shareLinkId,
           skillIds: ctx.skillIds,
+          pluginIds: ctx.pluginIds,
           transport: "git-clone",
           method: request.method,
           subPath,
@@ -179,35 +187,111 @@ interface ServeContext {
   shareLinkId: string;
   repoPath: string;
   skillIds: string[];
+  pluginIds: string[];
 }
 
 /** Resolve a raw share token to the materialized repo path and safe log context. */
-async function buildServeContext(token: string): Promise<ServeContext | null> {
+async function buildServeContext(
+  token: string,
+  retryOnConflict = true,
+): Promise<ServeContext | null> {
   const validated = await SkillShareLinkModel.validate({ rawToken: token });
   if (!validated) return null;
 
-  const [skills, organization] = await Promise.all([
+  const parsedPluginPlatform = PluginPlatformSchema.safeParse(
+    validated.link.pluginPlatform,
+  );
+  const [skills, plugins, organization] = await Promise.all([
     loadSkillsForLink(validated.skills.map((s) => s.id)),
+    loadPluginsForLink({
+      ids: validated.plugins.map((plugin) => plugin.id),
+      organizationId: validated.link.organizationId,
+      clientType: validated.link.pluginClientType,
+      pluginPlatform: parsedPluginPlatform.success
+        ? parsedPluginPlatform.data
+        : null,
+    }),
     OrganizationModel.getById(validated.link.organizationId),
   ]);
-  if (skills.length === 0) return null;
+  if (skills.length === 0 && plugins.length === 0) return null;
 
   const ownerName = organization?.name ?? DEFAULT_APP_NAME;
 
   const materializer = marketplaceMaterializer.get();
-  const result = await materializer.materialize({
-    linkId: validated.link.id,
-    marketplaceName: validated.link.marketplaceName,
-    ownerName,
-    displayName: `${ownerName} Skills`,
-    skills,
-  });
+  let result: Awaited<ReturnType<typeof materializer.materialize>>;
+  try {
+    result = await materializer.materialize({
+      linkId: validated.link.id,
+      marketplaceName: validated.link.marketplaceName,
+      ownerName,
+      displayName:
+        skills.length > 0 ? `${ownerName} Skills` : `${ownerName} Plugins`,
+      skills,
+      plugins,
+    });
+  } catch (error) {
+    if (
+      retryOnConflict &&
+      error instanceof MarketplaceMaterializationConflictError
+    ) {
+      return buildServeContext(token, false);
+    }
+    throw error;
+  }
 
   return {
     shareLinkId: validated.link.id,
     repoPath: result.repoPath,
     skillIds: skills.map((s) => s.id),
+    pluginIds: validated.plugins.map((plugin) => plugin.id),
   };
+}
+
+async function loadPluginsForLink(params: {
+  ids: string[];
+  organizationId: string;
+  clientType: string | null;
+  pluginPlatform: PluginPlatform | null;
+}): Promise<MaterializePluginInput[]> {
+  if (
+    !config.plugins.enabled ||
+    params.ids.length === 0 ||
+    !params.clientType ||
+    !params.pluginPlatform
+  ) {
+    return [];
+  }
+  const clientType = params.clientType;
+  const pluginPlatform = params.pluginPlatform;
+  const deliveryError = pluginDeliveryBudgetError(
+    await PluginModel.getApprovedDeliveryStats({
+      ids: params.ids,
+      organizationId: params.organizationId,
+    }),
+  );
+  if (deliveryError) throw new Error(deliveryError);
+  const plugins = await PluginModel.findApprovedByIds({
+    ids: params.ids,
+    organizationId: params.organizationId,
+  });
+  return plugins
+    .filter(
+      (plugin) =>
+        plugin.clientType === clientType &&
+        plugin.supportedPlatforms.includes(pluginPlatform),
+    )
+    .map((plugin) => ({
+      pluginSlug: plugin.pluginSlug,
+      displayName: plugin.displayName,
+      description: plugin.description,
+      clientType: plugin.clientType,
+      files: plugin.files.map(({ path, content, encoding, mode }) => ({
+        path,
+        content,
+        encoding,
+        mode,
+      })),
+    }));
 }
 
 async function loadSkillsForLink(

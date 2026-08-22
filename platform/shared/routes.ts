@@ -726,6 +726,21 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+
+  // Plugin Routes
+  GetPlugins: "getPlugins",
+  CreatePlugin: "createPlugin",
+  GetPlugin: "getPlugin",
+  UpdatePlugin: "updatePlugin",
+  DeletePlugin: "deletePlugin",
+  PreviewGithubPlugin: "previewGithubPlugin",
+  ImportGithubPlugin: "importGithubPlugin",
+  PreviewGithubPluginUpdate: "previewGithubPluginUpdate",
+  ApplyGithubPluginUpdate: "applyGithubPluginUpdate",
+  DiscoverGithubPluginMarketplace: "discoverGithubPluginMarketplace",
+  ImportGithubPluginMarketplace: "importGithubPluginMarketplace",
+  UpdatePluginGithubSync: "updatePluginGithubSync",
+  TriggerPluginGithubSync: "triggerPluginGithubSync",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
   GetSkillVersions: "getSkillVersions",
   GetSkillVersion: "getSkillVersion",
@@ -809,13 +824,13 @@ export const RouteId = {
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // App session recordings live client-side (IndexedDB); the only server
-  // endpoint forwards a shared recording bundle to the public demo catalog.
+  // endpoint forwards a shared recording plugin to the public demo catalog.
   EnhanceAppRecording: "enhanceAppRecording",
   RenderAppRecordingVideo: "renderAppRecordingVideo",
   GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
   DownloadAppRecordingVideo: "downloadAppRecordingVideo",
   CancelAppRecordingRender: "cancelAppRecordingRender",
-  // Reviewer-facing: fetch a hackathon submission's recording bundle from
+  // Reviewer-facing: fetch a hackathon submission's recording plugin from
   // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
   // read-only review player.
   ReviewAppRecording: "reviewAppRecording",

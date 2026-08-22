@@ -28,10 +28,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 import { DataTablePagination } from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
+const SELECT_COLUMN_ID = "select";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -240,6 +242,33 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
+  const visibleColumns = table.getVisibleLeafColumns();
+  const selectColumn = visibleColumns.find(
+    (column) => column.id === SELECT_COLUMN_ID,
+  );
+  const configuredTableSize =
+    table.getTotalSize() +
+    (selectColumn ? DATA_TABLE_SELECT_COLUMN_SIZE - selectColumn.getSize() : 0);
+  const fixedColumnsSize = visibleColumns
+    .filter(
+      (column) =>
+        column.id === SELECT_COLUMN_ID ||
+        column.id === ACTIONS_COLUMN_ID ||
+        fixedWidthColumnIds.includes(column.id),
+    )
+    .reduce(
+      (total, column) =>
+        total +
+        (column.id === SELECT_COLUMN_ID
+          ? DATA_TABLE_SELECT_COLUMN_SIZE
+          : column.getSize()),
+      0,
+    );
+  const flexibleColumnsSize = Math.max(
+    configuredTableSize - fixedColumnsSize,
+    1,
+  );
+
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
@@ -249,7 +278,7 @@ export function DataTable<TData, TValue>({
             headers stack letter-by-letter and cell contents overlap. */}
         <Table
           className={tableClassName}
-          style={{ minWidth: table.getTotalSize() }}
+          style={{ minWidth: configuredTableSize }}
         >
           {!hideHeader && (
             <TableHeader>
@@ -276,13 +305,14 @@ export function DataTable<TData, TValue>({
                           configuredSize: header.column.columnDef.size,
                           minSize: header.column.columnDef.minSize,
                           renderedSize: header.getSize(),
-                          totalSize: table.getTotalSize(),
                           fixedWidth: fixedWidthColumnIds.includes(
                             header.column.id,
                           ),
                           flexibleWidth: flexibleColumnIds.includes(
                             header.column.id,
                           ),
+                          fixedColumnsSize,
+                          flexibleColumnsSize,
                         })}
                       >
                         {header.isPlaceholder
@@ -314,19 +344,25 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         data-column-id={cell.column.id}
+                        onClick={
+                          cell.column.id === SELECT_COLUMN_ID
+                            ? handleSelectCellClick
+                            : undefined
+                        }
                         className={getColumnClassName(cell.column.id)}
                         style={getColumnStyle({
                           columnId: cell.column.id,
                           configuredSize: cell.column.columnDef.size,
                           minSize: cell.column.columnDef.minSize,
                           renderedSize: cell.column.getSize(),
-                          totalSize: table.getTotalSize(),
                           fixedWidth: fixedWidthColumnIds.includes(
                             cell.column.id,
                           ),
                           flexibleWidth: flexibleColumnIds.includes(
                             cell.column.id,
                           ),
+                          fixedColumnsSize,
+                          flexibleColumnsSize,
                         })}
                       >
                         {flexRender(
@@ -403,6 +439,10 @@ export function DataTable<TData, TValue>({
 }
 
 function getColumnClassName(columnId: string) {
+  if (columnId === SELECT_COLUMN_ID) {
+    return "!p-0 text-center [&>[role=checkbox]]:translate-y-0";
+  }
+
   if (COMPACT_ICON_COLUMN_IDS.has(columnId)) {
     return "w-0 px-2 md:px-2";
   }
@@ -414,15 +454,32 @@ function getColumnClassName(columnId: string) {
   return undefined;
 }
 
+function handleSelectCellClick(
+  event: React.MouseEvent<HTMLTableCellElement>,
+): void {
+  event.stopPropagation();
+  const target = event.target as HTMLElement;
+  if (target.closest('[role="checkbox"]')) return;
+  event.currentTarget.querySelector<HTMLElement>('[role="checkbox"]')?.click();
+}
+
 function getColumnStyle(params: {
   columnId: string;
   configuredSize?: number;
   minSize?: number;
   renderedSize: number;
-  totalSize: number;
   fixedWidth?: boolean;
   flexibleWidth?: boolean;
+  fixedColumnsSize: number;
+  flexibleColumnsSize: number;
 }): React.CSSProperties | undefined {
+  if (params.columnId === SELECT_COLUMN_ID) {
+    return {
+      width: DATA_TABLE_SELECT_COLUMN_SIZE,
+      minWidth: DATA_TABLE_SELECT_COLUMN_SIZE,
+      maxWidth: DATA_TABLE_SELECT_COLUMN_SIZE,
+    };
+  }
   const style: React.CSSProperties = {};
   if (params.configuredSize && !params.flexibleWidth) {
     // On a fixed-layout table an absolute pixel width forces the table wider
@@ -439,8 +496,10 @@ function getColumnStyle(params: {
     ) {
       style.width = params.renderedSize;
     } else {
-      const share = (params.renderedSize / params.totalSize) * 100;
-      style.width = `${share.toFixed(4)}%`;
+      const share = params.renderedSize / params.flexibleColumnsSize;
+      const percent = (share * 100).toFixed(4);
+      const fixedOffset = (params.fixedColumnsSize * share).toFixed(2);
+      style.width = `calc(${percent}% - ${fixedOffset}px)`;
     }
   }
   if (params.minSize) {

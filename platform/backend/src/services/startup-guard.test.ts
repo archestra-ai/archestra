@@ -484,6 +484,31 @@ describe("renderStartupGuardScript", () => {
     expect(script.trimEnd().endsWith("finish_guard")).toBe(true);
   });
 
+  test("uninstalls every plugin before removing its marketplace", () => {
+    const script = renderStartupGuardScript(
+      {
+        ...CTX,
+        skills: {
+          marketplaceName: "acme-skills",
+          cloneUrl:
+            "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
+          pluginNames: ["plugin-one", "plugin-two"],
+        },
+      },
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+
+    expect(script).toContain("PLUGIN_NAMES='plugin-one\nplugin-two'");
+    const uninstallAt = script.indexOf(
+      'command claude plugin uninstall "$arch_plugin@$SKILLS_MARKETPLACE_NAME"',
+    );
+    const marketplaceRemoveAt = script.indexOf(
+      'command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME"',
+    );
+    expect(uninstallAt).toBeGreaterThan(-1);
+    expect(marketplaceRemoveAt).toBeGreaterThan(uninstallAt);
+  });
+
   test("bedrock variant strips the bedrock env keys and flags the shell-profile token", () => {
     const script = renderStartupGuardScript(
       {

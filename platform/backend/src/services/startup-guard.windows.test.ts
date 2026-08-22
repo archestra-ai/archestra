@@ -150,7 +150,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     );
     expect(script).toContain(`'${CLAUDE_CODE_GUARD_MARKER_START}'`);
     expect(script).toContain(
-      "if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; exit 0 }",
+      "if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; return }",
     );
     // the self-removal is silent — no trailing explainer after the
     // Disconnected rows
@@ -167,7 +167,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       "if ($key -eq ' ') { $Script:SkipNow = $true; break }",
     );
     // skipping bypasses every prompt and launches at once, touching nothing
-    expect(script).toContain("if ($Script:SkipNow) { Exit-ArchGuard }");
+    expect(script).toContain("if ($Script:SkipNow) { Exit-ArchGuard; return }");
     expect(script).toContain("if ($Script:SkipNow) { break }");
   });
 
@@ -240,7 +240,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(whiteLabel).toContain("'Acme AI'");
   });
 
-  test("never blocks: opt-out env var, non-interactive stderr warnings with the failure copy, exit 0", () => {
+  test("never blocks: opt-out env var and non-interactive paths return to the wrapper", () => {
     const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
     expect(script).toContain("[Console]::IsInputRedirected");
@@ -250,7 +250,8 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       "'archestra: failed to connect to ' + $r.FailName",
     );
     // every interactive path funnels through Exit-ArchGuard (dwell + restore)
-    expect(script.trimEnd().endsWith("Exit-ArchGuard")).toBe(true);
+    expect(script.trimEnd().endsWith("Exit-ArchGuard\nreturn")).toBe(true);
+    expect(script).not.toContain("exit 0");
   });
 
   test("disconnect actions mirror connect and dodge the wrapper function", () => {
@@ -411,7 +412,7 @@ describe.each([
 
   test("wraps the client's own binary, disable flag, and non-interactive args", () => {
     const script = render();
-    expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { exit 0 }`);
+    expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { return }`);
     expect(script).toContain(`the real ${binary} no matter how`);
     // resolve the real exe by the client's own name, not claude's
     expect(script).toContain(

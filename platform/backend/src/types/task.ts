@@ -33,6 +33,8 @@ export const TaskTypeSchema = z.enum([
   "content_encryption_backfill",
   "check_due_skill_github_syncs",
   "skill_github_sync",
+  "check_due_plugin_github_syncs",
+  "plugin_github_sync",
   "skill_publication_backfill",
   "p4_shim_reconcile",
   "kb_bm25_stats_refresh",
@@ -52,6 +54,10 @@ export type PermissionSyncPayload = {
 };
 export type SkillGithubSyncPayload = {
   skillId: string;
+};
+export type PluginGithubSyncPayload = {
+  pluginId: string;
+  force?: boolean;
 };
 
 // ===== Queue lanes (runtime isolation) =====
@@ -76,6 +82,8 @@ export const TASK_LANES = {
     "content_encryption_backfill",
     "check_due_skill_github_syncs",
     "skill_github_sync",
+    "check_due_plugin_github_syncs",
+    "plugin_github_sync",
     "skill_publication_backfill",
     "p4_shim_reconcile",
     "kb_bm25_stats_refresh",

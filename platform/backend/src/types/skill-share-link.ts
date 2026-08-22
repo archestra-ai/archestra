@@ -41,6 +41,16 @@ export interface SkillShareLinkSkillSummary {
 
 export interface SkillShareLinkWithSkills extends SkillShareLink {
   skills: SkillShareLinkSkillSummary[];
+  plugins: SkillShareLinkPluginSummary[];
+}
+
+export interface SkillShareLinkPluginSummary {
+  id: string;
+  pluginSlug: string;
+  displayName: string;
+  description: string;
+  clientType: string;
+  contentHash: string;
 }
 
 /**

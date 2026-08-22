@@ -1,5 +1,6 @@
 import GithubAppConfigModel from "@/models/github-app-config";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import PluginModel from "@/models/plugin";
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -9,6 +10,7 @@ import {
   type PublicGithubAppConfig,
   type UpdateGithubAppConfigRequest,
 } from "@/types";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 const DEFAULT_GITHUB_URL = "https://api.github.com";
 
@@ -114,11 +116,34 @@ export async function deleteGithubAppConfig(params: {
       `GitHub App configuration is in use by ${referencingSkills} synced skill(s) and cannot be deleted. Disconnect those skills from GitHub first.`,
     );
   }
-
-  if (existing.secretId) {
-    await secretManager().deleteSecret(existing.secretId);
+  const referencingPlugins =
+    await PluginModel.countSyncedReferencingGithubAppConfig(existing.id);
+  if (referencingPlugins > 0) {
+    throw new ApiError(
+      409,
+      `GitHub App configuration is in use by ${referencingPlugins} GitHub-linked plugin(s) and cannot be deleted. Remove or reconnect those plugins first.`,
+    );
   }
-  await GithubAppConfigModel.delete(existing.id);
+
+  try {
+    await GithubAppConfigModel.delete(existing.id);
+  } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      throw new ApiError(
+        409,
+        "GitHub App configuration became referenced by a synced resource; disconnect it and retry",
+      );
+    }
+    throw error;
+  }
+  if (existing.secretId) {
+    try {
+      await secretManager().deleteSecret(existing.secretId);
+    } catch (error) {
+      await GithubAppConfigModel.restore(existing);
+      throw error;
+    }
+  }
 }
 
 // ===== Internal helpers =====

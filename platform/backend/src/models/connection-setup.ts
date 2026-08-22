@@ -22,6 +22,7 @@ export const CONNECTION_SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
 interface CreateConnectionSetupParams
   extends Omit<InsertConnectionSetup, "tokenHash" | "tokenStart"> {
   skillIds?: string[];
+  pluginIds?: string[];
 }
 
 class ConnectionSetupModel {
@@ -29,7 +30,7 @@ class ConnectionSetupModel {
     setup: ConnectionSetup;
     rawToken: string;
   }> {
-    const { skillIds = [], ...values } = params;
+    const { skillIds = [], pluginIds = [], ...values } = params;
 
     const rawToken = generateRawToken();
     const tokenHash = hashToken(rawToken);
@@ -47,6 +48,16 @@ class ConnectionSetupModel {
           uniqueSkillIds.map((skillId) => ({
             connectionSetupId: created.id,
             skillId,
+          })),
+        );
+      }
+
+      const uniquePluginIds = Array.from(new Set(pluginIds));
+      if (uniquePluginIds.length > 0) {
+        await tx.insert(schema.connectionSetupPluginsTable).values(
+          uniquePluginIds.map((pluginId) => ({
+            connectionSetupId: created.id,
+            pluginId,
           })),
         );
       }
@@ -130,6 +141,25 @@ class ConnectionSetupModel {
       );
 
     return rows.map((row) => row.skillId);
+  }
+
+  static async getPluginIds(params: {
+    connectionSetupId: string;
+    tx?: Transaction;
+  }): Promise<string[]> {
+    const executor = params.tx ?? db;
+    const rows = await executor
+      .select({
+        pluginId: schema.connectionSetupPluginsTable.pluginId,
+      })
+      .from(schema.connectionSetupPluginsTable)
+      .where(
+        eq(
+          schema.connectionSetupPluginsTable.connectionSetupId,
+          params.connectionSetupId,
+        ),
+      );
+    return rows.map((row) => row.pluginId);
   }
 
   /** Records the lazily-created share link on the setup row (audit/revocation). */

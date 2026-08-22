@@ -46,6 +46,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Skills | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
+| Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
@@ -276,6 +277,11 @@ The following table lists all available permissions that can be assigned to cust
 | `member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `plugin:read` | View plugins and their file metadata |
+| `plugin:create` | Create plugins |
+| `plugin:update` | Modify plugin metadata and files |
+| `plugin:delete` | Delete plugins |
+| `plugin:admin` | Publish executable plugins through connection marketplaces |
 | `project:read` | View projects and your own chats inside them |
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |

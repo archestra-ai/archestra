@@ -45,6 +45,7 @@ export * from "./pagination";
 export * from "./permission.types";
 export * from "./permission-hierarchy";
 export * from "./playwright-browser";
+export * from "./plugin-marketplaces";
 export * from "./policy-conditions";
 export * from "./provider-billing-copy";
 export * from "./roles";

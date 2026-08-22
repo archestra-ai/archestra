@@ -8,6 +8,7 @@ import { vi } from "vitest";
 import {
   ConnectionSetupModel,
   MemberModel,
+  PluginModel,
   SkillModel,
   SkillShareLinkModel,
   VirtualApiKeyModel,
@@ -26,6 +27,7 @@ vi.mock("@/auth");
 vi.mock("@/cache-manager");
 
 import { userHasPermission } from "@/auth";
+import config from "@/config";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -448,6 +450,62 @@ describe("GET /api/connection-setups/script/:token", () => {
     const allowed = await fetchScript(rawToken);
     expect(allowed.statusCode).toBe(200);
     expect(allowed.body).toContain("codex mcp add 'gate'");
+  });
+
+  test("re-validates plugin:admin before rendering executable hooks", async () => {
+    const originalFeatureState = config.plugins.enabled;
+    config.plugins.enabled = true;
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: user.id,
+      input: {
+        displayName: "Revalidated plugin",
+        description: "Permission revalidation test",
+        clientType: "claude-code",
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("failed to seed plugin");
+    const { rawToken } = await ConnectionSetupModel.create({
+      organizationId,
+      userId: user.id,
+      clientId: "claude-code",
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: null,
+      llmProxyId: null,
+      provider: null,
+      proxyAuth: "provider-key",
+      model: null,
+      virtualApiKeyId: null,
+      includeSkills: false,
+      skillLinkTtlDays: null,
+      pluginIds: [plugin.id],
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    try {
+      mockUserHasPermission.mockResolvedValue(false);
+      expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+      mockUserHasPermission.mockResolvedValue(true);
+      config.plugins.enabled = false;
+      expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+      config.plugins.enabled = true;
+      const allowed = await fetchScript(rawToken);
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.body).toContain(plugin.pluginSlug);
+    } finally {
+      config.plugins.enabled = originalFeatureState;
+    }
   });
 
   test("410s when the creator's org membership is gone", async ({

@@ -23,10 +23,12 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
+import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -89,6 +91,7 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ChatOpsChannelBindingModel,
   },
+  pluginsTable: { audited: true, model: PluginModel },
   environmentsTable: { audited: true, model: EnvironmentModel },
   environmentDefaultUserLimitsTable: {
     audited: true,
@@ -511,6 +514,18 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skill; parent (skill) audited",
   },
+  pluginFilesTable: {
+    audited: false,
+    reason: "child of plugin; parent (plugin) audited",
+  },
+  pluginTeamsTable: {
+    audited: false,
+    reason: "join: plugin × team; parent (plugin) audited",
+  },
+  pluginUsersTable: {
+    audited: false,
+    reason: "join: plugin × user; parent (plugin) audited",
+  },
   skillUsageEventsTable: {
     audited: false,
     reason:
@@ -531,14 +546,23 @@ export const AUDIT_DECISIONS = {
     reason:
       "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
-  skillShareLinksTable: {
+  connectionSetupPluginsTable: {
     audited: false,
     reason:
-      "skill share links; admin share/revoke not yet wired for audit (follow-up)",
+      "join: connection setup × plugin; parent (connectionSetups) ephemeral",
+  },
+  skillShareLinksTable: {
+    audited: true,
+    model: SkillShareLinkModel,
   },
   skillShareLinkSkillsTable: {
     audited: false,
     reason: "join: share link × skill; parent (skillShareLinks) carries signal",
+  },
+  skillShareLinkPluginsTable: {
+    audited: false,
+    reason:
+      "join: share link × plugin; parent (skillShareLinks) carries signal",
   },
   skillShareLinkRevisionsTable: {
     audited: false,

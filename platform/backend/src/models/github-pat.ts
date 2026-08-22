@@ -76,6 +76,10 @@ class GithubPatModel {
 
     return rows.length > 0;
   }
+
+  static async restore(data: GithubPat): Promise<void> {
+    await db.insert(schema.githubPatsTable).values(data).onConflictDoNothing();
+  }
 }
 
 export default GithubPatModel;

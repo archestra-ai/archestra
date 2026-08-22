@@ -33,6 +33,33 @@ describe("ZhipuaiStreamAdapter policy refusal", () => {
     expect(response.choices[0].finish_reason).toBe("stop");
   });
 
+  // GLM thinking mode streams its thinking in `reasoning_content`; it reached
+  // the client but was never accumulated into the recorded turn.
+  test("records the reasoning the model streamed", () => {
+    const adapter = zhipuaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-test",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "glm-4",
+      choices: [
+        {
+          index: 0,
+          delta: { reasoning_content: "thinking" },
+          finish_reason: null,
+        },
+      ],
+    } as StreamChunk);
+    adapter.processChunk(textChunk("the answer"));
+
+    const message = adapter.toProviderResponse().choices[0].message as {
+      content: string | null;
+      reasoning_content?: string;
+    };
+    expect(message.reasoning_content).toBe("thinking");
+    expect(message.content).toBe("the answer");
+  });
+
   test("leaves an unrefused turn untouched", () => {
     const adapter = zhipuaiAdapterFactory.createStreamAdapter();
     adapter.processChunk(textChunk("all good"));

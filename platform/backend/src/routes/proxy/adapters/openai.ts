@@ -1057,6 +1057,18 @@ export class OpenAIStreamAdapter
     return `${this.state.text}${this.replacedText}`;
   }
 
+  /**
+   * The reasoning the model streamed, accumulated.
+   *
+   * OpenAI-compatible reasoning models (qwen3, DeepSeek-R1, GLM, …) stream
+   * their thinking in `reasoning_content` (or `reasoning`). It was forwarded to
+   * the client but never accumulated, so the reconstructed turn — the one
+   * persisted as the interaction — recorded a reasoning turn as though the
+   * model had gone straight to its answer, which is what makes such a turn
+   * impossible to review afterwards.
+   */
+  private reasoningText = "";
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -1150,6 +1162,8 @@ export class OpenAIStreamAdapter
       (typeof reasoning === "string" && reasoning.length > 0) ||
       (typeof reasoningAlt === "string" && reasoningAlt.length > 0);
     if (hasReasoning && !delta.tool_calls) {
+      this.reasoningText +=
+        typeof reasoning === "string" ? reasoning : (reasoningAlt as string);
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
 
@@ -1346,6 +1360,11 @@ export class OpenAIStreamAdapter
           message: {
             role: "assistant",
             content: this.contentWithAnyReplacement(),
+            // Non-standard, and the same field these models emit on the wire —
+            // clients that render reasoning read it back from here.
+            ...(this.reasoningText
+              ? { reasoning_content: this.reasoningText }
+              : {}),
             refusal: null,
             tool_calls: toolCalls,
           },

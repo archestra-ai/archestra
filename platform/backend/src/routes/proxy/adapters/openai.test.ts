@@ -851,6 +851,63 @@ describe("OpenAIStreamAdapter", () => {
     expect(response.choices[0].finish_reason).toBe("stop");
   });
 
+  // Reasoning models stream their thinking in `reasoning_content`. It reached
+  // the client but was never accumulated, so the recorded turn looked as though
+  // the model had gone straight to its answer.
+  test("toProviderResponse records the reasoning the model streamed", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          // Not part of the typed delta — the adapter reads it by cast for the
+          // same reason.
+          delta: {
+            reasoning_content: "weighing ",
+          } as Chunk["choices"][number]["delta"],
+          finish_reason: null,
+        },
+      ],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          // Not part of the typed delta — the adapter reads it by cast for the
+          // same reason.
+          delta: {
+            reasoning_content: "it up",
+          } as Chunk["choices"][number]["delta"],
+          finish_reason: null,
+        },
+      ],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        { index: 0, delta: { content: "the answer" }, finish_reason: null },
+      ],
+    } as Chunk);
+
+    const message = adapter.toProviderResponse().choices[0].message as {
+      content: string | null;
+      reasoning_content?: string;
+    };
+    expect(message.reasoning_content).toBe("weighing it up");
+    expect(message.content).toBe("the answer");
+  });
+
   test("carries the trailing usage chunk into the final SSE (net of cache)", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({

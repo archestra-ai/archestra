@@ -295,7 +295,7 @@ class TaskModel {
    */
   static async findActivePayloadValues(
     taskType: TaskType,
-    field: "connectorId" | "triggerId" | "skillId",
+    field: "connectorId" | "triggerId" | "skillId" | "pluginId",
   ): Promise<Set<string>> {
     const { rows } = await db.execute<{ value: string | null }>(sql`
       SELECT DISTINCT payload->>${field} AS value

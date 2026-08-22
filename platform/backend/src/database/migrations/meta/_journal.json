@@ -3025,6 +3025,13 @@
       "when": 1787402357111,
       "tag": "0431_drop_optimization_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 432,
+      "version": "7",
+      "when": 1787406752442,
+      "tag": "0432_handy_scarecrow",
+      "breakpoints": true
     }
   ]
 }

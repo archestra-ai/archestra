@@ -81,6 +81,7 @@ export { default as chatopsChannelBindingsTable } from "./chatops-channel-bindin
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export {
+  connectionSetupPluginsTable,
   connectionSetupSkillsTable,
   default as connectionSetupsTable,
 } from "./connection-setup";
@@ -163,6 +164,10 @@ export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
+export { default as pluginsTable } from "./plugin";
+export { default as pluginFilesTable } from "./plugin-file";
+export { default as pluginTeamsTable } from "./plugin-team";
+export { default as pluginUsersTable } from "./plugin-user";
 export { default as processedEmailsTable } from "./processed-email";
 export {
   default as projectsTable,
@@ -188,6 +193,7 @@ export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay
 export { default as skillSandboxSkillMountsTable } from "./skill-sandbox-skill-mount";
 export {
   default as skillShareLinksTable,
+  skillShareLinkPluginsTable,
   skillShareLinkSkillsTable,
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";

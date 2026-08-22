@@ -8,7 +8,9 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { ClientType, PluginPlatform } from "@/types/plugin";
 import organizationsTable from "./organization";
+import pluginsTable from "./plugin";
 import skillsTable from "./skill";
 import usersTable from "./user";
 
@@ -38,6 +40,10 @@ const skillShareLinksTable = pgTable(
     tokenStart: varchar("token_start", { length: 22 }).notNull(),
     name: text("name"),
     marketplaceName: text("marketplace_name").notNull(),
+    /** Non-null when the link carries plugins; all must share this type. */
+    pluginClientType: text("plugin_client_type").$type<ClientType>(),
+    /** Target OS family for all executable plugins attached to this link. */
+    pluginPlatform: text("plugin_platform").$type<PluginPlatform>(),
     expiresAt: timestamp("expires_at", { mode: "date" }),
     revokedAt: timestamp("revoked_at", { mode: "date" }),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
@@ -73,6 +79,23 @@ export const skillShareLinkSkillsTable = pgTable(
   (table) => [
     primaryKey({ columns: [table.shareLinkId, table.skillId] }),
     index("skill_share_link_skill_skill_id_idx").on(table.skillId),
+  ],
+);
+
+export const skillShareLinkPluginsTable = pgTable(
+  "skill_share_link_plugins",
+  {
+    shareLinkId: uuid("share_link_id")
+      .notNull()
+      .references(() => skillShareLinksTable.id, { onDelete: "cascade" }),
+    pluginId: uuid("plugin_id")
+      .notNull()
+      .references(() => pluginsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.shareLinkId, table.pluginId] }),
+    index("skill_share_link_plugins_plugin_id_idx").on(table.pluginId),
   ],
 );
 

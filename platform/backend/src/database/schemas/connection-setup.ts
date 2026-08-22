@@ -18,6 +18,7 @@ import type {
 } from "@/types/connection-setup";
 import agentsTable from "./agent";
 import organizationsTable from "./organization";
+import pluginsTable from "./plugin";
 import skillsTable from "./skill";
 import skillShareLinksTable from "./skill-share-link";
 import usersTable from "./user";
@@ -113,6 +114,23 @@ export const connectionSetupSkillsTable = pgTable(
   (table) => [
     primaryKey({ columns: [table.connectionSetupId, table.skillId] }),
     index("connection_setup_skills_skill_id_idx").on(table.skillId),
+  ],
+);
+
+/** Plugins frozen into the setup before its one-time command is minted. */
+export const connectionSetupPluginsTable = pgTable(
+  "connection_setup_plugins",
+  {
+    connectionSetupId: uuid("connection_setup_id")
+      .notNull()
+      .references(() => connectionSetupsTable.id, { onDelete: "cascade" }),
+    pluginId: uuid("plugin_id")
+      .notNull()
+      .references(() => pluginsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.connectionSetupId, table.pluginId] }),
+    index("connection_setup_plugins_plugin_id_idx").on(table.pluginId),
   ],
 );
 

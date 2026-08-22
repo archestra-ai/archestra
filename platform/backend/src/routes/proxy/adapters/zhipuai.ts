@@ -628,6 +628,22 @@ class ZhipuaiStreamAdapter
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so formatEndSSE finishes as "stop" (not the upstream "tool_calls")
   // and toProviderResponse persists the refusal rather than the blocked calls.
+  // A refusal does not erase what the model already said: its text streamed
+  // as it arrived and the refusal was appended after it, so the client holds
+  // both. Recording the refusal alone deletes the model's own answer from the
+  // turn, leaving anything that reads it back — conversation history, a
+  // summarizer, a human debugging a run that died — a turn in which the model
+  // never spoke.
+  //
+  // The refusal ships as one more content delta, which clients concatenate onto
+  // what they have accumulated, so the record is that same concatenation.
+  private contentWithAnyRefusal(): string | null {
+    if (this.replacedText === null) {
+      return this.state.text || null;
+    }
+    return `${this.state.text}${this.replacedText}`;
+  }
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -874,7 +890,7 @@ class ZhipuaiStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.replacedText ?? (this.state.text || null),
+            content: this.contentWithAnyRefusal(),
             tool_calls: toolCalls,
           },
           logprobs: null,

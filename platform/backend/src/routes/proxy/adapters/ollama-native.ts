@@ -455,6 +455,22 @@ class OllamaNativeStreamAdapter
   // Raw native tool-call lines, buffered until policy approval then replayed.
   private rawToolCallLines: string[] = [];
   // Set to the refusal text when the response was replaced by a policy refusal.
+  // A refusal does not erase what the model already said: its text streamed
+  // as it arrived and the refusal was appended after it, so the client holds
+  // both. Recording the refusal alone deletes the model's own answer from the
+  // turn, leaving anything that reads it back — conversation history, a
+  // summarizer, a human debugging a run that died — a turn in which the model
+  // never spoke.
+  //
+  // The refusal ships as one more message chunk, whose content Ollama clients
+  // concatenate onto the message they are building, so the record matches.
+  private contentWithAnyRefusal(): string {
+    if (this.replacedText === null) {
+      return this.state.text;
+    }
+    return `${this.state.text}${this.replacedText}`;
+  }
+
   private replacedText: string | null = null;
   /** Ollama's own timing counters, read off the swallowed final chunk. */
   private upstreamMetrics: Record<string, number | undefined> = {};
@@ -667,7 +683,7 @@ class OllamaNativeStreamAdapter
       created_at: this.createdAt,
       message: {
         role: "assistant",
-        content: this.replacedText ?? this.state.text,
+        content: this.contentWithAnyRefusal(),
         ...(this.thinking ? { thinking: this.thinking } : {}),
         ...(toolCalls ? { tool_calls: toolCalls } : {}),
       },

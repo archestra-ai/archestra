@@ -34,6 +34,46 @@ function asStreamChunk<T>(chunk: unknown): T {
   return chunk as T;
 }
 
+describe("Bedrock policy refusal", () => {
+  // A refusal appends further content, so the client holds the model's text AND
+  // the refusal. Recording the refusal alone deleted the model's own answer;
+  // the withheld tool call must stay out, or the turn owes a tool result
+  // nothing will ever send.
+  test("keeps the streamed text, drops the withheld call, appends the refusal", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+    type Chunk = Parameters<typeof adapter.processChunk>[0];
+
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "let me check" },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockStart: {
+          contentBlockIndex: 1,
+          start: { toolUse: { toolUseId: "tooluse_123", name: "read_file" } },
+        },
+      }),
+    );
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    const content = response.output?.message?.content ?? [];
+    expect(
+      content.map((block) => ("text" in block ? block.text : undefined)),
+    ).toEqual(["let me check", "blocked message"]);
+    expect(content.some((block) => "toolUse" in block)).toBe(false);
+    expect(response.stopReason).toBe("end_turn");
+  });
+});
+
 describe("Bedrock tool name encoding", () => {
   test("shortens provider-facing tool names that exceed the Bedrock limit", () => {
     const toolName =

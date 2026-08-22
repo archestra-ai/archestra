@@ -1558,35 +1558,25 @@ class BedrockStreamAdapter
         }
     > = [];
 
-    if (this.replacedText !== null) {
-      return {
-        $metadata: { requestId: this.state.responseId },
-        output: {
-          message: {
-            role: "assistant",
-            content: [{ text: this.replacedText }],
-          },
-        },
-        stopReason: "end_turn",
-        usage: {
-          inputTokens: this.state.usage?.inputTokens ?? 0,
-          outputTokens: this.state.usage?.outputTokens ?? 0,
-        },
-        metrics:
-          this.bedrockState.latencyMs !== null
-            ? { latencyMs: this.bedrockState.latencyMs }
-            : undefined,
-        trace: this.bedrockState.trace ?? undefined,
-      };
-    }
-
     // Add text block if we have text
     if (this.state.text) {
       content.push({ text: this.state.text });
     }
 
-    // Add tool use blocks
-    for (const toolCall of this.state.toolCalls) {
+    // A refusal does not erase what the model already said: its text streamed
+    // as it arrived and the refusal was appended after it, so the client holds
+    // both. Recording the refusal alone deletes the model's own answer from the
+    // turn, leaving anything that reads it back a turn in which it never spoke.
+    if (this.replacedText !== null) {
+      content.push({ text: this.replacedText });
+    }
+
+    // Add tool use blocks. Calls held back by the gate never reached the
+    // client, so they stay out of the record — a turn naming them would owe
+    // tool results nothing will ever send.
+    for (const toolCall of this.replacedText === null
+      ? this.state.toolCalls
+      : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);
@@ -1620,7 +1610,10 @@ class BedrockStreamAdapter
         },
       },
       stopReason:
-        (this.state.stopReason as BedrockResponse["stopReason"]) ?? "end_turn",
+        this.replacedText !== null
+          ? "end_turn"
+          : ((this.state.stopReason as BedrockResponse["stopReason"]) ??
+            "end_turn"),
       usage: {
         inputTokens: this.state.usage?.inputTokens ?? 0,
         outputTokens: this.state.usage?.outputTokens ?? 0,

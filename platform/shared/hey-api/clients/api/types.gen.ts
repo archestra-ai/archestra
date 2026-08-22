@@ -36173,6 +36173,313 @@ export type BulkDeleteEnvironmentsResponses = {
 
 export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
 
+export type GetExternalMcpSkillsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        environmentId?: string;
+    };
+    url: '/api/skills/external';
+};
+
+export type GetExternalMcpSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillsError = GetExternalMcpSkillsErrors[keyof GetExternalMcpSkillsErrors];
+
+export type GetExternalMcpSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetExternalMcpSkillsResponse = GetExternalMcpSkillsResponses[keyof GetExternalMcpSkillsResponses];
+
+export type GetExternalMcpSkillUsageStatisticsData = {
+    body?: never;
+    path?: never;
+    query: {
+        mcpServerId: string;
+        uri: string;
+    };
+    url: '/api/skills/external/usage-statistics';
+};
+
+export type GetExternalMcpSkillUsageStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsError = GetExternalMcpSkillUsageStatisticsErrors[keyof GetExternalMcpSkillUsageStatisticsErrors];
+
+export type GetExternalMcpSkillUsageStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        users: Array<{
+            userId: string | null;
+            name: string | null;
+            total: number;
+        }>;
+        daily: Array<{
+            date: string;
+            userId: string | null;
+            count: number;
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsResponse = GetExternalMcpSkillUsageStatisticsResponses[keyof GetExternalMcpSkillUsageStatisticsResponses];
+
+export type GetExternalMcpSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        mcpServerId: string;
+    };
+    url: '/api/skills/external/{id}';
+};
+
+export type GetExternalMcpSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillError = GetExternalMcpSkillErrors[keyof GetExternalMcpSkillErrors];
+
+export type GetExternalMcpSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+        content: string;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'script' | 'reference' | 'asset';
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillResponse = GetExternalMcpSkillResponses[keyof GetExternalMcpSkillResponses];
+
 export type GeminiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -54308,6 +54615,8 @@ export type GetInternalMcpCatalogResponses = {
         authorName?: string | null;
         toolCount: number;
         providesUi?: boolean;
+        skillCount: number;
+        providesSkills?: boolean;
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;

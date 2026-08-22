@@ -1,16 +1,16 @@
 ---
 title: Sharing Skills
 category: Agents
-order: 4
+order: 5
 description: Share Archestra skills into Claude Code, Codex CLI, Copilot CLI, and Cursor through native plugin marketplaces
-lastUpdated: 2026-07-20
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra skills can be installed into your local Claude Code, Codex CLI, Copilot CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves the marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex and Copilot read `.agents/plugins/marketplace.json`, Cursor reads `.cursor-plugin/marketplace.json`, and the underlying `SKILL.md` files are identical.
+Archestra skills can be installed into your local Claude Code, Codex CLI, Copilot CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves the marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex prefers `.agents/plugins/marketplace.json`, Copilot prefers `.github/plugin/marketplace.json`, and Cursor reads `.cursor-plugin/marketplace.json`. Codex and Copilot fall back to the Claude manifest only when their preferred manifest is absent; manifests are not merged.
 
-Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. The slug is also written as the SKILL.md frontmatter `name`, per the Agent Skills spec, so the skill's slash command is well-formed (a skill named "Build App" installs as `/build-app`). Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
+Every shared skill is included into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. The slug is also written as the SKILL.md frontmatter `name`, per the Agent Skills spec, so the skill's slash command is well-formed (a skill named "Build App" installs as `/build-app`). Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
 
 The marketplace lives on the **Connect** page, alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically, and a fresh share link is created when the script is fetched.
 
@@ -22,6 +22,10 @@ Picking "Any client" replaces the script with a manual step that snapshots every
 
 ![The Install shared skills step for a generic client, showing the git clone command for the marketplace repository](/docs/automated_screenshots/platform-agent-skills-sharing_marketplace-link.webp)
 
+## Plugins
+
+Plugins can share the same generated marketplace as Skills. They remain separate resources with their own approval and update lifecycle. See [Plugins](/docs/platform-agent-plugins).
+
 ## Marketplace name
 
 The marketplace name is generated at create time and frozen on the link, since clients register marketplaces by name in their local config — changing it later would silently break every installed marketplace.
@@ -30,7 +34,7 @@ Format: `<app-slug>-<org-slug>-skills` (e.g. `archestra-acme-corp-skills`). The 
 
 ## Who can share
 
-Creating, refreshing, and revoking the marketplace link requires the `skill:admin` permission. Members can install a link that has been shared with them; they cannot create new links.
+Creating, refreshing, and revoking a skills-only marketplace link requires the `skill:admin` permission. Publishing a link that contains executable plugins also requires `plugin:admin`. Members can install a link that has been shared with them; they cannot create new links.
 
 ## Scope and authentication
 
@@ -75,17 +79,18 @@ For security, the clone URL is only returned at creation. After a page reload th
 
 ## Updates and revocation
 
-When a skill's content changes in Archestra a new commit is appended to the materialized repo's history with a deterministic SHA, so users who `git pull` (via `claude plugin marketplace update` or the Codex equivalent) fast-forward to the new revision instead of fetching unrelated histories. Adding or removing skills from a link's skill set still requires creating a new link (the link's snapshot is fixed at create time).
+When a skill or approved plugin payload changes in Archestra, a new commit is appended to the materialized repo's history with a deterministic SHA. Every emitted plugin gets a real, monotonic SemVer (`0.<revision>.0`), so vendor CLIs recognize the update instead of ignoring a content hash in SemVer build metadata. Connected shell wrappers refresh the marketplace and installed plugins after an interactive session exits, at most once per day. Adding or removing resources from a link's fixed set still requires creating a new link.
 
-Revoking a marketplace link deletes the underlying repository on disk and causes future clone or pull requests to return `404`. Existing local clones keep working until the user attempts a pull, at which point they need a fresh link. The token also persists in the user's local `git` config after `plugin marketplace add`; revoke the link when sharing ends, and prefer short TTLs (the step defaults to 30 days).
+Revoking a marketplace link deletes the underlying repository on disk and causes future clone or pull requests to return `404`. Existing local clones and already-installed plugins keep working; server revocation cannot instantly delete executable code from a developer machine. Use the startup guard's reconfigure menu or the client CLI's plugin uninstall command on that machine to remove it. The token also persists in the user's local `git` config after `plugin marketplace add`; revoke the link when sharing ends, and prefer short TTLs (the step defaults to 30 days).
 
-Every clone is audit-logged with the share-link ID and skill IDs — the raw token is never written to logs.
+Every clone is audit-logged with the share-link ID plus skill and plugin IDs — the raw token is never written to logs. Creating, rotating, and revoking the bearer capability also writes a redacted organization audit record.
 
 ## Configuration
 
-Deployment-side configuration lives in two environment variables documented in [platform-deployment](/docs/platform-deployment#environment-variables):
+Deployment-side configuration lives in three environment variables documented in [platform-deployment](/docs/platform-deployment#environment-variables):
 
 - `ARCHESTRA_GIT_BINARY_PATH` — path to the `git` binary; the public endpoint shells out to `git http-backend` (CGI).
 - `ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR` — directory holding materialized repos. Defaults to `~/.archestra/skill-marketplace-cache`. The authoritative history lives in `skill_share_link_revision`, so the cache is safe to wipe; in prod, mount a persistent volume here to skip rebuilds on container restart.
+- `ARCHESTRA_PLUGINS_ENABLED` — enables plugin authoring and automatic connection delivery. It is off by default; a blank value follows `ARCHESTRA_BETA`.
 
 The git committer identity stamped on materialized commits is hardcoded (`Archestra Marketplace <marketplace@archestra.local>`) because the deterministic-replay contract folds it into every commit SHA; making it deployment-configurable would orphan stored revisions the moment a new value rolled out.

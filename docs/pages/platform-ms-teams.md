@@ -1,7 +1,7 @@
 ---
 title: MS Teams
 category: Agents
-order: 7
+order: 8
 description: Connect Archestra agents to Microsoft Teams channels
 lastUpdated: 2026-07-30
 ---

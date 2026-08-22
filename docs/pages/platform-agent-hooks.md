@@ -1,7 +1,7 @@
 ---
 title: Hooks (Beta)
 category: Agents
-order: 11
+order: 12
 description: Scripts that run in the sandbox when an agent lifecycle event fires
 lastUpdated: 2026-08-18
 ---

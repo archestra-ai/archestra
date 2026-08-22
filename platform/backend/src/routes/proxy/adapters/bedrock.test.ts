@@ -34,6 +34,75 @@ function asStreamChunk<T>(chunk: unknown): T {
   return chunk as T;
 }
 
+describe("Bedrock reasoning", () => {
+  // Reasoning streams through untouched and is deliberately kept out of
+  // state.text (that holds the answer), so nothing captured it and the recorded
+  // turn looked as though the model went straight to its answer. The signature
+  // rides with the text: it is what makes a reasoning block replayable.
+  test("records the reasoning the model streamed, ahead of the answer", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+    type Chunk = Parameters<typeof adapter.processChunk>[0];
+
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { text: "weighing it up" } },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { signature: "sig-abc" } },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 1,
+          delta: { text: "the answer" },
+        },
+      }),
+    );
+
+    const content = adapter.toProviderResponse().output?.message?.content ?? [];
+    expect(content).toEqual([
+      {
+        reasoningContent: {
+          reasoningText: { text: "weighing it up", signature: "sig-abc" },
+        },
+      },
+      { text: "the answer" },
+    ]);
+  });
+
+  test("records a redacted reasoning block", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+    type Chunk = Parameters<typeof adapter.processChunk>[0];
+
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { redactedContent: "encrypted-blob" } },
+        },
+      }),
+    );
+
+    const content = adapter.toProviderResponse().output?.message?.content ?? [];
+    expect(content).toEqual([
+      { reasoningContent: { redactedContent: "encrypted-blob" } },
+    ]);
+  });
+});
+
 describe("Bedrock policy refusal", () => {
   // A refusal appends further content, so the client holds the model's text AND
   // the refusal. Recording the refusal alone deleted the model's own answer;

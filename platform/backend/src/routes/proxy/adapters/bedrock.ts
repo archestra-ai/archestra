@@ -1089,6 +1089,51 @@ class BedrockStreamAdapter
   // with the (discarded) tool events, so formatEndSSE must synthesize a terminal
   // messageStop (end_turn); toProviderResponse persists the refusal, not the
   // blocked tool calls.
+  /**
+   * The reasoning the model streamed, accumulated.
+   *
+   * Bedrock sends it as `reasoningContent` deltas which stream through
+   * untouched and are deliberately kept out of `state.text` (that holds the
+   * answer). Nothing else captured them, so the reconstructed turn — the one
+   * persisted as the interaction — recorded a reasoning turn as though the
+   * model had gone straight to its answer.
+   *
+   * The signature is kept with the text: it is what makes a reasoning block
+   * replayable, and a record without it describes something the API rejects.
+   */
+  private reasoningText = "";
+  private reasoningSignature = "";
+  private redactedReasoning: string | null = null;
+
+  private accumulateReasoningDelta(delta: unknown): void {
+    // Structurally narrowed rather than typed against the SDK union: the union
+    // members differ per reasoning kind (text/signature vs redacted), and this
+    // only ever reads the fields it recognises.
+    const reasoning = (
+      delta as {
+        reasoningContent?: {
+          text?: unknown;
+          signature?: unknown;
+          redactedContent?: unknown;
+          data?: unknown;
+        };
+      }
+    ).reasoningContent;
+    if (!reasoning) {
+      return;
+    }
+    if (typeof reasoning.text === "string") {
+      this.reasoningText += reasoning.text;
+    }
+    if (typeof reasoning.signature === "string") {
+      this.reasoningSignature += reasoning.signature;
+    }
+    const redacted = reasoning.redactedContent ?? reasoning.data;
+    if (typeof redacted === "string") {
+      this.redactedReasoning = (this.redactedReasoning ?? "") + redacted;
+    }
+  }
+
   private replacedText: string | null = null;
   private pendingProtocolText = "";
   private pendingProtocolContentBlockIndex: number | null = null;
@@ -1212,7 +1257,9 @@ class BedrockStreamAdapter
         // and whatever Bedrock adds next — streams through unmodified. Only
         // toolUse deltas are held back for policy evaluation. Reasoning is
         // deliberately not folded into state.text, which holds the final
-        // answer for interaction logging.
+        // answer for interaction logging — it is accumulated separately so the
+        // recorded turn still shows the reasoning the model produced.
+        this.accumulateReasoningDelta(blockDelta.delta);
         sseData =
           rawBytes ??
           encodeEventStreamMessage(
@@ -1547,16 +1594,32 @@ class BedrockStreamAdapter
   }
 
   toProviderResponse(): BedrockResponse {
-    const content: Array<
-      | { text: string }
-      | {
-          toolUse: {
-            toolUseId: string;
-            name: string;
-            input: Record<string, unknown>;
-          };
-        }
-    > = [];
+    // Typed from the response shape itself so reasoning blocks are expressible
+    // here rather than only in the wire type.
+    const content: NonNullable<
+      NonNullable<BedrockResponse["output"]>["message"]
+    >["content"] = [];
+
+    // Reasoning first, matching the order Bedrock emits it: a reasoning block
+    // precedes the answer it produced, and a record that reordered them would
+    // not describe the turn the client saw.
+    if (this.reasoningText) {
+      content.push({
+        reasoningContent: {
+          reasoningText: {
+            text: this.reasoningText,
+            ...(this.reasoningSignature
+              ? { signature: this.reasoningSignature }
+              : {}),
+          },
+        },
+      });
+    }
+    if (this.redactedReasoning !== null) {
+      content.push({
+        reasoningContent: { redactedContent: this.redactedReasoning },
+      });
+    }
 
     // Add text block if we have text
     if (this.state.text) {

@@ -644,6 +644,16 @@ class ZhipuaiStreamAdapter
     return `${this.state.text}${this.replacedText}`;
   }
 
+  /**
+   * The reasoning the model streamed, accumulated.
+   *
+   * GLM thinking mode streams its thinking in `reasoning_content`. It was
+   * forwarded to the client but never accumulated, so the reconstructed turn —
+   * the one persisted as the interaction — recorded a reasoning turn as though
+   * the model had gone straight to its answer.
+   */
+  private reasoningText = "";
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -712,6 +722,9 @@ class ZhipuaiStreamAdapter
     // `delta.tool_calls`) exposed blocked tool calls to the client before policy
     // evaluation and defeated the handler's buffering.
     const hasStreamableContent = delta.content || delta.reasoning_content;
+    if (delta.reasoning_content && !delta.tool_calls) {
+      this.reasoningText += delta.reasoning_content;
+    }
     if (hasStreamableContent && !delta.tool_calls) {
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
@@ -891,6 +904,11 @@ class ZhipuaiStreamAdapter
           message: {
             role: "assistant",
             content: this.contentWithAnyRefusal(),
+            // The same field GLM emits on the wire, so clients that render
+            // reasoning read it back from here.
+            ...(this.reasoningText
+              ? { reasoning_content: this.reasoningText }
+              : {}),
             tool_calls: toolCalls,
           },
           logprobs: null,

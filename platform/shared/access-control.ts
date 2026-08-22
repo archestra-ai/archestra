@@ -948,19 +948,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
     // already install, so it is gated like installation (:create), not :update.
-    // The handler does scope-aware authorization (owner-only for personal,
-    // team-admin for team, etc.) for the finer-grained check. Requiring :update
-    // here locked out members — who have :create but not :update — with a bare
-    // 403 the moment their OAuth token expired and they tried to re-authenticate.
+    // Installation admin subsumes CRUD through the shared permission hierarchy;
+    // the handler then applies ownership/team scope rules to non-admins.
     mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
-    // Reinstalling redeploys a connection the caller can already install, so it
-    // is gated like installation (:create), not :update — mirroring
-    // ReauthenticateMcpServer above. The handler's assertScopedLifecycleAuthorization
-    // does the finer-grained check (owner-only for personal, team-admin for team,
-    // admin for org), so a member can reinstall their OWN connection and nothing
-    // more. Requiring :update here locked owners out of reinstalling their own.
+    // Reinstall uses the same create-or-installation-admin hierarchy as
+    // re-authentication, followed by the same scope-aware lifecycle check.
     mcpServerInstallation: ["create"],
   },
   [RouteId.HardResetMcpServer]: {
@@ -973,13 +967,28 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["admin"],
   },
   [RouteId.ReloadMcpServerTools]: {
-    // Reloading tools is a strict subset of reinstalling (tool re-sync with no
-    // redeploy), so it is gated identically; the handler's
-    // assertScopedLifecycleAuthorization does the same finer-grained scope check.
+    // Reloading tools is a strict subset of reinstalling, so it is gated and
+    // scope-checked identically.
     mcpServerInstallation: ["create"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
+  },
+  // Muting is a per-viewer display preference: it hides an alert from the
+  // caller's own registry and from nobody else's, so it is gated on the same
+  // :read that let them see the connection in the first place. The handler
+  // re-checks visibility of the specific install.
+  [RouteId.MuteMcpServerAlert]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.UnmuteMcpServerAlert]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.MuteMcpCatalogAlert]: {
+    mcpRegistry: ["read"],
+  },
+  [RouteId.UnmuteMcpCatalogAlert]: {
+    mcpRegistry: ["read"],
   },
   [RouteId.InitiateOAuth]: {
     mcpServerInstallation: ["create"],
@@ -1751,6 +1760,18 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.GetExternalMcpSkills]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetExternalMcpSkill]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetExternalMcpSkillUsageStatistics]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
   [RouteId.CreateSkill]: { skill: ["create"] },
   [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
   // chat:read gates spending the agent's configured LLM key — the same gate
@@ -2026,6 +2047,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
+  "/mcp/registry/new": { mcpRegistry: ["create"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 

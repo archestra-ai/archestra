@@ -9,10 +9,13 @@ type WebSocketMessage = ClientWebSocketMessage | ServerWebSocketMessage;
 
 type MessageHandler = (message: WebSocketMessage) => void;
 
+type ConnectionHandler = (isConnected: boolean) => void;
+
 class WebSocketService {
   private ws: WebSocket | null = null;
   private handlers: Map<WebSocketMessage["type"], Set<MessageHandler>> =
     new Map();
+  private connectionHandlers: Set<ConnectionHandler> = new Set();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = Infinity;
@@ -42,6 +45,7 @@ class WebSocketService {
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         this.flushPendingMessages();
+        this.notifyConnectionHandlers(true);
       });
 
       // this.ws.addEventListener("error", (_error) => {});
@@ -58,6 +62,7 @@ class WebSocketService {
       this.ws.addEventListener("close", () => {
         this.ws = null;
         this.isConnecting = false;
+        this.notifyConnectionHandlers(false);
 
         // Attempt to reconnect unless manually disconnected
         if (!this.isManuallyDisconnected) {
@@ -67,6 +72,7 @@ class WebSocketService {
     } catch (error) {
       this.isConnecting = false;
       console.error("[WebSocket] Connection failed:", error);
+      this.notifyConnectionHandlers(false);
       this.scheduleReconnect();
     }
   }
@@ -133,6 +139,20 @@ class WebSocketService {
     };
   }
 
+  /**
+   * Observe the connection itself opening and closing. Callers that hold a
+   * server-side subscription need the open edge: the server forgets every
+   * subscription along with the socket it was made on, so the subscription has
+   * to be re-sent on each new connection. The close edge is what tells them a
+   * connection attempt ended without a live socket.
+   */
+  onConnectionChange(handler: ConnectionHandler): () => void {
+    this.connectionHandlers.add(handler);
+    return () => {
+      this.connectionHandlers.delete(handler);
+    };
+  }
+
   private handleMessage(message: WebSocketMessage): void {
     const handlers = this.handlers.get(message.type);
     if (handlers) {
@@ -191,6 +211,16 @@ class WebSocketService {
     }
 
     this.sendNow(message);
+  }
+
+  private notifyConnectionHandlers(isConnected: boolean): void {
+    this.connectionHandlers.forEach((handler) => {
+      try {
+        handler(isConnected);
+      } catch (error) {
+        console.error("[WebSocket] Error in connection handler:", error);
+      }
+    });
   }
 }
 

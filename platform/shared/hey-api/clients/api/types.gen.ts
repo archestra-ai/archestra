@@ -26035,6 +26035,8 @@ export type BedrockConverseWithDefaultAgentData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -26229,6 +26231,19 @@ export type BedrockConverseWithDefaultAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26371,6 +26386,8 @@ export type BedrockConverseWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26568,6 +26585,19 @@ export type BedrockConverseWithAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26710,6 +26740,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26918,6 +26950,8 @@ export type BedrockConverseStreamWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -27129,6 +27163,8 @@ export type BedrockConverseWithAgentAndModelData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -27326,6 +27362,19 @@ export type BedrockConverseWithAgentAndModelResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -27468,6 +27517,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -34521,6 +34572,7 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             mcpIdleHibernationBetaEnabled: boolean;
+            mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
@@ -36121,6 +36173,313 @@ export type BulkDeleteEnvironmentsResponses = {
 };
 
 export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
+
+export type GetExternalMcpSkillsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        environmentId?: string;
+    };
+    url: '/api/skills/external';
+};
+
+export type GetExternalMcpSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillsError = GetExternalMcpSkillsErrors[keyof GetExternalMcpSkillsErrors];
+
+export type GetExternalMcpSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetExternalMcpSkillsResponse = GetExternalMcpSkillsResponses[keyof GetExternalMcpSkillsResponses];
+
+export type GetExternalMcpSkillUsageStatisticsData = {
+    body?: never;
+    path?: never;
+    query: {
+        mcpServerId: string;
+        uri: string;
+    };
+    url: '/api/skills/external/usage-statistics';
+};
+
+export type GetExternalMcpSkillUsageStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsError = GetExternalMcpSkillUsageStatisticsErrors[keyof GetExternalMcpSkillUsageStatisticsErrors];
+
+export type GetExternalMcpSkillUsageStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        users: Array<{
+            userId: string | null;
+            name: string | null;
+            total: number;
+        }>;
+        daily: Array<{
+            date: string;
+            userId: string | null;
+            count: number;
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsResponse = GetExternalMcpSkillUsageStatisticsResponses[keyof GetExternalMcpSkillUsageStatisticsResponses];
+
+export type GetExternalMcpSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        mcpServerId: string;
+    };
+    url: '/api/skills/external/{id}';
+};
+
+export type GetExternalMcpSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillError = GetExternalMcpSkillErrors[keyof GetExternalMcpSkillErrors];
+
+export type GetExternalMcpSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+        content: string;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'script' | 'reference' | 'asset';
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillResponse = GetExternalMcpSkillResponses[keyof GetExternalMcpSkillResponses];
 
 export type GeminiEmbeddingsWithDefaultAgentData = {
     body: {
@@ -40456,6 +40815,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -40658,6 +41021,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:responses';
             model: string | null;
             baselineModel: string | null;
@@ -40776,6 +41143,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -40891,6 +41262,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'gemini:embeddings';
             model: string | null;
@@ -41008,6 +41383,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'bedrock:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -41124,6 +41503,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'cohere:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -41216,6 +41599,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'gemini:generateContent';
             model: string | null;
@@ -41311,6 +41698,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'anthropic:messages';
             model: string | null;
@@ -41472,6 +41863,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41656,6 +42049,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41765,6 +42160,19 @@ export type GetInteractionsResponses = {
                                     [key: string]: unknown;
                                 };
                             };
+                        } | {
+                            reasoningContent: {
+                                reasoningText: {
+                                    text: string;
+                                    signature?: string;
+                                };
+                            } | {
+                                redactedContent: string;
+                            } | {
+                                redactedReasoning: {
+                                    data: string;
+                                };
+                            };
                         }>;
                     };
                 };
@@ -41830,6 +42238,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'bedrock:converse';
             model: string | null;
@@ -42400,6 +42812,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'bedrock:invoke';
             model: string | null;
             baselineModel: string | null;
@@ -42494,6 +42910,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'cerebras:chatCompletions';
             model: string | null;
@@ -42590,6 +43010,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42684,6 +43108,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'perplexity:chatCompletions';
             model: string | null;
@@ -42780,6 +43208,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42874,6 +43306,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'xai:chatCompletions';
             model: string | null;
@@ -42970,6 +43406,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -43065,6 +43505,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -43157,6 +43601,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'ollama:chatCompletions';
             model: string | null;
@@ -43251,6 +43699,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'ollama-native:chat';
             model: string | null;
             baselineModel: string | null;
@@ -43343,6 +43795,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'cohere:chat';
             model: string | null;
@@ -43439,6 +43895,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -43533,6 +43993,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'deepseek:chatCompletions';
             model: string | null;
@@ -44343,6 +44807,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'kimi:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -45151,6 +45619,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'github-copilot:chatCompletions';
             model: string | null;
@@ -45961,6 +46433,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'microsoft-365-copilot:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -46055,6 +46531,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'minimax:chatCompletions';
             model: string | null;
@@ -46218,6 +46698,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'azure:chatCompletions';
             model: string | null;
@@ -46421,6 +46905,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'azure:responses';
             model: string | null;
             baselineModel: string | null;
@@ -46623,6 +47111,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'perplexity:responses';
             model: string | null;
             baselineModel: string | null;
@@ -46824,6 +47316,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'github-copilot:responses';
             model: string | null;
@@ -47344,6 +47840,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -47546,6 +48046,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:responses';
         model: string | null;
         baselineModel: string | null;
@@ -47664,6 +48168,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -47779,6 +48287,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'gemini:embeddings';
         model: string | null;
@@ -47896,6 +48408,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'bedrock:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -48012,6 +48528,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'cohere:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -48104,6 +48624,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'gemini:generateContent';
         model: string | null;
@@ -48199,6 +48723,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'anthropic:messages';
         model: string | null;
@@ -48360,6 +48888,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -48544,6 +49074,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -48653,6 +49185,19 @@ export type GetInteractionResponses = {
                                 [key: string]: unknown;
                             };
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedContent: string;
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 };
             };
@@ -48718,6 +49263,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'bedrock:converse';
         model: string | null;
@@ -49288,6 +49837,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'bedrock:invoke';
         model: string | null;
         baselineModel: string | null;
@@ -49382,6 +49935,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'cerebras:chatCompletions';
         model: string | null;
@@ -49478,6 +50035,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49572,6 +50133,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'perplexity:chatCompletions';
         model: string | null;
@@ -49668,6 +50233,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49762,6 +50331,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'xai:chatCompletions';
         model: string | null;
@@ -49858,6 +50431,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49953,6 +50530,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -50045,6 +50626,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'ollama:chatCompletions';
         model: string | null;
@@ -50139,6 +50724,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'ollama-native:chat';
         model: string | null;
         baselineModel: string | null;
@@ -50231,6 +50820,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'cohere:chat';
         model: string | null;
@@ -50327,6 +50920,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -50421,6 +51018,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'deepseek:chatCompletions';
         model: string | null;
@@ -51231,6 +51832,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'kimi:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -52039,6 +52644,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'github-copilot:chatCompletions';
         model: string | null;
@@ -52849,6 +53458,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'microsoft-365-copilot:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -52943,6 +53556,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'minimax:chatCompletions';
         model: string | null;
@@ -53106,6 +53723,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'azure:chatCompletions';
         model: string | null;
@@ -53309,6 +53930,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'azure:responses';
         model: string | null;
         baselineModel: string | null;
@@ -53511,6 +54136,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'perplexity:responses';
         model: string | null;
         baselineModel: string | null;
@@ -53712,6 +54341,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'github-copilot:responses';
         model: string | null;
@@ -53981,8 +54614,18 @@ export type GetInternalMcpCatalogResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        alertMutes?: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
         toolCount: number;
         providesUi?: boolean;
+        skillCount: number;
+        providesSkills?: boolean;
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
@@ -54331,6 +54974,188 @@ export type CreateInternalMcpCatalogItemResponses = {
 };
 
 export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
+
+export type UnmuteMcpCatalogAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpCatalogAlertError = UnmuteMcpCatalogAlertErrors[keyof UnmuteMcpCatalogAlertErrors];
+
+export type UnmuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpCatalogAlertResponse = UnmuteMcpCatalogAlertResponses[keyof UnmuteMcpCatalogAlertResponses];
+
+export type MuteMcpCatalogAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpCatalogAlertError = MuteMcpCatalogAlertErrors[keyof MuteMcpCatalogAlertErrors];
+
+export type MuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpCatalogAlertResponse = MuteMcpCatalogAlertResponses[keyof MuteMcpCatalogAlertResponses];
 
 export type DeleteInternalMcpCatalogItemData = {
     body?: never;
@@ -66662,6 +67487,14 @@ export type GetMcpServersResponses = {
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        alertMutes: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
     }>;
 };
 
@@ -67397,6 +68230,188 @@ export type RestoreMcpServerResponses = {
 };
 
 export type RestoreMcpServerResponse = RestoreMcpServerResponses[keyof RestoreMcpServerResponses];
+
+export type UnmuteMcpServerAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpServerAlertError = UnmuteMcpServerAlertErrors[keyof UnmuteMcpServerAlertErrors];
+
+export type UnmuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpServerAlertResponse = UnmuteMcpServerAlertResponses[keyof UnmuteMcpServerAlertResponses];
+
+export type MuteMcpServerAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpServerAlertError = MuteMcpServerAlertErrors[keyof MuteMcpServerAlertErrors];
+
+export type MuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpServerAlertResponse = MuteMcpServerAlertResponses[keyof MuteMcpServerAlertResponses];
 
 export type GetMcpServerInstallationStatusData = {
     body?: never;

@@ -1235,9 +1235,18 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     });
 
     // The other half of the contract: widening what counts as declared must not
-    // hollow out the check. A tool the caller never declared is still refused,
-    // which is what per-conversation tool selection relies on.
-    test("a tool the caller never declared is still refused", async () => {
+    // hollow out the check — `enabledToolNames` must still hold exactly what
+    // this request declared and nothing else.
+    //
+    // What that buys has changed. An undeclared name is now handed back rather
+    // than refused: refusing dropped the call and ended the turn, which reads
+    // to an agent loop as "the assistant is finished" and strands an
+    // unattended run. Nothing executes either way, because the caller cannot
+    // run a tool it never declared. Per-conversation tool selection is still
+    // enforced where the tool would actually run — chat's AI SDK raises
+    // NoSuchToolError for anything unregistered, and run_tool applies the
+    // conversation gate on the dispatch path.
+    test("a tool the caller never declared is handed back, not refused", async () => {
       openAiStubOptions.includeToolCalls = true;
       const { evaluatePolicies } = await vi.importActual<
         typeof import("@/guardrails/tool-invocation")
@@ -1266,8 +1275,11 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       const enabledToolNames = mockEvaluatePolicies.mock
         .calls[0][4] as Set<string>;
       expect([...enabledToolNames]).toEqual(["something_else"]);
-      expect(response.body).toContain("are not enabled for this");
-      expect(response.body).not.toContain('"finish_reason":"tool_calls"');
+      expect(response.body).not.toContain("are not enabled for this");
+      // The turn still ends on the tool call, so the loop keeps going and the
+      // caller is the one that rejects the name.
+      expect(response.body).toContain("get_weather");
+      expect(response.body).toContain('"finish_reason":"tool_calls"');
     });
 
     // The refusal sibling above only pins that a refused call is absent, which
@@ -1519,10 +1531,54 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       );
     });
 
+    // The streaming path decides the refusal inside a try and writes the
+    // interaction in the finally, so the marker has to survive that hop — a row
+    // that does not say it was refused is indistinguishable from a healthy one.
+    test("a streamed refusal marks the interaction row", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolCallCount: 1,
+      });
+    });
+
     // A refusal replaces the recorded turn with the refusal text alone, so the
     // text the client already saw streaming is not in the record. Pinned as the
     // existing behaviour: withholding tool calls does not change it either way.
-    test("a streamed refusal records the refusal text alone", async () => {
+    // Both text blocks streamed live to the client before the gate refused the
+    // call between them, so the record has to carry them and then the refusal.
+    // Recording the refusal alone erased the model's own answer from history.
+    test("a streamed refusal keeps the text the client already received", async () => {
       anthropicStubOptions.toolUseBetweenText = true;
       anthropicStubOptions.streamStopReason = "tool_use";
 
@@ -1558,8 +1614,13 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         content: { type: string; text?: string }[];
       };
       expect(logged.content.map((block) => block.text)).toEqual([
+        "Let me check.Then I will summarise.",
         "Tool get_weather is not enabled here",
       ]);
+      // The blocked call was never delivered, so it stays out of the record.
+      expect(logged.content.some((block) => block.type === "tool_use")).toBe(
+        false,
+      );
     });
 
     // Holding tool calls until the gate decides moves them behind any text that

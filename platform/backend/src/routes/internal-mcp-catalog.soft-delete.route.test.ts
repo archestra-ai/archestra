@@ -6,6 +6,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
+import websocketService from "@/websocket";
 
 vi.mock("@/auth");
 
@@ -81,6 +82,10 @@ describe("internal MCP catalog soft-delete routes", () => {
     });
     const server = await makeMcpServer({ catalogId: catalog.id });
     const tool = await makeTool({ catalogId: catalog.id });
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
 
     const res = await app.inject({
       method: "DELETE",
@@ -88,6 +93,11 @@ describe("internal MCP catalog soft-delete routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ success: true });
+    expect(lifecycleBroadcast).toHaveBeenCalledWith({
+      organizationId,
+      catalogIds: [catalog.id],
+      serverIds: [server.id],
+    });
 
     const [catRow] = await db
       .select()
@@ -158,6 +168,34 @@ describe("internal MCP catalog soft-delete routes", () => {
     // before = soft-deleted snapshot, after = revived snapshot (non-empty diff).
     expect(row?.before).toMatchObject({ deletedAt: expect.any(String) });
     expect(row?.after).toMatchObject({ deletedAt: null });
+  });
+
+  test("global catalog deletion broadcasts only public catalog ids to every organization", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId: null });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifecycleBroadcast).toHaveBeenCalledWith({
+      organizationId: null,
+      catalogIds: [catalog.id],
+      serverIds: [],
+    });
   });
 
   test("GET ?status=deleted requires manage-deleted and lists soft-deleted roots", async ({

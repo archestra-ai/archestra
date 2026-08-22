@@ -201,6 +201,7 @@ export function EditCatalogContent({
         initialValues={item}
         onSubmit={onSubmit}
         embedded={keepOpenOnSave}
+        wizardPanel={keepOpenOnSave && !!footer}
         onDirtyChange={onDirtyChange}
         submitRef={submitRef}
         affectedServerCount={affectedServerCount}

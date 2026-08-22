@@ -180,6 +180,13 @@ export function classifyThrownRefreshError(
 /**
  * Map a refresh outcome to the `mcp_server` fields to persist. Returns `null`
  * for success and for transient failures (which must persist nothing).
+ *
+ * Hand the result to `McpServerModel.recordOAuthRefreshFailure`, not to a plain
+ * update: the three cause fields carry the latest diagnosis and are always
+ * overwritten, but `oauthRefreshFailedAt` is the moment this failure was
+ * observed and is persisted only when the install was not already failing. That
+ * keeps the column a first-failure stamp, which is what "failing since" reads
+ * and what a viewer's alert mute is pinned to.
  */
 export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
   oauthRefreshError: "refresh_failed" | "no_refresh_token";

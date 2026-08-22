@@ -869,28 +869,6 @@ class GeminiStreamAdapter
   }
 
   toProviderResponse(): GeminiResponse {
-    if (this.replacedText !== null) {
-      return {
-        candidates: [
-          {
-            content: { parts: [{ text: this.replacedText }], role: "model" },
-            finishReason: "STOP",
-            index: 0,
-          },
-        ],
-        usageMetadata: this.state.usage
-          ? {
-              promptTokenCount: this.state.usage.inputTokens,
-              candidatesTokenCount: this.state.usage.outputTokens,
-              totalTokenCount:
-                this.state.usage.inputTokens + this.state.usage.outputTokens,
-            }
-          : undefined,
-        modelVersion: this.state.model,
-        responseId: this.state.responseId || `gemini-${Date.now()}`,
-      };
-    }
-
     const parts: Gemini.Types.MessagePart[] = [];
 
     // Add thought text part if present (separate from output text).
@@ -922,9 +900,16 @@ class GeminiStreamAdapter
       parts.push(inlineDataPart);
     }
 
-    // Add function calls with thoughtSignature preserved
-    for (let i = 0; i < this.state.toolCalls.length; i++) {
-      const toolCall = this.state.toolCalls[i];
+    // Add function calls with thoughtSignature preserved.
+    //
+    // Skipped entirely when a refusal replaced the response: those calls were
+    // held back and never reached the client, so recording them would describe
+    // a turn that did not happen — and would leave a record owing function
+    // responses that nothing will ever send.
+    const emittedToolCalls =
+      this.replacedText === null ? this.state.toolCalls : [];
+    for (let i = 0; i < emittedToolCalls.length; i++) {
+      const toolCall = emittedToolCalls[i];
       let parsedArgs: Record<string, unknown> = {};
       try {
         parsedArgs = JSON.parse(toolCall.arguments);
@@ -943,6 +928,15 @@ class GeminiStreamAdapter
       });
     }
 
+    // A refusal does not erase what the model already said — its thought and
+    // answer text streamed as they arrived, and the refusal was appended after
+    // them, so the client holds all of it. Recording the refusal alone drops
+    // the model's own output from the record, and whatever reads the turn back
+    // later then sees a turn in which the model never spoke.
+    if (this.replacedText !== null) {
+      parts.push({ text: this.replacedText });
+    }
+
     return {
       candidates: [
         {
@@ -951,7 +945,10 @@ class GeminiStreamAdapter
             role: "model",
           },
           finishReason:
-            (this.state.stopReason as Gemini.Types.FinishReason) ?? "STOP",
+            this.replacedText !== null
+              ? "STOP"
+              : ((this.state.stopReason as Gemini.Types.FinishReason) ??
+                "STOP"),
           index: 0,
         },
       ],

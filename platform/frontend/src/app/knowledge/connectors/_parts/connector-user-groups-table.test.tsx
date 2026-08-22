@@ -110,11 +110,10 @@ describe("ConnectorUserGroupsTable", () => {
     // the bot is an app account and stays out of the counts entirely.
     const rows = screen.getAllByRole("row");
     expect(rows[2]).toHaveTextContent("2/4 assigned");
-    // The Members badges carry the member detail: resolved members with
-    // their org user, unresolved with the reason, overflow in the tooltip.
+    // The count's hover carries the member detail: resolved members with
+    // their org user, unresolved with the reason.
     expect(screen.getByText("alice@example.com · Alice")).toBeInTheDocument();
     expect(screen.getByText("bob@example.com")).toBeInTheDocument();
-    expect(screen.getByText("+2 more")).toBeInTheDocument();
     expect(screen.getByText("Dave D · email hidden")).toBeInTheDocument();
     // The manually assigned member shows the mapped user's identity, not
     // "email hidden".

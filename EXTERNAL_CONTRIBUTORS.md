@@ -737,3 +737,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Sravan1011
 - @kwitykwity
 - @GMNeonsky
+- @pacocartones
+- @matthewgregor

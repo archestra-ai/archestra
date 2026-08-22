@@ -6,38 +6,27 @@ import {
   BUILT_IN_AGENT_IDS,
   DocsPage,
   getDocsUrl,
-  parseFullToolName,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
 import { useQueries } from "@tanstack/react-query";
 import {
   BookOpen,
-  CheckIcon,
   ChevronDown,
   KeyRound,
   PackageSearch,
   Settings2,
-  Unplug,
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useId, useMemo, useState } from "react";
-import {
-  MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
-  MISSING_CREDENTIAL_TONE,
-  shouldOfferAppCatalogs,
-} from "@/components/agent-form.utils";
+import { shouldOfferAppCatalogs } from "@/components/agent-form.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { filterExcludableTools } from "@/components/agent-tool-exclusions-editor.utils";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { Editor } from "@/components/editor";
 import { EntityPill as Pill } from "@/components/entity-pill";
 import { KnowledgeSourceIcon } from "@/components/knowledge-source-icon";
-import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { SettingRow, SettingRows } from "@/components/setting-row";
+import { SettingGroup, SettingRow } from "@/components/setting-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,10 +41,9 @@ import {
 } from "@/lib/agent-skills.query";
 import { useAgentSubagentExclusions } from "@/lib/agent-subagent-exclusions.query";
 import { useAgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
-import { useAgentDelegations } from "@/lib/agent-tools.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -73,8 +61,8 @@ import {
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { providerToLogoProvider } from "@/lib/provider-logos";
-import { cn, formatDate } from "@/lib/utils";
-import { AGENT_PAGE_CONFIGS, type AgentPageKind } from "./agent-page-config";
+import { cn } from "@/lib/utils";
+import { type AgentPageKind, agentDetailHref } from "./agent-page-config";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
 
@@ -82,15 +70,12 @@ type Agent = archestraApiTypes.GetAgentResponses["200"];
 const PREVIEW_LIMIT = 12;
 
 /**
- * The Overview tab of an agent's detail page: one panel, the wizard's column
- * wide, as the wizard itself is. Its heading section holds the facts about
- * the record (the model it answers with, environment, access, labels, dates);
- * under it the setup wizard's own sections repeat — read-only, in the
- * wizard's order, with the wizard's own visuals (server pills with icons and
- * counts, agent and skill chips, the Auto-mode check list) — so the page and
- * the form describe the record the same way. Counts live on the pills
- * themselves, never repeated in a heading. The page header owns the single
- * Edit action; nothing here edits.
+ * The Overview section of an agent's detail page: one card per subject, stacked
+ * the wizard's column wide, as the wizard itself is. Each card that mirrors
+ * one of the setup wizard's steps repeats it read-only, in the wizard's order
+ * and with the wizard's own visuals (server pills with icons and counts,
+ * agent and skill chips), as values rather than prose. The page's one Edit
+ * lives in the header.
  */
 export function AgentOverview({
   kind,
@@ -101,31 +86,28 @@ export function AgentOverview({
 }) {
   const isBuiltIn = !!agent.builtIn;
   const showsTools = kind !== "llm_proxy" && !isBuiltIn;
-  const showsInstruction = kind === "agent";
-  // Delegation is keyed on the stored type, not the route family: gateways and
-  // legacy profiles have subagents too, only true LLM proxies do not.
-  const showsSubagents = agent.agentType !== "llm_proxy" && !isBuiltIn;
-  const showsAdvanced = !isBuiltIn;
+  const showsInstruction = kind === "agent" && !!agent.systemPrompt?.trim();
+  const showsSubagents = kind === "agent" && !isBuiltIn;
 
   return (
-    <div className="divide-y rounded-lg border bg-card">
-      <SummarySection kind={kind} agent={agent} />
+    <div className="space-y-4">
+      {kind === "agent" && <SummarySection kind={kind} agent={agent} />}
       {showsInstruction && <InstructionSection agent={agent} />}
-      {showsInstruction && agent.suggestedPrompts.length > 0 && (
+      {kind === "agent" && agent.suggestedPrompts.length > 0 && (
         <SuggestedPromptsSection agent={agent} />
       )}
       {showsTools && <ToolsSection kind={kind} agent={agent} />}
-      {showsSubagents && <SubagentsSection kind={kind} agent={agent} />}
-      {showsTools && <SkillsSection kind={kind} agent={agent} />}
-      {/* Last, as on the wizard: Advanced is the closing step there too. */}
-      {showsAdvanced && <AdvancedSection kind={kind} agent={agent} />}
+      {showsSubagents && <SubagentsSection agent={agent} />}
+      {showsTools && <SkillsSection agent={agent} />}
     </div>
   );
 }
 
 /**
- * The heading section: the record's facts in a grid, untitled like the
- * wizard's first section — the page header already names the record.
+ * What the agent answers with and where it runs — the wizard's first step,
+ * minus the parts big enough to be their own card (the instruction, the
+ * prompts). Who owns the record is not here: the page title carries its
+ * visibility badge, and the closing Details card names the owner.
  */
 function SummarySection({
   kind,
@@ -135,7 +117,6 @@ function SummarySection({
   agent: Agent;
 }) {
   const isBuiltIn = !!agent.builtIn;
-  const { data: session } = useSession();
   const { data: environmentsData } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
 
@@ -149,53 +130,33 @@ function SummarySection({
   const showsEnvironment = kind !== "agent" || !isBuiltIn;
 
   return (
-    <section className="grid gap-x-6 gap-y-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-      {showsModel && <ModelField agent={agent} />}
-      {showsEnvironment && (
-        <OverviewField label="Environment">
-          {environmentName ? (
-            <span>{environmentName}</span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </OverviewField>
-      )}
-      <OverviewField label="Accessible to">
-        {isBuiltIn ? (
-          <span>Everyone in the organization</span>
-        ) : (
-          <ResourceVisibilityBadge
-            scope={agent.scope}
-            teams={agent.teams}
-            users={agent.users}
-            authorId={agent.authorId}
-            authorName={agent.authorName}
-            currentUserId={session?.user?.id}
-            showSelfAsMe
-          />
+    <OverviewSection
+      // Named after what the card actually holds: a built-in agent shows a
+      // model and no environment, and a proxy or gateway shows an environment
+      // and no model, so a fixed pair of nouns names a field that is not there.
+      // "Where it runs" for those two, because a title that repeats the one
+      // label under it says nothing the label did not.
+      title={
+        showsModel && showsEnvironment
+          ? "Model and environment"
+          : showsModel
+            ? "Model"
+            : "Where it runs"
+      }
+    >
+      <FieldGrid>
+        {showsModel && <ModelField agent={agent} />}
+        {showsEnvironment && (
+          <OverviewField label="Environment">
+            {environmentName ? (
+              <span>{environmentName}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </OverviewField>
         )}
-      </OverviewField>
-      {agent.labels.length > 0 && (
-        <OverviewField label="Labels">
-          <LabelTags labels={agent.labels} />
-        </OverviewField>
-      )}
-      <OverviewField label="Created">
-        <span>
-          {agent.authorName ? <span>by {agent.authorName} </span> : null}
-          <span>
-            on {formatDate({ date: agent.createdAt, dateFormat: "PP" })}
-          </span>
-        </span>
-      </OverviewField>
-      {agent.updatedAt !== agent.createdAt && (
-        <OverviewField label="Last updated">
-          <span>
-            {formatDate({ date: agent.updatedAt, dateFormat: "PP p" })}
-          </span>
-        </OverviewField>
-      )}
-    </section>
+      </FieldGrid>
+    </OverviewSection>
   );
 }
 
@@ -237,22 +198,20 @@ function ModelField({ agent }: { agent: Agent }) {
     : organizationDefault.label;
 
   return (
-    <OverviewField label="Model">
-      <div className="space-y-1">
-        {modelName ? (
-          <span className="flex items-start gap-1.5 font-medium">
-            {provider && (
-              <ModelSelectorLogo
-                provider={providerToLogoProvider[provider]}
-                className="mt-0.5 size-3.5 shrink-0"
-              />
-            )}
-            <span>{modelName}</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">Best available model</span>
-        )}
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <>
+      <OverviewField label="Model">
+        <span className="flex min-w-0 items-center gap-1.5 font-medium">
+          {provider && (
+            <ModelSelectorLogo
+              provider={providerToLogoProvider[provider]}
+              className="size-3.5 shrink-0"
+            />
+          )}
+          <span>{modelName || "Best available model"}</span>
+        </span>
+      </OverviewField>
+      <OverviewField label="API key">
+        <span className="flex items-center gap-1.5">
           <KeyRound className="size-3 shrink-0" />
           <span>
             {agent.llmApiKeyId
@@ -260,13 +219,8 @@ function ModelField({ agent }: { agent: Agent }) {
               : "Organization default"}
           </span>
         </span>
-        {!hasOwnModel && !organizationDefault.isSet && (
-          <p className="text-xs text-muted-foreground">
-            No organization default is set, so the best available model answers.
-          </p>
-        )}
-      </div>
-    </OverviewField>
+      </OverviewField>
+    </>
   );
 }
 
@@ -287,10 +241,7 @@ function InstructionSection({ agent }: { agent: Agent }) {
   const isLong = contentHeight > COLLAPSED_PROMPT_HEIGHT_PX;
 
   return (
-    <OverviewSection
-      title="Instruction"
-      description="The system prompt every conversation with this agent starts from."
-    >
+    <OverviewSection title="Instruction">
       {prompt ? (
         // `group`: the toggle brightens when the pointer is anywhere over the
         // instruction, not only over the toggle itself.
@@ -366,8 +317,8 @@ function InstructionSection({ agent }: { agent: Agent }) {
           )}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          No instruction — the agent answers with the platform defaults.
+        <p className={typeRole({ role: "body" })}>
+          None — platform defaults apply.
         </p>
       )}
     </OverviewSection>
@@ -376,19 +327,18 @@ function InstructionSection({ agent }: { agent: Agent }) {
 
 function SuggestedPromptsSection({ agent }: { agent: Agent }) {
   return (
-    <OverviewSection
-      title="Suggested Prompts"
-      description="Offered when someone starts a new chat with this agent."
-    >
+    <OverviewSection title="Suggested prompts">
       <ul className="space-y-2">
         {agent.suggestedPrompts.map((prompt, index) => (
           <li
             // biome-ignore lint/suspicious/noArrayIndexKey: summary titles are not unique, and this list is read-only and never reordered
             key={`${index}:${prompt.summaryTitle}`}
-            className="rounded-md border px-3 py-2 text-sm"
+            className="rounded-md border px-3 py-2"
           >
-            <div className="font-medium">{prompt.summaryTitle}</div>
-            <div className="text-muted-foreground">{prompt.prompt}</div>
+            <div className={cn(typeRole({ role: "body" }), "font-medium")}>
+              {prompt.summaryTitle}
+            </div>
+            <div className={typeRole({ role: "body" })}>{prompt.prompt}</div>
           </li>
         ))}
       </ul>
@@ -396,74 +346,7 @@ function SuggestedPromptsSection({ agent }: { agent: Agent }) {
   );
 }
 
-/** The form's Advanced section: security, identity provider, passthrough headers. */
-function AdvancedSection({
-  kind,
-  agent,
-}: {
-  kind: AgentPageKind;
-  agent: Agent;
-}) {
-  const { data: canReadIdentityProviders } = useHasPermissions({
-    identityProvider: ["read"],
-  });
-  const { data: identityProviders } = useIdentityProviders({
-    enabled: !!agent.identityProviderId && !!canReadIdentityProviders,
-  });
-  const identityProvider = identityProviders?.find(
-    (idp) => idp.id === agent.identityProviderId,
-  );
-  const showsSecurity = kind === "agent" || kind === "llm_proxy";
-
-  return (
-    <OverviewSection title="Advanced" step>
-      <div className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-        {showsSecurity && (
-          <OverviewField label="Security">
-            <span>
-              {agent.considerContextUntrusted
-                ? "Context is treated as sensitive from the start of chat"
-                : "Context is trusted"}
-            </span>
-          </OverviewField>
-        )}
-        <OverviewField label="Identity provider">
-          {agent.identityProviderId ? (
-            identityProvider?.issuer ? (
-              <span>{identityProvider.issuer}</span>
-            ) : (
-              <span className="text-muted-foreground">Configured</span>
-            )
-          ) : (
-            <span className="text-muted-foreground">None</span>
-          )}
-        </OverviewField>
-        {kind === "mcp_gateway" && (
-          <OverviewField label="Passthrough headers">
-            {agent.passthroughHeaders && agent.passthroughHeaders.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {agent.passthroughHeaders.map((header) => (
-                  <Badge
-                    key={header}
-                    variant="secondary"
-                    className="font-mono font-normal"
-                  >
-                    {header}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <span className="text-muted-foreground">None</span>
-            )}
-          </OverviewField>
-        )}
-      </div>
-    </OverviewSection>
-  );
-}
-
 function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
-  const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
   const { catalogName: archestraCatalogName } = useArchestraMcpIdentity();
   const { data: exclusions } = useAgentToolExclusions(
     agent.accessAllTools ? agent.id : undefined,
@@ -473,14 +356,11 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
   });
   const hasKnowledge =
     agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
-  // Auto mode searches the environment rather than an assignment, so the
-  // lists are needed there too — see the knowledge block below.
-  const showsKnowledge = agent.accessAllTools || hasKnowledge;
   const { data: knowledgeBases } = useKnowledgeBases({
-    enabled: !!canReadKnowledge && showsKnowledge,
+    enabled: !!canReadKnowledge && hasKnowledge,
   });
   const { data: connectors } = useConnectors({
-    enabled: !!canReadKnowledge && showsKnowledge,
+    enabled: !!canReadKnowledge && hasKnowledge,
   });
   const knowledgeConfigured = useIsKnowledgeBaseConfigured();
   // The names and icons behind the tools come from the same catalog the tools
@@ -570,6 +450,8 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
   }));
 
   const knowledgeSources = [
+    // A knowledge base has no page of its own, so its chip stays inert; a
+    // connector's chip opens the connector.
     ...agent.knowledgeBaseIds.map((id) => {
       const base = knowledgeBases?.find((kb) => kb.id === id);
       return base ? { id, name: base.name, connectorType: null } : null;
@@ -577,45 +459,32 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
     ...agent.connectorIds.map((id) => {
       const connector = connectors?.find((c) => c.id === id);
       return connector
-        ? { id, name: connector.name, connectorType: connector.connectorType }
+        ? {
+            id,
+            name: connector.name,
+            connectorType: connector.connectorType,
+            href: knowledgeConnectorHref(connector.id),
+          }
         : null;
     }),
   ].filter((source): source is NonNullable<typeof source> => !!source);
   const knowledgeCount =
     agent.knowledgeBaseIds.length + agent.connectorIds.length;
-  // What Auto mode actually searches is resolved per call: every connector in
-  // THIS agent's environment that the caller may query — the assignment above
-  // is not read at all in that mode. The names here are the ones this reader
-  // can see, which is why the block says so rather than claiming a set.
-  const environmentSources = (connectors ?? []).filter(
-    (connector) =>
-      (connector.environmentId ?? null) === (agent.environmentId ?? null),
-  );
-
   const loadsToolsWhenNeeded = agent.toolExposureMode === "search_and_run_only";
 
   return (
     <OverviewSection
-      title="Tools & Knowledge Sources"
+      title="Tools and knowledge sources"
       mode={agent.accessAllTools ? "Auto" : "Custom"}
-      step
     >
       {agent.accessAllTools ? (
         <>
-          <ModeNotes
-            notes={[
-              `Every MCP tool and knowledge source the calling user can access, in this ${noun}'s environment — new servers included automatically`,
-              "Credentials resolve at call time per each server's default credential setting — on behalf of the calling user unless the server always uses one account",
-            ]}
-          />
           <div className="space-y-1.5">
             <SubHeading label="Disabled tools" />
             {excludedCount === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                None — every tool stays available.
-              </p>
+              <p className={typeRole({ role: "body" })}>None</p>
             ) : disabledByServer.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className={typeRole({ role: "body" })}>
                 <span>Resolving which servers they belong to…</span>
               </p>
             ) : (
@@ -632,6 +501,7 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
                       }
                       name={server.name}
                       note={`${server.disabled}/${server.total} disabled`}
+                      href={mcpServerHref(server.id)}
                     />
                   </li>
                 ))}
@@ -642,50 +512,18 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
               what makes the whole catalog reachable without loading it), so
               the setting reads as the same status indicator it is under
               Custom — a setting, not one more note on the mode. */}
-          <KnowledgeBlock
-            canRead={!!canReadKnowledge}
-            configured={knowledgeConfigured}
-            sources={environmentSources.map((connector) => ({
-              id: connector.id,
-              name: connector.name,
-              connectorType: connector.connectorType,
-            }))}
-            emptyLabel={`No source is set up in this ${noun}'s environment yet.`}
-            note={`Sources in this ${noun}'s environment, as you can see them — each conversation searches the ones its own caller may query.`}
-          />
-          {/* Both settings, as under Custom — but Auto resolves tools from
-              what each caller can already reach, so nothing can be missing
-              and the stored choice lies dormant. The row says that rather
-              than hiding, which left the setting looking unset. */}
-          <SettingRows>
+          <SettingGroup>
             <ProgressiveToolLoadingRow kind={kind} on={loadsToolsWhenNeeded} />
-            <SettingRow
-              icon={<Unplug className="size-4" />}
-              title="Tool connections"
-              tone="off"
-              state="Not needed"
-              learnMoreHref={getDocsUrl(
-                DocsPage.PlatformAgents,
-                "tool-connections",
-              )}
-            >
-              {`Auto reaches only the tools each caller can already use, so no connection can be missing.`}
-            </SettingRow>
-          </SettingRows>
+          </SettingGroup>
         </>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
-            Only the tools and knowledge sources assigned here are available.
-          </p>
           {servers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No tools assigned yet.
-            </p>
+            <p className={typeRole({ role: "body" })}>No tools assigned yet.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="flex flex-wrap gap-1.5">
               {servers.map((server) => (
-                <li key={server.id} className="space-y-1.5">
+                <li key={server.id}>
                   <Pill
                     icon={
                       <McpCatalogIcon
@@ -696,23 +534,8 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
                     }
                     name={server.name}
                     count={server.tools.length}
+                    href={mcpServerHref(server.id)}
                   />
-                  <div className="flex flex-wrap gap-1.5 pl-1">
-                    {server.tools.slice(0, PREVIEW_LIMIT).map((tool) => (
-                      <Badge
-                        key={tool.id}
-                        variant="secondary"
-                        className="font-mono font-normal"
-                      >
-                        {parseFullToolName(tool.name).toolName || tool.name}
-                      </Badge>
-                    ))}
-                    {server.tools.length > PREVIEW_LIMIT && (
-                      <Badge variant="outline" className="font-normal">
-                        +{server.tools.length - PREVIEW_LIMIT} more
-                      </Badge>
-                    )}
-                  </div>
                 </li>
               ))}
             </ul>
@@ -726,37 +549,18 @@ function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
               sources={knowledgeSources}
               hiddenCount={knowledgeCount - knowledgeSources.length}
               emptyLabel="None assigned."
-              note={`Each conversation searches the assigned sources its own caller may query, in this ${noun}'s environment.`}
             />
           )}
-          {/* The form's two Custom-mode settings, as status indicators: both
-              only apply to an explicit tool list — an Auto agent always
-              discovers tools on demand, and no caller can be missing a
-              connection to a server they already reach. */}
-          <SettingRows>
+          <SettingGroup>
             <ProgressiveToolLoadingRow kind={kind} on={loadsToolsWhenNeeded} />
-            <MissingConnectionRow
-              behavior={agent.missingCredentialBehavior}
-              noun={noun}
-            />
-          </SettingRows>
+          </SettingGroup>
         </>
       )}
     </OverviewSection>
   );
 }
 
-function SubagentsSection({
-  kind,
-  agent,
-}: {
-  kind: AgentPageKind;
-  agent: Agent;
-}) {
-  const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
-  const { data: delegations = [] } = useAgentDelegations(
-    agent.accessAllSubagents ? undefined : agent.id,
-  );
+function SubagentsSection({ agent }: { agent: Agent }) {
   const { data: exclusions } = useAgentSubagentExclusions(
     agent.accessAllSubagents ? agent.id : undefined,
   );
@@ -776,15 +580,28 @@ function SubagentsSection({
     llmSettings: ["read"],
   });
   const excludedIds = exclusions?.excludedSubagentIds ?? [];
+  const assignedIds = agent.accessAllSubagents
+    ? []
+    : Array.from(
+        new Set(
+          agent.tools.flatMap((tool) =>
+            tool.delegateToAgentId ? [tool.delegateToAgentId] : [],
+          ),
+        ),
+      );
   const advisorEnabled = advisorId
     ? agent.accessAllSubagents
       ? !excludedIds.includes(advisorId)
-      : delegations.some((target) => target.id === advisorId)
+      : assignedIds.includes(advisorId)
     : false;
 
   const iconOf = (id: string) =>
     roster.find((target) => target.id === id)?.icon ?? null;
-  const targets = delegations.filter((target) => target.id !== advisorId);
+  const targetIds = assignedIds.filter((id) => id !== advisorId);
+  const targets = targetIds.flatMap((id) => {
+    const target = roster.find((candidate) => candidate.id === id);
+    return target ? [target] : [];
+  });
   const disabled = excludedIds
     .filter((id) => id !== advisorId)
     .map((id) => ({
@@ -800,53 +617,48 @@ function SubagentsSection({
       title="Subagents"
       mode={agent.accessAllSubagents ? "Auto" : "Custom"}
     >
-      {agent.accessAllSubagents ? (
-        <>
-          <ModeNotes
-            notes={[
-              `Can delegate to any agent the calling user can access, in this ${noun}'s environment — new agents included automatically`,
-            ]}
-          />
-          <div className="space-y-1.5">
-            <SubHeading label="Disabled subagents" />
-            {disabled.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                None — every agent stays available.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-1.5">
-                {namedDisabled.slice(0, PREVIEW_LIMIT).map((target) => (
-                  <li key={target.id}>
-                    <Pill
-                      icon={<AgentIcon icon={iconOf(target.id)} size={14} />}
-                      name={target.name}
-                      tone="exclude"
-                    />
-                  </li>
-                ))}
-                {disabled.length > namedDisabled.length && (
-                  <li>
-                    <Badge variant="outline" className="font-normal">
-                      +{disabled.length - namedDisabled.length} not visible to
-                      you
-                    </Badge>
-                  </li>
-                )}
-              </ul>
+      {agent.accessAllSubagents && disabled.length > 0 && (
+        <div className="space-y-1.5">
+          <SubHeading label="Disabled subagents" />
+          <ul className="flex flex-wrap gap-1.5">
+            {namedDisabled.slice(0, PREVIEW_LIMIT).map((target) => (
+              <li key={target.id}>
+                <Pill
+                  icon={<AgentIcon icon={iconOf(target.id)} size={14} />}
+                  name={target.name}
+                  tone="exclude"
+                  href={agentDetailHref("agent", target.id)}
+                />
+              </li>
+            ))}
+            {/* The cap applies here as it does to every other list on the
+                   page: without this the thirteenth disabled agent onwards
+                   simply vanished. */}
+            {namedDisabled.length > PREVIEW_LIMIT && (
+              <li>
+                <Badge variant="outline" className="font-normal">
+                  +{namedDisabled.length - PREVIEW_LIMIT} more
+                </Badge>
+              </li>
             )}
-          </div>
-        </>
-      ) : targets.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Delegates to no other agent.
-        </p>
-      ) : (
+            {disabled.length > namedDisabled.length && (
+              <li>
+                <Badge variant="outline" className="font-normal">
+                  +{disabled.length - namedDisabled.length} not visible to you
+                </Badge>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+      {!agent.accessAllSubagents && targetIds.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {targets.slice(0, PREVIEW_LIMIT).map((target) => (
             <li key={target.id}>
               <Pill
                 icon={<AgentIcon icon={iconOf(target.id)} size={14} />}
                 name={target.name}
+                href={agentDetailHref("agent", target.id)}
               />
             </li>
           ))}
@@ -857,12 +669,19 @@ function SubagentsSection({
               </Badge>
             </li>
           )}
+          {targetIds.length > targets.length && (
+            <li>
+              <Badge variant="outline" className="font-normal">
+                +{targetIds.length - targets.length} not visible to you
+              </Badge>
+            </li>
+          )}
         </ul>
       )}
       {/* The wizard's own switch under both modes, as a status tile like
           the tool settings above it — with the Advisor agent's own icon. */}
       {advisorId && (
-        <SettingRows>
+        <SettingGroup>
           <SettingRow
             icon={
               <AgentIcon
@@ -880,19 +699,14 @@ function SubagentsSection({
               "advisor",
             )}
             action={canReadLlmSettings ? <AdvisorSettingsLink /> : undefined}
-          >
-            {advisorEnabled
-              ? `This ${noun} consults a stronger model when making decisions.`
-              : `This ${noun} answers on its own model throughout.`}
-          </SettingRow>
-        </SettingRows>
+          />
+        </SettingGroup>
       )}
     </OverviewSection>
   );
 }
 
-function SkillsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
-  const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
+function SkillsSection({ agent }: { agent: Agent }) {
   const skillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const enabled = skillsEnabled && !!canReadSkills;
@@ -912,31 +726,18 @@ function SkillsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
     <OverviewSection
       title="Published skills"
       mode={assignments.accessAllSkills ? "Auto" : "Custom"}
-      description={`Skills this ${noun} serves to MCP clients as skill:// resources.`}
     >
       {assignments.accessAllSkills ? (
-        <>
-          <ModeNotes
-            notes={[
-              `Publishes every organization-scoped skill in this ${noun}'s environment — new ones included automatically`,
-              "Team and personal skills are never published automatically",
-            ]}
-          />
-          <div className="space-y-1.5">
-            <SubHeading label="Excluded skills" />
-            {excluded.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No skill is held back.
-              </p>
-            ) : (
-              <SkillPills skills={excluded} tone="exclude" />
-            )}
-          </div>
-        </>
+        <div className="space-y-1.5">
+          <SubHeading label="Excluded skills" />
+          {excluded.length === 0 ? (
+            <p className={typeRole({ role: "body" })}>None</p>
+          ) : (
+            <SkillPills skills={excluded} tone="exclude" />
+          )}
+        </div>
       ) : published.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No skills published yet.
-        </p>
+        <p className={typeRole({ role: "body" })}>No skills published yet.</p>
       ) : (
         <SkillPills skills={published} />
       )}
@@ -945,44 +746,29 @@ function SkillsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
 }
 
 /**
- * One section of the overview, in the shape the setup wizard's own sections
- * use: title, optional Auto/Custom mode, one-line description.
+ * One card of the overview: title, optional Auto/Custom mode, and the facts.
+ * The page's single Edit lives in the header, so a card carries no chrome of
+ * its own.
+ *
+ * Card titles sit below the detail page's Overview group heading.
  */
 function OverviewSection({
   title,
   mode,
-  description,
-  step = false,
   children,
 }: {
   title: string;
   mode?: "Auto" | "Custom";
-  description?: string;
-  /**
-   * A section that IS one of the setup wizard's steps (Tools & Knowledge,
-   * Advanced) reads a rank above the sections inside a step: a larger h2 to
-   * the others' h3, so the page carries the wizard's own hierarchy.
-   */
-  step?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("space-y-4 p-4", step && "pt-5")}>
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {step ? (
-            <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          ) : (
-            <h3 className="text-base font-semibold">{title}</h3>
-          )}
-          {mode && (
-            <Badge variant="secondary" className="font-normal">
-              {mode}
-            </Badge>
-          )}
-        </div>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+    <section className="space-y-4 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {mode && (
+          <Badge variant="secondary" className="font-normal">
+            {mode}
+          </Badge>
         )}
       </div>
       {children}
@@ -991,10 +777,22 @@ function OverviewSection({
 }
 
 /**
+ * The labelled facts of a card, two or three to a row. Its own component
+ * because three cards lay their fields out the same way and a grid that
+ * disagrees between them reads as two different pages.
+ */
+function FieldGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+      {children}
+    </div>
+  );
+}
+
+/**
  * The knowledge half of the section, in the tools' own vocabulary: a
- * sub-heading, a wrap of source chips, and one line saying whose reach the
- * chips describe. Auto mode passes the environment's sources, Custom mode the
- * assignment; neither is a promise about another caller, which the note says.
+ * sub-heading and a wrap of explicitly assigned source chips. It is not a
+ * promise about another caller.
  */
 function KnowledgeBlock({
   canRead,
@@ -1002,81 +800,69 @@ function KnowledgeBlock({
   sources,
   hiddenCount = 0,
   emptyLabel,
-  note,
 }: {
   canRead: boolean;
   configured: boolean;
-  sources: { id: string; name: string; connectorType?: string | null }[];
+  sources: {
+    id: string;
+    name: string;
+    connectorType?: string | null;
+    /** Connectors have a page of their own; knowledge bases do not. */
+    href?: string;
+  }[];
   /** Assigned sources this reader cannot see, counted rather than named. */
   hiddenCount?: number;
   emptyLabel: string;
-  note: string;
 }) {
   return (
     <div className="space-y-1.5">
       <SubHeading label="Knowledge sources" />
       {!configured ? (
-        <p className="text-sm text-muted-foreground">
+        <p className={typeRole({ role: "body" })}>
           Knowledge search is off — no embedding model is configured.
         </p>
       ) : !canRead ? (
-        <p className="text-sm text-muted-foreground">
+        <p className={typeRole({ role: "body" })}>
           You do not have permission to see knowledge sources.
         </p>
       ) : sources.length === 0 && hiddenCount === 0 ? (
-        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+        <p className={typeRole({ role: "body" })}>{emptyLabel}</p>
       ) : (
-        <>
-          <ul className="flex flex-wrap gap-1.5">
-            {sources.slice(0, PREVIEW_LIMIT).map((source) => (
-              <li key={source.id}>
-                <Pill
-                  icon={
-                    <KnowledgeSourceIcon connectorType={source.connectorType} />
-                  }
-                  name={source.name}
-                />
-              </li>
-            ))}
-            {sources.length > PREVIEW_LIMIT && (
-              <li>
-                <Badge variant="outline" className="font-normal">
-                  +{sources.length - PREVIEW_LIMIT} more
-                </Badge>
-              </li>
-            )}
-            {hiddenCount > 0 && (
-              <li>
-                <Badge variant="outline" className="font-normal">
-                  +{hiddenCount} not visible to you
-                </Badge>
-              </li>
-            )}
-          </ul>
-          <p className="text-xs text-muted-foreground">{note}</p>
-        </>
+        <ul className="flex flex-wrap gap-1.5">
+          {sources.slice(0, PREVIEW_LIMIT).map((source) => (
+            <li key={source.id}>
+              <Pill
+                icon={
+                  <KnowledgeSourceIcon connectorType={source.connectorType} />
+                }
+                name={source.name}
+                href={source.href}
+              />
+            </li>
+          ))}
+          {sources.length > PREVIEW_LIMIT && (
+            <li>
+              <Badge variant="outline" className="font-normal">
+                +{sources.length - PREVIEW_LIMIT} more
+              </Badge>
+            </li>
+          )}
+          {hiddenCount > 0 && (
+            <li>
+              <Badge variant="outline" className="font-normal">
+                +{hiddenCount} not visible to you
+              </Badge>
+            </li>
+          )}
+        </ul>
       )}
     </div>
   );
 }
 
-/** The wizard's Auto-mode check list, read-only. */
-function ModeNotes({ notes }: { notes: readonly string[] }) {
-  return (
-    <ul className="space-y-1.5 text-xs text-muted-foreground">
-      {notes.map((note) => (
-        <li key={note} className="flex gap-2">
-          <CheckIcon className="mt-px size-3.5 shrink-0" />
-          <span>{note}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /** The wizard's own sub-label above a group of pills ("Disabled tools"). */
 function SubHeading({ label }: { label: string }) {
-  return <p className="text-sm text-muted-foreground">{label}</p>;
+  return <p className={typeRole({ role: "label" })}>{label}</p>;
 }
 
 /** The form's "Load tools progressively when needed" switch, read-only. */
@@ -1102,48 +888,8 @@ function ProgressiveToolLoadingRow({
           : DocsPage.PlatformAgents,
         "load-tools-when-needed",
       )}
-    >
-      {on ? (
-        <>
-          Only <Code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</Code> and{" "}
-          <Code>{TOOL_RUN_TOOL_SHORT_NAME}</Code> are pre-loaded into the
-          context upfront. All the other tools are loaded on demand.
-        </>
-      ) : (
-        <>All assigned tools are pre-loaded into the context upfront.</>
-      )}
-    </SettingRow>
+    />
   );
-}
-
-/** The form's "When someone is missing a tool connection" choice, read-only. */
-function MissingConnectionRow({
-  behavior,
-  noun,
-}: {
-  behavior: Agent["missingCredentialBehavior"];
-  noun: string;
-}) {
-  const option = MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.find(
-    (candidate) => candidate.value === behavior,
-  );
-  if (!option) return null;
-  return (
-    <SettingRow
-      icon={<Unplug className="size-4" />}
-      title="Tool connections"
-      tone={MISSING_CREDENTIAL_TONE[behavior]}
-      state={option.label}
-      // The agents page documents the setting for gateways too.
-      learnMoreHref={getDocsUrl(DocsPage.PlatformAgents, "tool-connections")}
-    >
-      {option.describe(noun)}
-    </SettingRow>
-  );
-}
-
-function Code({ children }: { children: ReactNode }) {
-  return <code className="font-mono">{children}</code>;
 }
 
 /** The Advisor is a beta capability; the form and LLM settings say so too. */
@@ -1194,6 +940,7 @@ function SkillPills({
             icon={<BookOpen className="size-3.5 shrink-0" />}
             name={skill.name}
             tone={tone}
+            href={`/skills/${encodeURIComponent(skill.id)}`}
           />
         </li>
       ))}
@@ -1217,10 +964,27 @@ function OverviewField({
 }) {
   return (
     <div className="min-w-0 space-y-1">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="break-words">{children}</div>
+      <div className={typeRole({ role: "label" })}>{label}</div>
+      <div className={cn(typeRole({ role: "body" }), "break-words")}>
+        {children}
+      </div>
     </div>
   );
+}
+
+/**
+ * An MCP server's own page in the registry — nothing for the synthetic group
+ * that stands in for servers this reader cannot see, which has no page.
+ */
+function mcpServerHref(catalogId: string) {
+  return catalogId === UNKNOWN_CATALOG_ID
+    ? undefined
+    : `/mcp/registry/${encodeURIComponent(catalogId)}`;
+}
+
+/** A knowledge connector's own page. */
+function knowledgeConnectorHref(connectorId: string) {
+  return `/knowledge/connectors/${encodeURIComponent(connectorId)}`;
 }
 
 /**

@@ -46,8 +46,10 @@ import {
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   ApiError,
+  agentOwner,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   type LocalConfig,
@@ -1405,6 +1407,8 @@ async function handleDeployMcpServer(
         args,
         mcpServer,
         catalogItem,
+        ownerAgentId: context.agent.id,
+        tokenAuth: context.tokenAuth,
       });
     }
 
@@ -1413,6 +1417,8 @@ async function handleDeployMcpServer(
         args,
         mcpServer,
         catalogItem,
+        ownerAgentId: context.agent.id,
+        tokenAuth: context.tokenAuth,
       });
     }
 
@@ -1612,6 +1618,8 @@ async function discoverLocalMcpServerTools(params: {
     id: string;
     name: string;
   };
+  ownerAgentId: string;
+  tokenAuth: ArchestraContext["tokenAuth"];
 }): Promise<void> {
   const { args, mcpServer, catalogItem } = params;
 
@@ -1665,6 +1673,12 @@ async function discoverLocalMcpServerTools(params: {
       localInstallationStatus: "success",
       localInstallationError: null,
     });
+    await refreshMcpSkillMetadata({
+      catalogId: catalogItem.id,
+      mcpServerId: mcpServer.id,
+      owner: agentOwner(params.ownerAgentId),
+      tokenAuth: params.tokenAuth,
+    });
     broadcastMcpInstallationStatus(mcpServer.id, "success", null);
   } catch (err) {
     logger.error(
@@ -1687,28 +1701,34 @@ async function discoverRemoteMcpServerTools(params: {
     id: string;
     name: string;
   };
+  ownerAgentId: string;
+  tokenAuth: ArchestraContext["tokenAuth"];
 }): Promise<void> {
   const { args, mcpServer, catalogItem } = params;
 
   try {
     const discoveredTools = await McpServerModel.getToolsFromServer(mcpServer);
-    if (discoveredTools.length === 0) {
-      return;
+    if (discoveredTools.length > 0) {
+      const toolsToCreate = discoveredTools.map((tool) => ({
+        name: ToolModel.slugifyName(catalogItem.name, tool.name),
+        rawToolName: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+        catalogId: catalogItem.id,
+      }));
+      const createdTools =
+        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+      await assignDiscoveredToolsToAgents({
+        agentIds: args.agentIds ?? [],
+        toolIds: createdTools.map((tool) => tool.id),
+        mcpServerId: mcpServer.id,
+      });
     }
-
-    const toolsToCreate = discoveredTools.map((tool) => ({
-      name: ToolModel.slugifyName(catalogItem.name, tool.name),
-      rawToolName: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema,
+    await refreshMcpSkillMetadata({
       catalogId: catalogItem.id,
-    }));
-    const createdTools =
-      await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
-    await assignDiscoveredToolsToAgents({
-      agentIds: args.agentIds ?? [],
-      toolIds: createdTools.map((tool) => tool.id),
       mcpServerId: mcpServer.id,
+      owner: agentOwner(params.ownerAgentId),
+      tokenAuth: params.tokenAuth,
     });
   } catch (err) {
     logger.error(

@@ -145,6 +145,12 @@ const CachePointContentBlockSchema = z.object({
 // system cachePoint block). Two variants per the Bedrock Converse API: plain
 // reasoning text with a signature, or redacted reasoning bytes. `signature` is
 // optional so a text variant without one still validates and passes through.
+//
+// The redacted variant has two spellings on the wire. `redactedContent` is the
+// Converse API's own (`ReasoningContentBlock`) and what the pinned
+// @ai-sdk/amazon-bedrock echoes back; `redactedReasoning.data` is what it sent
+// before 4.0.158 and what other clients may still send. Both are accepted and
+// forwarded as received — Bedrock is the one that decides.
 const ReasoningContentBlockSchema = z.object({
   reasoningContent: z.union([
     z.object({
@@ -152,6 +158,9 @@ const ReasoningContentBlockSchema = z.object({
         text: z.string(),
         signature: z.string().optional(),
       }),
+    }),
+    z.object({
+      redactedContent: z.string(),
     }),
     z.object({
       redactedReasoning: z.object({
@@ -248,7 +257,13 @@ const ResponseToolUseBlockSchema = z.object({
   }),
 });
 
+// Extended-thinking output comes back as a `reasoningContent` block alongside
+// the answer, in exactly the shape a later request echoes back, so the same
+// schema serves both directions. Without it the proxy rejects its own upstream
+// response and a non-streaming Converse call to a thinking model never reaches
+// the client.
 export const ResponseContentBlockSchema = z.union([
   ResponseTextBlockSchema,
   ResponseToolUseBlockSchema,
+  ReasoningContentBlockSchema,
 ]);

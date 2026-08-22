@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0428_drop_optimization_rules.sql"),
+  path.join(__dirname, "0431_drop_optimization_rules.sql"),
   "utf-8",
 );
 
@@ -54,7 +54,7 @@ async function getRolePermission(
   return JSON.parse(role.permission as unknown as string);
 }
 
-describe("0428 drop optimization_rules", () => {
+describe("0431 drop optimization_rules", () => {
   test("strips the removed resource from a custom role, leaving its other permissions intact", async ({
     makeOrganization,
   }) => {

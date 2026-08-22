@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useBulkDeleteSkills,
   useBulkUpdateSkillsVisibility,
+  useExternalMcpSkill,
   useRestoreSkillVersion,
   useSkillVersion,
   useSkillVersions,
@@ -19,6 +20,7 @@ vi.mock("@archestra/shared", () => ({
     getSkill: vi.fn(),
     getSkillSourceRepos: vi.fn(),
     getSkillUsageStatistics: vi.fn(),
+    getExternalMcpSkill: vi.fn(),
     getSkillVersion: vi.fn(),
     getSkillVersions: vi.fn(),
     createSkill: vi.fn(),
@@ -119,6 +121,33 @@ const restoreArgs = {
   version: 6,
   baseVersion: 12,
 };
+
+describe("useExternalMcpSkill", () => {
+  it("clears a removed external Skill when its refetch returns not found", async () => {
+    sdk.getExternalMcpSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message: "External skill not found",
+          type: "api_not_found_error",
+        },
+      },
+    } as never);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+
+    const { result } = renderHook(
+      () => useExternalMcpSkill({ id: "skill-1", mcpServerId: "server-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+  });
+});
 
 describe("useRestoreSkillVersion", () => {
   beforeEach(() => {

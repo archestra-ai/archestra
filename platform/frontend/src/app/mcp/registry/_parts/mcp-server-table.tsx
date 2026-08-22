@@ -1,9 +1,13 @@
 "use client";
 
+import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
+  Bell,
+  BellOff,
   Download,
   FileSearch,
+  KeyRound,
   Loader2,
   MessageSquare,
   Pencil,
@@ -14,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -23,24 +27,49 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import type { SelectAllMatching } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import { typeRole } from "@/lib/design/type-scale";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  type McpDeploymentFeedState,
   useBulkUninstallMcpServers,
   useMcpServers,
+  useRestoreMcpServerAlerts,
 } from "@/lib/mcp/mcp-server.query";
-import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import {
+  canFixInstall,
+  facetIssues,
+  type McpServerAttentionFacet,
+  type McpServerIssue,
+} from "@/lib/mcp/mcp-server-issues";
+import { cn } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
+import {
+  computeDeploymentStatusSummary,
+  getDeploymentLabel,
+} from "./deployment-status";
+import type { DismissAlertTarget } from "./dismiss-alert-dialog";
+import { DismissAlertDialog } from "./dismiss-alert-dialog";
+import { McpCapabilityBadges } from "./mcp-capability-badges";
+import {
+  getMcpServerActionModel,
+  mcpServerAction,
+} from "./mcp-server-actions-model";
+import { mcpServerAlertTarget } from "./mcp-server-alert-target";
+import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
+import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -56,6 +85,14 @@ type McpServerTableProps = {
   envLabelByCatalog: Map<string, string | null>;
   /** Outstanding issues per catalog id; items with none are absent. */
   issuesByCatalog: Map<string, McpServerIssue[]>;
+  /**
+   * Whether the live deployment feed has anything to say. An empty
+   * `deploymentStatuses` means "not yet" on Kubernetes and "never" everywhere
+   * else, and a Status column that cannot tell them apart calls a server
+   * healthy on the strength of data that has not arrived.
+   */
+  deploymentFeedState: McpDeploymentFeedState;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   installingItemId: string | null;
   onInstall: (item: CatalogItem) => void;
   onReinstall: (
@@ -64,28 +101,36 @@ type McpServerTableProps = {
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
   onCancelInstallation?: (serverId: string) => void;
+  attention?: {
+    facet: McpServerAttentionFacet;
+    servers: InstalledServer[];
+    rowSelection: RowSelectionState;
+    onRowSelectionChange: (selection: RowSelectionState) => void;
+    onTargetsCompleted: (targets: readonly DismissAlertTarget[]) => void;
+  };
 };
 
 // Table variant of the registry catalog list. The name cell links to the item
-// detail page and the Actions column keeps parity with the card buttons:
-// chat, install, uninstall, reinstall, and server settings, with credentials
-// and logs in the overflow menu.
+// detail page and the Actions column keeps parity with the card buttons. The
+// table has room for compact icon buttons, so applicable actions stay visible.
 export function McpServerTable({
   items,
   getServerInfo,
   envLabelByCatalog,
   issuesByCatalog,
+  deploymentFeedState,
+  deploymentStatuses,
   installingItemId,
   onInstall,
   onReinstall,
   onCancelInstallation,
+  attention,
 }: McpServerTableProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-
-  const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
-  const bulkUninstall = useBulkUninstallMcpServers();
+  const canSelect = (item: CatalogItem) =>
+    !getServerInfo(item).isInstallInProgress;
 
   const {
     rowSelection,
@@ -98,7 +143,7 @@ export function McpServerTable({
     rows: items,
     getId: (item) => item.id,
     // An install in flight is neither installable nor uninstallable yet.
-    canSelect: (item) => !getServerInfo(item).isInstallInProgress,
+    canSelect,
     filterSignature: `mcp-registry:${items.length}`,
     matchDescription: "match the current filters",
   });
@@ -118,40 +163,24 @@ export function McpServerTable({
       name: item.name,
     }));
 
-  const columns: ColumnDef<CatalogItem>[] = [
+  const standardColumns: ColumnDef<CatalogItem>[] = [
     createSelectColumn<CatalogItem>({
       rowLabel: (item) => `Select ${item.name}`,
       allLabel: "Select all MCP servers on this page",
-      canSelect: (item) => !getServerInfo(item).installedServer,
+      canSelect,
     }),
     {
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 600,
+      size: 540,
       cell: ({ row }) => {
         const item = row.original;
-        const environmentLabel = envLabelByCatalog.get(item.id);
         return (
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
-              <span className="truncate font-medium">{item.name}</span>
-              {environmentLabel && (
-                <Badge
-                  variant="outline"
-                  className="shrink-0 text-muted-foreground"
-                >
-                  <span className="max-w-32 truncate">{environmentLabel}</span>
-                </Badge>
-              )}
-            </div>
-            {item.description && (
-              <div className="truncate text-xs text-muted-foreground">
-                {item.description}
-              </div>
-            )}
-          </div>
+          <McpServerNameCell
+            item={item}
+            environmentLabel={envLabelByCatalog.get(item.id)}
+          />
         );
       },
     },
@@ -182,16 +211,21 @@ export function McpServerTable({
     },
     {
       id: "status",
-      // Wide enough for the longest issue label ("Needs re-authentication");
-      // the badge itself is capped to the cell so nothing can spill.
-      size: 210,
+      // The table is a scanning surface: the status label is enough here.
+      // Diagnosis and remediation live on the server page and attention facet.
+      size: 190,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;
         const { installedServer, isInstallInProgress } = getServerInfo(item);
         if (installingItemId === item.id || isInstallInProgress) {
           return (
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span
+              className={cn(
+                typeRole({ role: "body" }),
+                "inline-flex items-center gap-1.5",
+              )}
+            >
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Installing…
             </span>
@@ -200,22 +234,35 @@ export function McpServerTable({
         if (item.serverType === "builtin") {
           return <Badge variant="secondary">Built-in</Badge>;
         }
-        // Worst issue first; the pill carries the cause in its tooltip.
-        const issue = issuesByCatalog.get(item.id)?.[0];
+        // Worst live issue first, since issues are kind-ordered. An item whose
+        // only trouble has been muted still shows it, muted.
+        const issues = issuesByCatalog.get(item.id) ?? [];
+        const issue = issues.find((i) => !i.muted) ?? issues[0];
         if (issue) {
-          return <McpServerIssueBadge issue={issue} />;
+          return (
+            <div className="flex min-h-9 items-center">
+              <McpServerIssueBadge issue={issue} showDetail={false} />
+            </div>
+          );
         }
-        if (installedServer) {
-          return <Badge variant="secondary">Installed</Badge>;
-        }
+        // Nothing installed means there is no runtime to have a status, and a
+        // catalog entry nobody has connected is not "Healthy" — it is nothing.
+        if (!installedServer) return null;
         return (
-          <span className="text-sm text-muted-foreground">Not installed</span>
+          <span className={typeRole({ role: "body" })}>
+            {installedStatusLabel({
+              isLocal: item.serverType === "local",
+              feedState: deploymentFeedState,
+              serverId: installedServer.id,
+              deploymentStatuses,
+            })}
+          </span>
         );
       },
     },
     {
       id: "actions",
-      size: 190,
+      size: 260,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const item = row.original;
@@ -224,6 +271,7 @@ export function McpServerTable({
           <McpServerRowActions
             item={item}
             installedServer={installedServer}
+            issues={issuesByCatalog.get(item.id) ?? []}
             isInstalling={installingItemId === item.id || !!isInstallInProgress}
             onInstall={onInstall}
             onReinstall={onReinstall}
@@ -233,6 +281,221 @@ export function McpServerTable({
       },
     },
   ];
+
+  const attentionColumns: ColumnDef<CatalogItem>[] = attention
+    ? [
+        {
+          id: "select",
+          size: 36,
+          header: ({ table }) => (
+            <Checkbox
+              aria-label={
+                attention.facet === "muted"
+                  ? "Select all restorable alerts"
+                  : "Select all alerts"
+              }
+              checked={
+                table.getIsAllRowsSelected()
+                  ? true
+                  : table.getIsSomeRowsSelected()
+                    ? "indeterminate"
+                    : false
+              }
+              onCheckedChange={(checked) =>
+                table.toggleAllRowsSelected(checked === true)
+              }
+            />
+          ),
+          cell: ({ row }) => (
+            <Checkbox
+              aria-label={`Select ${row.original.name}`}
+              checked={row.getIsSelected()}
+              onCheckedChange={(checked) =>
+                row.toggleSelected(checked === true)
+              }
+            />
+          ),
+        },
+        {
+          id: "name",
+          accessorKey: "name",
+          header: "MCP Server",
+          size: 540,
+          cell: ({ row }) => {
+            const item = row.original;
+            return (
+              <McpServerNameCell
+                item={item}
+                environmentLabel={envLabelByCatalog.get(item.id)}
+              />
+            );
+          },
+        },
+        ...(attention.facet === "muted"
+          ? [
+              {
+                id: "dismissReason",
+                header: "Dismiss reason",
+                size: 280,
+                cell: ({ row }) => {
+                  const reasons = Array.from(
+                    new Set(
+                      attentionRawIssues(row.original)
+                        .map((issue) => issue.mutedReason?.trim())
+                        .filter((reason): reason is string => !!reason),
+                    ),
+                  );
+                  return reasons.length > 0 ? (
+                    <span className="block break-words">
+                      {reasons.join("; ")}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  );
+                },
+              } satisfies ColumnDef<CatalogItem>,
+            ]
+          : []),
+        {
+          id: "issue",
+          header: "Issue",
+          size: 220,
+          cell: ({ row }) => (
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              {attentionIssues(row.original).map((issue) => (
+                <McpServerIssueBadge
+                  key={issue.kind}
+                  issue={issue}
+                  showDetail={false}
+                />
+              ))}
+            </div>
+          ),
+        },
+        {
+          id: "owner",
+          header: "Owner",
+          size: 220,
+          cell: ({ row }) => {
+            const item = row.original;
+            const issues = attentionRawIssues(item);
+            const owner = issues.length
+              ? describeMcpIssueActionOwners({
+                  issues,
+                  servers: attentionServers(item),
+                }).label
+              : "—";
+            return (
+              <span className="block break-words" title={owner}>
+                {owner}
+              </span>
+            );
+          },
+        },
+        {
+          id: "actions",
+          header: () => <div className="text-right">Actions</div>,
+          size: 160,
+          cell: ({ row }) => {
+            const item = row.original;
+            return (
+              <McpServerIssueNotice
+                variant="actions"
+                item={item}
+                issues={issuesByCatalog.get(item.id) ?? []}
+                facet={attention.facet}
+                servers={attentionServers(item)}
+                onTargetsCompleted={attention.onTargetsCompleted}
+              />
+            );
+          },
+        },
+      ]
+    : [];
+
+  const columns = attention ? attentionColumns : standardColumns;
+
+  function attentionIssues(item: CatalogItem): McpServerIssue[] {
+    const issues = attentionRawIssues(item);
+    const seen = new Set<string>();
+    return issues.filter((issue) => {
+      if (seen.has(issue.kind)) return false;
+      seen.add(issue.kind);
+      return true;
+    });
+  }
+
+  function attentionRawIssues(item: CatalogItem): McpServerIssue[] {
+    if (!attention) return [];
+    return facetIssues(issuesByCatalog.get(item.id) ?? [], attention.facet);
+  }
+
+  function attentionServers(item: CatalogItem): InstalledServer[] {
+    return (
+      attention?.servers.filter((server) => server.catalogId === item.id) ?? []
+    );
+  }
+
+  return (
+    <>
+      {!attention && (
+        <BulkMcpServerActions
+          selected={selected}
+          selectedToInstall={selectedToInstall}
+          selectedToUninstall={selectedToUninstall}
+          clearSelection={clearSelection}
+          selectAllMatching={selectAllMatching}
+          onInstall={onInstall}
+        />
+      )}
+
+      <DataTable
+        columns={columns}
+        data={items}
+        getRowId={(row) => row.id}
+        rowSelection={attention?.rowSelection ?? rowSelection}
+        onRowSelectionChange={
+          attention?.onRowSelectionChange ?? setRowSelection
+        }
+        onPageRowIdsChange={attention ? undefined : onPageRowIdsChange}
+        hideSelectedCount={!!attention}
+        onRowClick={
+          attention
+            ? undefined
+            : (row) => router.push(`/mcp/registry/${row.id}`)
+        }
+        emptyMessage="No MCP servers found."
+        hidePaginationWhenSinglePage
+        fixedWidthColumnIds={
+          attention
+            ? ["select", "issue", "owner", "dismissReason", "actions"]
+            : undefined
+        }
+        flexibleColumnIds={attention ? ["name"] : undefined}
+      />
+    </>
+  );
+}
+
+// === internal components ===
+
+function BulkMcpServerActions({
+  selected,
+  selectedToInstall,
+  selectedToUninstall,
+  clearSelection,
+  selectAllMatching,
+  onInstall,
+}: {
+  selected: readonly CatalogItem[];
+  selectedToInstall: readonly CatalogItem[];
+  selectedToUninstall: Array<{ id: string; name: string }>;
+  clearSelection: () => void;
+  selectAllMatching: SelectAllMatching | undefined;
+  onInstall: McpServerTableProps["onInstall"];
+}) {
+  const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
+  const bulkUninstall = useBulkUninstallMcpServers();
 
   return (
     <>
@@ -283,19 +546,6 @@ export function McpServerTable({
         </PermissionButton>
       </BulkActionsBar>
 
-      <DataTable
-        columns={columns}
-        data={items}
-        getRowId={(row) => row.id}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        onPageRowIdsChange={onPageRowIdsChange}
-        hideSelectedCount
-        onRowClick={(row) => router.push(`/mcp/registry/${row.id}`)}
-        emptyMessage="No MCP servers found."
-        hidePaginationWhenSinglePage
-      />
-
       {bulkUninstallOpen && (
         <DeleteConfirmDialog
           open={bulkUninstallOpen}
@@ -327,8 +577,6 @@ export function McpServerTable({
   );
 }
 
-// === internal components ===
-
 // Per-row action cluster mirroring McpServerCard's buttons. The heavy lifting
 // (install/reinstall flows, dialogs) stays in the parent via callbacks, same
 // as for the cards; this component only re-derives the card's visibility
@@ -336,6 +584,7 @@ export function McpServerTable({
 function McpServerRowActions({
   item,
   installedServer,
+  issues,
   isInstalling,
   onInstall,
   onReinstall,
@@ -343,17 +592,22 @@ function McpServerRowActions({
 }: {
   item: CatalogItem;
   installedServer?: InstalledServer;
+  issues: McpServerIssue[];
   isInstalling: boolean;
   onInstall: McpServerTableProps["onInstall"];
   onReinstall: McpServerTableProps["onReinstall"];
   onCancelInstallation?: (serverId: string) => void;
 }) {
-  const router = useRouter();
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
   const { data: allMcpServers } = useMcpServers();
+  const { data: canManageInstalls } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const restoreMutation = useRestoreMcpServerAlerts();
+  const [dismissOpen, setDismissOpen] = useState(false);
   const isBuiltin = item.serverType === "builtin";
   const isLocal = item.serverType === "local";
   const { canModify: canEditCatalog } = useCanModifyCatalogItem(
@@ -361,12 +615,18 @@ function McpServerRowActions({
   );
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const [uninstallOpen, setUninstallOpen] = useState(false);
+  const actionModel = getMcpServerActionModel(item);
+  const connectionsAction = mcpServerAction(actionModel, "connections");
+  const logsAction = mcpServerAction(actionModel, "logs");
+  const editAction = mcpServerAction(actionModel, "edit");
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
   );
   const personalServersForCatalog = allServersForCatalog.filter(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+    (s) =>
+      s.ownerId === currentUserId &&
+      (s.scope === "personal" || (!s.scope && !s.teamId)),
   );
   const hasPersonalConnection = personalServersForCatalog.length > 0;
   const hasLocalInstalls = allServersForCatalog.some(
@@ -379,9 +639,15 @@ function McpServerRowActions({
     hasInstallation: allServersForCatalog.length > 0,
   });
 
-  // Reinstall visibility mirrors the card's combined admin/tenant rule.
+  // Reinstall visibility mirrors the card's combined admin/tenant rule: an
+  // installs admin who does not own the connection used to be told to
+  // reinstall and then found no button anywhere.
+  const viewer = {
+    userId: currentUserId ?? null,
+    canManageInstalls: !!canManageInstalls,
+  };
   const userFlaggedInstalls = allServersForCatalog.filter(
-    (s) => s.reinstallRequired && s.ownerId === currentUserId,
+    (s) => s.reinstallRequired && canFixInstall({ server: s, viewer }),
   );
   const needsReinstall = userFlaggedInstalls.length > 0;
   const needsCatalogReinstall =
@@ -412,14 +678,44 @@ function McpServerRowActions({
     return onReinstall(item, flagged);
   };
 
-  // The most recent personal install, as on the card's uninstall dialog.
+  // The connections this row's alerts are about, and whether the viewer may
+  // remove or mute one. Naming a single connection is only honest when the
+  // alerts point at exactly one; with several, the credentials tab is the
+  // place that can show them all.
+  const alertingConnectionIds = new Set(issues.map((i) => i.serverId));
+  const alertingConnections = allServersForCatalog.filter((s) =>
+    alertingConnectionIds.has(s.id),
+  );
+  const removableConnection =
+    alertingConnections.length === 1 &&
+    canFixInstall({ server: alertingConnections[0], viewer })
+      ? alertingConnections[0]
+      : null;
+  const queueTargets = issues.map((issue) => ({
+    issue,
+    target: mcpServerAlertTarget({
+      issue,
+      item,
+      servers: allServersForCatalog,
+    }),
+  }));
+  const dismissTargets = queueTargets
+    .filter(({ issue }) => !issue.muted)
+    .map(({ target }) => target);
+  const restoreTargets = queueTargets
+    .filter(({ issue }) => issue.muted)
+    .map(({ target }) => target);
+
+  // The most recent personal install, as on the card's uninstall dialog; an
+  // admin with no connection of their own removes the one that is alerting.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
-    const install = personalServersForCatalog
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )[0];
+    const install =
+      personalServersForCatalog
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )[0] ?? removableConnection;
     return install
       ? [
           {
@@ -430,7 +726,30 @@ function McpServerRowActions({
       : [];
   })();
 
+  const actionableIssues = issues.filter(
+    (issue) => !issue.muted && issue.audience === "you",
+  );
+  const reauthIssue = actionableIssues.find(
+    (issue) => issue.kind === "needs-reauth",
+  );
+  const hasRuntimeIssue = actionableIssues.some(
+    (issue) => issue.kind === "failed-to-start" || issue.kind === "not-running",
+  );
   const actions: TableRowAction[] = [];
+  if (reauthIssue) {
+    actions.push({
+      icon: <KeyRound className="h-4 w-4" />,
+      label: "Re-authenticate",
+      href: `/mcp/registry/${item.id}?tab=credentials${reauthIssue.serverId ? `&server=${reauthIssue.serverId}` : ""}`,
+    });
+  }
+  if (hasRuntimeIssue) {
+    actions.push({
+      icon: <FileSearch className="h-4 w-4" />,
+      label: logsAction.label,
+      href: logsAction.href,
+    });
+  }
   if (showChat) {
     actions.push({
       icon: <MessageSquare className="h-4 w-4" />,
@@ -459,6 +778,17 @@ function McpServerRowActions({
       actions.push({
         icon: <Trash2 className="h-4 w-4" />,
         label: "Uninstall",
+        // Removing a connection is its own capability, as on the card.
+        permissions: { mcpServerInstallation: ["delete"] },
+        onClick: () => setUninstallOpen(true),
+      });
+    } else if (removableConnection) {
+      // An alert with no exit: before this, an admin looking at somebody
+      // else's broken connection could re-authenticate it or nothing.
+      actions.push({
+        icon: <Trash2 className="h-4 w-4" />,
+        label: "Remove this connection",
+        permissions: { mcpServerInstallation: ["delete"] },
         onClick: () => setUninstallOpen(true),
       });
     } else if (!(isLocal && showApprovalPanel)) {
@@ -481,41 +811,53 @@ function McpServerRowActions({
       });
     }
   }
+  // Dismiss/Restore is queue management, not an overflow action. Keep it
+  // visible beside the row's other first-class actions.
+  if (dismissTargets.length > 0) {
+    actions.push({
+      icon: <BellOff className="h-4 w-4" />,
+      label: dismissTargets.length === 1 ? "Dismiss alert" : "Dismiss alerts",
+      onClick: () => setDismissOpen(true),
+    });
+  }
+  if (restoreTargets.length > 0) {
+    actions.push({
+      icon: <Bell className="h-4 w-4" />,
+      label: restoreTargets.length === 1 ? "Restore alert" : "Restore alerts",
+      disabled: restoreMutation.isPending,
+      onClick: () =>
+        restoreMutation.mutate({
+          alerts: restoreTargets,
+        }),
+    });
+  }
   if (canEditCatalog) {
     actions.push({
       icon: <Pencil className="h-4 w-4" />,
-      label: "Server settings",
-      onClick: () => router.push(`/mcp/registry/${item.id}`),
+      label: editAction.label,
+      href: editAction.href,
     });
   }
-
-  const dropdownActions: TableRowAction[] = [];
   if (!isBuiltin) {
-    dropdownActions.push({
+    actions.push({
       icon: <Users className="h-4 w-4" />,
-      label: "Manage credentials",
-      href: `/mcp/registry/${item.id}?tab=credentials`,
+      label: connectionsAction.label,
+      href: connectionsAction.href,
     });
   }
-  if (hasLocalInstalls) {
-    dropdownActions.push({
+  if (hasLocalInstalls && !hasRuntimeIssue) {
+    actions.push({
       icon: <FileSearch className="h-4 w-4" />,
-      label: "View logs",
-      href: `/mcp/registry/${item.id}?tab=logs`,
+      label: logsAction.label,
+      href: logsAction.href,
     });
   }
-
-  if (actions.length === 0 && dropdownActions.length === 0) return null;
+  if (actions.length === 0) return null;
 
   return (
     <>
       <div className="flex justify-end">
-        <TableRowActions
-          actions={actions}
-          dropdownActions={
-            dropdownActions.length > 0 ? dropdownActions : undefined
-          }
-        />
+        <TableRowActions itemName={item.name} actions={actions} />
       </div>
 
       <UninstallServerDialog
@@ -525,11 +867,84 @@ function McpServerRowActions({
         isCancelingInstallation={isInstalling}
         onCancelInstallation={onCancelInstallation}
       />
+
+      <DismissAlertDialog
+        open={dismissOpen}
+        onClose={() => setDismissOpen(false)}
+        targets={dismissTargets}
+      />
     </>
   );
 }
 
 // === internal helpers ===
+
+function McpServerNameCell({
+  item,
+  environmentLabel,
+}: {
+  item: CatalogItem;
+  environmentLabel: string | null | undefined;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
+        <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
+        <span className="truncate font-medium">{item.name}</span>
+        {environmentLabel && (
+          <Badge variant="outline" className="shrink-0 text-muted-foreground">
+            <span className="max-w-32 truncate">{environmentLabel}</span>
+          </Badge>
+        )}
+        <McpCapabilityBadges
+          providesUi={item.providesUi}
+          providesSkills={item.providesSkills}
+          skillCount={item.skillCount}
+        />
+      </div>
+      {item.description && (
+        <div className="truncate text-xs text-muted-foreground">
+          {item.description}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What an installed server's Status cell says when it has no outstanding
+ * issue. The feed's own state decides, never the absence of an entry: on a
+ * deployment without Kubernetes no entry will ever arrive, and on one with it
+ * the first entries arrive a moment after the page does.
+ *
+ * The words come from `getDeploymentLabel` over the same summary the card
+ * builds, so the two views cannot describe one pod differently. Reading only
+ * `state === "running"` called every other reported state "Status unavailable"
+ * — including "Hibernated", which is the healthy steady state of an idle
+ * server, and "Succeeded", which is a Job that finished and is still serving.
+ * "Status unavailable" is reserved for a feed that has nothing to say.
+ */
+function installedStatusLabel({
+  isLocal,
+  feedState,
+  serverId,
+  deploymentStatuses,
+}: {
+  isLocal: boolean;
+  feedState: McpDeploymentFeedState;
+  serverId: string;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+}): string {
+  // A remote server has no pod, so "Installed" is the whole runtime story.
+  if (!isLocal || feedState === "disabled") return "Installed";
+  if (feedState === "loading") return "Checking…";
+  const summary =
+    feedState === "ready"
+      ? computeDeploymentStatusSummary([serverId], deploymentStatuses)
+      : null;
+  if (summary) return getDeploymentLabel(summary.overallState);
+  return "Status unavailable";
+}
 
 // Plain-text variant of LOCAL_MCP_DISABLED_MESSAGE (the shared const is JSX
 // with a docs link; tooltips on table action buttons only take strings).

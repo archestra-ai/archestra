@@ -25,6 +25,9 @@ const {
   bulkUpdateSkillsVisibility,
   getSkills,
   getSkill,
+  getExternalMcpSkill,
+  getExternalMcpSkills,
+  getExternalMcpSkillUsageStatistics,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -52,6 +55,21 @@ export type SkillVersionSummary =
 /** One immutable version with its SKILL.md body and resource files. */
 export type SkillVersionDetail =
   archestraApiTypes.GetSkillVersionResponses["200"];
+
+export type SkillUsageReference =
+  | { kind: "standalone"; skillId: string }
+  | { kind: "externalMcp"; mcpServerId: string; uri: string };
+
+export const externalMcpSkillsQueryKey = [
+  "skills",
+  "external-mcp",
+  "list",
+] as const;
+export const externalMcpSkillDetailQueryKey = [
+  "skills",
+  "external-mcp",
+  "detail",
+] as const;
 
 const SKILL_VERSIONS_PAGE_SIZE = 20;
 
@@ -155,15 +173,24 @@ export function useSearchSkillCatalog(search: string) {
   });
 }
 
-/** Per-user activation counts for one skill over the last 30 days. */
-export function useSkillUsageStatistics(id: string | null) {
+/** Per-user activation counts for one Skill over the last 30 days. */
+export function useSkillUsageStatistics(reference: SkillUsageReference | null) {
   return useQuery({
-    queryKey: ["skills", id, "usage-statistics"],
-    enabled: !!id,
+    queryKey: ["skills", "usage-statistics", reference],
+    enabled: !!reference,
     queryFn: async () => {
-      const { data, error } = await getSkillUsageStatistics({
-        path: { id: id as string },
-      });
+      if (!reference) return null;
+      const { data, error } =
+        reference.kind === "standalone"
+          ? await getSkillUsageStatistics({
+              path: { id: reference.skillId },
+            })
+          : await getExternalMcpSkillUsageStatistics({
+              query: {
+                mcpServerId: reference.mcpServerId,
+                uri: reference.uri,
+              },
+            });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;
     },
@@ -179,6 +206,51 @@ export function useSkill(id: string | null) {
       return data ?? null;
     },
     enabled: !!id,
+  });
+}
+
+export function useExternalMcpSkills(params?: {
+  enabled?: boolean;
+  environmentId?: string;
+}) {
+  return useQuery({
+    queryKey: [...externalMcpSkillsQueryKey, params?.environmentId ?? null],
+    enabled: params?.enabled ?? true,
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const { data, error } = await getExternalMcpSkills({
+        query: params?.environmentId
+          ? { environmentId: params.environmentId }
+          : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useExternalMcpSkill(params: {
+  id: string | null;
+  mcpServerId: string | null;
+}) {
+  return useQuery({
+    queryKey: [
+      ...externalMcpSkillDetailQueryKey,
+      params.id,
+      params.mcpServerId,
+    ],
+    enabled: !!params.id && !!params.mcpServerId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const { data, error } = await getExternalMcpSkill({
+        path: { id: params.id as string },
+        query: { mcpServerId: params.mcpServerId as string },
+      });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
   });
 }
 

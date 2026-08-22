@@ -1199,6 +1199,69 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     expect(adapter.toProviderResponse().stop_reason).toBe("max_tokens");
   });
 
+  // Thinking blocks stream to the client but were never accumulated, so the
+  // reconstructed turn — the one persisted as the interaction — recorded a
+  // reasoning turn as though the model had gone straight to its answer. The
+  // signature rides with the block: it is what makes a thinking block
+  // replayable, and a record without it describes something upstream rejects.
+  test("toProviderResponse records the reasoning the model produced", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "weighing it up" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig-abc" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 0 } as Chunk);
+
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "text_delta", text: "the answer" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 1 } as Chunk);
+
+    const response = adapter.toProviderResponse();
+
+    // Reasoning leads, matching the order upstream emitted it.
+    expect(response.content).toEqual([
+      { type: "thinking", thinking: "weighing it up", signature: "sig-abc" },
+      { type: "text", text: "the answer", citations: null },
+    ]);
+  });
+
+  test("toProviderResponse records a redacted thinking block", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "redacted_thinking", data: "encrypted-blob" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 0 } as Chunk);
+
+    const response = adapter.toProviderResponse();
+
+    expect(response.content).toEqual([
+      { type: "redacted_thinking", data: "encrypted-blob" },
+    ]);
+  });
+
   test("toProviderResponse records tool calls once they are released", () => {
     const adapter = streamBlockedToolTurn();
 
@@ -1210,7 +1273,12 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     ).toMatchObject([{ id: "toolu_1", name: "list" }]);
   });
 
-  test("toProviderResponse persists the refusal, not the blocked tool call", () => {
+  // The record has to describe the turn the CLIENT saw. "let me check" was
+  // streamed live and the refusal was appended after it as a further block, so
+  // both belong. Keeping only the refusal deleted the model's own answer from
+  // history — a later reader (conversation replay, a summarizer, a human
+  // debugging the run) then saw a turn in which the model never spoke.
+  test("toProviderResponse keeps the streamed text and appends the refusal", () => {
     const adapter = streamBlockedToolTurn();
 
     adapter.formatCompleteTextSSE("blocked message");
@@ -1218,8 +1286,10 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 
     expect(response.stop_reason).toBe("end_turn");
     expect(response.content).toEqual([
+      { type: "text", text: "let me check", citations: null },
       { type: "text", text: "blocked message", citations: null },
     ]);
+    // The blocked call was never delivered, so it must not appear in the record.
     expect(response.content.some((block) => block.type === "tool_use")).toBe(
       false,
     );

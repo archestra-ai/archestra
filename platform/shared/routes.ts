@@ -106,6 +106,10 @@ export const RouteId = {
   HardResetMcpServer: "hardResetMcpServer",
   ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
+  MuteMcpServerAlert: "muteMcpServerAlert",
+  UnmuteMcpServerAlert: "unmuteMcpServerAlert",
+  MuteMcpCatalogAlert: "muteMcpCatalogAlert",
+  UnmuteMcpCatalogAlert: "unmuteMcpCatalogAlert",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
@@ -702,6 +706,9 @@ export const RouteId = {
 
   // Agent Skill Routes
   GetSkills: "getSkills",
+  GetExternalMcpSkills: "getExternalMcpSkills",
+  GetExternalMcpSkill: "getExternalMcpSkill",
+  GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
   CreateSkill: "createSkill",
   ConvertAgentToSkill: "convertAgentToSkill",
   SuggestSkillDescription: "suggestSkillDescription",

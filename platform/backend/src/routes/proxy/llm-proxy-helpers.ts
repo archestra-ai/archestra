@@ -38,6 +38,7 @@ import type {
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
+  ToolCallBlock,
   ToolCompressionStats,
   ToonSkipReason,
   UnsafeContextBoundary,
@@ -425,6 +426,7 @@ export function buildInteractionRecord(params: {
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
+  toolCallBlock?: ToolCallBlock;
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
@@ -447,6 +449,7 @@ export function buildInteractionRecord(params: {
     response: params.response as InteractionResponse,
     dualLlmAnalyses: params.dualLlmAnalyses,
     unsafeContextBoundary: params.unsafeContextBoundary,
+    toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
     // rules, which were the only thing that could swap the requested model for
@@ -478,6 +481,32 @@ export function buildInteractionRecord(params: {
  * Used by both streaming and non-streaming paths when tool invocation
  * policies refuse tool calls.
  */
+/**
+ * The row-level marker for a turn whose tool calls a guardrail refused.
+ *
+ * A refusal is otherwise persisted as an ordinary assistant turn — normal
+ * finish reason, no error field — so nothing on the row separates it from a
+ * healthy one. That is invisible exactly where it costs most: an unattended
+ * agent whose correct output is sometimes nothing looks identical whether it
+ * did the work or was cut off mid-turn. Spans and the blocked-tool counter
+ * already carry the event, but neither can be joined to a session's rows after
+ * the fact, which is what triaging one of these actually requires.
+ *
+ * Returns undefined when nothing was blocked, so the column stays NULL on the
+ * overwhelming majority of rows.
+ */
+export function toToolCallBlock(
+  refusal: utils.toolInvocation.PolicyBlockResult | null,
+): ToolCallBlock | undefined {
+  if (!refusal) {
+    return undefined;
+  }
+  return {
+    reason: refusal.reason,
+    blockedToolCallCount: refusal.allToolCallNames.length,
+  };
+}
+
 export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;

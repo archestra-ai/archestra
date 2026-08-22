@@ -563,7 +563,7 @@ export async function openManageCredentialsDialog(
   catalogItemName: string,
 ): Promise<void> {
   // The card's credentials control navigates to the item detail page's
-  // Credentials tab; chat surfaces render the same content inside the
+  // Credentials section; chat surfaces render the same content inside the
   // standalone ManageCredentialsDialog. Both carry the same testids, so
   // locate the credentials surface page-wide instead of scoping to a dialog.
   const searchInput = page.getByRole("textbox", {
@@ -600,7 +600,8 @@ export async function openManageCredentialsDialog(
       return;
     }
 
-    // Already on the item detail page (another tab) — switch to Credentials.
+    // Older builds exposed a Credentials tab; keep that fallback for mixed
+    // frontend sessions while the unified detail page rolls out.
     if (await connectionsNavButton.isVisible().catch(() => false)) {
       await connectionsNavButton.click();
       await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
@@ -631,7 +632,7 @@ export async function openManageCredentialsDialog(
       name: /^\d+\/\d+$/,
     });
 
-    // Both controls navigate to the item detail page's Credentials tab.
+    // Both controls navigate to the item detail page's Credentials section.
     if (await manageButton.isVisible().catch(() => false)) {
       await manageButton.click({ force: true });
     } else {
@@ -649,8 +650,9 @@ export async function openManageCredentialsDialog(
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  // Works on any credentials surface (item detail tab or dialog): the nav
-  // button/tab trigger carries the connection count, the content the rows.
+  // Works on any credentials surface (item detail section or dialog): the
+  // section heading/dialog trigger carries the connection count, the content
+  // carries the rows.
   const connectionsNavButton = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );

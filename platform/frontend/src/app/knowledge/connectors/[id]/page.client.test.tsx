@@ -540,14 +540,14 @@ describe("ConnectorDetailPage", () => {
         expect.objectContaining({ runType: "permission" }),
       );
       // Family-aware Results summary instead of dedicated permission columns:
-      // a full reconcile renders the complete counter listing (no mode label).
+      // a settled full reconcile is labelled as one, then reports its scope
+      // and everything that actually moved.
       const runsTable = screen.getByRole("table");
       expect(runsTable).toHaveTextContent(
-        "22,915 docs checked · 13,831 permissions updated",
+        "Full reconcile · 13,831 permissions updated · 6 group members updated",
       );
+      // A flagged counter is never what gets collapsed away.
       expect(screen.getByText("3 docs locked")).toBeInTheDocument();
-      expect(runsTable).toHaveTextContent("6 groups checked");
-      expect(runsTable).toHaveTextContent("6 group members updated");
       // No qualifier badge in the row — the ran-during-a-content-sync note
       // lives only in the run details dialog.
       expect(
@@ -748,7 +748,10 @@ describe("ConnectorDetailPage", () => {
       // an upstream permission edit must not read as "nothing happened".
       const runsTable = screen.getByRole("table");
       expect(runsTable).toHaveTextContent("1 access list updated");
-      expect(runsTable).toHaveTextContent("0 permissions updated");
+      // …and the counters that stayed at zero are left out of a settled row
+      // rather than padding it with three ways of saying nothing happened.
+      expect(runsTable).not.toHaveTextContent("0 permissions updated");
+      expect(runsTable).not.toHaveTextContent("0 docs locked");
     });
 
     it("shows awaiting-sync coverage in the metadata block and triggers a manual sync from the actions menu", async () => {

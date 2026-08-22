@@ -97,7 +97,22 @@ vi.mock("@/components/chat/editable-assistant-message", () => ({
 }));
 
 vi.mock("@/components/chat/editable-user-message", () => ({
-  EditableUserMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableUserMessage: ({
+    text,
+    skill,
+  }: {
+    text: string;
+    skill?: { name: string; href?: string };
+  }) => (
+    <div>
+      {text}
+      {skill && (
+        <span data-testid="skill-attribution" data-href={skill.href}>
+          {skill.name}
+        </span>
+      )}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/inline-chat-error", () => ({
@@ -287,6 +302,44 @@ describe("ChatMessages", () => {
     } as unknown as ReturnType<typeof useOrganization>);
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
     mockHasKnowledgeBaseToolCall.mockReturnValue(false);
+  });
+
+  it("renders external MCP Skill attribution from message metadata", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Prepare the release" }],
+        metadata: {
+          externalMcpSkill: {
+            id: "11111111-1111-4111-8111-111111111111",
+            mcpServerId: "33333333-3333-4333-8333-333333333333",
+            uri: "skill://example/release/SKILL.md",
+            name: "release-checklist",
+            serverName: "Operations server",
+            commandValue: "/operations-server-release-checklist",
+            displayName:
+              "Operations server [team:33333333] / release-checklist",
+          },
+        },
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("skill-attribution")).toHaveTextContent(
+      "Operations server [team:33333333] / release-checklist",
+    );
+    expect(screen.getByTestId("skill-attribution")).toHaveAttribute(
+      "data-href",
+      "/skills/external/11111111-1111-4111-8111-111111111111?mcpServerId=33333333-3333-4333-8333-333333333333",
+    );
   });
 
   it("keeps a completed turn's knowledge image visible while a later turn streams", () => {

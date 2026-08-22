@@ -31,6 +31,7 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useProfile } from "@/lib/agent.query";
 import {
@@ -44,7 +45,7 @@ import {
   isAgentTypeAllowedOnPage,
   resolveAgentSetupStep,
 } from "./agent-page-config";
-import { AgentPageShell, AgentWizardFooter } from "./agent-page-shell";
+import { AgentPageShell } from "./agent-page-shell";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -317,7 +318,7 @@ function SetupWizard({
             const canSave = canSubmit && !isGone;
             const savingWith = isSaving ? saveIntentRef.current : null;
             return (
-              <AgentWizardFooter>
+              <WizardFooter>
                 <div>
                   {prevStep ? (
                     <Button
@@ -408,7 +409,7 @@ function SetupWizard({
                       </Button>
                     ))}
                 </div>
-              </AgentWizardFooter>
+              </WizardFooter>
             );
           }}
         />

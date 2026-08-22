@@ -2,17 +2,9 @@
 
 import { Trash2 } from "lucide-react";
 import type { TableRowAction } from "@/components/table-row-actions";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useIsGlobalAdmin } from "@/lib/organization.query";
 
 /**
- * The "Delete permanently" trash action, in the two shapes the trash views
- * need.
+ * The "Delete permanently" trash action.
  *
  * Permanent delete is gated on a built-in admin ROLE, not on a permission:
  * `agent:admin`, `skill:admin` and `project:admin` are oversight grants (see
@@ -22,9 +14,9 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
  */
 
 /**
- * The action's name, everywhere it appears: this component's two shapes, and
- * the `confirmLabel` of the dialog each of them opens. Shared so the button a
- * user clicks and the button that confirms it cannot drift apart.
+ * The action's name, everywhere it appears: the row action below, and the
+ * `confirmLabel` of the dialog it opens. Shared so the button a user clicks
+ * and the button that confirms it cannot drift apart.
  */
 export const PERMANENT_DELETE_LABEL = "Delete permanently";
 
@@ -56,62 +48,6 @@ export function permanentDeleteRowAction({
     disabledTooltip: reason,
     onClick,
   };
-}
-
-/**
- * The same action as an icon button, for the trash rows that render a
- * `ButtonGroup` of `PermissionButton`s (MCP gateways, LLM proxies) rather than
- * a `TableRowActions` list.
- */
-export function PermanentDeleteButton({
-  onClick,
-  itemName,
-}: {
-  onClick: () => void;
-  /**
-   * Appended to the accessible name so screen reader users can tell one row's
-   * button from the next, matching `TableRowActions`. Required: a column of
-   * identically named buttons for an irreversible action is worse than a long
-   * label.
-   */
-  itemName: string;
-}) {
-  const admin = useIsGlobalAdmin();
-  const reason = adminGateReason(admin);
-  const label = `${PERMANENT_DELETE_LABEL} ${itemName}`;
-
-  const button = (
-    <Button
-      aria-label={label}
-      variant="outline"
-      size="icon-sm"
-      disabled={!!reason}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      <Trash2 className="h-4 w-4 text-destructive" />
-    </Button>
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {reason ? (
-          // A disabled button swallows pointer events, so the tooltip naming
-          // the reason would never open. The span receives them instead — the
-          // same trick `PermissionButton` and `TableRowActions` use.
-          <span className="inline-flex cursor-not-allowed">{button}</span>
-        ) : (
-          button
-        )}
-      </TooltipTrigger>
-      <TooltipContent className="max-w-60">
-        {reason ?? PERMANENT_DELETE_LABEL}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 // === internal ===

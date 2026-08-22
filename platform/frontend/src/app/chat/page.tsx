@@ -2,6 +2,8 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  type ChatExternalMcpSkillMetadata,
+  ChatExternalMcpSkillMetadataSchema,
   type ChatMessageFeedback,
   type ChatSkillMetadata,
   type ThinkingEffortSetting,
@@ -217,7 +219,11 @@ import ArchestraPromptInput, {
   type ChatSubmitOptions,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
-import { buildSkillCommands, resolveUrlSkillAction } from "./skill-commands";
+import {
+  buildSkillCommands,
+  externalMcpSkillCommandValue,
+  resolveUrlSkillAction,
+} from "./skill-commands";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -292,13 +298,18 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
+  const pendingExternalMcpSkillRef =
+    useRef<ChatExternalMcpSkillMetadata | null>(null);
   // Sandbox-command marker (`!` prefix) on the first message of a new chat,
   // held the same way so the deferred send stamps metadata.sandboxCommand.
   const pendingSandboxCommandRef = useRef<true | undefined>(undefined);
-  // Composer prefill from a `?skillId=` deep link; handed to the composer
-  // once and cleared via onPrefillApplied.
+  // Composer prefill from a Skill deep link; handed to the composer once and
+  // cleared via onPrefillApplied.
   const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const [externalMcpSkillAttachment, setExternalMcpSkillAttachment] =
+    useState<ChatExternalMcpSkillMetadata | null>(null);
   const urlSkillProcessedRef = useRef(false);
+  const urlExternalMcpSkillProcessedRef = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -594,6 +605,22 @@ export function ChatPageContent({
   // produces it): the auto-send would orphan the prefill, so the skill is
   // skipped and only the prompt is sent.
   const urlSkillId = searchParams.get("skillId");
+  const urlExternalMcpSkillId = searchParams.get("externalMcpSkillId");
+  const urlExternalMcpServerId = searchParams.get("externalMcpServerId");
+  const urlExternalMcpSkillUri = searchParams.get("externalMcpSkillUri");
+  const urlExternalMcpSkillName = searchParams.get("externalMcpSkillName");
+  const urlExternalMcpServerName = searchParams.get("externalMcpServerName");
+  const urlExternalMcpSkillDisplayName = searchParams.get(
+    "externalMcpSkillDisplayName",
+  );
+  const hasAnyExternalMcpSkillParam = !!(
+    urlExternalMcpSkillId ||
+    urlExternalMcpServerId ||
+    urlExternalMcpSkillUri ||
+    urlExternalMcpSkillName ||
+    urlExternalMcpServerName ||
+    urlExternalMcpSkillDisplayName
+  );
   const urlSkillWanted = !!urlSkillId && !initialUserPrompt;
   const urlSkillQuery = useSkill(urlSkillWanted ? urlSkillId : null);
   const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
@@ -606,7 +633,12 @@ export function ChatPageContent({
   // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
     { limit: 100, forAgentId: initialAgentId ?? undefined },
-    { enabled: urlSkillWanted && skillToolsEnabled && !!initialAgentId },
+    {
+      enabled:
+        (urlSkillWanted || hasAnyExternalMcpSkillParam) &&
+        skillToolsEnabled &&
+        !!initialAgentId,
+    },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
@@ -662,8 +694,83 @@ export function ChatPageContent({
     searchParams,
   ]);
 
+  useEffect(() => {
+    if (
+      urlExternalMcpSkillProcessedRef.current ||
+      !hasAnyExternalMcpSkillParam
+    ) {
+      return;
+    }
+    if (
+      skillToolsEnabled &&
+      initialAgentId &&
+      !urlSkillCommandsQuery.isSuccess &&
+      !urlSkillCommandsQuery.isError
+    ) {
+      return;
+    }
+    urlExternalMcpSkillProcessedRef.current = true;
+    clearExternalMcpSkillQueryParams({ pathname, router, searchParams });
+    if (
+      !urlExternalMcpSkillId ||
+      !urlExternalMcpServerId ||
+      !urlExternalMcpSkillUri ||
+      !urlExternalMcpSkillName ||
+      !urlExternalMcpServerName ||
+      !urlExternalMcpSkillDisplayName
+    ) {
+      toast.error("This MCP Skill is not available in chat");
+      return;
+    }
+    if (initialUserPrompt || urlSkillId) return;
+    const parsed = ChatExternalMcpSkillMetadataSchema.safeParse({
+      id: urlExternalMcpSkillId,
+      mcpServerId: urlExternalMcpServerId,
+      uri: urlExternalMcpSkillUri,
+      name: urlExternalMcpSkillName,
+      serverName: urlExternalMcpServerName,
+      commandValue: externalMcpSkillCommandValue({
+        skill: {
+          name: urlExternalMcpSkillName,
+          serverName: urlExternalMcpServerName,
+        },
+        skillCommands: urlSkillCommandsQuery.data?.data
+          ? buildSkillCommands(urlSkillCommandsQuery.data.data)
+          : [],
+      }),
+      displayName: urlExternalMcpSkillDisplayName,
+    });
+    if (parsed.success) {
+      setExternalMcpSkillAttachment(parsed.data);
+      setComposerPrefill(`${parsed.data.commandValue} `);
+    } else {
+      toast.error("This MCP Skill is not available in chat");
+    }
+  }, [
+    urlExternalMcpSkillId,
+    urlExternalMcpServerId,
+    urlExternalMcpSkillUri,
+    urlExternalMcpSkillName,
+    urlExternalMcpServerName,
+    urlExternalMcpSkillDisplayName,
+    hasAnyExternalMcpSkillParam,
+    initialUserPrompt,
+    urlSkillId,
+    pathname,
+    router,
+    searchParams,
+    skillToolsEnabled,
+    initialAgentId,
+    urlSkillCommandsQuery.isSuccess,
+    urlSkillCommandsQuery.isError,
+    urlSkillCommandsQuery.data,
+  ]);
+
   const handleComposerPrefillApplied = useCallback(() => {
     setComposerPrefill(null);
+  }, []);
+  const handleRemoveExternalMcpSkillAttachment = useCallback(() => {
+    setExternalMcpSkillAttachment(null);
   }, []);
 
   // Update URL when conversation changes
@@ -1901,7 +2008,8 @@ export function ChatPageContent({
     const hasPendingInitialMessage =
       !!pendingPromptRef.current ||
       pendingFilesRef.current.length > 0 ||
-      !!pendingSkillRef.current;
+      !!pendingSkillRef.current ||
+      !!pendingExternalMcpSkillRef.current;
     const shouldSendPendingInitialMessage =
       conversationId &&
       conversation?.id === conversationId &&
@@ -1919,10 +2027,12 @@ export function ChatPageContent({
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
     const skillToSend = pendingSkillRef.current;
+    const externalMcpSkillToSend = pendingExternalMcpSkillRef.current;
     const sandboxCommandToSend = pendingSandboxCommandRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
+    pendingExternalMcpSkillRef.current = null;
     pendingSandboxCommandRef.current = undefined;
 
     const parts: ChatMessagePart[] = [];
@@ -1953,6 +2063,9 @@ export function ChatPageContent({
         metadata: {
           createdAt: new Date().toISOString(),
           ...(skillToSend ? { skill: skillToSend } : {}),
+          ...(externalMcpSkillToSend
+            ? { externalMcpSkill: externalMcpSkillToSend }
+            : {}),
           ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
           ...(initialAppDiagnostics.length > 0
             ? { appDiagnostics: initialAppDiagnostics }
@@ -1966,7 +2079,7 @@ export function ChatPageContent({
       agentId: conversation.agentId ?? undefined,
       messageLength: promptToSend?.length ?? 0,
       fileCount: filesToSend.length,
-      hasSkill: !!skillToSend,
+      hasSkill: !!skillToSend || !!externalMcpSkillToSend,
     });
     for (const file of filesToSend) {
       trackEvent("file_uploaded", {
@@ -2077,13 +2190,16 @@ export function ChatPageContent({
         throw new Error("attachments-not-queueable");
       }
       const queueText = message.text?.trim();
-      if (!queueText && !options?.skill) {
+      if (!queueText && !options?.skill && !options?.externalMcpSkill) {
         // Nothing to queue (Enter on an empty composer while streaming).
         throw new Error("empty-queue-submit");
       }
       chatMessageQueue.enqueue(conversationId, {
         text: message.text ?? "",
         ...(options?.skill ? { skill: options.skill } : {}),
+        ...(options?.externalMcpSkill
+          ? { externalMcpSkill: options.externalMcpSkill }
+          : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
       });
       trackEvent("message_queued", {
@@ -2131,8 +2247,12 @@ export function ChatPageContent({
     const hasFiles = message.files && message.files.length > 0;
     // a skill slash command may be sent on its own, with no prompt or files
     const hasSkill = !!options?.skill;
+    const hasExternalMcpSkill = !!options?.externalMcpSkill;
 
-    if (!sendMessage || (!hasText && !hasFiles && !hasSkill)) {
+    if (
+      !sendMessage ||
+      (!hasText && !hasFiles && !hasSkill && !hasExternalMcpSkill)
+    ) {
       return;
     }
 
@@ -2184,6 +2304,7 @@ export function ChatPageContent({
     }
 
     const skillToAttach = options?.skill;
+    const externalMcpSkillToAttach = options?.externalMcpSkill;
 
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
@@ -2200,6 +2321,9 @@ export function ChatPageContent({
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToAttach ? { skill: skillToAttach } : {}),
+        ...(externalMcpSkillToAttach
+          ? { externalMcpSkill: externalMcpSkillToAttach }
+          : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
         ...(openedAppMetadata
@@ -2225,7 +2349,7 @@ export function ChatPageContent({
       agentId: conversation?.agentId ?? undefined,
       messageLength: message.text?.length ?? 0,
       fileCount: message.files?.length ?? 0,
-      hasSkill: !!skillToAttach,
+      hasSkill: !!skillToAttach || !!externalMcpSkillToAttach,
     });
     for (const file of message.files ?? []) {
       trackEvent("file_uploaded", {
@@ -2569,7 +2693,10 @@ export function ChatPageContent({
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles && !options?.skill) ||
+        (!hasText &&
+          !hasFiles &&
+          !options?.skill &&
+          !options?.externalMcpSkill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
@@ -2581,6 +2708,7 @@ export function ChatPageContent({
       pendingPromptRef.current = message.text || "";
       pendingFilesRef.current = message.files || [];
       pendingSkillRef.current = options?.skill;
+      pendingExternalMcpSkillRef.current = options?.externalMcpSkill ?? null;
       pendingSandboxCommandRef.current = options?.sandboxCommand;
 
       // Check if there are pending tool actions to apply
@@ -3399,6 +3527,15 @@ export function ChatPageContent({
                               }
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
+                              externalMcpSkillAttachment={
+                                externalMcpSkillAttachment
+                              }
+                              onRemoveExternalMcpSkillAttachment={
+                                handleRemoveExternalMcpSkillAttachment
+                              }
+                              onRestoreExternalMcpSkillAttachment={
+                                setExternalMcpSkillAttachment
+                              }
                             />
                             <div className="text-center">
                               <Version inline />
@@ -3604,6 +3741,15 @@ export function ChatPageContent({
                                     onPrefillApplied={
                                       handleComposerPrefillApplied
                                     }
+                                    externalMcpSkillAttachment={
+                                      externalMcpSkillAttachment
+                                    }
+                                    onRemoveExternalMcpSkillAttachment={
+                                      handleRemoveExternalMcpSkillAttachment
+                                    }
+                                    onRestoreExternalMcpSkillAttachment={
+                                      setExternalMcpSkillAttachment
+                                    }
                                   />
                                 </>
                               )}
@@ -3763,6 +3909,26 @@ function clearSkillIdQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("skillId");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
+// External MCP Skill identity is a one-shot attachment handoff. Remove every
+// field once staged so refreshes cannot re-attach it after dismissal or send.
+function clearExternalMcpSkillQueryParams(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("externalMcpSkillId");
+  nextSearchParams.delete("externalMcpServerId");
+  nextSearchParams.delete("externalMcpSkillUri");
+  nextSearchParams.delete("externalMcpSkillName");
+  nextSearchParams.delete("externalMcpServerName");
+  nextSearchParams.delete("externalMcpSkillDisplayName");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

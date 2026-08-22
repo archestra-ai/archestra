@@ -30,6 +30,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -86,6 +87,7 @@ import {
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
+  type ToolCallBlock,
   type ToolCompressionStats,
   type ToonSkipReason,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
@@ -115,6 +117,7 @@ import {
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
+  toToolCallBlock,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
@@ -945,10 +948,18 @@ export async function handleLLMProxy<
     // before any guardrail evaluation — trusted-data and tool-invocation
     // lookups otherwise miss the real tool behind the decoration and the
     // dispatch wrapper.
+    // The request's own tool list is passed in so the canonicalizer can learn
+    // the client's label for the gateway when it is not a name this
+    // organization knows — the label is free text typed at `claude mcp add`
+    // time, and a label nothing matches used to leave every decorated name
+    // untouched.
     const canonicalizeToolName =
-      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer(
-        resolvedAgent.organizationId,
-      );
+      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer({
+        organizationId: resolvedAgent.organizationId,
+        declaredToolNames: utils.collectDeclaredToolNames(
+          requestAdapter.getOriginalRequest(),
+        ),
+      });
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       canonicalizeToolName,
@@ -1196,6 +1207,29 @@ export async function handleLLMProxy<
         .map(canonicalizeToolName),
     );
 
+    // A gateway tool name the client decorated with an alias the platform does
+    // not recognize survives canonicalization untouched, and every guardrail
+    // downstream then reasons about the decoration rather than the tool. That
+    // degradation is otherwise completely silent, which is why it can sit in a
+    // deployment indefinitely — so say so once per request, naming the tool, so
+    // it is greppable and the gateway can be re-registered under the name the
+    // connection-setup script derives (`toMcpClientServerName`).
+    const unrecognizedGatewayToolNames = [...enabledToolNames].filter(
+      (toolName) =>
+        archestraMcpBranding.isLikelyToolName(toolName) &&
+        !archestraMcpBranding.isToolName(toolName),
+    );
+    if (unrecognizedGatewayToolNames.length > 0) {
+      logger.warn(
+        {
+          agentId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          toolNames: unrecognizedGatewayToolNames,
+        },
+        `[${providerName}Proxy] Gateway tool names carry a client alias this organization does not know; guardrails cannot resolve the tools behind them`,
+      );
+    }
+
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};
     const rawHeaders = headers as Record<string, unknown>;
@@ -1442,6 +1476,11 @@ async function handleStreaming<
     `[${providerName}Proxy] Starting streaming request`,
   );
 
+  // Hoisted out of the try: the refusal is decided inside it, but the
+  // interaction is written in the finally, and a row that does not say it was
+  // refused is indistinguishable from a healthy one.
+  let toolCallBlock: ToolCallBlock | undefined;
+
   try {
     // Execute streaming request with tracing — the span covers the full streaming
     // operation (request → all chunks consumed) so we can set response attributes
@@ -1675,6 +1714,8 @@ async function handleStreaming<
         { refused: !!toolInvocationRefusal },
         "Tool invocation policy result",
       );
+
+      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
     }
 
     if (toolInvocationRefusal) {
@@ -1871,6 +1912,7 @@ async function handleStreaming<
           toonSkipReason,
           dualLlmAnalyses,
           unsafeContextBoundary,
+          toolCallBlock,
         });
         await persistProxyInteraction(
           record,
@@ -2214,6 +2256,7 @@ async function handleNonStreaming<
         toonSkipReason,
         dualLlmAnalyses,
         unsafeContextBoundary,
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
       });
       await persistProxyInteraction(
         refusalRecord,

@@ -192,6 +192,21 @@ describe("ConnectorMembersTable", () => {
     ).toBeEnabled();
   });
 
+  it("keeps the upstream account id out of the column and on the hover", () => {
+    mockGroups();
+
+    render(<ConnectorMembersTable connectorId="connector-1" />);
+
+    // The id is reachable (it is the only stable handle on an account with no
+    // email) but no longer a third line of every identity cell.
+    const idCell = screen.getByText("acc-alice");
+    expect(idCell).toBeInTheDocument();
+    // And no avatar column: these sources hand over no picture, so the
+    // circles were initials of the name already in the next column.
+    const [headerRow] = screen.getAllByRole("row");
+    expect(within(headerRow).getAllByRole("columnheader")).toHaveLength(5);
+  });
+
   it("assigns an unresolved user to an org user from the dialog", async () => {
     const user = await setupUserEvent();
     mockGroups();

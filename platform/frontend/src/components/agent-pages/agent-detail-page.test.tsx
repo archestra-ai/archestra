@@ -9,12 +9,16 @@ import {
   useProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { AgentDetailPage } from "./agent-detail-page";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/environment.query");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/agent.query", () => ({
   useProfile: vi.fn(),
   useDeleteProfile: vi.fn(),
@@ -62,6 +66,7 @@ const baseAgent = {
   deletedAt: null,
   teams: [],
   authorId: "me",
+  environmentId: null,
 };
 
 function mockAgent(agent: unknown) {
@@ -76,6 +81,13 @@ describe("AgentDetailPage", () => {
     vi.clearAllMocks();
     access = { ...access, resource: "agent", isBuiltIn: false };
     vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useEnvironments).mockReturnValue({
+      data: { environments: [{ id: "env-1", name: "Production" }] },
+    } as unknown as ReturnType<typeof useEnvironments>);
+    vi.mocked(useDefaultEnvironment).mockReturnValue({
+      id: "default",
+      name: "Default",
+    } as unknown as ReturnType<typeof useDefaultEnvironment>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -145,23 +157,75 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /restore/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /permanently/i })).toBeNull();
     expect(screen.queryByText(/is in the trash/i)).toBeNull();
-    // Connect stays offered, and Edit stays in the header. (PageLayout renders
-    // each tab in a desktop row and a mobile row, hence getAllByRole.)
+    // Connect stays on the same page, and Edit stays in the header.
     expect(
-      screen.getAllByRole("link", { name: "Connect" }).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("heading", { name: "Connect" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("connect content")).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.AgentDetailEditButton),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
   });
 
-  it("shows no tab strip for a built-in agent, which has only the Overview", () => {
+  it("collapses the overview by default and reveals it before the connection instructions", async () => {
+    const user = userEvent.setup();
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    const overviewToggle = screen.getByRole("button", { name: "Overview" });
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("overview")).toBeNull();
+
+    await user.click(overviewToggle);
+    const overview = screen.getByText("overview");
+    const connect = screen.getByText("connect content");
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      overview.compareDocumentPosition(connect) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("moves the LLM Proxy environment into the header and omits Overview", () => {
+    mockAgent({ ...baseAgent, agentType: "llm_proxy", environmentId: "env-1" });
+    render(<AgentDetailPage kind="llm_proxy" id="a1" />);
+
+    expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
+    expect(screen.queryByText("overview")).toBeNull();
+    expect(screen.getByText("Production")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Connect" })).toBeVisible();
+    expect(screen.getByText("connect content")).toBeVisible();
+  });
+
+  it("keeps the MCP Gateway Overview but moves its environment into the header", () => {
+    mockAgent({
+      ...baseAgent,
+      agentType: "mcp_gateway",
+      environmentId: "env-1",
+    });
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
+
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByText("Production")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Connect" })).toBeVisible();
+  });
+
+  it("omits the connection section for a built-in agent", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
-    expect(screen.getByText("overview")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Connect" })).toBeNull();
+    expect(screen.queryByText("connect content")).toBeNull();
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText("overview")).toBeNull();
   });
 });

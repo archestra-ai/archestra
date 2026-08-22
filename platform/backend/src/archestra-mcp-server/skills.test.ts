@@ -1,8 +1,10 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+import { createHash } from "node:crypto";
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_TOOL_PREFIX,
   getArchestraToolFullName,
+  MCP_SKILLS_EXTENSION_ID,
   MEMBER_ROLE_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_EDIT_SKILL_FULL_NAME,
@@ -11,14 +13,19 @@ import {
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
+import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import {
   EnvironmentModel,
+  ExternalMcpSkillUsageEventModel,
+  McpCatalogSkillModel,
   SkillEnvironmentModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
 } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import {
@@ -52,6 +59,8 @@ describe("skill tool execution", () => {
     };
   });
 
+  afterEach(() => vi.restoreAllMocks());
+
   async function seedSkill(
     overrides: {
       skill?: Partial<InsertSkill>;
@@ -84,6 +93,10 @@ describe("skill tool execution", () => {
       "",
       body,
     ].join("\n");
+  }
+
+  function digest(content: string): string {
+    return `sha256:${createHash("sha256").update(content).digest("hex")}`;
   }
 
   test("load_skill refuses a skill from another environment", async ({
@@ -170,6 +183,148 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("<available_skills>");
     expect(textOf(result)).toContain("pdf-processing");
+  });
+
+  test("list_skills projects metadata from accessible MCP installations", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const originalEnabled = config.mcpGateway.skillsEnabled;
+    config.mcpGateway.skillsEnabled = true;
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "remote",
+      scope: "org",
+      name: "Operations server",
+    });
+    await McpCatalogSkillModel.syncCatalog({
+      catalogId: catalog.id,
+      generation: (await McpCatalogSkillModel.beginRefresh(catalog.id)) ?? 0,
+      skills: [
+        {
+          uri: "skill://example/release/SKILL.md",
+          name: "release",
+          description: "Release safely.",
+          frontmatter: { name: "release", description: "Release safely." },
+          resources: [],
+        },
+      ],
+    });
+
+    try {
+      const result = await executeArchestraTool(
+        TOOL_LIST_SKILLS_FULL_NAME,
+        {},
+        context,
+      );
+      expect(textOf(result)).toContain(
+        `${server.name} [org:${server.id.slice(0, 8)}] / release`,
+      );
+      expect(textOf(result)).toContain("Release safely.");
+      expect(textOf(result)).toContain('trust="untrusted"');
+    } finally {
+      config.mcpGateway.skillsEnabled = originalEnabled;
+    }
+  });
+
+  test("load_skill counts an external activation but not a supporting-file read", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const originalEnabled = config.mcpGateway.skillsEnabled;
+    config.mcpGateway.skillsEnabled = true;
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "remote",
+      scope: "org",
+      name: "Operations server",
+    });
+    const uri = "skill://example/release/SKILL.md";
+    const guideUri = "skill://example/release/guide.md";
+    const skillManifest = manifest("release", "Release carefully.");
+    const guide = "# Release guide";
+    const resources = [
+      { uri, digest: digest(skillManifest) },
+      { uri: guideUri, digest: digest(guide) },
+    ];
+    await McpCatalogSkillModel.syncCatalog({
+      catalogId: catalog.id,
+      generation: (await McpCatalogSkillModel.beginRefresh(catalog.id)) ?? 0,
+      skills: [
+        {
+          uri,
+          name: "release",
+          description: "A test skill.",
+          frontmatter: { name: "release", description: "A test skill." },
+          resources,
+        },
+      ],
+    });
+    vi.spyOn(mcpClient, "withSkillsSession").mockImplementation(
+      async ({ run }) =>
+        run(
+          {
+            request: vi.fn(async () => ({
+              skill: {
+                uri,
+                frontmatter: {
+                  name: "release",
+                  description: "A test skill.",
+                },
+                resources,
+              },
+            })),
+            readResource: vi.fn(async ({ uri: requestedUri }) => ({
+              contents: [
+                {
+                  uri: requestedUri.toString(),
+                  text: requestedUri.toString() === uri ? skillManifest : guide,
+                },
+              ],
+            })),
+          } as never,
+          {
+            serverExtensions: () => ({ [MCP_SKILLS_EXTENSION_ID]: {} }),
+          },
+        ),
+    );
+    const qualifiedName = `${server.name} [org:${server.id.slice(0, 8)}] / release`;
+
+    try {
+      const activation = await executeArchestraTool(
+        TOOL_LOAD_SKILL_FULL_NAME,
+        { name: qualifiedName },
+        context,
+      );
+      expect(activation.isError).toBe(false);
+      await drainBackgroundWork();
+      let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+        { mcpServerId: server.id, uri },
+      ]);
+      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
+
+      const fileRead = await executeArchestraTool(
+        TOOL_LOAD_SKILL_FULL_NAME,
+        { name: qualifiedName, path: "guide.md" },
+        context,
+      );
+      expect(fileRead.isError).toBe(false);
+      await drainBackgroundWork();
+      usage = await ExternalMcpSkillUsageEventModel.getSummaries([
+        { mcpServerId: server.id, uri },
+      ]);
+      expect(usage.get(server.id)?.get(uri)?.usageCount).toBe(1);
+    } finally {
+      config.mcpGateway.skillsEnabled = originalEnabled;
+    }
   });
 
   test("list_skills reports when the org has no skills", async () => {

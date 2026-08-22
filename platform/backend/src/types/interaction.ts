@@ -10,7 +10,10 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { DualLlmAnalysisSchema } from "./dual-llm";
-import { UnsafeContextBoundarySchema } from "./interaction-guardrails";
+import {
+  ToolCallBlockSchema,
+  UnsafeContextBoundarySchema,
+} from "./interaction-guardrails";
 import {
   Anthropic,
   Azure,
@@ -187,6 +190,7 @@ const extendedFields = {
   toonSkipReason: ToonSkipReasonSchema.nullable().optional(),
   dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
   unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
+  toolCallBlock: ToolCallBlockSchema.nullable().optional(),
 };
 
 /**

@@ -101,6 +101,11 @@ export const AUDIT_DECISIONS = {
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
+  mcpCatalogSkillsTable: {
+    audited: false,
+    reason:
+      "derived MCP discovery metadata refreshed with the parent catalog's tools; not directly admin-mutable",
+  },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
     audited: true,
@@ -452,6 +457,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: mcp server × user; parent (mcp server) audited",
   },
+  mcpServerAlertMutesTable: {
+    audited: false,
+    reason: "per-viewer UI state; intentionally excluded from audit logs",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",
@@ -506,6 +515,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "append-only usage metric written by the system on every activation; not a user-driven state change",
+  },
+  externalMcpSkillUsageEventsTable: {
+    audited: false,
+    reason:
+      "append-only usage metric written by the system on every external MCP Skill activation; not a user-driven state change",
   },
   connectionSetupsTable: {
     audited: false,

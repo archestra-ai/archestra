@@ -3,14 +3,14 @@ title: Publishing Skills over MCP
 category: MCP
 order: 6
 description: Serve your organization's skills to MCP clients as skill:// resources
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-21
 ---
 
 A gateway can publish your organization's [skills](/docs/platform-agent-skills) to the MCP clients that connect to it. The client reads them as `skill://` resources and offers them alongside its own skills.
 
-This implements the draft MCP Skills extension (`io.modelcontextprotocol/skills`). Turn it on with `ARCHESTRA_BETA`. It is off by default — the specification is still a draft, so the wire format may change.
+This implements the draft MCP Skills extension (`io.modelcontextprotocol/skills`). Turn it on with `ARCHESTRA_MCP_SKILLS_ENABLED=true` (or the `ARCHESTRA_BETA` fallback). It is off by default — the specification is still a draft, so the wire format may change.
 
-`ARCHESTRA_BETA` is the deployment-wide beta switch. There is no skills-only setting, so turning it on also enables the other beta features listed in [Deployment](/docs/platform-deployment).
+The same flag enables the client direction: Skills discovered from installed MCP servers are projected dynamically and read from their source live. See [Skills from MCP servers](/docs/platform-agent-skills#skills-from-mcp-servers).
 
 ## What a Client Receives
 

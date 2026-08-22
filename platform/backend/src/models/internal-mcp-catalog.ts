@@ -538,6 +538,27 @@ class InternalMcpCatalogModel {
     return result;
   }
 
+  /** Batch fetch only the display icons needed by source-provenance surfaces. */
+  static async getIconsByIds(
+    ids: string[],
+  ): Promise<Map<string, string | null>> {
+    if (ids.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        icon: schema.internalMcpCatalogTable.icon,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          inArray(schema.internalMcpCatalogTable.id, ids),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
+    return new Map(rows.map((row) => [row.id, row.icon]));
+  }
+
   static async findByName(
     name: string,
     options?: { organizationId?: string },
@@ -1029,6 +1050,19 @@ class InternalMcpCatalogModel {
     return count > 0;
   }
 
+  static async findDeleteCascadeSourceIds(id: string): Promise<{
+    catalogIds: string[];
+    serverIds: string[];
+  }> {
+    const children = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, id));
+    const catalogIds = [id, ...children.map((child) => child.id)];
+    const servers = await McpServerModel.findByCatalogIds(catalogIds);
+    return { catalogIds, serverIds: servers.map((server) => server.id) };
+  }
+
   /**
    * Restore a soft-deleted catalog item and, cascaded via the shared `deletedAt`
    * timestamp, its tools + installs. TRANSACTIONAL (all-or-nothing): there is no
@@ -1486,11 +1520,13 @@ class InternalMcpCatalogModel {
     }
 
     const ids = dbItems.map((item) => item.id);
-    const [labelsMap, teamsMap, toolStatsMap] = await Promise.all([
-      McpCatalogLabelModel.getLabelsForCatalogItems(ids),
-      McpCatalogTeamModel.getTeamDetailsForCatalogs(ids),
-      InternalMcpCatalogModel.getToolStats(ids),
-    ]);
+    const [labelsMap, teamsMap, toolStatsMap, skillStatsMap] =
+      await Promise.all([
+        McpCatalogLabelModel.getLabelsForCatalogItems(ids),
+        McpCatalogTeamModel.getTeamDetailsForCatalogs(ids),
+        InternalMcpCatalogModel.getToolStats(ids),
+        InternalMcpCatalogModel.getSkillStats(ids),
+      ]);
 
     return dbItems.map((item) => ({
       ...item,
@@ -1498,6 +1534,8 @@ class InternalMcpCatalogModel {
       teams: teamsMap.get(item.id) || [],
       toolCount: toolStatsMap.get(item.id)?.toolCount ?? 0,
       providesUi: toolStatsMap.get(item.id)?.providesUi ?? false,
+      skillCount: skillStatsMap.get(item.id) ?? 0,
+      providesSkills: (skillStatsMap.get(item.id) ?? 0) > 0,
     }));
   }
 
@@ -1545,6 +1583,21 @@ class InternalMcpCatalogModel {
           { toolCount: row.toolCount, providesUi: row.providesUi ?? false },
         ]),
     );
+  }
+
+  private static async getSkillStats(
+    catalogIds: string[],
+  ): Promise<Map<string, number>> {
+    if (catalogIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        catalogId: schema.mcpCatalogSkillsTable.catalogId,
+        skillCount: count(schema.mcpCatalogSkillsTable.id),
+      })
+      .from(schema.mcpCatalogSkillsTable)
+      .where(inArray(schema.mcpCatalogSkillsTable.catalogId, catalogIds))
+      .groupBy(schema.mcpCatalogSkillsTable.catalogId);
+    return new Map(rows.map((row) => [row.catalogId, row.skillCount]));
   }
 
   /**

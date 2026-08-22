@@ -2,6 +2,7 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 
@@ -61,11 +62,45 @@ type RunToolDispatch =
  * policies evaluate the tool that actually produced the data instead of the
  * built-in wrapper.
  */
-/** True when the (canonical) tool name is the `run_tool` dispatch wrapper. */
+/**
+ * True when the tool name is the `run_tool` dispatch wrapper, including when an
+ * MCP client has decorated it with its own label.
+ *
+ * Clients namespace a gateway's tools with the alias they were registered
+ * under: Claude Code turns what the gateway advertised into
+ * `mcp__<alias>__<advertised name>`. That alias is free text typed at
+ * `claude mcp add` time, so it routinely matches no name the platform knows,
+ * and the gateway's own branded prefix then sits a segment deeper than the
+ * decoration-stripping canonicalizer reaches. A strict match misses the wrapper
+ * entirely — and a missed wrapper is not a harmless miss: the dispatch is never
+ * unwrapped, so policies are evaluated against an opaque name that matches no
+ * `tools` row and **fail open**, instead of against the tool the call runs.
+ *
+ * Matching loosely is safe here, and only here. Recognizing a dispatch can only
+ * ADD enforcement: it hands the target tool to policy evaluation in place of a
+ * name nothing speaks for. It routes no call anywhere — a loosely matched name
+ * is never used as a rewrite target, which stays strict in
+ * `planDispatchModeToolCallRewrites` — and it confers no built-in policy
+ * bypass, which stays on `archestraMcpBranding.isToolName`. That keeps the
+ * standing rule in `branding.ts` intact: a loose match must not drive dispatch,
+ * RBAC, or bypass decisions.
+ *
+ * Only suffixes that still carry a server prefix are considered, so a
+ * third-party tool merely named `run_tool` is not mistaken for the wrapper —
+ * the prefix has to be one the branding recognizes as ours.
+ */
 function isRunToolName(toolName: string): boolean {
-  return (
-    archestraMcpBranding.getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
-  );
+  const segments = toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  for (let i = 0; i < segments.length - 1; i++) {
+    const candidate = segments.slice(i).join(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    if (
+      archestraMcpBranding.getToolShortName(candidate) ===
+      TOOL_RUN_TOOL_SHORT_NAME
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function resolveRunToolDispatch(

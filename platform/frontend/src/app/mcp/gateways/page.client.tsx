@@ -115,6 +115,59 @@ function SortIcon({
   );
 }
 
+/**
+ * What a gateway exposes, in the one column the list has for it.
+ *
+ * The column used to render `tools.length`, which is a lie for the default
+ * configuration: an Auto-mode gateway has no per-tool rows at all, so it
+ * showed "0" while exposing the whole catalogue. It is also a counter with no
+ * denominator, which the detail-page rules forbid — and the denominator cannot
+ * honestly be named here, because the catalogue a gateway reaches depends on
+ * its environment's installs and on its own exclusions, and `GET /api/tools`
+ * would pull every tool's JSON schema onto a list page to find out. So the set
+ * is named instead of counted, and the list itself is one hover away, which is
+ * what the rules say to do when the denominator is unavailable.
+ */
+function ExposedSetCell({
+  exposesEverything,
+  everythingLabel,
+  names,
+  noun,
+}: {
+  exposesEverything: boolean;
+  /** What "everything" is called here — "All tools", "All subagents". */
+  everythingLabel: string;
+  names: string[];
+  noun: string;
+}) {
+  if (exposesEverything) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-sm">{everythingLabel}</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          Every {noun} this gateway's environment offers, minus its exclusions.
+          The set grows as servers are installed.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (names.length === 0) {
+    return <span className="text-sm text-muted-foreground">None</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="text-sm">{names.length} selected</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{names.join(", ")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function McpGateways({
   initialData,
 }: {
@@ -210,6 +263,10 @@ function McpGateways({
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
   const { data: isTeamAdmin } = useHasPermissions({
     mcpGateway: ["team-admin"],
+  });
+  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isLegacyTeamAdmin } = useHasPermissions({
+    agent: ["team-admin"],
   });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -383,7 +440,7 @@ function McpGateways({
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
-      size: 80,
+      size: 110,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -394,17 +451,21 @@ function McpGateways({
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
+      cell: ({ row }) => (
+        <ExposedSetCell
+          exposesEverything={row.original.accessAllTools}
+          everythingLabel="All tools"
+          names={row.original.tools
+            .filter((tool) => !tool.delegateToAgentId)
+            .map((tool) => tool.name)}
+          noun="tool"
+        />
+      ),
     },
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
-      size: 100,
+      size: 120,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -415,12 +476,16 @@ function McpGateways({
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
-      },
+      cell: ({ row }) => (
+        <ExposedSetCell
+          exposesEverything={row.original.accessAllSubagents}
+          everythingLabel="All subagents"
+          names={row.original.tools
+            .filter((tool) => tool.delegateToAgentId)
+            .map((tool) => tool.name)}
+          noun="subagent"
+        />
+      ),
     },
     {
       id: "lastUsedAt",
@@ -472,16 +537,17 @@ function McpGateways({
     {
       id: "actions",
       header: "Actions",
-      // Pixel-sized so the five icon buttons never clip: the actions column
-      // keeps its px width while the sized columns scale down to fit.
-      size: 200,
+      // Pixel-sized so the row's buttons never clip: the actions column keeps
+      // its px width while the sized columns scale down to fit.
+      size: 140,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const isLegacy = agent.agentType === "profile";
         const canModify = computeCanModifyAgent({
           agent,
-          isAdmin: !!isAdmin,
-          isTeamAdmin: !!isTeamAdmin,
+          isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
+          isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
           currentUserId,
           userTeamIds: userTeamIdSet,
         });
@@ -492,11 +558,6 @@ function McpGateways({
             <McpGatewayActions
               agent={agent}
               canModify={canModify}
-              onConnect={(target) =>
-                router.push(
-                  agentDetailHref("mcp_gateway", target.id, "connect"),
-                )
-              }
               onEdit={(target) =>
                 router.push(agentEditHref("mcp_gateway", target.id))
               }

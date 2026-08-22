@@ -3,6 +3,8 @@
 
 "use client";
 
+import { Lock, type LucideIcon } from "lucide-react";
+import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -25,6 +27,13 @@ import {
  * roster's display name when the caller knows it), and the empty ACL
  * (fail-closed — nobody can retrieve the document until a permission sync tags
  * it). Raw tokens stay available on hover for correlation with the Groups tab.
+ *
+ * Entries are drawn in the app's shared scope vocabulary (`scope-vocabulary`)
+ * — the same globe/people/person glyphs and colours the visibility badges use
+ * elsewhere — so "who can read this" is recognisable by shape before it is
+ * read. An upstream group is a team-shaped audience and borrows that styling;
+ * only the fail-closed badge steps outside, in amber, because it is a warning
+ * rather than an audience.
  */
 export function AclBadges({
   acl,
@@ -45,8 +54,9 @@ export function AclBadges({
         <TooltipTrigger asChild>
           <Badge
             variant="outline"
-            className="border-amber-600 text-amber-600 text-xs whitespace-nowrap"
+            className="gap-1 border-amber-600 text-amber-600 text-xs whitespace-nowrap"
           >
+            <LockedIcon className="h-3 w-3 shrink-0" />
             Locked
           </Badge>
         </TooltipTrigger>
@@ -60,21 +70,33 @@ export function AclBadges({
 
   return (
     <CollapsedBadgeList
-      items={acl.map((entry) => ({
-        id: entry,
-        label: formatAclEntry({
+      items={acl.map((entry) => {
+        const { label, icon, className } = formatAclEntry({
           entry,
           teams,
           groupNamesByToken,
           noun,
           orgMembers,
-        }),
-        // The raw token, for correlation with the Groups tab.
-        title: entry,
-      }))}
+        });
+        return {
+          id: entry,
+          label,
+          icon,
+          className,
+          // The raw token, for correlation with the Groups tab.
+          title: entry,
+        };
+      })}
     />
   );
 }
+
+// ===== Internal pieces =====
+
+const OrgIcon = SCOPE_META.org.icon;
+const TeamIcon = SCOPE_META.team.icon;
+const UserIcon = SCOPE_META.personal.icon;
+const LockedIcon = Lock;
 
 function formatAclEntry({
   entry,
@@ -88,14 +110,22 @@ function formatAclEntry({
   groupNamesByToken: Map<string, string> | undefined;
   noun: RosterNoun;
   orgMembers: { name: string; email: string }[] | undefined;
-}): string {
+}): { label: string; icon: LucideIcon; className: string } {
   if (entry === "org:*") {
-    return "Everyone in org";
+    return {
+      label: "Everyone in org",
+      icon: OrgIcon,
+      className: scopeStyles.org,
+    };
   }
   if (entry.startsWith("team:")) {
     const teamId = entry.slice("team:".length);
     const team = teams?.find(({ id }) => id === teamId);
-    return `Team: ${team?.name ?? teamId}`;
+    return {
+      label: `Team: ${team?.name ?? teamId}`,
+      icon: TeamIcon,
+      className: scopeStyles.team,
+    };
   }
   if (entry.startsWith("user_email:")) {
     // A user grant reads as the org user it resolves to — a manually mapped
@@ -105,13 +135,21 @@ function formatAclEntry({
     const user = orgMembers?.find(
       (member) => member.email.toLowerCase() === email.toLowerCase(),
     );
-    return user ? `${email} · ${user.name}` : email;
+    return {
+      label: user ? `${email} · ${user.name}` : email,
+      icon: UserIcon,
+      className: scopeStyles.personal,
+    };
   }
   if (entry.startsWith("group:")) {
     // The roster's display name where it is known; the connector-qualified
     // group id otherwise. Either way the raw token stays on hover.
     const label = groupNamesByToken?.get(entry) ?? entry.slice("group:".length);
-    return `${capitalizeNoun(noun.singular)}: ${label}`;
+    return {
+      label: `${capitalizeNoun(noun.singular)}: ${label}`,
+      icon: TeamIcon,
+      className: scopeStyles.team,
+    };
   }
-  return entry;
+  return { label: entry, icon: UserIcon, className: scopeStyles.personal };
 }

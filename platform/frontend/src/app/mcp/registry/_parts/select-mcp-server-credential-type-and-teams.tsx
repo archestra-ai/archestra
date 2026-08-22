@@ -378,13 +378,40 @@ export function SelectMcpServerCredentialTypeAndTeams({
     );
   }
 
+  if (lockToExistingScope) {
+    const LockedScopeIcon =
+      scope === "org" ? Globe : scope === "team" ? Users : Lock;
+    const teamName =
+      scope === "team"
+        ? teams?.find((team) => team.id === selectedTeamId)?.name
+        : null;
+    return (
+      <div
+        className="space-y-2"
+        data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
+      >
+        <Label>{isReauth ? "Connection owner" : "Reinstall for"}</Label>
+        <div className="flex items-center gap-2 rounded-md border bg-background/60 px-3 py-2 text-sm">
+          <LockedScopeIcon className="h-4 w-4 text-muted-foreground" />
+          <span>
+            {scope === "org"
+              ? "Organization"
+              : scope === "team"
+                ? (teamName ?? "Team")
+                : "Personal"}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // When personalOnly, orgOnly, or preselectedTeamId, skip the scope selector
   // entirely — scope is fixed.
   if (personalOnly || orgOnly || preselectedTeamId) {
     return null;
   }
 
-  const hideSelector = isReinstall || visibilityOptions.length <= 1;
+  const hideSelector = visibilityOptions.length <= 1;
 
   return (
     <div

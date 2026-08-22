@@ -207,6 +207,7 @@ class WebSocketService {
         }
 
         this.clientContexts.set(ws, clientContext);
+        this.sendToClient(ws, { type: "websocket_ready", payload: {} });
 
         logger.trace(
           {
@@ -1069,6 +1070,32 @@ class WebSocketService {
     });
   }
 
+  broadcastMcpServersChanged(params: {
+    organizationId: string | null;
+    serverIds?: string[];
+    catalogIds?: string[];
+  }): void {
+    if (!this.wss) return;
+    const serverIds = [...new Set(params.serverIds ?? [])];
+    const catalogIds = [...new Set(params.catalogIds ?? [])];
+    if (serverIds.length === 0 && catalogIds.length === 0) return;
+
+    this.sendToClients(
+      {
+        type: "mcp_servers_changed",
+        payload: { change: "uninstalled", serverIds, catalogIds },
+      },
+      (client) => {
+        const context = this.clientContexts.get(client);
+        return (
+          context !== undefined &&
+          (params.organizationId === null ||
+            context.organizationId === params.organizationId)
+        );
+      },
+    );
+  }
+
   broadcastConversationUpdated(
     ownerUserId: string,
     organizationId: string,
@@ -1102,6 +1129,15 @@ export function broadcastMcpInstallationStatus(
   error: string | null = null,
 ): void {
   websocketService.broadcastMcpInstallationStatus(serverId, status, error);
+}
+
+/** Push MCP removals to every open client in the affected organization. */
+export function broadcastMcpServersChanged(params: {
+  organizationId: string | null;
+  serverIds?: string[];
+  catalogIds?: string[];
+}): void {
+  websocketService.broadcastMcpServersChanged(params);
 }
 
 /**

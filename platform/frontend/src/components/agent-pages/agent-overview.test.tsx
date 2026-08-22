@@ -10,9 +10,7 @@ import {
 } from "@/lib/agent-skills.query";
 import { useAgentSubagentExclusions } from "@/lib/agent-subagent-exclusions.query";
 import { useAgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
-import { useAgentDelegations } from "@/lib/agent-tools.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -41,14 +39,10 @@ vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
 vi.mock("@/lib/agent-tool-exclusions.query", () => ({
   useAgentToolExclusions: vi.fn(),
 }));
-vi.mock("@/lib/agent-tools.query", () => ({ useAgentDelegations: vi.fn() }));
 vi.mock("@/lib/agent.query", () => ({ useDelegationTargetAgents: vi.fn() }));
 vi.mock("@/lib/agent-skills.query", () => ({
   useAgentSkills: vi.fn(),
   useAgentSkillExclusions: vi.fn(),
-}));
-vi.mock("@/lib/auth/identity-provider-read.query", () => ({
-  useIdentityProviders: vi.fn(),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: vi.fn() }));
 vi.mock("@/lib/config/config.query", () => ({ useFeature: vi.fn() }));
@@ -119,9 +113,9 @@ function renderOverview(
   );
 }
 
-/** The section whose heading names it, so assertions can be scoped to it. */
+/** The card whose heading names it, so assertions can be scoped to it. */
 function section(name: string) {
-  // Step-rank sections render h2, the sections inside a step h3.
+  // Every card title is one rank; cards are siblings, not a hierarchy.
   const heading = screen.getByRole("heading", { name });
   const element = heading.closest("section");
   if (!element) throw new Error(`No section around "${name}"`);
@@ -142,9 +136,6 @@ describe("AgentOverview", () => {
       data: false,
       isPending: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "me" } },
-    } as unknown as ReturnType<typeof useSession>);
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);
@@ -154,9 +145,6 @@ describe("AgentOverview", () => {
     vi.mocked(useEnvironments).mockReturnValue({
       data: { environments: [] },
     } as unknown as ReturnType<typeof useEnvironments>);
-    vi.mocked(useIdentityProviders).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useIdentityProviders>);
     vi.mocked(useConnectors).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useConnectors>);
@@ -180,9 +168,6 @@ describe("AgentOverview", () => {
     vi.mocked(useAgentSubagentExclusions).mockReturnValue({
       data: undefined,
     } as unknown as ReturnType<typeof useAgentSubagentExclusions>);
-    vi.mocked(useAgentDelegations).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useAgentDelegations>);
     vi.mocked(useDelegationTargetAgents).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useDelegationTargetAgents>);
@@ -197,42 +182,41 @@ describe("AgentOverview", () => {
     } as unknown as ReturnType<typeof useAgentSkillExclusions>);
   });
 
-  it("offers no edit control of its own — the page header owns that action", () => {
+  it("leaves editing to the page header instead of repeating it on cards", () => {
     renderOverview("agent", {
       systemPrompt: "Be brief.",
     } as unknown as Partial<typeof baseAgent>);
 
-    expect(screen.queryByRole("link", { name: /edit/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
   });
 
-  it("opens with the record's facts, then the wizard's sections in the wizard's order", () => {
+  it("opens with what the agent answers with, and nests card headings below the page group", () => {
     renderOverview("agent", {
       labels: [{ key: "team", value: "support" }],
     } as unknown as Partial<typeof baseAgent>);
 
-    // The heading section: what it answers with, where it runs, who can use
-    // it, labels, when — untitled, before the first titled section.
-    const facts = screen.getByText("Model").closest("section");
-    if (!facts) throw new Error("No heading section around the facts");
-    expect(within(facts).getByText("Environment")).toBeVisible();
-    expect(within(facts).getByText("Accessible to")).toBeVisible();
-    expect(within(facts).getByText("Created")).toBeVisible();
-    expect(facts.querySelector("h3")).toBeNull();
-    expect(
-      facts.compareDocumentPosition(
-        screen.getByRole("heading", { level: 3, name: "Instruction" }),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const facts = section("Model and environment");
+    expect(facts.getByText("Model")).toBeVisible();
+    expect(facts.getByText("Environment")).toBeVisible();
 
-    // Sections that ARE wizard steps rank a level above the sections
-    // inside a step: h2 to the others' h3.
-    expect(
-      screen.getAllByRole("heading", { level: 2 }).map((el) => el.textContent),
-    ).toEqual(["Tools & Knowledge Sources", "Advanced"]);
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((el) => el.textContent),
-    ).toEqual(["Instruction", "Subagents"]);
+    ).toEqual([
+      "Model and environment",
+      "Tools and knowledge sources",
+      "Subagents",
+    ]);
+    expect(screen.queryAllByRole("heading", { level: 2 })).toEqual([]);
+  });
+
+  it("omits the Instruction card when no instruction is configured", () => {
+    renderOverview("agent", {
+      systemPrompt: "   ",
+    } as unknown as Partial<typeof baseAgent>);
+
+    expect(screen.queryByRole("heading", { name: "Instruction" })).toBeNull();
+    expect(screen.queryByText("None — platform defaults apply.")).toBeNull();
   });
 
   it("reads the instruction in the wizard's editor, read-only, keeping its Handlebars highlighting", () => {
@@ -316,17 +300,18 @@ describe("AgentOverview", () => {
 
     renderOverview("agent");
     const model = field("Model");
-    expect(model.getByText("Organization default")).toBeVisible();
+    expect(field("API key").getByText("Organization default")).toBeVisible();
     expect(model.getByText("Anthropic · Claude Sonnet")).toBeVisible();
     // The form's model pill carries the provider's logo; so does this one.
     expect(model.getByRole("img", { name: /anthropic logo/i })).toBeVisible();
   });
 
-  it("says the best available model answers when the organization set no default", () => {
+  it("shows the fallback model as a value without explanatory prose", () => {
     renderOverview("agent");
     const model = field("Model");
     expect(model.getByText("Best available model")).toBeVisible();
-    expect(model.getByText(/No organization default is set/)).toBeVisible();
+    expect(field("API key").getByText("Organization default")).toBeVisible();
+    expect(model.queryByText(/No organization default is set/)).toBeNull();
   });
 
   it("shows the agent's own key and model with the provider's logo", () => {
@@ -345,9 +330,9 @@ describe("AgentOverview", () => {
     } as unknown as Partial<typeof baseAgent>);
 
     const model = field("Model");
-    expect(model.getByText("Team OpenAI key")).toBeVisible();
     expect(model.getByText("OpenAI · GPT-5")).toBeVisible();
     expect(model.getByRole("img", { name: /openai logo/i })).toBeVisible();
+    expect(field("API key").getByText("Team OpenAI key")).toBeVisible();
   });
 
   it("names the servers the disabled tools belong to, with the wizard's N/M counts", () => {
@@ -372,7 +357,7 @@ describe("AgentOverview", () => {
     } as unknown as ReturnType<typeof useAgentToolExclusions>);
     renderOverview("agent", { accessAllTools: true });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("2/3 disabled")).toBeVisible();
     expect(tools.queryByText("GitHub")).toBeNull();
     // An id no visible server accounts for is still counted, not dropped.
@@ -380,7 +365,7 @@ describe("AgentOverview", () => {
     expect(tools.getByText("1/1 disabled")).toBeVisible();
   });
 
-  it("groups assigned tools under their MCP server, leaving delegation rows to the Subagents section", () => {
+  it("summarizes assigned tools by MCP server without listing individual tools", () => {
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
       data: [{ id: "cat-1", name: "GitHub", icon: null }],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
@@ -407,26 +392,55 @@ describe("AgentOverview", () => {
       ],
     } as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     // The server pill carries the count; two tools, not three.
     expect(tools.getByText("GitHub")).toBeInTheDocument();
     expect(tools.getByText("(2)")).toBeInTheDocument();
-    expect(tools.getByText("create_issue")).toBeInTheDocument();
-    expect(tools.getByText("list_issues")).toBeInTheDocument();
+    expect(tools.queryByText("create_issue")).toBeNull();
+    expect(tools.queryByText("list_issues")).toBeNull();
     expect(tools.queryByText("delegate_to_researcher")).toBeNull();
+    // The server has a page; individual tools stay in the editor wizard.
+    expect(tools.getByRole("link", { name: /GitHub/ })).toHaveAttribute(
+      "href",
+      "/mcp/registry/cat-1",
+    );
   });
 
-  it("shows Auto mode as the wizard describes it, with both settings as rows — the connection one dormant", () => {
+  it("counts the disabled subagents past the cap instead of dropping them", () => {
+    const roster = Array.from({ length: 14 }, (_, index) => ({
+      id: `sub-${index}`,
+      name: `Agent ${index}`,
+      icon: null,
+    }));
+    vi.mocked(useDelegationTargetAgents).mockReturnValue({
+      data: roster,
+    } as unknown as ReturnType<typeof useDelegationTargetAgents>);
+    vi.mocked(useAgentSubagentExclusions).mockReturnValue({
+      data: { excludedSubagentIds: roster.map((target) => target.id) },
+    } as unknown as ReturnType<typeof useAgentSubagentExclusions>);
+    renderOverview("agent", { accessAllSubagents: true });
+
+    const subagents = section("Subagents");
+    expect(subagents.getByText("Agent 0")).toBeInTheDocument();
+    expect(subagents.queryByText("Agent 12")).toBeNull();
+    expect(subagents.getByText("+2 more")).toBeInTheDocument();
+    // Each named one opens the agent it disables.
+    expect(subagents.getByRole("link", { name: /Agent 0/ })).toHaveAttribute(
+      "href",
+      "/agents/sub-0",
+    );
+  });
+
+  it("shows Auto mode with its progressive-loading state", () => {
     vi.mocked(useAgentToolExclusions).mockReturnValue({
       data: { excludedToolIds: ["x1", "x2"] },
     } as unknown as ReturnType<typeof useAgentToolExclusions>);
     renderOverview("agent", {
       accessAllTools: true,
       toolExposureMode: "search_and_run_only",
-      missingCredentialBehavior: "block",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Auto")).toBeInTheDocument();
     expect(tools.getByText("Disabled tools")).toBeInTheDocument();
     // The pills carry the counts; no heading repeats them.
@@ -436,16 +450,11 @@ describe("AgentOverview", () => {
     expect(tools.queryByText(/discovered on demand/)).toBeNull();
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Progressively")).toBeInTheDocument();
-    expect(tools.getByText("search_tools")).toBeInTheDocument();
-    expect(tools.getByText("run_tool")).toBeInTheDocument();
-    // The connection setting shows in Auto too, but says it lies dormant
-    // there — Auto reaches only what each caller can already use.
-    expect(tools.getByText("Tool connections")).toBeInTheDocument();
-    expect(tools.getByText("Not needed")).toBeInTheDocument();
-    expect(tools.queryByText("Required before use")).toBeNull();
+    expect(tools.queryByText("Tool connections")).toBeNull();
+    expect(tools.getAllByRole("link", { name: /Learn more/ })).toHaveLength(1);
   });
 
-  it("names the knowledge sources Auto mode searches — the environment's, not the stored assignment", () => {
+  it("does not surface environment-wide knowledge sources in Auto mode", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -464,7 +473,6 @@ describe("AgentOverview", () => {
           connectorType: "jira",
           environmentId: null,
         },
-        // Another environment's source is not searched by this agent.
         {
           id: "c3",
           name: "Staging wiki",
@@ -479,17 +487,11 @@ describe("AgentOverview", () => {
       connectorIds: ["c3"],
     } as unknown as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
-    expect(tools.getByText("Knowledge sources")).toBeInTheDocument();
-    expect(tools.getByText("Handbook")).toBeInTheDocument();
-    expect(tools.getByText("Tickets")).toBeInTheDocument();
+    const tools = section("Tools and knowledge sources");
+    expect(tools.queryByText("Knowledge sources")).toBeNull();
+    expect(tools.queryByText("Handbook")).toBeNull();
+    expect(tools.queryByText("Tickets")).toBeNull();
     expect(tools.queryByText("Staging wiki")).toBeNull();
-    // The chips are this reader's view, and the set is resolved per caller.
-    expect(
-      tools.getByText(
-        /each conversation searches the ones its own caller may query/i,
-      ),
-    ).toBeInTheDocument();
   });
 
   it("counts assigned sources it cannot name rather than dropping them", () => {
@@ -513,13 +515,13 @@ describe("AgentOverview", () => {
       knowledgeBaseIds: ["kb-9"],
     } as unknown as Partial<typeof baseAgent>);
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Handbook")).toBeInTheDocument();
     // Two ids this reader cannot resolve: named as a count, not silently lost.
     expect(tools.getByText("+2 not visible to you")).toBeInTheDocument();
   });
 
-  it("says knowledge search is off when the organization has no embedding model", () => {
+  it("omits knowledge status when no custom source is assigned", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -527,60 +529,36 @@ describe("AgentOverview", () => {
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
     renderOverview("agent", { accessAllTools: true });
 
-    const tools = section("Tools & Knowledge Sources");
-    expect(
-      tools.getByText(/Knowledge search is off — no embedding model/),
-    ).toBeInTheDocument();
+    const tools = section("Tools and knowledge sources");
+    expect(tools.queryByText("Knowledge sources")).toBeNull();
+    expect(tools.queryByText(/Knowledge search is off/)).toBeNull();
   });
 
-  it("shows the Custom-mode settings as rows: the state as a badge, with what it means", () => {
+  it("shows the Custom-mode progressive-loading state with its docs link", () => {
     renderOverview("agent", {
       toolExposureMode: "search_and_run_only",
-      missingCredentialBehavior: "warn",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Progressively")).toBeInTheDocument();
-    expect(
-      tools.getByText(/are pre-loaded into the context upfront/),
-    ).toBeInTheDocument();
-    // Each setting points at its public docs.
-    const learnMore = tools.getAllByRole("link", { name: /Learn more/ });
-    expect(learnMore[0]).toHaveAttribute(
+    expect(tools.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
       "href",
       expect.stringContaining("#load-tools-when-needed"),
     );
-    expect(learnMore[1]).toHaveAttribute(
-      "href",
-      expect.stringContaining("#tool-connections"),
-    );
-    expect(tools.getByText("Tool connections")).toBeInTheDocument();
-    expect(tools.getByText("Requested at chat start")).toBeInTheDocument();
-    expect(
-      tools.getByText(/naming the servers not yet connected/),
-    ).toBeInTheDocument();
+    expect(tools.queryByText("Tool connections")).toBeNull();
   });
 
-  it("names upfront loading as the value when progressive loading is off, and says what it means", () => {
+  it("names upfront loading as a value", () => {
     renderOverview("agent", {
       toolExposureMode: "full",
-      missingCredentialBehavior: "allow",
     });
 
-    const tools = section("Tools & Knowledge Sources");
+    const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Upfront")).toBeInTheDocument();
     expect(tools.queryByText("Off")).toBeNull();
-    expect(
-      tools.getByText(
-        "All assigned tools are pre-loaded into the context upfront.",
-      ),
-    ).toBeInTheDocument();
-    expect(tools.getByText("Requested when needed")).toBeInTheDocument();
-    expect(
-      tools.getByText(/requested the moment a tool call needs one/),
-    ).toBeInTheDocument();
+    expect(tools.queryByText("Tool connections")).toBeNull();
   });
 
   it("names the delegation targets and the advisor's state, without counting the advisor", () => {
@@ -595,13 +573,22 @@ describe("AgentOverview", () => {
         { id: "a2", name: "Researcher", icon: null },
       ],
     } as unknown as ReturnType<typeof useDelegationTargetAgents>);
-    vi.mocked(useAgentDelegations).mockReturnValue({
-      data: [
-        { id: "a2", name: "Researcher" },
-        { id: "advisor", name: "Advisor" },
+    renderOverview("agent", {
+      tools: [
+        {
+          id: "delegate-researcher",
+          name: "delegate_to_researcher",
+          catalogId: null,
+          delegateToAgentId: "a2",
+        },
+        {
+          id: "delegate-advisor",
+          name: "delegate_to_advisor",
+          catalogId: null,
+          delegateToAgentId: "advisor",
+        },
       ],
-    } as unknown as ReturnType<typeof useAgentDelegations>);
-    renderOverview("agent");
+    } as unknown as Partial<typeof baseAgent>);
 
     const subagents = section("Subagents");
     const pills = subagents.getByRole("list");
@@ -611,9 +598,6 @@ describe("AgentOverview", () => {
     // pills — the way the tool settings are — not as plain text.
     expect(subagents.getByText("Advisor Subagent")).toBeInTheDocument();
     expect(subagents.getByText("On")).toBeInTheDocument();
-    expect(
-      subagents.getByText(/consults a stronger model when making decisions/),
-    ).toBeInTheDocument();
     expect(subagents.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
       "href",
       expect.stringContaining("#advisor"),
@@ -635,20 +619,21 @@ describe("AgentOverview", () => {
 
     const subagents = section("Subagents");
     expect(subagents.getByText("Advisor Subagent")).toBeInTheDocument();
+    expect(subagents.queryByText("None")).toBeNull();
     expect(
       subagents.queryByRole("link", { name: /Advisor settings/ }),
     ).toBeNull();
   });
 
-  it("keeps the Subagents section for a gateway and a legacy profile, but not for an LLM proxy", () => {
+  it("omits agent-only Subagents from gateways, legacy profiles, and LLM proxies", () => {
     const gateway = renderOverview("mcp_gateway", {
       agentType: "mcp_gateway",
     });
-    expect(screen.getByRole("heading", { name: "Subagents" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     gateway.unmount();
 
     const profile = renderOverview("llm_proxy", { agentType: "profile" });
-    expect(screen.getByRole("heading", { name: "Subagents" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     profile.unmount();
 
     renderOverview("llm_proxy", { agentType: "llm_proxy" });

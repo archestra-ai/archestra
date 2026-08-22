@@ -60,10 +60,15 @@ import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
+import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
 import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { tidyMcpServerErrorText } from "@/lib/mcp/mcp-server-issues";
+import {
+  canFixInstall,
+  type McpServerIssue,
+} from "@/lib/mcp/mcp-server-issues";
 import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -82,11 +87,13 @@ import {
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
+import { McpCapabilityBadges } from "./mcp-capability-badges";
 import {
   type AgentUsage,
   agentOwnerLabel,
   deriveAgentUsage,
 } from "./mcp-server-agent-usage";
+import { McpServerIssueStatusCell } from "./mcp-server-issue-badge";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
 import {
   UninstallServerDialog,
@@ -112,6 +119,14 @@ export type McpServerCardProps = {
     | "discovering-tools"
     | null;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  /**
+   * Whether the live deployment feed has anything to say yet. Without it an
+   * empty `deploymentStatuses` reads as "still loading" forever on every
+   * deployment that has no Kubernetes runtime at all.
+   */
+  deploymentFeedState: McpDeploymentFeedState;
+  /** This item's outstanding issues, from the registry's shared computation. */
+  issues?: McpServerIssue[];
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   /**
@@ -144,6 +159,8 @@ export function McpServerCard({
   installingItemId,
   installationStatus,
   deploymentStatuses,
+  deploymentFeedState,
+  issues,
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
@@ -155,6 +172,7 @@ export function McpServerCard({
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
+  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -326,19 +344,34 @@ export function McpServerCard({
     }
   };
 
+  // Gated like its Install and Reinstall siblings: removing a connection is
+  // its own capability, and offering the button to a role without it only
+  // buys the user a 403 from the delete call behind the dialog.
   const uninstallButton = hasPersonalConnection ? (
-    <Button
+    <PermissionButton
+      permissions={{ mcpServerInstallation: ["delete"] }}
       variant="outline"
       size="sm"
       className="flex-1"
       onClick={handleUninstallClick}
     >
       Uninstall
-    </Button>
+    </PermissionButton>
   ) : null;
 
+  // The reinstall button follows `canFixInstall`, so an installs admin is
+  // never shown a reinstall prompt for a connection whose button the card
+  // then withholds because they do not own it.
   const userFlaggedInstalls = allServersForCatalog.filter(
-    (s) => s.reinstallRequired && s.ownerId === currentUserId,
+    (s) =>
+      s.reinstallRequired &&
+      canFixInstall({
+        server: s,
+        viewer: {
+          userId: currentUserId ?? null,
+          canManageInstalls: !!isMcpServerInstallAdmin,
+        },
+      }),
   );
   const needsReinstall = userFlaggedInstalls.length > 0;
   const triggerReinstall = () =>
@@ -363,13 +396,12 @@ export function McpServerCard({
 
   // Check for OAuth refresh errors on any credential the user can see
   // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  const isOAuthServer = !!item.oauthConfig;
   // Re-auth entry point gated by per-connection permission, not catalog-edit
   // access; the detailed reason lives on the credentials tab. When several
   // connections have failed, prefer one the caller can re-authenticate so the
   // marker stays actionable regardless of row order.
   const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers = isOAuthServer
+  const oauthFailedServers = alertingEnabled
     ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
     : [];
   const oauthFailedServer =
@@ -495,6 +527,10 @@ export function McpServerCard({
     ? getDeploymentStatusTooltipCopy(deploymentSummary.overallState)
     : null;
   // SPDX-SnippetEnd
+  // Worst live issue first, since issues are kind-ordered; an item whose only
+  // trouble the viewer muted still shows it, muted.
+  const statusIssue =
+    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   const toolsCount = item.toolCount ?? 0;
 
   const chatButton = shouldShowMcpCardChatButton({
@@ -698,6 +734,12 @@ export function McpServerCard({
       )}
       {variant === "local" &&
         deploymentServerIds.length > 0 &&
+        // No Kubernetes runtime on this deployment means no pod will ever
+        // report, which is not the same as a report failing to arrive. The
+        // table says "Installed" for the same case; the card, which has no
+        // status text of its own, simply leaves the runtime chip off rather
+        // than accusing every local server of being unreachable.
+        deploymentFeedState !== "disabled" &&
         (deploymentSummary ? (
           <TooltipProvider>
             <Tooltip>
@@ -731,11 +773,15 @@ export function McpServerCard({
               {/* SPDX-SnippetEnd */}
             </Tooltip>
           </TooltipProvider>
-        ) : (
+        ) : deploymentFeedState === "loading" ? (
           <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/50" />
           </span>
+        ) : (
+          // The feed has settled and still knows nothing about this server's
+          // pods, which is a different thing from the pods being fine.
+          <span className={typeRole({ role: "meta" })}>Status unavailable</span>
         ))}
       {/*
         Trailing cluster, pushed to the card's right edge by `ml-auto` so the
@@ -1066,6 +1112,12 @@ export function McpServerCard({
                 {item.description}
               </p>
             )}
+            <McpCapabilityBadges
+              providesUi={item.providesUi}
+              providesSkills={item.providesSkills}
+              skillCount={item.skillCount}
+              className="mt-2"
+            />
           </div>
           {canEditCatalog && settingsButton}
         </div>
@@ -1110,60 +1162,38 @@ export function McpServerCard({
             </p>
           </div>
         )}
-        {variant === "local" &&
-          (() => {
-            // Multi-tenant catalogs alias one K8s pod across many mcp_server
-            // rows, so every sibling install reports the same error.
-            // Collapse failed banners per (catalog) for multi-tenant —
-            // the failure is catalog-scope by construction. Single-tenant
-            // installs each own their own pod; dedup by podName falling
-            // back to error text. The previous pod-name-only dedup was
-            // brittle: `deploymentStatuses` is keyed per install id and
-            // the WS handler may have delivered podName for some
-            // siblings but not others, leaving N-1 banners showing.
-            const seenKeys = new Set<string>();
-            return allServersForCatalog.filter((s) => {
-              if (s.localInstallationStatus !== "error") return false;
-              const dedupKey = item.multitenant
-                ? `catalog:${s.catalogId}`
-                : (deploymentStatuses[s.id]?.podName ??
-                  s.localInstallationError ??
-                  s.id);
-              if (seenKeys.has(dedupKey)) return false;
-              seenKeys.add(dedupKey);
-              return true;
-            });
-          })().map((failed) => {
-            const errorMsg =
-              tidyMcpServerErrorText(failed.localInstallationError) ??
-              "The server exited during start.";
-            // The card is a summary tile: one status line in the
-            // DeploymentStatusBanner shape plus the evidence link. The
-            // diagnosis (cause, what to change, actions) lives on the
-            // server's Overview and the registry's Needs-attention tab.
-            return (
-              <div
-                key={failed.id}
-                className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm"
-                data-testid={`${E2eTestId.McpServerError}-${item.name}-default`}
-                title={errorMsg}
+        {statusIssue && (
+          <div
+            className="flex items-start gap-2 rounded-md border bg-muted/50 px-3 py-2"
+            data-testid={
+              statusIssue.kind === "failed-to-start"
+                ? `${E2eTestId.McpServerError}-${item.name}-default`
+                : undefined
+            }
+          >
+            {/* The card is a summary tile: the same badge and one-line cause
+                the table's Status column shows, so a server reads the same
+                whichever view you are in. The full diagnosis, with the fix and
+                the verbs, lives on the server's Overview. Multi-tenant
+                siblings are already collapsed into one issue upstream, which
+                is what used to need a dedup pass here. */}
+            <McpServerIssueStatusCell
+              issue={statusIssue}
+              className="min-w-0 flex-1"
+            />
+            {variant === "local" && statusIssue.serverId && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 p-0 text-xs"
+                data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
+                onClick={() => goToItemPage("logs", statusIssue.serverId)}
               >
-                <DeploymentStatusDot state="failed" />
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  Failed to start
-                </span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto shrink-0 p-0 text-xs"
-                  data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
-                  onClick={() => goToItemPage("logs", failed.id)}
-                >
-                  View logs
-                </Button>
-              </div>
-            );
-          })}
+                View logs
+              </Button>
+            )}
+          </div>
+        )}
         {variant === "local" && isInstalling && (
           <div className="bg-muted/50 rounded-md overflow-hidden">
             <div className="px-3 py-2">

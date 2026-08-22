@@ -1,4 +1,7 @@
-import type { ChatSkillMetadata } from "@archestra/shared";
+import type {
+  ChatExternalMcpSkillMetadata,
+  ChatSkillMetadata,
+} from "@archestra/shared";
 
 /** A slash command bound to a skill, e.g. typing `/deep-research` in chat. */
 export type SkillCommand = {
@@ -35,8 +38,9 @@ export function skillCommandValue(name: string): string {
  */
 export function buildSkillCommands(
   skills: { id: string; name: string; description: string }[],
+  reservedValues: string[] = [],
 ): SkillCommand[] {
-  const used = new Set<string>();
+  const used = new Set(reservedValues);
   return skills.map(({ id, name, description }) => {
     const base = skillCommandValue(name);
     let value = base;
@@ -46,6 +50,22 @@ export function buildSkillCommands(
     used.add(value);
     return { value, name, description, skill: { id, name } };
   });
+}
+
+/** Allocate an external Skill token after every local Skill command. */
+export function externalMcpSkillCommandValue(params: {
+  skill: Pick<ChatExternalMcpSkillMetadata, "serverName" | "name">;
+  skillCommands: SkillCommand[];
+}): string {
+  const base = skillCommandValue(
+    `${params.skill.serverName} ${params.skill.name}`,
+  );
+  const used = new Set(params.skillCommands.map((command) => command.value));
+  let value = base;
+  for (let suffix = 2; used.has(value); suffix += 1) {
+    value = `${base}-${suffix}`;
+  }
+  return value;
 }
 
 /** What the chat page should do with a skill resolved from a `?skillId=` deep link. */
@@ -107,6 +127,30 @@ export function parseSkillCommand(
   return {
     skill: command.skill,
     value: command.value,
+    remaining: spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trimStart(),
+  };
+}
+
+/** Resolve a staged external MCP Skill only when its visible slash token remains. */
+export function parseExternalMcpSkillCommand(params: {
+  text: string;
+  skill: ChatExternalMcpSkillMetadata;
+}): {
+  skill: ChatExternalMcpSkillMetadata;
+  value: string;
+  remaining: string;
+} | null {
+  const { text, skill } = params;
+  if (!text.startsWith("/")) return null;
+  const spaceIndex = text.search(/\s/);
+  const token = (
+    spaceIndex === -1 ? text : text.slice(0, spaceIndex)
+  ).toLowerCase();
+  const value = skill.commandValue;
+  if (token !== value) return null;
+  return {
+    skill,
+    value,
     remaining: spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trimStart(),
   };
 }

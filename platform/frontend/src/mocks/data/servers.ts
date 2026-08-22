@@ -17,6 +17,7 @@ export function makeInstalledServer(
     ownerId: "test-user-admin",
     teamId: null,
     scope: "personal",
+    alertMutes: [],
     reinstallRequired: false,
     reinstallReason: "restart",
     localInstallationStatus: "success",

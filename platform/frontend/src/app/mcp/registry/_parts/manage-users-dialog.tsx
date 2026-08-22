@@ -2,26 +2,20 @@
 
 import {
   ADMIN_ROLE_NAME,
+  type archestraApiTypes,
   DocsPage,
   E2eTestId,
   formatSecretStorageType,
   getDocsUrl,
   isPlaywrightCatalogItem,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
-import {
-  AlertTriangle,
-  Info,
-  KeyRound,
-  Plus,
-  RefreshCw,
-  Trash,
-  User,
-  Zap,
-} from "lucide-react";
+import { KeyRound, Plus, RefreshCw, Trash, User, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,11 +27,6 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -60,13 +49,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useInitiateOAuth } from "@/lib/auth/oauth.query";
-import {
-  setOAuthCatalogId,
-  setOAuthMcpServerId,
-  setOAuthReturnUrl,
-  setOAuthState,
-} from "@/lib/auth/oauth-session";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -82,7 +65,8 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
-import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
+
+type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -148,6 +132,7 @@ interface ManageUsersContentProps {
   bodyTestId?: string;
   /** Whether this catalog is currently being installed. */
   isInstalling?: boolean;
+  onReauthenticate?: (server: InstalledServer) => void;
 }
 
 export function ManageUsersContent({
@@ -163,7 +148,9 @@ export function ManageUsersContent({
   hideHeader = false,
   bodyTestId,
   isInstalling = false,
+  onReauthenticate,
 }: ManageUsersContentProps) {
+  const router = useRouter();
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
@@ -194,9 +181,8 @@ export function ManageUsersContent({
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
 
-  // Find the catalog item to check if it supports OAuth
+  // Find the catalog item for connection labels and add-connection behavior.
   const catalogItem = catalogItems?.find((item) => item.id === catalogId);
-  const isOAuthServer = !!catalogItem?.oauthConfig;
 
   const canReauthenticate = useCanReauthenticate();
 
@@ -262,7 +248,6 @@ export function ManageUsersContent({
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
-  const initiateOAuthMutation = useInitiateOAuth();
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
     await deleteMcpServerMutation.mutateAsync({
@@ -271,41 +256,19 @@ export function ManageUsersContent({
     });
   };
 
-  const handleReauthenticate = async (
-    mcpServer: (typeof allServers)[number],
-  ) => {
-    if (!catalogItem) {
-      toast.error("Catalog item not found");
+  const handleReauthenticate = (mcpServer: (typeof allServers)[number]) => {
+    if (onReauthenticate) {
+      onReauthenticate(mcpServer);
       return;
     }
-
-    try {
-      // Store the MCP server ID in session storage for re-authentication flow
-      setOAuthMcpServerId(mcpServer.id);
-
-      // Call backend to initiate OAuth flow
-      const { authorizationUrl, state } =
-        await initiateOAuthMutation.mutateAsync({
-          catalogId: catalogItem.id,
-        });
-
-      // Store state in session storage for the callback
-      setOAuthState(state);
-      setOAuthCatalogId(catalogItem.id);
-
-      // Remember where re-authentication started so the callback returns here
-      setOAuthReturnUrl(window.location.href);
-
-      // Redirect to OAuth provider
-      window.location.href = authorizationUrl;
-    } catch (error) {
-      setOAuthMcpServerId(null);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to initiate re-authentication",
-      );
-    }
+    const params = new URLSearchParams({
+      [MCP_CATALOG_REAUTH_QUERY_PARAM]: catalogId,
+      [MCP_CATALOG_SERVER_QUERY_PARAM]: mcpServer.id,
+    });
+    // The registry owns the complete reauth flow. It handles pure OAuth,
+    // OAuth plus setup fields, and non-OAuth credentials without this table
+    // guessing from catalog metadata.
+    router.push(`/mcp/registry?${params.toString()}`);
   };
 
   // Close dialog when all credentials are revoked (only after data has loaded),
@@ -394,7 +357,6 @@ export function ManageUsersContent({
   const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
 
   const rowProps: RowRenderProps = {
-    isOAuthServer,
     deploymentStatuses,
     canonicalStateByPod,
     getCredentialOwnerName,
@@ -549,7 +511,6 @@ type ServerEntry = NonNullable<
 type ConnectionRow = { server: ServerEntry; isYou: boolean };
 
 interface RowRenderProps {
-  isOAuthServer: boolean;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   canonicalStateByPod: Map<string, string>;
   getCredentialOwnerName: (s: ServerEntry) => string;
@@ -602,7 +563,6 @@ function ConnectionsSection({
 function ConnectionsTable({
   rows,
   testId,
-  isOAuthServer,
   deploymentStatuses,
   canonicalStateByPod,
   getCredentialOwnerName,
@@ -618,6 +578,7 @@ function ConnectionsTable({
   rows: ConnectionRow[];
   testId: string;
 } & RowRenderProps) {
+  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const hasDeploymentStatuses = rows.some(
     (r) => deploymentStatuses[r.server.id],
   );
@@ -626,13 +587,15 @@ function ConnectionsTable({
     <Table data-testid={testId}>
       <TableHeader>
         <TableRow>
-          <TableHead className="whitespace-nowrap">Owner</TableHead>
+          <TableHead className="w-[200px] whitespace-nowrap">Owner</TableHead>
           {hasDeploymentStatuses && (
             <TableHead className="whitespace-nowrap">Pod</TableHead>
           )}
           <TableHead className="whitespace-nowrap">Secret Storage</TableHead>
           <TableHead className="whitespace-nowrap">Created At</TableHead>
-          <TableHead className="whitespace-nowrap">Action</TableHead>
+          <TableHead className="w-[280px] whitespace-nowrap text-right">
+            Action
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -642,18 +605,8 @@ function ConnectionsTable({
             data-testid={E2eTestId.CredentialRow}
             data-server-id={server.id}
           >
-            <TableCell className="font-medium max-w-[220px]">
+            <TableCell className="w-[200px] max-w-[220px] font-medium">
               <div className="flex items-center gap-2">
-                {isOAuthServer && server.oauthRefreshError && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                      </TooltipTrigger>
-                      <TooltipContent>Needs re-authentication</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
                 <span
                   className="truncate"
                   data-testid={E2eTestId.CredentialOwner}
@@ -666,11 +619,15 @@ function ConnectionsTable({
                   </Badge>
                 )}
               </div>
-              {(server.teamId || server.scope === "org") && (
-                <span className="text-muted-foreground text-xs block">
-                  Created by: {server.ownerEmail}
-                </span>
-              )}
+              {(server.teamId || server.scope === "org") &&
+                server.ownerEmail && (
+                  <span
+                    className="block truncate text-xs font-normal text-muted-foreground"
+                    title={`Created by ${server.ownerEmail}`}
+                  >
+                    {server.ownerEmail}
+                  </span>
+                )}
             </TableCell>
             {hasDeploymentStatuses && (
               <TableCell className="max-w-[260px]">
@@ -742,19 +699,19 @@ function ConnectionsTable({
             >
               {format(new Date(server.createdAt), "PP")}
             </TableCell>
-            <TableCell>
-              <div className="flex flex-col gap-1">
-                {isOAuthServer && server.oauthRefreshError && (
+            <TableCell className="w-[280px]">
+              <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                {alertingEnabled && server.oauthRefreshError && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="w-full">
+                        <span>
                           <Button
                             onClick={() => handleReauthenticate(server)}
                             disabled={!canReauthenticate(server)}
                             size="sm"
                             variant="outline"
-                            className="h-7 w-full text-xs"
+                            className="h-7 text-xs"
                           >
                             <RefreshCw className="mr-1 h-3 w-3" />
                             Re-authenticate
@@ -769,51 +726,16 @@ function ConnectionsTable({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {isOAuthServer && server.oauthRefreshError && (
-                  <div
-                    className="mb-2 flex items-start gap-1 text-[11px] leading-tight text-destructive"
-                    data-testid="oauth-reauth-detail"
-                  >
-                    <p className="min-w-0 break-words">
-                      {formatOAuthFailureDetail(
-                        server.oauthRefreshErrorMessage,
-                        server.oauthRefreshFailedAt,
-                      )}
-                    </p>
-                    {server.oauthRefreshErrorDescription && (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
-                            aria-label="Show OAuth error details"
-                            data-testid="oauth-reauth-detail-info"
-                          >
-                            <Info className="h-3 w-3" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          className="w-80 whitespace-pre-wrap break-words text-xs"
-                        >
-                          {server.oauthRefreshErrorDescription}
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  </div>
-                )}
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="w-full">
+                      <span>
                         <Button
                           onClick={() => handleRevoke(server)}
                           disabled={isDeleting || !canRevoke(server)}
                           size="sm"
-                          variant="outline"
-                          className="h-7 w-full text-xs"
+                          variant="ghost"
+                          className="h-7 text-xs text-muted-foreground hover:text-foreground"
                           data-testid={
                             isYou
                               ? `${E2eTestId.RevokeCredentialButton}-personal`

@@ -528,6 +528,29 @@ function isToolUseBlock(block: unknown): block is {
   );
 }
 
+/** An extended-thinking block as it appears in a Converse response. */
+type BedrockReasoningContentBlock = Extract<
+  NonNullable<
+    NonNullable<BedrockResponse["output"]>["message"]
+  >["content"][number],
+  { reasoningContent: unknown }
+>;
+
+/**
+ * Check if a content block is an extended-thinking block, in either of the
+ * Converse API's variants (`reasoningText` or `redactedContent`).
+ */
+function isReasoningContentBlock(
+  block: unknown,
+): block is BedrockReasoningContentBlock {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "reasoningContent" in block &&
+    (block as { reasoningContent: unknown }).reasoningContent !== undefined
+  );
+}
+
 /**
  * Check if a content block is a tool result block.
  * Works with both AWS SDK ContentBlock and our internal Zod types.
@@ -1535,35 +1558,25 @@ class BedrockStreamAdapter
         }
     > = [];
 
-    if (this.replacedText !== null) {
-      return {
-        $metadata: { requestId: this.state.responseId },
-        output: {
-          message: {
-            role: "assistant",
-            content: [{ text: this.replacedText }],
-          },
-        },
-        stopReason: "end_turn",
-        usage: {
-          inputTokens: this.state.usage?.inputTokens ?? 0,
-          outputTokens: this.state.usage?.outputTokens ?? 0,
-        },
-        metrics:
-          this.bedrockState.latencyMs !== null
-            ? { latencyMs: this.bedrockState.latencyMs }
-            : undefined,
-        trace: this.bedrockState.trace ?? undefined,
-      };
-    }
-
     // Add text block if we have text
     if (this.state.text) {
       content.push({ text: this.state.text });
     }
 
-    // Add tool use blocks
-    for (const toolCall of this.state.toolCalls) {
+    // A refusal does not erase what the model already said: its text streamed
+    // as it arrived and the refusal was appended after it, so the client holds
+    // both. Recording the refusal alone deletes the model's own answer from the
+    // turn, leaving anything that reads it back a turn in which it never spoke.
+    if (this.replacedText !== null) {
+      content.push({ text: this.replacedText });
+    }
+
+    // Add tool use blocks. Calls held back by the gate never reached the
+    // client, so they stay out of the record — a turn naming them would owe
+    // tool results nothing will ever send.
+    for (const toolCall of this.replacedText === null
+      ? this.state.toolCalls
+      : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);
@@ -1597,7 +1610,10 @@ class BedrockStreamAdapter
         },
       },
       stopReason:
-        (this.state.stopReason as BedrockResponse["stopReason"]) ?? "end_turn",
+        this.replacedText !== null
+          ? "end_turn"
+          : ((this.state.stopReason as BedrockResponse["stopReason"]) ??
+            "end_turn"),
       usage: {
         inputTokens: this.state.usage?.inputTokens ?? 0,
         outputTokens: this.state.usage?.outputTokens ?? 0,
@@ -1980,7 +1996,10 @@ export const bedrockAdapterFactory: LLMProvider<
       run: (input) => bedrockClient.converse(request.modelId, input),
     });
 
-    // Convert response to our internal format with decoded tool names
+    // Convert response to our internal format with decoded tool names.
+    // Reasoning blocks are carried by reference: only tool names need decoding,
+    // and dropping them would strip extended thinking from the answer and cost
+    // the client the signature it has to echo back on the next turn.
     const outputContent: Array<
       | { text: string }
       | {
@@ -1990,6 +2009,7 @@ export const bedrockAdapterFactory: LLMProvider<
             input: Record<string, unknown>;
           };
         }
+      | BedrockReasoningContentBlock
     > = [];
     if (response.output?.message?.content) {
       for (const c of response.output.message.content) {
@@ -2006,6 +2026,8 @@ export const bedrockAdapterFactory: LLMProvider<
               input: (c.toolUse.input ?? {}) as Record<string, unknown>,
             },
           });
+        } else if (isReasoningContentBlock(c)) {
+          outputContent.push(c);
         }
       }
     }

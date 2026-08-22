@@ -11,6 +11,7 @@ export const PLUGIN_MARKETPLACE_IMPORT_LIMIT = 10;
 export const POPULAR_PLUGIN_MARKETPLACES: PopularPluginMarketplace[] = [
   {
     repo: "archestra-ai/OpenAPPA",
+    // white-label-ok: OpenAPPA is the vendor's upstream marketplace.
     description:
       "Archestra's Open Agent Policy Protocol plugin for Claude Code.",
     supportedPlatforms: ["posix"],

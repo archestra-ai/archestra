@@ -914,10 +914,11 @@ function renderWindowsMarketplaceRefreshProfileBlock(
   const nonInteractiveArgs = client.nonInteractiveArgPatterns
     .map(psq)
     .join(", ");
+  // white-label-ok: PowerShell function and cache names are stable wire identifiers.
   return `function Invoke-Archestra${client.binary}MarketplaceRefresh {
   param([object[]]$ClientArgs)
   foreach ($archArg in $ClientArgs) {
-    if (@(${nonInteractiveArgs}) -contains [string]$archArg) { return $true }
+    if (@(${nonInteractiveArgs}) -contains [string]$archArg) { return $true } # white-label-ok: generated PowerShell uses stable wire identifiers
   }
   $archRefreshDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Archestra'
   $archRefreshStamp = Join-Path $archRefreshDir ${psq(`${client.binary}-${ctx.skills.marketplaceName}.refresh`)}

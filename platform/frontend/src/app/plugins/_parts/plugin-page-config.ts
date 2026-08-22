@@ -1,5 +1,8 @@
 export const PLUGIN_DESCRIPTION_FALLBACK = "No description.";
 
+// white-label-ok: OpenAPPA provenance names the upstream vendor, not this deployment.
+export const ARCHESTRA_PLUGIN_PROVENANCE_LABEL = "Archestra";
+
 export const CLIENT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
   "copilot-cli": "Copilot CLI",

@@ -72,6 +72,7 @@ import {
 import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
+  ARCHESTRA_PLUGIN_PROVENANCE_LABEL,
   CLIENT_LABELS,
   comparePinnedPluginTableOrder,
   comparePluginCatalogOrder,
@@ -341,7 +342,7 @@ function PluginsList() {
                 </span>
                 {isArchestraPlugin(plugin) && (
                   <Badge variant="secondary" className="shrink-0">
-                    Archestra
+                    {ARCHESTRA_PLUGIN_PROVENANCE_LABEL}
                   </Badge>
                 )}
                 {repo && (

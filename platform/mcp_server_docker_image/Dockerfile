@@ -45,15 +45,15 @@ RUN uv pip sync \
 FROM ${NODE_IMAGE} AS node-builder
 
 # Upgrade npm to a version whose bundled dependencies already include the fixes for
-# tar CVE-2026-59873/CVE-2026-59874 (bundle ships tar 7.5.19), picomatch
-# CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151 (bundle
-# ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
+# picomatch CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151
+# (bundle ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
 # npm 11.18.0 was published 2026-06-29 and has cleared the 7-day release-age practice.
-# Two of npm's OWN bundled dependencies carry HIGH CVEs that no npm release fixes,
-# so both are swapped in place. 11.18.0 is the last 11.x, and 12.0.0/12.0.1 require
-# Node >=22 while this stage is node:20-alpine, so upgrading npm is not the way out.
-# Both swaps stay within the same major and satisfy the bundled consumer's range, and
-# this is also what the final stage ships — it copies this npm wholesale (see below).
+# Three of npm's OWN bundled dependencies carry HIGH CVEs that no npm release fixes,
+# so all three are swapped in place. 11.19.0 (the newest 11.x) bundles the exact same
+# versions of all three, and 12.x requires Node >=22 while this stage is node:20-alpine,
+# so upgrading npm is not the way out. Every swap stays within the same major and
+# satisfies the bundled consumers' ranges, and this is also what the final stage ships
+# — it copies this npm wholesale (see below).
 #
 #   brace-expansion  CVE-2026-14257, then CVE-2026-69152 (uncontrolled resource
 #     consumption). The bundle ships 5.0.7 via minimatch 10.2.5, which asks ^5.0.5;
@@ -63,10 +63,18 @@ FROM ${NODE_IMAGE} AS node-builder
 #     bundle ships 10.2.0 via socks 2.8.9, which asks ^10.1.1; 10.3.1 is in range and
 #     declares `node: >= 12`. The package.json override next to this file only governs
 #     the /opt/node-deps tree, so it cannot reach this copy.
+#   tar  CVE-2026-73566 (uncontrolled recursion in mapHas/filesFilter, an uncatchable
+#     stack-overflow DoS, affects <=7.5.20). The bundle ships 7.5.19, reached by npm
+#     itself plus libnpmdiff/node-gyp/pacote, whose ranges are all ^7.5.x; 7.5.22 is the
+#     newest patch (7.5.21 carries the fix), keeps 7.5.19's dependency ranges — all
+#     satisfied by the bundled chownr 3.0.0, yallist 5.0.0, minipass 7.1.3,
+#     minizlib 3.1.0 and @isaacs/fs-minipass 4.0.1 — and declares `node: >=18`.
 #
 # Each `npm pack` must run BEFORE its old copy is removed: npm reaches these packages
-# through minimatch/glob and socks respectively, so deleting first can leave npm unable
-# to run the very command that fetches the replacement.
+# through minimatch/glob, socks and pacote respectively, so deleting first can leave npm
+# unable to run the very command that fetches the replacement. tar is swapped LAST for
+# the same reason — npm cannot pack anything once its own tar is gone. The `tar -xzf`
+# calls are the shell's busybox tar, not this module, so they are unaffected.
 RUN npm install -g npm@11.18.0 && \
     cd /usr/local/lib/node_modules/npm/node_modules && \
     npm pack brace-expansion@5.0.9 && \
@@ -78,7 +86,12 @@ RUN npm install -g npm@11.18.0 && \
     rm -rf ip-address && \
     tar -xzf ip-address-10.3.1.tgz && \
     mv package ip-address && \
-    rm ip-address-10.3.1.tgz
+    rm ip-address-10.3.1.tgz && \
+    npm pack tar@7.5.22 && \
+    rm -rf tar && \
+    tar -xzf tar-7.5.22.tgz && \
+    mv package tar && \
+    rm tar-7.5.22.tgz
 
 WORKDIR /opt/node-deps
 

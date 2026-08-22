@@ -129,6 +129,8 @@ export function McpServerTable({
   const router = useRouter();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  const canSelect = (item: CatalogItem) =>
+    !getServerInfo(item).isInstallInProgress;
 
   const {
     rowSelection,
@@ -141,7 +143,7 @@ export function McpServerTable({
     rows: items,
     getId: (item) => item.id,
     // An install in flight is neither installable nor uninstallable yet.
-    canSelect: (item) => !getServerInfo(item).isInstallInProgress,
+    canSelect,
     filterSignature: `mcp-registry:${items.length}`,
     matchDescription: "match the current filters",
   });
@@ -165,7 +167,7 @@ export function McpServerTable({
     createSelectColumn<CatalogItem>({
       rowLabel: (item) => `Select ${item.name}`,
       allLabel: "Select all MCP servers on this page",
-      canSelect: (item) => !getServerInfo(item).installedServer,
+      canSelect,
     }),
     {
       id: "name",

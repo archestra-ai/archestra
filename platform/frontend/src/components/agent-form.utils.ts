@@ -88,11 +88,10 @@ export const TOOL_CONNECTION_PROMPTING: Record<
   MissingCredentialBehavior,
   string
 > = {
-  allow:
-    "Nothing up front. The first tool call that needs a server prompts to connect it.",
-  warn: "The chat opens by listing the servers not connected yet, with an offer to connect. Their tools wait until then.",
+  allow: "Prompt only when a tool needs a server connection.",
+  warn: "At chat start, prompt for every server that is not connected. Their tools remain unavailable until it is.",
   block:
-    "Nothing works until every backing server is connected. No mid-chat prompts.",
+    "Require every backing server to be connected before the gateway can be used.",
 };
 
 /**

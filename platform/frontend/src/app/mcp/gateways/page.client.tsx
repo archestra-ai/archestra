@@ -264,6 +264,10 @@ function McpGateways({
   const { data: isTeamAdmin } = useHasPermissions({
     mcpGateway: ["team-admin"],
   });
+  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isLegacyTeamAdmin } = useHasPermissions({
+    agent: ["team-admin"],
+  });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
@@ -539,10 +543,11 @@ function McpGateways({
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const isLegacy = agent.agentType === "profile";
         const canModify = computeCanModifyAgent({
           agent,
-          isAdmin: !!isAdmin,
-          isTeamAdmin: !!isTeamAdmin,
+          isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
+          isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
           currentUserId,
           userTeamIds: userTeamIdSet,
         });
@@ -553,11 +558,6 @@ function McpGateways({
             <McpGatewayActions
               agent={agent}
               canModify={canModify}
-              onConnect={(target) =>
-                router.push(
-                  agentDetailHref("mcp_gateway", target.id, "connect"),
-                )
-              }
               onEdit={(target) =>
                 router.push(agentEditHref("mcp_gateway", target.id))
               }

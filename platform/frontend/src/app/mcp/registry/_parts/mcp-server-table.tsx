@@ -61,6 +61,10 @@ import {
 import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
+import {
+  getMcpServerActionModel,
+  mcpServerAction,
+} from "./mcp-server-actions-model";
 import { mcpServerAlertTarget } from "./mcp-server-alert-target";
 import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
@@ -588,7 +592,6 @@ function McpServerRowActions({
   onReinstall: McpServerTableProps["onReinstall"];
   onCancelInstallation?: (serverId: string) => void;
 }) {
-  const router = useRouter();
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -606,6 +609,10 @@ function McpServerRowActions({
   );
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const [uninstallOpen, setUninstallOpen] = useState(false);
+  const actionModel = getMcpServerActionModel(item);
+  const connectionsAction = mcpServerAction(actionModel, "connections");
+  const logsAction = mcpServerAction(actionModel, "logs");
+  const editAction = mcpServerAction(actionModel, "edit");
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
@@ -733,8 +740,8 @@ function McpServerRowActions({
   if (hasRuntimeIssue) {
     actions.push({
       icon: <FileSearch className="h-4 w-4" />,
-      label: "View logs",
-      href: `/mcp/registry/${item.id}?tab=logs`,
+      label: logsAction.label,
+      href: logsAction.href,
     });
   }
   if (showChat) {
@@ -821,23 +828,22 @@ function McpServerRowActions({
   if (canEditCatalog) {
     actions.push({
       icon: <Pencil className="h-4 w-4" />,
-      label: "Edit configuration",
-      onClick: () =>
-        router.push(`/mcp/registry/${item.id}/edit?step=configuration`),
+      label: editAction.label,
+      href: editAction.href,
     });
   }
   if (!isBuiltin) {
     actions.push({
       icon: <Users className="h-4 w-4" />,
-      label: "Manage credentials",
-      href: `/mcp/registry/${item.id}?tab=credentials`,
+      label: connectionsAction.label,
+      href: connectionsAction.href,
     });
   }
   if (hasLocalInstalls && !hasRuntimeIssue) {
     actions.push({
       icon: <FileSearch className="h-4 w-4" />,
-      label: "View logs",
-      href: `/mcp/registry/${item.id}?tab=logs`,
+      label: logsAction.label,
+      href: logsAction.href,
     });
   }
   if (actions.length === 0) return null;

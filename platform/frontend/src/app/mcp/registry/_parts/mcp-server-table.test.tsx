@@ -216,7 +216,7 @@ describe("McpServerTable uninstall permission", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: "Manage credentials some-remote-server",
+        name: "Credentials some-remote-server",
       }),
     ).toBeInTheDocument();
     expect(

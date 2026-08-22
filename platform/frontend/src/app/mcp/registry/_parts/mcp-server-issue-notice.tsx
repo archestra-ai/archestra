@@ -91,6 +91,7 @@ export function McpServerIssueNotice({
   facet = null,
   hideName = false,
   variant = "panel",
+  panelActions = "all",
   className,
   onTargetsCompleted,
 }: {
@@ -106,6 +107,8 @@ export function McpServerIssueNotice({
   /** On the server's own page the name is the page title already. */
   hideName?: boolean;
   variant?: "panel" | "actions" | "details";
+  /** Detail pages already expose remediation in their header and sections. */
+  panelActions?: "all" | "dismiss-only";
   className?: string;
   onTargetsCompleted?: (targets: readonly DismissAlertTarget[]) => void;
 }) {
@@ -341,6 +344,17 @@ export function McpServerIssueNotice({
       )}
     </>
   );
+  const dismissOnlyAction = dismissTargets.length > 0 && (
+    <Button
+      variant="outline"
+      size="sm"
+      aria-label={`Dismiss alert for ${item.name}`}
+      onClick={() => setDismissOpen(true)}
+    >
+      <BellOff className="h-4 w-4" />
+      Dismiss
+    </Button>
+  );
 
   // Compact icon buttons fit the complete row action set. Keep applicable
   // remediation visible instead of forcing discovery through a kebab menu.
@@ -548,19 +562,25 @@ export function McpServerIssueNotice({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end sm:pt-0.5">
-          {actions.secondary && (
-            <Button
-              variant="outline"
-              size="sm"
-              data-testid={actions.secondary.testId}
-              onClick={actions.secondary.onClick}
-            >
-              {actions.secondary.label}
-            </Button>
+          {panelActions === "dismiss-only" ? (
+            dismissOnlyAction
+          ) : (
+            <>
+              {actions.secondary && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid={actions.secondary.testId}
+                  onClick={actions.secondary.onClick}
+                >
+                  {actions.secondary.label}
+                </Button>
+              )}
+              {panelPrimaryAction}
+              {queueActions}
+              {overflowMenu}
+            </>
           )}
-          {panelPrimaryAction}
-          {queueActions}
-          {overflowMenu}
         </div>
       </div>
       {showDetail && disclosedDetail && (

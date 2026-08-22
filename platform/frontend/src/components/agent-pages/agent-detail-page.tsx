@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   PackageX,
   Pencil,
+  Plug,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -55,10 +57,16 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
-  ACTION_LABEL,
   backToListLabel,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
+import { useEnvironments } from "@/lib/environment.query";
+import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  agentAction,
+  agentActionHref,
+  getAgentActionModel,
+} from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
 import { AgentOverview } from "./agent-overview";
 import {
@@ -198,6 +206,8 @@ function AgentDetails({
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: environmentsData } = useEnvironments();
+  const defaultEnvironment = useDefaultEnvironment();
   const {
     resource,
     canModify,
@@ -208,6 +218,20 @@ function AgentDetails({
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
+  const actionModel = getAgentActionModel({ kind, agent });
+  const connectAction = agentAction(actionModel, "connect");
+  const chatAction = agentAction(actionModel, "chat");
+  const editAction = agentAction(actionModel, "edit");
+  const cloneAction = agentAction(actionModel, "clone");
+  const exportAction = agentAction(actionModel, "export");
+  const historyAction = agentAction(actionModel, "history");
+  const convertAction = agentAction(actionModel, "convert");
+  const deleteAction = agentAction(actionModel, "delete");
+  const environmentName = agent.environmentId
+    ? environmentsData?.environments.find(
+        (environment) => environment.id === agent.environmentId,
+      )?.name
+    : defaultEnvironment.name;
   // The record's own resource, not the route family's: a legacy profile shown
   // under the proxy pages is authorized as an `agent` everywhere, version
   // history included.
@@ -216,7 +240,7 @@ function AgentDetails({
   });
   const { data: canCreateSkill } = useHasPermissions({ skill: ["create"] });
 
-  const showConnect = !isBuiltIn;
+  const showConnect = connectAction.visible;
   const legacyConnectRequested = searchParams.get("tab") === "connect";
 
   useEffect(() => {
@@ -310,6 +334,12 @@ function AgentDetails({
             type={isBuiltIn ? "builtIn" : agent.scope}
             className="font-normal"
           />
+          {(kind === "llm_proxy" || kind === "mcp_gateway") &&
+            environmentName && (
+              <Badge variant="outline" className="font-normal">
+                {environmentName}
+              </Badge>
+            )}
         </div>
       }
       documentTitle={agent.name}
@@ -319,11 +349,19 @@ function AgentDetails({
         // One primary (Edit), one secondary (Chat), the rest in the kebab with
         // the destructive item under a divider.
         <div className="flex shrink-0 items-center gap-2">
-          {kind === "agent" && !isBuiltIn && (
+          {connectAction.detailVisible && connectAction.href && (
             <Button variant="outline" asChild>
-              <Link href={`/chat/new?agent_id=${agent.id}`}>
+              <Link href={connectAction.href}>
+                <Plug className="h-4 w-4" />
+                {connectAction.label}
+              </Link>
+            </Button>
+          )}
+          {chatAction.visible && chatAction.href && (
+            <Button variant="outline" asChild>
+              <Link href={chatAction.href}>
                 <MessageSquare className="h-4 w-4" />
-                {ACTION_LABEL.chat}
+                {chatAction.label}
               </Link>
             </Button>
           )}
@@ -336,9 +374,9 @@ function AgentDetails({
             <Skeleton className="h-9 w-24" />
           ) : canEdit ? (
             <Button asChild data-testid={E2eTestId.AgentDetailEditButton}>
-              <Link href={agentEditHref(kind, agent.id)}>
+              <Link href={agentActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
-                {ACTION_LABEL.edit}
+                {editAction.label}
               </Link>
             </Button>
           ) : (
@@ -352,7 +390,7 @@ function AgentDetails({
               data-testid={E2eTestId.AgentDetailEditButton}
             >
               <Pencil className="h-4 w-4" />
-              {ACTION_LABEL.edit}
+              {editAction.label}
             </PermissionButton>
           )}
           <DropdownMenu>
@@ -369,14 +407,14 @@ function AgentDetails({
                   its own divider. */}
               <KebabItem
                 icon={<Copy className="h-4 w-4" />}
-                label={ACTION_LABEL.clone}
+                label={cloneAction.label}
                 reason={cloneReason}
                 onSelect={() => setCloning(true)}
               />
               {hasExport && (
                 <KebabItem
                   icon={<Download className="h-4 w-4" />}
-                  label="Export"
+                  label={exportAction.label}
                   reason={exportReason}
                   isBusy={exportAgent.isPending}
                   onSelect={handleExport}
@@ -384,14 +422,14 @@ function AgentDetails({
               )}
               <KebabItem
                 icon={<History className="h-4 w-4" />}
-                label={ACTION_LABEL.versionHistory}
+                label={historyAction.label}
                 reason={historyReason}
                 onSelect={() => setHistoryOpen(true)}
               />
               {hasConvertToSkill && (
                 <KebabItem
                   icon={<Sparkles className="h-4 w-4" />}
-                  label="Convert to skill"
+                  label={convertAction.label}
                   reason={convertReason}
                   onSelect={() => setConverting(true)}
                 />
@@ -400,7 +438,7 @@ function AgentDetails({
               <KebabItem
                 variant="destructive"
                 icon={<Trash2 className="h-4 w-4" />}
-                label={ACTION_LABEL.delete}
+                label={deleteAction.label}
                 reason={deleteReason}
                 onSelect={() => setDeleteRequested(true)}
               />
@@ -410,22 +448,24 @@ function AgentDetails({
       }
     >
       <div className="space-y-10">
-        <section aria-labelledby="agent-overview-heading">
-          <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-              <h2
-                id="agent-overview-heading"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                Overview
-              </h2>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <AgentOverview kind={kind} agent={agent} />
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
+        {kind !== "llm_proxy" && (
+          <section aria-labelledby="agent-overview-heading">
+            <Collapsible>
+              <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+                <h2
+                  id="agent-overview-heading"
+                  className="text-base font-semibold tracking-tight text-foreground"
+                >
+                  Overview
+                </h2>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <AgentOverview kind={kind} agent={agent} />
+              </CollapsibleContent>
+            </Collapsible>
+          </section>
+        )}
         {showConnect && (
           <section
             id={AGENT_CONNECT_SECTION_ID}

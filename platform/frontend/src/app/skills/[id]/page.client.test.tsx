@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
@@ -105,7 +106,8 @@ describe("SkillDetailPage", () => {
     mockSkill();
   });
 
-  it("reads the skill as cards: its content, who may use it, then the record itself", () => {
+  it("keeps content primary and reveals access/source facts from a collapsed Overview", async () => {
+    const user = userEvent.setup();
     render(<SkillDetailPage id="skill-1" />);
 
     expect(
@@ -123,27 +125,21 @@ describe("SkillDetailPage", () => {
     // No save anywhere: editing goes through the wizard.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
 
-    // Who may use it, and where.
-    const access = section("Who can use it");
-    expect(access.getByText("All environments")).toBeInTheDocument();
-    // A skill only its owner can reach says so through the page title's
-    // scope badge; "Accessible to: Me" repeated it and was cut.
-    expect(screen.queryByText("Accessible to")).toBeNull();
-
-    // The record itself, last and with nothing to edit.
-    const details = section("Details");
-    expect(details.getByText("skill-1")).toBeInTheDocument();
+    const overview = screen.getByRole("button", { name: "Overview" });
+    expect(overview).toHaveAttribute("aria-expanded", "false");
     expect(
-      details.getByRole("button", { name: /copy to clipboard/i }),
-    ).toBeInTheDocument();
-    expect(details.getByText("Written in Archestra")).toBeInTheDocument();
-    expect(details.getByText("v7")).toBeInTheDocument();
-    expect(details.getByText(/3 times/)).toBeInTheDocument();
-    expect(details.getByText("Created")).toBeInTheDocument();
-    expect(details.getByText("Last updated")).toBeInTheDocument();
-    // The skill row records when it changed, never by whom.
-    expect(details.queryByText(/updated by/i)).toBeNull();
-    expect(details.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
+      screen.queryByRole("heading", { name: "Access and source" }),
+    ).toBeNull();
+
+    await user.click(overview);
+    expect(overview).toHaveAttribute("aria-expanded", "true");
+    const access = section("Access and source");
+    expect(access.getByText("All environments")).toBeInTheDocument();
+    expect(screen.queryByText("Accessible to")).toBeNull();
+    expect(access.getByText("Written in Archestra")).toBeInTheDocument();
+    expect(access.getByText("v7")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
+    expect(screen.queryByText("skill-1")).toBeNull();
   });
 
   it("keeps a single Edit in the header instead of repeating it on cards", () => {
@@ -157,9 +153,6 @@ describe("SkillDetailPage", () => {
         name: /^Edit\b/,
       }),
     ).toBeNull();
-    expect(
-      section("Who can use it").queryByRole("link", { name: /^Edit\b/ }),
-    ).toBeNull();
   });
 
   it("offers no Edit anywhere to someone who may not update skills", () => {
@@ -171,7 +164,8 @@ describe("SkillDetailPage", () => {
     expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 
-  it("says where a synced skill's content comes from and how it keeps up", () => {
+  it("says where a synced skill's content comes from and how it keeps up", async () => {
+    const user = userEvent.setup();
     mockSkill({
       sourceType: "github",
       sourceRef: "acme/skills@main",
@@ -182,6 +176,7 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Synced from GitHub")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Overview" }));
     expect(screen.getByRole("link", { name: /acme\/skills/ })).toHaveAttribute(
       "href",
       "https://github.com/acme/skills/tree/main",

@@ -13,6 +13,10 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import {
+  agentAction,
+  getAgentActionModel,
+} from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import {
   type TableRowAction,
@@ -29,7 +33,6 @@ type Agent = NonNullable<
 type AgentActionsProps = {
   agent: Agent;
   canModify: boolean;
-  onConnect: (agent: Pick<Agent, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Agent) => void;
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
@@ -59,7 +62,6 @@ type AgentActionsProps = {
 export function AgentActions({
   agent,
   canModify,
-  onConnect,
   onEdit,
   onView,
   onDelete,
@@ -74,6 +76,15 @@ export function AgentActions({
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
+  const actionModel = getAgentActionModel({ kind: "agent", agent });
+  const connectAction = agentAction(actionModel, "connect");
+  const chatAction = agentAction(actionModel, "chat");
+  const editAction = agentAction(actionModel, "edit");
+  const cloneAction = agentAction(actionModel, "clone");
+  const exportAction = agentAction(actionModel, "export");
+  const historyAction = agentAction(actionModel, "history");
+  const convertAction = agentAction(actionModel, "convert");
+  const deleteAction = agentAction(actionModel, "delete");
 
   if (isDeleted) {
     return (
@@ -83,7 +94,7 @@ export function AgentActions({
           {
             icon: <RotateCcw className="h-4 w-4" />,
             label: ACTION_LABEL.restore,
-            permissions: { agent: ["delete"] },
+            permissions: deleteAction.permissions,
             disabled: !canModify,
             disabledTooltip: notYoursToChange({
               resource: "agent",
@@ -108,13 +119,13 @@ export function AgentActions({
     canModify || isBuiltIn
       ? {
           icon: <Pencil className="h-4 w-4" />,
-          label: ACTION_LABEL.edit,
+          label: editAction.label,
           // A built-in agent is an org-wide record that only a resource admin
           // may change (`requireAgentModifyPermission`), so the row asks for
           // the permission the destination will actually check. Asking for
           // `agent:update` let any holder of it through to an edit page that
           // renders every field disabled.
-          permissions: isBuiltIn ? { agent: ["admin"] } : { agent: ["update"] },
+          permissions: editAction.permissions,
           disabled: !canModify && !isBuiltIn,
           disabledTooltip: notYoursToChange({
             resource: "agent",
@@ -131,21 +142,26 @@ export function AgentActions({
         };
 
   const primaryActions: TableRowAction[] = [
-    {
-      icon: <Plug className="h-4 w-4" />,
-      label: ACTION_LABEL.connect,
-      disabled: isBuiltIn,
-      disabledTooltip: "Built-in agents cannot be connected",
-      onClick: () => onConnect(agent),
-      testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
-    },
-    {
-      icon: <MessageSquare className="h-4 w-4" />,
-      label: ACTION_LABEL.chat,
-      disabled: isBuiltIn,
-      disabledTooltip: "Built-in agents cannot be chatted with",
-      href: `/chat/new?agent_id=${agent.id}`,
-    },
+    ...(connectAction.visible
+      ? [
+          {
+            icon: <Plug className="h-4 w-4" />,
+            label: connectAction.label,
+            permissions: connectAction.permissions,
+            href: connectAction.href,
+            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
+          },
+        ]
+      : []),
+    ...(chatAction.visible
+      ? [
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: chatAction.label,
+            href: chatAction.href,
+          },
+        ]
+      : []),
     editOrViewAction,
   ];
 
@@ -171,19 +187,19 @@ export function AgentActions({
       : []),
     {
       icon: <Copy className="h-4 w-4" />,
-      label: ACTION_LABEL.clone,
+      label: cloneAction.label,
       disabled: isBuiltIn,
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be cloned"
         : undefined,
-      permissions: { agent: ["create"] },
+      permissions: cloneAction.permissions,
       onClick: () => onClone(agent),
       testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
     {
       icon: <Download className="h-4 w-4" />,
-      label: "Export",
-      permissions: { agent: ["read"] },
+      label: exportAction.label,
+      permissions: exportAction.permissions,
       disabled: isBuiltIn || agent.agentType !== "agent",
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be exported"
@@ -194,15 +210,15 @@ export function AgentActions({
     },
     {
       icon: <History className="h-4 w-4" />,
-      label: ACTION_LABEL.versionHistory,
-      permissions: { agent: ["read"] },
+      label: historyAction.label,
+      permissions: historyAction.permissions,
       testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
       onClick: () => onHistory(agent.id, canModify),
     },
     {
       icon: <Sparkles className="h-4 w-4" />,
-      label: "Convert to skill",
-      permissions: { skill: ["create"] },
+      label: convertAction.label,
+      permissions: convertAction.permissions,
       disabled: isBuiltIn || agent.agentType !== "agent",
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be converted"
@@ -213,8 +229,8 @@ export function AgentActions({
     },
     {
       icon: <Trash2 className="h-4 w-4" />,
-      label: ACTION_LABEL.delete,
-      permissions: { agent: ["delete"] },
+      label: deleteAction.label,
+      permissions: deleteAction.permissions,
       disabled: isBuiltIn || !canModify,
       disabledTooltip: isBuiltIn
         ? "Built-in agents cannot be deleted"

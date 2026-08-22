@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { WizardFooter } from "@/components/wizard-footer";
 import {
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
@@ -209,9 +210,10 @@ export default function NewMcpCatalogItemPage() {
       )}
 
       {(!catalogEnabled || step === "configure") && (
-        <div className="flex flex-col rounded-lg border">
+        <div className="flex flex-col">
           <McpCatalogForm
             mode="create"
+            wizardPanel
             onSubmit={onSubmit}
             formValues={prefilledValues ?? cloneValues}
             notice={
@@ -227,7 +229,7 @@ export default function NewMcpCatalogItemPage() {
               ) : undefined
             }
             footer={({ hasBlockingErrors }) => (
-              <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+              <WizardFooter>
                 {cloneSourceId || !catalogEnabled ? (
                   <Button variant="outline" type="button" asChild>
                     <Link href="/mcp/registry">Cancel</Link>
@@ -248,7 +250,7 @@ export default function NewMcpCatalogItemPage() {
                 >
                   {createMutation.isPending ? "Adding..." : "Add Server"}
                 </Button>
-              </div>
+              </WizardFooter>
             )}
           />
         </div>

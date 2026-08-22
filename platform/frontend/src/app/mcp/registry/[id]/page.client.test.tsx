@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -172,18 +178,26 @@ const localItem = {
   },
 };
 
-function renderPage(overrides: Record<string, unknown> = {}) {
+function renderPage(
+  overrides: Record<string, unknown> = {},
+  options: { openOverview?: boolean } = {},
+) {
   useInternalMcpCatalog.mockReturnValue({
     data: [{ ...localItem, ...overrides }],
     isPending: false,
   });
   // Some of the page's children query directly; the page's own reads are
   // mocked above, so this client never fetches.
-  return render(
+  const result = render(
     <QueryClientProvider client={new QueryClient()}>
       <McpCatalogItemPage id="cat-1" />
     </QueryClientProvider>,
   );
+  if (options.openOverview !== false) {
+    const overview = screen.queryByRole("button", { name: "Overview" });
+    if (overview) fireEvent.click(overview);
+  }
+  return result;
 }
 
 /** The card whose heading names it. Every card title is one rank. */
@@ -241,39 +255,42 @@ describe("McpCatalogItemDetailPage overview", () => {
     });
   }
 
-  it("reads the command as one runnable line, from the API's argument array", () => {
+  it("collapses Overview by default and keeps installations visible", () => {
+    renderPage({}, { openOverview: false });
+
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("heading", { name: "Runtime" })).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Installations" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Installations" })).toHaveAttribute(
+      "href",
+      "/mcp/registry/cat-1?tab=credentials",
+    );
+  });
+
+  it("keeps editor-only command and installation prompts out of Overview", () => {
     renderPage();
 
-    const connection = section("Connection");
-    // Joined with spaces — reading the wizard's textarea shape here would
-    // spread the string into one character per argument.
+    expect(screen.queryByText("sh -c node server.js --port 8080")).toBeNull();
     expect(
-      connection.getByText("sh -c node server.js --port 8080"),
-    ).toBeInTheDocument();
-    expect(
-      connection.getByRole("button", { name: /copy/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Environment variables" }),
+    ).toBeNull();
+    expect(screen.queryByText("API_TOKEN")).toBeNull();
+    expect(screen.getByText("Default")).toBeVisible();
   });
 
   it("shows the deployment facts the wizard asks for", () => {
     renderPage();
 
-    const connection = section("Connection");
-    expect(connection.getByText(/Single-tenant/)).toBeInTheDocument();
-    expect(connection.getByText("stdio")).toBeInTheDocument();
-    expect(connection.getByText("Generated")).toBeInTheDocument();
-  });
-
-  it("names the environment variables, split by when they are supplied", () => {
-    renderPage();
-
-    const environment = section("Environment variables");
-    expect(environment.getByText("Asked at installation")).toBeInTheDocument();
-    expect(environment.getByText("API_TOKEN")).toBeInTheDocument();
-    expect(environment.getByText("Set on the server")).toBeInTheDocument();
-    expect(environment.getByText("LOG_LEVEL")).toBeInTheDocument();
-    expect(environment.getByText("From Kubernetes")).toBeInTheDocument();
-    expect(environment.getByText("shared-creds")).toBeInTheDocument();
+    const runtime = section("Runtime");
+    expect(runtime.getByText(/Single-tenant/)).toBeInTheDocument();
+    expect(runtime.getByText("stdio")).toBeInTheDocument();
+    expect(runtime.queryByText("Generated")).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -297,7 +314,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(auth.queryByText("shhh")).toBeNull();
   });
 
-  it("shows each team's access level, which the visibility badge cannot", () => {
+  it("leaves record metadata and exact tool inventory to their dedicated surfaces", () => {
     renderPage({
       scope: "team",
       teams: [
@@ -306,26 +323,10 @@ describe("McpCatalogItemDetailPage overview", () => {
       ],
     });
 
-    const teams = screen.getByText("Teams").parentElement as HTMLElement;
-    expect(within(teams).getByText("Platform")).toBeInTheDocument();
-    expect(within(teams).getByText("Manage")).toBeInTheDocument();
-    expect(within(teams).getByText("Support")).toBeInTheDocument();
-    expect(within(teams).getByText("Use")).toBeInTheDocument();
-  });
-
-  it("closes with the record itself: id, dates and owner, and no way to edit it", () => {
-    renderPage();
-
-    const details = section("Details");
-    expect(details.getByText("cat-1")).toBeInTheDocument();
-    expect(
-      details.getByRole("button", { name: /copy to clipboard/i }),
-    ).toBeInTheDocument();
-    expect(details.getByText("Created")).toBeInTheDocument();
-    expect(details.getByText("Last updated")).toBeInTheDocument();
-    expect(details.getByText("Admin")).toBeInTheDocument();
-    // The catalog row records when it changed, never by whom.
-    expect(details.queryByText(/updated by/i)).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Platform")).toBeNull();
+    expect(screen.queryByText("Support")).toBeNull();
   });
 
   it("keeps one Edit in the header and none on the overview cards", () => {
@@ -333,21 +334,17 @@ describe("McpCatalogItemDetailPage overview", () => {
 
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
       "href",
-      "/mcp/registry/cat-1/edit",
+      "/mcp/registry/cat-1/edit?step=configuration",
     );
-    for (const name of [
-      "Status",
-      "Connection",
-      "Authentication",
-      "Environment variables",
-      "Tools",
-      "Details",
-    ]) {
-      expect(section(name).queryByRole("link", { name: /^Edit\b/ })).toBeNull();
-    }
+    expect(
+      section("Runtime").queryByRole("link", { name: /^Edit\b/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Authentication" }),
+    ).toBeNull();
   });
 
-  it("reads the status the way the registry list does, so the two cannot disagree", () => {
+  it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {
     // A remote connection whose token was rejected: a row exists, and it is
     // not working. Deriving the status from the row alone read "Connected"
     // with a green dot directly above the notice saying otherwise.
@@ -370,23 +367,26 @@ describe("McpCatalogItemDetailPage overview", () => {
     } as unknown as ReturnType<typeof useMcpServerIssues>);
     renderPage({ serverType: "remote", localConfig: null });
 
-    const status = section("Status");
     const pageTitle = screen.getByRole("heading", { level: 1 });
     expect(within(pageTitle).queryByText("Needs re-authentication")).toBeNull();
     expect(
-      within(pageTitle.parentElement as HTMLElement).getByText(
+      within(pageTitle.parentElement as HTMLElement).queryByText(
         "Needs re-authentication",
       ),
-    ).toBeInTheDocument();
-    expect(status.queryByText("Needs re-authentication")).toBeNull();
-    // An authentication fault is explained beside the authentication
-    // configuration, not floating above the page.
-    expect(status.queryByTestId(/mcp-registry-attention-row/)).toBeNull();
+    ).toBeNull();
+    const issue = within(
+      screen.getByTestId("mcp-registry-attention-row-internal-tools"),
+    );
+    expect(issue.getByText("Needs re-authentication")).toBeVisible();
     expect(
-      section("Authentication").getByTestId(
-        "mcp-registry-attention-row-internal-tools",
-      ),
-    ).toBeInTheDocument();
+      issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
+    ).toBeVisible();
+    expect(issue.queryByRole("button", { name: "Re-authenticate" })).toBeNull();
+    expect(
+      issue.queryByRole("button", { name: "Edit configuration" }),
+    ).toBeNull();
+    expect(issue.queryByRole("button", { name: /More actions/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
   });
 
   it("repairs the selected connection inline without opening a dialog", async () => {
@@ -530,9 +530,11 @@ describe("McpCatalogItemDetailPage overview", () => {
 
     const pageTitle = screen.getByRole("heading", { level: 1 });
     expect(within(pageTitle).queryByText("Needs re-authentication")).toBeNull();
-    const titleRow = within(pageTitle.parentElement as HTMLElement);
-    expect(titleRow.getByText("Needs re-authentication")).toBeInTheDocument();
-    expect(titleRow.queryByText("Failed to start")).toBeNull();
+    const issue = within(
+      screen.getByTestId("mcp-registry-attention-row-internal-tools"),
+    );
+    expect(issue.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(issue.queryByText("Failed to start")).toBeNull();
   });
 
   it("does not claim a pod is running when no pod status has been reported", () => {
@@ -541,16 +543,15 @@ describe("McpCatalogItemDetailPage overview", () => {
 
     // A green dot is a claim about a pod. With Kubernetes reachable and no
     // entry for this install, the honest answer is that the state is unknown.
-    const status = section("Status");
-    expect(status.getByText("Status unavailable")).toBeInTheDocument();
-    expect(status.queryByText("Installed")).toBeNull();
+    expect(screen.getByText("Status unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Installed")).toBeNull();
   });
 
   it("says a remote server is installed, since it has no pod to be running", () => {
     installedWithNoDeploymentEntry();
     renderPage({ serverType: "remote", localConfig: null });
 
-    expect(section("Status").getByText("Installed")).toBeInTheDocument();
+    expect(screen.getByText("Installed")).toBeInTheDocument();
   });
 
   it("says it is still checking while the deployment feed is loading", () => {
@@ -561,13 +562,14 @@ describe("McpCatalogItemDetailPage overview", () => {
     });
     renderPage();
 
-    expect(section("Status").getByText("Checking…")).toBeInTheDocument();
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
   });
 
   it("says a built-in server is built in, rather than not installed", () => {
     renderPage({ serverType: "builtin", localConfig: null });
 
-    expect(section("Status").getByText("Built-in")).toBeInTheDocument();
+    expect(screen.getByText("Built-in")).toBeInTheDocument();
     expect(screen.queryByText("Not installed")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
   });
 });

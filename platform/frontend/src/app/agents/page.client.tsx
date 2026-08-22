@@ -472,9 +472,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <AgentActions
               agent={agent}
               canModify={canModify}
-              onConnect={(target) =>
-                router.push(agentDetailHref("agent", target.id, "connect"))
-              }
               onEdit={(target) =>
                 router.push(agentEditHref("agent", target.id))
               }

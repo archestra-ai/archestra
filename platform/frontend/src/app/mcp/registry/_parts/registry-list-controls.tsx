@@ -244,9 +244,9 @@ export function RegistryAttentionFacets({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-max items-center gap-2">
       <fieldset
-        className="flex min-w-0 flex-1 items-stretch rounded-md border p-0.5 sm:flex-none"
+        className="flex w-max items-stretch rounded-md border p-0.5"
         data-testid="mcp-registry-attention-facets"
       >
         <legend className="sr-only">
@@ -262,11 +262,11 @@ export function RegistryAttentionFacets({
             data-testid={`mcp-registry-facet-${facet ?? "all"}`}
             className={cn(
               typeRole({ role: "body" }),
-              "inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent sm:flex-none",
+              "inline-flex flex-none items-center justify-center gap-1 whitespace-nowrap rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent",
               selected === facet && "bg-secondary font-medium",
             )}
           >
-            <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+            <span>{label}</span>
             <span className="tabular-nums text-muted-foreground">
               ({count})
             </span>

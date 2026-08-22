@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ChartColumn,
+  ChevronDown,
   Github,
   History,
   MoreHorizontal,
@@ -13,11 +14,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
-import { CopyButton } from "@/components/copy-button";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,10 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
-  ACTION_LABEL,
   backToListLabel,
-  FIELD_LABEL,
-  formatCreated,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
 import { typeRole } from "@/lib/design/type-scale";
@@ -41,19 +43,23 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import { useSkill } from "@/lib/skills/skill.query";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
 import type { SkillDetail } from "../_parts/github-sync-panel";
 import {
-  SKILL_PAGE_EDITOR_CLASS,
+  getSkillActionModel,
+  skillAction,
+  skillActionHref,
+} from "../_parts/skill-actions-model";
+import {
+  SKILL_DETAIL_EDITOR_CLASS,
   SkillContentEditor,
 } from "../_parts/skill-content-editor";
 import { isSyncedGithubSkill } from "../_parts/skill-draft";
 import {
   SKILL_DESCRIPTION_FALLBACK,
-  skillEditHref,
   skillGithubSourceRepo,
 } from "../_parts/skill-page-config";
 import {
@@ -133,6 +139,11 @@ function SkillDetailView({
   // private one has nothing to add.
   const isShared = skill.teams.length > 0 || (skill.users ?? []).length > 0;
   const manifest = useMemo(() => composeManifest(skill), [skill]);
+  const actionModel = getSkillActionModel(skill.id);
+  const editAction = skillAction(actionModel, "edit");
+  const usageAction = skillAction(actionModel, "usage");
+  const historyAction = skillAction(actionModel, "history");
+  const deleteAction = skillAction(actionModel, "delete");
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -179,22 +190,22 @@ function SkillDetailView({
           {isAccessPending ? (
             <Skeleton className="h-9 w-20" />
           ) : canEdit ? (
-            <PermissionButton permissions={{ skill: ["update"] }} asChild>
-              <Link href={skillEditHref(skill.id)}>
+            <PermissionButton permissions={editAction.permissions} asChild>
+              <Link href={skillActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
-                {ACTION_LABEL.edit}
+                {editAction.label}
               </Link>
             </PermissionButton>
           ) : (
             // Refused, not removed: a reader who simply cannot see Edit has no
             // way to learn the skill is not theirs to change.
             <PermissionButton
-              permissions={{ skill: ["update"] }}
+              permissions={editAction.permissions}
               disabled={canUpdate}
               tooltip={canUpdate ? notYours : undefined}
             >
               <Pencil className="h-4 w-4" />
-              {ACTION_LABEL.edit}
+              {editAction.label}
             </PermissionButton>
           )}
           <DropdownMenu>
@@ -205,13 +216,13 @@ function SkillDetailView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
-                <History className="h-4 w-4" />
-                {ACTION_LABEL.versionHistory}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setUsageOpen(true)}>
                 <ChartColumn className="h-4 w-4" />
-                Usage
+                {usageAction.label}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="h-4 w-4" />
+                {historyAction.label}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
@@ -236,7 +247,7 @@ function SkillDetailView({
                 }}
               >
                 <Trash2 className="h-4 w-4" />
-                {ACTION_LABEL.delete}
+                {deleteAction.label}
                 {/* The reason as text, not only as a tooltip: a menu item
                     reached by keyboard never opens one. `aria-hidden` keeps it
                     out of the accessible name, where it would duplicate the
@@ -257,10 +268,64 @@ function SkillDetailView({
         </div>
       }
     >
-      {/* One card per subject, the wizard's column wide and in the wizard's
-          order: what the skill says, then who may use it, then the record
-          itself. The page's single Edit lives in the header. */}
-      <div className="space-y-4">
+      <div className="space-y-10">
+        <section aria-labelledby="skill-overview-heading">
+          <Collapsible>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+              <h2
+                id="skill-overview-heading"
+                className="text-base font-semibold tracking-tight text-foreground"
+              >
+                Overview
+              </h2>
+              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <section className="space-y-4 rounded-lg border bg-card p-4">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Access and source
+                </h3>
+                <FactGrid>
+                  <Fact label="Environment">
+                    {skill.environments.length === 0 ? (
+                      <span>All environments</span>
+                    ) : (
+                      <ul className="flex flex-wrap gap-1.5">
+                        {skill.environments.map((environment) => (
+                          <li key={environment.id}>
+                            <Badge variant="outline" className="font-normal">
+                              {environment.name}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Fact>
+                  {isShared && (
+                    <Fact label="Shared with">
+                      <ResourceVisibilityBadge
+                        scope={skill.scope}
+                        teams={skill.teams}
+                        users={skill.users}
+                        authorId={skill.authorId}
+                        authorName={undefined}
+                        currentUserId={currentUserId}
+                        showSelfAsMe={false}
+                      />
+                    </Fact>
+                  )}
+                  <Fact label="Source">
+                    <SourceFact skill={skill} />
+                  </Fact>
+                  <Fact label="Version">
+                    <span>v{skill.latestVersion}</span>
+                  </Fact>
+                </FactGrid>
+              </section>
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
+
         <SkillCard title="Instructions and files" spacious>
           <SkillContentEditor
             manifest={manifest}
@@ -269,93 +334,8 @@ function SkillDetailView({
             onFilesChange={noop}
             readOnly
             readOnlyMarker={false}
-            className={SKILL_PAGE_EDITOR_CLASS}
+            className={SKILL_DETAIL_EDITOR_CLASS}
           />
-        </SkillCard>
-
-        <SkillCard title="Who can use it">
-          <FactGrid>
-            <Fact label={FIELD_LABEL.environment}>
-              {skill.environments.length === 0 ? (
-                <span>All environments</span>
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {skill.environments.map((environment) => (
-                    <li key={environment.id}>
-                      <Badge variant="outline" className="font-normal">
-                        {environment.name}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Fact>
-            {/* Only when the badge has something the page title's scope badge
-                does not already carry. "Accessible to: Me" on a page only its
-                owner can open was a tautology. */}
-            {isShared && (
-              <Fact label="Shared with">
-                <ResourceVisibilityBadge
-                  scope={skill.scope}
-                  teams={skill.teams}
-                  users={skill.users}
-                  authorId={skill.authorId}
-                  authorName={undefined}
-                  currentUserId={currentUserId}
-                  showSelfAsMe={false}
-                />
-              </Fact>
-            )}
-          </FactGrid>
-        </SkillCard>
-
-        {/* The last change is a date only: a skill row records when it changed,
-            never by whom, and its author is not resolvable on this page. */}
-        <SkillCard title="Details">
-          <FactGrid>
-            <Fact label="ID">
-              <span className="flex min-w-0 items-center gap-1">
-                <code
-                  className={cn(typeRole({ role: "code" }), "min-w-0 truncate")}
-                >
-                  {skill.id}
-                </code>
-                <CopyButton text={skill.id} className="shrink-0" />
-              </span>
-            </Fact>
-            <Fact label="Source">
-              <SourceFact skill={skill} />
-            </Fact>
-            <Fact label="Version">
-              <span>v{skill.latestVersion}</span>
-            </Fact>
-            <Fact label="Used">
-              {skill.usageCount === 0 ? (
-                <span>Never</span>
-              ) : (
-                <span>
-                  {skill.usageCount} {skill.usageCount === 1 ? "time" : "times"}
-                  {skill.lastUsedAt ? (
-                    <span>
-                      {" "}
-                      · last{" "}
-                      {formatRelativeTimeFromNow(
-                        skill.lastUsedAt,
-                      ).toLowerCase()}
-                    </span>
-                  ) : null}
-                </span>
-              )}
-            </Fact>
-            <Fact label={FIELD_LABEL.created}>
-              <span>{formatCreated({ createdAt: skill.createdAt })}</span>
-            </Fact>
-            <Fact label={FIELD_LABEL.lastUpdated}>
-              <span>
-                {formatDate({ date: skill.updatedAt, dateFormat: "PP" })}
-              </span>
-            </Fact>
-          </FactGrid>
         </SkillCard>
       </div>
 

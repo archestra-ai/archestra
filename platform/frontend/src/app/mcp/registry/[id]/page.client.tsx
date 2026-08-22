@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  E2eTestId,
-  isPlaywrightCatalogItem,
-  MCP_CATALOG_CLONE_QUERY_PARAM,
-  parseFullToolName,
-} from "@archestra/shared";
+import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
   ArrowLeft,
+  ChevronDown,
   Copy,
   KeyRound,
   MessageSquare,
@@ -15,16 +11,14 @@ import {
   MoreHorizontal,
   PackageX,
   Pencil,
-  PlugZap,
   RefreshCw,
-  ShieldCheck,
+  Server,
   Trash2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
-import { CopyButton } from "@/components/copy-button";
-import { CopyableCode } from "@/components/copyable-code";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { EntityPill } from "@/components/entity-pill";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
@@ -32,7 +26,12 @@ import type { SettingTone } from "@/components/setting-icon";
 import { SettingGroup, SettingRow } from "@/components/setting-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,14 +47,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
-import { FIELD_LABEL, formatCreated } from "@/lib/design/resource-lexicon";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import {
-  useCatalogTools,
   useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -66,16 +63,13 @@ import {
   useMcpInstallationStatusCacheSync,
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
-import type {
-  McpServerIssue,
-  McpServerIssueKind,
-} from "@/lib/mcp/mcp-server-issues";
+import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import {
   useDefaultEnvironment,
   useOrganization,
 } from "@/lib/organization.query";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
@@ -92,9 +86,13 @@ import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import {
+  getMcpServerActionModel,
+  mcpServerAction,
+  mcpServerActionHref,
+} from "../_parts/mcp-server-actions-model";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
-import { McpServerIssueBadge } from "../_parts/mcp-server-issue-badge";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
@@ -135,8 +133,7 @@ const LOGS_TAB_BY_ID: Record<string, McpLogsTab> = {
   shell: "debug",
 };
 
-// How many tools to preview on the Overview before linking out to guardrails.
-const TOOLS_PREVIEW_LIMIT = 6;
+const MCP_CONNECTIONS_SECTION_ID = "connections";
 
 export function McpCatalogItemPage({ id }: { id: string }) {
   const router = useRouter();
@@ -233,10 +230,13 @@ function CatalogItemDetails({
       : item.serverType === "remote"
         ? "remote"
         : "local";
+  const actionModel = getMcpServerActionModel(item);
+  const connectionsAction = mcpServerAction(actionModel, "connections");
+  const editAction = mcpServerAction(actionModel, "edit");
+  const cloneAction = mcpServerAction(actionModel, "clone");
+  const deleteAction = mcpServerAction(actionModel, "delete");
   const isPlaywright = isPlaywrightCatalogItem(item.id);
 
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
   const { canModify } = useCanModifyCatalogItem(
     variant !== "builtin" ? item : null,
   );
@@ -256,7 +256,6 @@ function CatalogItemDetails({
   // silenced fault here and the live one in the list.
   const statusIssue = itemIssues?.find((i) => !i.muted) ?? itemIssues?.[0];
   useMcpInstallationStatusCacheSync();
-  const { data: tools = [] } = useCatalogTools(item.id);
 
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
@@ -271,9 +270,6 @@ function CatalogItemDetails({
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
-  );
-  const hasPersonalConnection = allServersForCatalog.some(
-    (s) => s.ownerId === currentUserId && !s.teamId,
   );
 
   // Aggregate installations for the logs/inspector dropdown — local installs
@@ -331,12 +327,10 @@ function CatalogItemDetails({
   // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin";
 
-  // Every tab beyond the always-present Overview dashboard. Usage is always
-  // present: "nothing uses this yet" is itself an answer, and it keeps the
-  // ?tab=usage deep link from the registry card's hover card always resolvable.
+  // Overview and Credentials/Installations share the unified main page. Only
+  // secondary operational views remain in the tab strip.
   const tabIds: DetailTab[] = [
     "usage",
-    ...(showConnectionsTab ? (["credentials"] as DetailTab[]) : []),
     ...diagnosticTabs.map((panel) => panel.id),
   ];
 
@@ -345,17 +339,14 @@ function CatalogItemDetails({
   const tabParam = searchParams.get("tab");
   const serverParam = searchParams.get("server");
 
-  // The URL is the single source of truth for the selected tab — the tab bar
-  // renders links, so a click, a shared deep link and the back button all take
-  // the same path. A ?tab= naming a tab that isn't available yet (diagnostics
-  // appear only once an install loads) falls back to Overview and resolves on
-  // its own when the tab shows up.
+  // Legacy Overview links and Credentials/Installations deep links resolve to
+  // the unified main page. Secondary tabs remain URL-driven.
   const effectiveTab: DetailTab =
     tabParam && tabIds.includes(tabParam as DetailTab)
       ? (tabParam as DetailTab)
       : "overview";
   const reauthServer =
-    effectiveTab === "credentials" && serverParam
+    tabParam === "credentials" && serverParam
       ? allServersForCatalog.find(
           (server) => server.id === serverParam && !!server.oauthRefreshError,
         )
@@ -389,25 +380,10 @@ function CatalogItemDetails({
   }).total;
 
   const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
-    { label: "Overview", href: tabHref("overview") },
     {
       label: <TabLabel title="Usage" count={agentUsageCount} />,
       href: tabHref("usage"),
     },
-    ...(showConnectionsTab
-      ? [
-          {
-            label: (
-              <TabLabel
-                title={variant === "local" ? "Installations" : "Credentials"}
-                count={connectionsCount}
-              />
-            ),
-            href: tabHref("credentials"),
-            testId: E2eTestId.McpServerSettingsConnectionsNavButton,
-          },
-        ]
-      : []),
     ...diagnosticTabs.map((panel) => ({
       label: panel.title,
       href: tabHref(panel.id),
@@ -427,13 +403,7 @@ function CatalogItemDetails({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  // Install inline on this page (no navigation). The dialog lets the user pick
-  // scope/credential; the add-* helpers pre-target a personal/team/org scope.
   const install = useCatalogInstall();
-  const openInstall = () =>
-    item.serverType === "local"
-      ? install.installLocal(item)
-      : install.installRemote(item);
 
   // "Chat" spins up (or reuses) a personal agent with this catalog's tools —
   // same flow and visibility gate as the registry card. The gate reads
@@ -451,13 +421,12 @@ function CatalogItemDetails({
   const canRestartPods =
     canModify && variant === "local" && deploymentServerIds.length > 0;
 
-  // Where each outstanding issue is explained: beside the configuration that
-  // caused it, so the diagnosis and the remedy are one card apart.
-  const issuesByCard = groupIssuesByCard(itemIssues ?? [], {
-    // The built-in server is not reached over a connection anybody configures,
-    // so `ConfigurationSections` renders no Connection card for it.
-    hasConnectionCard: item.serverType !== "builtin",
-  });
+  useEffect(() => {
+    if (tabParam !== "credentials" || !showConnectionsTab) return;
+    document
+      .getElementById(MCP_CONNECTIONS_SECTION_ID)
+      ?.scrollIntoView?.({ block: "start" });
+  }, [showConnectionsTab, tabParam]);
 
   return (
     <PageLayout
@@ -477,12 +446,22 @@ function CatalogItemDetails({
             providesSkills={item.providesSkills}
             skillCount={item.skillCount}
           />
+          {item.serverType !== "builtin" && (
+            <Badge variant="outline" className="font-normal">
+              {environmentLabel ?? defaultEnvironment.name}
+            </Badge>
+          )}
         </div>
       }
       status={
-        statusIssue ? (
-          <McpServerIssueBadge issue={statusIssue} showDetail={false} />
-        ) : undefined
+        statusIssue ? undefined : (
+          <ServerStatus
+            variant={variant}
+            deploymentSummary={deploymentSummary}
+            deploymentFeedState={deploymentFeedState}
+            connectionsCount={connectionsCount}
+          />
+        )
       }
       documentTitle={item.name}
       backLink={<BackToRegistryLink />}
@@ -490,10 +469,16 @@ function CatalogItemDetails({
       tabs={tabs}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
-          {!hasPersonalConnection && variant !== "builtin" && (
-            <Button variant="outline" onClick={openInstall}>
-              <PlugZap className="h-4 w-4" />
-              Install
+          {connectionsAction.href && (
+            <Button variant="outline" asChild>
+              <Link href={connectionsAction.href}>
+                {variant === "local" ? (
+                  <Server className="h-4 w-4" />
+                ) : (
+                  <Users className="h-4 w-4" />
+                )}
+                {connectionsAction.label}
+              </Link>
             </Button>
           )}
           {showChatButton && (
@@ -508,9 +493,9 @@ function CatalogItemDetails({
           )}
           {canModify && (
             <Button asChild>
-              <Link href={`/mcp/registry/${item.id}/edit`}>
+              <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
-                Edit
+                {editAction.label}
               </Link>
             </Button>
           )}
@@ -542,13 +527,11 @@ function CatalogItemDetails({
                 {userCanCreateCatalogItem && !isPlaywright && (
                   <DropdownMenuItem
                     onClick={() =>
-                      router.push(
-                        `/mcp/registry/new?${MCP_CATALOG_CLONE_QUERY_PARAM}=${item.id}`,
-                      )
+                      router.push(mcpServerActionHref(cloneAction))
                     }
                   >
                     <Copy className="h-4 w-4" />
-                    Clone
+                    {cloneAction.label}
                   </DropdownMenuItem>
                 )}
                 {canModify && !isPlaywright && (
@@ -559,7 +542,7 @@ function CatalogItemDetails({
                       onClick={() => setDeleteRequested(true)}
                     >
                       <Trash2 className="h-4 w-4" />
-                      Delete
+                      {deleteAction.label}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -578,200 +561,84 @@ function CatalogItemDetails({
         )}
 
         {effectiveTab === "overview" && (
-          <div className="space-y-4">
-            {/* One compact card per subject. The aggregate issue is visible
-                beside the page title; its diagnosis appears only in the card
-                that owns the failing configuration. */}
-            <DetailCard title="Status">
-              <ServerStatus
-                variant={variant}
-                deploymentSummary={deploymentSummary}
-                deploymentFeedState={deploymentFeedState}
-                connectionsCount={connectionsCount}
-              />
-              {/* An issue that belongs to the catalog entry rather than to any
-                  one installation has no configuration card to sit under. */}
-              <CardIssues
-                item={item}
-                issues={issuesByCard.summary}
-                servers={allServersForCatalog}
-              />
-            </DetailCard>
+          <div className="space-y-10">
+            {item.serverType !== "builtin" && (
+              <section aria-labelledby="mcp-overview-heading">
+                <Collapsible>
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+                    <h2
+                      id="mcp-overview-heading"
+                      className="text-base font-semibold tracking-tight text-foreground"
+                    >
+                      Overview
+                    </h2>
+                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-4">
+                    <ConfigurationSections item={item} />
+                  </CollapsibleContent>
+                </Collapsible>
+              </section>
+            )}
 
-            <ConfigurationSections
+            <CardIssues
               item={item}
-              environmentLabel={environmentLabel ?? defaultEnvironment.name}
+              issues={itemIssues ?? []}
               servers={allServersForCatalog}
-              issues={issuesByCard}
             />
 
-            <DetailCard title="Tools">
-              {tools.length === 0 ? (
-                <Empty className="border-0 py-8">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <ShieldCheck />
-                    </EmptyMedia>
-                    <EmptyTitle>No tools discovered yet</EmptyTitle>
-                    <EmptyDescription>
-                      Tools appear once the server is connected and reachable.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <>
-                  <ul className="divide-y divide-border">
-                    {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
-                      <li
-                        key={tool.name}
-                        className="py-2.5 first:pt-0 last:pb-0"
-                      >
-                        <code
-                          className={cn(
-                            typeRole({ role: "code" }),
-                            "font-medium",
-                          )}
-                        >
-                          {parseFullToolName(tool.name).toolName || tool.name}
-                        </code>
-                        {tool.description && (
-                          <p
-                            className={cn(
-                              typeRole({ role: "meta" }),
-                              "mt-0.5 line-clamp-2",
-                            )}
-                          >
-                            {tool.description}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {tools.length > TOOLS_PREVIEW_LIMIT && (
-                    <p className={typeRole({ role: "meta" })}>
-                      Showing {TOOLS_PREVIEW_LIMIT} of {tools.length} tools.
-                    </p>
-                  )}
-                </>
-              )}
-            </DetailCard>
-
-            {/* The record itself, last: nothing here was written on a wizard
-                step, so the card offers no way into one, and the last change
-                is a date alone — the catalog row records when it changed,
-                never by whom. */}
-            <DetailCard title="Details">
-              <FieldGrid>
-                <OverviewField label="ID">
-                  <span className="flex min-w-0 items-center gap-1">
-                    <code
-                      className={cn(
-                        typeRole({ role: "code" }),
-                        "min-w-0 truncate",
-                      )}
-                    >
-                      {item.id}
-                    </code>
-                    <CopyButton text={item.id} className="shrink-0" />
-                  </span>
-                </OverviewField>
-                <OverviewField label={FIELD_LABEL.created}>
-                  {formatCreated({ createdAt: item.createdAt })}
-                </OverviewField>
-                <OverviewField label={FIELD_LABEL.lastUpdated}>
-                  {formatDate({ date: item.updatedAt, dateFormat: "PP" })}
-                </OverviewField>
-                {/* Unlike the agent and skill pages, this page's title
-                    carries the server's type rather than its scope, so an
-                    org-wide server would otherwise read like a personal one.
-                    A personal server says nothing: this page is only
-                    reachable by the person it belongs to. */}
-                {item.scope === "org" && (
-                  <OverviewField label={FIELD_LABEL.accessibleTo}>
-                    Everyone in the organization
-                  </OverviewField>
-                )}
-                {item.scope === "team" && item.teams.length > 0 ? (
-                  // The wizard grants each team either level, which no scope
-                  // badge can say.
-                  <OverviewField label="Teams">
-                    <ul className="flex flex-wrap gap-1.5">
-                      {item.teams.map((team) => (
-                        <li key={team.id}>
-                          <EntityPill
-                            name={team.name}
-                            note={team.level === "write" ? "Manage" : "Use"}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </OverviewField>
-                ) : item.authorName ? (
-                  <OverviewField label="Owner">{item.authorName}</OverviewField>
-                ) : null}
-                {item.labels.length > 0 && (
-                  <OverviewField label="Labels">
-                    <div className="flex flex-wrap gap-1.5">
-                      {item.labels.map((label) => (
-                        <Badge
-                          key={`${label.key}-${label.value}`}
-                          variant="outline"
-                          className="font-normal"
-                        >
-                          {label.key}: {label.value}
-                        </Badge>
-                      ))}
-                    </div>
-                  </OverviewField>
-                )}
-              </FieldGrid>
-            </DetailCard>
+            {showConnectionsTab && (
+              <section
+                id={MCP_CONNECTIONS_SECTION_ID}
+                aria-labelledby="mcp-connections-heading"
+                className="scroll-mt-24 space-y-4"
+              >
+                <h2
+                  id="mcp-connections-heading"
+                  className="text-base font-semibold tracking-tight text-foreground"
+                  data-testid={E2eTestId.McpServerSettingsConnectionsNavButton}
+                >
+                  <TabLabel
+                    title={
+                      variant === "local" ? "Installations" : "Credentials"
+                    }
+                    count={connectionsCount}
+                  />
+                </h2>
+                <div className="space-y-4 rounded-lg border bg-card p-4">
+                  {reauthServer ? (
+                    <InlineMcpReauthentication
+                      item={item}
+                      server={reauthServer}
+                      onClose={closeReauthentication}
+                      onCompleted={closeReauthentication}
+                    />
+                  ) : null}
+                  <ManageUsersContent
+                    isActive
+                    onClose={() => {}}
+                    label={item.name}
+                    catalogId={item.id}
+                    onAddPersonalConnection={() =>
+                      install.addPersonalConnection(item)
+                    }
+                    onAddSharedConnection={(teamId) =>
+                      install.addSharedConnection(item, teamId)
+                    }
+                    onAddOrgConnection={() => install.addOrgConnection(item)}
+                    deploymentStatuses={deploymentStatuses}
+                    hideHeader
+                    bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
+                    isInstalling={install.installingItemId === item.id}
+                    onReauthenticate={selectReauthServer}
+                    onOpenPodLogs={
+                      variant === "local" ? openPodLogs : undefined
+                    }
+                  />
+                </div>
+              </section>
+            )}
           </div>
-        )}
-
-        {effectiveTab === "credentials" && showConnectionsTab && (
-          <Card>
-            <CardHeader>
-              <h2 className="text-base font-semibold">
-                {variant === "local" ? "Installations" : "Credentials"}
-              </h2>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {reauthServer ? (
-                <InlineMcpReauthentication
-                  item={item}
-                  server={reauthServer}
-                  onClose={closeReauthentication}
-                  onCompleted={closeReauthentication}
-                />
-              ) : (
-                <CardIssues
-                  item={item}
-                  issues={issuesByCard.authentication}
-                  servers={allServersForCatalog}
-                />
-              )}
-              <ManageUsersContent
-                isActive
-                onClose={() => {}}
-                label={item.name}
-                catalogId={item.id}
-                onAddPersonalConnection={() =>
-                  install.addPersonalConnection(item)
-                }
-                onAddSharedConnection={(teamId) =>
-                  install.addSharedConnection(item, teamId)
-                }
-                onAddOrgConnection={() => install.addOrgConnection(item)}
-                deploymentStatuses={deploymentStatuses}
-                hideHeader
-                bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
-                isInstalling={install.installingItemId === item.id}
-                onReauthenticate={selectReauthServer}
-                onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
-              />
-            </CardContent>
-          </Card>
         )}
 
         {/* Diagnostics — Logs / Inspector / Shell share one mounted panel so the
@@ -825,17 +692,7 @@ function CatalogItemDetails({
  * all three were written — the mapping cards owe the wizard is that every
  * card leads to exactly one step, not that every step has exactly one card.
  */
-function ConfigurationSections({
-  item,
-  environmentLabel,
-  servers,
-  issues,
-}: {
-  item: CatalogItem;
-  environmentLabel: string;
-  servers: InstalledServer[];
-  issues: IssuesByCard;
-}) {
+function ConfigurationSections({ item }: { item: CatalogItem }) {
   const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
   const { data: identityProviders = [] } = useIdentityProviders();
   const isLocal = item.serverType === "local";
@@ -852,28 +709,16 @@ function ConfigurationSections({
         (provider) => provider.id === managed.identityProviderId,
       )?.issuer ?? "Not visible to you")
     : null;
-  const commandLine = [local?.command, ...(local?.arguments ?? [])]
-    .filter(Boolean)
-    .join(" ");
-  const envVars = local?.environment ?? [];
-  const promptedVars = envVars.filter(
-    (variable) => variable.promptOnInstallation,
-  );
-  const fixedVars = envVars.filter(
-    (variable) => !variable.promptOnInstallation,
-  );
-  const envFrom = local?.envFrom ?? [];
   const headers = values.additionalHeaders ?? [];
+  const showsAuthentication =
+    values.authMethod !== "none" || !!managed || headers.length > 0;
   return (
-    <>
+    <div className="space-y-4">
       {/* The built-in server is not reached over a connection anybody
           configures, so it has no Connection card rather than an empty one. */}
       {item.serverType !== "builtin" && (
-        <DetailCard title="Connection">
+        <DetailCard title={isLocal ? "Runtime" : "Connection"}>
           <FieldGrid>
-            <OverviewField label={FIELD_LABEL.environment}>
-              {environmentLabel}
-            </OverviewField>
             {item.serverType === "remote" && item.serverUrl && (
               <OverviewField
                 label="Server URL"
@@ -905,33 +750,12 @@ function ConfigurationSections({
                     </span>
                   )}
                 </OverviewField>
-                <OverviewField label="Deployment spec">
-                  {item.deploymentSpecYaml ? "Customized" : "Generated"}
-                </OverviewField>
                 {local?.dockerImage && (
                   <OverviewField
                     label="Image"
                     className="sm:col-span-2 lg:col-span-3"
                   >
                     <CodeLine>{local.dockerImage}</CodeLine>
-                  </OverviewField>
-                )}
-                {commandLine && (
-                  <OverviewField
-                    label="Command"
-                    className="sm:col-span-2 lg:col-span-3"
-                  >
-                    {/* The command as it runs, on one line — long ones scroll
-                      rather than wrap, and the button copies the whole thing. */}
-                    <CopyableCode
-                      value={commandLine}
-                      toastMessage="Command copied"
-                      className="w-full"
-                    >
-                      <code className="block overflow-x-auto whitespace-nowrap font-mono text-xs">
-                        {commandLine}
-                      </code>
-                    </CopyableCode>
                   </OverviewField>
                 )}
                 {local?.serviceAccount && (
@@ -948,124 +772,82 @@ function ConfigurationSections({
             )}
           </FieldGrid>
           <IdleHibernationRow item={item} />
-          <CardIssues
-            item={item}
-            issues={issues.connection}
-            servers={servers}
-          />
         </DetailCard>
       )}
 
-      <DetailCard title="Authentication">
-        <SettingGroup>
-          <SettingRow
-            icon={<KeyRound className="size-4" />}
-            title="Method"
-            tone={values.authMethod === "none" ? "off" : "on"}
-            state={authLabel}
-          />
-        </SettingGroup>
-        {(values.authMethod === "oauth" ||
-          values.authMethod === "oauth_client_credentials") &&
-          oauth && (
+      {showsAuthentication && (
+        <DetailCard title="Authentication">
+          <SettingGroup>
+            <SettingRow
+              icon={<KeyRound className="size-4" />}
+              title="Method"
+              tone={values.authMethod === "none" ? "off" : "on"}
+              state={authLabel}
+            />
+          </SettingGroup>
+          {(values.authMethod === "oauth" ||
+            values.authMethod === "oauth_client_credentials") &&
+            oauth && (
+              <FieldGrid>
+                {oauth.tokenEndpoint && (
+                  <OverviewField
+                    label="Token endpoint"
+                    className="sm:col-span-2 lg:col-span-3"
+                  >
+                    <CodeLine>{oauth.tokenEndpoint}</CodeLine>
+                  </OverviewField>
+                )}
+                {oauth.client_id && (
+                  <OverviewField label="Client ID">
+                    <CodeLine>{oauth.client_id}</CodeLine>
+                  </OverviewField>
+                )}
+                <OverviewField label="Client secret">
+                  {item.clientSecretId || oauth.client_secret
+                    ? "Configured"
+                    : "Not set"}
+                </OverviewField>
+                {oauth.scopes && (
+                  <OverviewField label="Scopes">
+                    <CodeLine>{String(oauth.scopes)}</CodeLine>
+                  </OverviewField>
+                )}
+              </FieldGrid>
+            )}
+          {managed && (
             <FieldGrid>
-              {oauth.tokenEndpoint && (
-                <OverviewField
-                  label="Token endpoint"
-                  className="sm:col-span-2 lg:col-span-3"
-                >
-                  <CodeLine>{oauth.tokenEndpoint}</CodeLine>
-                </OverviewField>
-              )}
-              {oauth.client_id && (
-                <OverviewField label="Client ID">
-                  <CodeLine>{oauth.client_id}</CodeLine>
-                </OverviewField>
-              )}
-              <OverviewField label="Client secret">
-                {item.clientSecretId || oauth.client_secret
-                  ? "Configured"
-                  : "Not set"}
+              <OverviewField label="Identity provider">
+                {identityProviderName ?? "Not set"}
               </OverviewField>
-              {oauth.scopes && (
-                <OverviewField label="Scopes">
-                  <CodeLine>{String(oauth.scopes)}</CodeLine>
+              {managed.requestedCredentialType && (
+                <OverviewField label="Requested credential">
+                  {managed.requestedCredentialType}
+                </OverviewField>
+              )}
+              {managed.tokenInjectionMode && (
+                <OverviewField label="Injection">
+                  {managed.tokenInjectionMode}
                 </OverviewField>
               )}
             </FieldGrid>
           )}
-        {managed && (
-          <FieldGrid>
-            <OverviewField label="Identity provider">
-              {identityProviderName ?? "Not set"}
-            </OverviewField>
-            {managed.requestedCredentialType && (
-              <OverviewField label="Requested credential">
-                {managed.requestedCredentialType}
-              </OverviewField>
-            )}
-            {managed.tokenInjectionMode && (
-              <OverviewField label="Injection">
-                {managed.tokenInjectionMode}
-              </OverviewField>
-            )}
-          </FieldGrid>
-        )}
-        {headers.length > 0 && (
-          <div className="space-y-1.5">
-            <SubHeading label="Headers" />
-            <ul className="flex flex-wrap gap-1.5">
-              {headers.map((header) => (
-                <li key={header.headerName}>
-                  <EntityPill
-                    name={header.headerName}
-                    note={[
-                      header.promptOnInstallation
-                        ? "asked at install"
-                        : "fixed",
-                      header.required ? "required" : null,
-                      header.sensitive ? "sensitive" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <CardIssues
-          item={item}
-          issues={issues.authentication}
-          servers={servers}
-        />
-      </DetailCard>
-
-      {isLocal && (envVars.length > 0 || envFrom.length > 0) && (
-        <DetailCard title="Environment variables">
-          {promptedVars.length > 0 && (
+          {headers.length > 0 && (
             <div className="space-y-1.5">
-              <SubHeading label="Asked at installation" />
-              <EnvVarPills variables={promptedVars} />
-            </div>
-          )}
-          {fixedVars.length > 0 && (
-            <div className="space-y-1.5">
-              <SubHeading label="Set on the server" />
-              <EnvVarPills variables={fixedVars} />
-            </div>
-          )}
-          {envFrom.length > 0 && (
-            <div className="space-y-1.5">
-              <SubHeading label="From Kubernetes" />
+              <SubHeading label="Headers" />
               <ul className="flex flex-wrap gap-1.5">
-                {envFrom.map((source) => (
-                  <li key={`${source.type}:${source.name}`}>
+                {headers.map((header) => (
+                  <li key={header.headerName}>
                     <EntityPill
-                      name={source.name}
-                      note={
-                        source.type === "configMap" ? "ConfigMap" : "Secret"
-                      }
+                      name={header.headerName}
+                      note={[
+                        header.promptOnInstallation
+                          ? "asked at install"
+                          : "fixed",
+                        header.required ? "required" : null,
+                        header.sensitive ? "sensitive" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     />
                   </li>
                 ))}
@@ -1074,7 +856,7 @@ function ConfigurationSections({
           )}
         </DetailCard>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1138,38 +920,6 @@ const HIBERNATION_COPY: Record<string, { label: string; tone: SettingTone }> = {
   },
 };
 
-/** One environment variable per chip: secrets keyed, files marked, required noted. */
-function EnvVarPills({
-  variables,
-}: {
-  variables: NonNullable<
-    NonNullable<CatalogItem["localConfig"]>["environment"]
-  >;
-}) {
-  return (
-    <ul className="flex flex-wrap gap-1.5">
-      {variables.map((variable) => (
-        <li key={variable.key}>
-          <EntityPill
-            icon={
-              variable.type === "secret" ? (
-                <KeyRound className="size-3.5 text-muted-foreground" />
-              ) : undefined
-            }
-            name={variable.key}
-            note={[
-              variable.mounted ? "file" : null,
-              variable.required ? "required" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /** One compact subject card. Editing starts from the page header. */
 function DetailCard({
   title,
@@ -1180,7 +930,7 @@ function DetailCard({
 }) {
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4">
-      <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {children}
     </section>
   );
@@ -1246,12 +996,7 @@ function ServerStatus({
   return <span className={typeRole({ role: "body" })}>Not installed</span>;
 }
 
-/**
- * The issues one card owns, explained where their cause is configured — the
- * same notice the registry's Needs-attention tab renders, so the diagnosis
- * reads identically. Tinted off the card so it reads as an inset rather than
- * as a second card inside this one.
- */
+/** Keep operational failures visible even while Overview is collapsed. */
 function CardIssues({
   item,
   issues,
@@ -1268,54 +1013,11 @@ function CardIssues({
       issues={issues}
       servers={servers}
       hideName
+      panelActions="dismiss-only"
       className="bg-muted/40"
     />
   );
 }
-
-interface IssuesByCard {
-  /** Catalog-scope trouble, which belongs to no one installation. */
-  summary: McpServerIssue[];
-  connection: McpServerIssue[];
-  authentication: McpServerIssue[];
-}
-
-/**
- * Which card owns each kind of trouble. A rejected token is an authentication
- * fault and belongs beside the authentication configuration; a pod that will
- * not start belongs beside how the server is built and run. An issue with no
- * `serverId` is about the catalog entry rather than any installation, and
- * stays with the status it explains.
- *
- * `hasConnectionCard` is the escape hatch, not a style choice: the built-in
- * server has no Connection card, and `computeMcpServerIssues` does not
- * exclude its catalog entry, so anything routed to that card would be dropped
- * from the page without it. Every bucket must have a card that renders it.
- */
-function groupIssuesByCard(
-  issues: McpServerIssue[],
-  { hasConnectionCard }: { hasConnectionCard: boolean },
-): IssuesByCard {
-  const grouped: IssuesByCard = {
-    summary: [],
-    connection: [],
-    authentication: [],
-  };
-  for (const issue of issues) {
-    const card = issue.serverId ? ISSUE_CARD[issue.kind] : "summary";
-    grouped[
-      card === "connection" && !hasConnectionCard ? "summary" : card
-    ].push(issue);
-  }
-  return grouped;
-}
-
-const ISSUE_CARD: Record<McpServerIssueKind, "connection" | "authentication"> =
-  {
-    "needs-reauth": "authentication",
-    "failed-to-start": "connection",
-    "not-running": "connection",
-  };
 
 function SubHeading({ label }: { label: string }) {
   return <p className={typeRole({ role: "label" })}>{label}</p>;

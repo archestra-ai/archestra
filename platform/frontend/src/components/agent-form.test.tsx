@@ -707,6 +707,19 @@ describe("AgentForm delegation state", () => {
     });
   });
 
+  it.each([
+    "mcp_gateway",
+    "profile",
+    "llm_proxy",
+  ] as const)("omits agent-only Subagents for %s forms", (agentType) => {
+    render(
+      <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
+    expect(useAgentDelegationsMock).toHaveBeenCalledWith(undefined);
+  });
+
   it("turns the advisor on in Custom mode by adding it as a subagent", async () => {
     const user = userEvent.setup();
     useProfileMock.mockReturnValue({

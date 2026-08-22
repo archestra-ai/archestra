@@ -18,6 +18,7 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -28,7 +29,7 @@ import {
   agentListHref,
   getAgentSetupSteps,
 } from "./agent-page-config";
-import { AgentPageShell, AgentWizardFooter } from "./agent-page-shell";
+import { AgentPageShell } from "./agent-page-shell";
 
 /**
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
@@ -164,7 +165,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
               setCreated(record);
             }}
             footer={({ isSaving, canSubmit }) => (
-              <AgentWizardFooter>
+              <WizardFooter>
                 <div>
                   {prevStep ? (
                     <Button
@@ -222,7 +223,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
                     </span>
                   </Button>
                 )}
-              </AgentWizardFooter>
+              </WizardFooter>
             )}
           />
         </>

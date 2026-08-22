@@ -30,7 +30,7 @@ Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform
 
 ## Server Configuration
 
-Every server has a page of its own. Its **Overview** reads back the setup wizard: how the server is reached and run, how callers authenticate, what its container is given at run time, and the tools it exposes. Secret values are never shown there — only whether a value is set here or asked for at installation. **Edit** in the page header reopens the wizard.
+Every server has a page of its own. Its environment appears beside the server type in the header. The collapsed **Overview** keeps only useful runtime, connection, and configured authentication facts; commands, installation prompts, environment variables, generated defaults, and secret values stay in the editor or installation flow. Personal and shared **Credentials** or **Installations** remain visible below the Overview, while Usage and runtime diagnostics stay in dedicated tabs. **Edit** in the page header reopens the wizard and remains the place to inspect exact configuration.
 
 Registry entries can describe either a remote server or a self-hosted server.
 

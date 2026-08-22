@@ -93,6 +93,11 @@ import {
   ExternalMcpSkillsSection,
   filterExternalMcpSkills,
 } from "./_parts/external-mcp-skills-section";
+import {
+  getSkillActionModel,
+  skillAction,
+  skillActionHref,
+} from "./_parts/skill-actions-model";
 import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
@@ -561,6 +566,12 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
+        const actionModel = getSkillActionModel(skill.id);
+        const chatAction = skillAction(actionModel, "chat");
+        const editAction = skillAction(actionModel, "edit");
+        const usageAction = skillAction(actionModel, "usage");
+        const historyAction = skillAction(actionModel, "history");
+        const deleteAction = skillAction(actionModel, "delete");
         // RBAC alone let any `skill:update` holder press Edit, Delete and
         // Restore on somebody else's skill and collect a 403 at save. The
         // backend runs a skill through the same scope rule it runs an agent
@@ -592,17 +603,17 @@ function SkillsList() {
           : [
               {
                 icon: <MessageSquare className="h-4 w-4" />,
-                label: ACTION_LABEL.chat,
-                permissions: { chat: ["read", "create"] },
-                href: `/chat/new?skill_id=${skill.id}`,
+                label: chatAction.label,
+                permissions: chatAction.permissions,
+                href: skillActionHref(chatAction),
               },
               {
                 icon: <Pencil className="h-4 w-4" />,
-                label: ACTION_LABEL.edit,
-                permissions: { skill: ["update"] },
+                label: editAction.label,
+                permissions: editAction.permissions,
                 disabled: !canModify,
                 disabledTooltip: notYours,
-                href: skillEditHref(skill.id),
+                href: skillActionHref(editAction),
               },
             ];
         const dropdownActions: TableRowAction[] = isDeletedView
@@ -622,21 +633,21 @@ function SkillsList() {
           : [
               {
                 icon: <ChartColumn className="h-4 w-4" />,
-                label: "Usage",
-                permissions: { skill: ["read"] },
+                label: usageAction.label,
+                permissions: usageAction.permissions,
                 onClick: () => setUsageSkill(skill),
               },
               {
                 icon: <History className="h-4 w-4" />,
-                label: ACTION_LABEL.versionHistory,
-                permissions: { skill: ["read"] },
+                label: historyAction.label,
+                permissions: historyAction.permissions,
                 onClick: () => setHistorySkillId(skill.id),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
-                label: ACTION_LABEL.delete,
+                label: deleteAction.label,
                 variant: "destructive",
-                permissions: { skill: ["delete"] },
+                permissions: deleteAction.permissions,
                 disabled: !canModify,
                 disabledTooltip: notYours,
                 onClick: () => setDeletingSkill(skill),

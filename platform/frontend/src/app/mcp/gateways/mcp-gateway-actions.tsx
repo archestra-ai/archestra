@@ -1,5 +1,9 @@
 import { E2eTestId } from "@archestra/shared";
 import { Copy, History, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import {
+  agentAction,
+  getAgentActionModel,
+} from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import {
   type TableRowAction,
@@ -17,9 +21,6 @@ type Gateway = NonNullable<
 type McpGatewayActionsProps = {
   agent: Gateway;
   canModify: boolean;
-  onConnect: (
-    agent: Pick<Gateway, "id" | "name" | "agentType" | "slug">,
-  ) => void;
   onEdit: (agent: Gateway) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
@@ -43,7 +44,6 @@ type McpGatewayActionsProps = {
 export function McpGatewayActions({
   agent,
   canModify,
-  onConnect,
   onEdit,
   onDelete,
   onRestore,
@@ -52,6 +52,13 @@ export function McpGatewayActions({
   onHistory,
 }: McpGatewayActionsProps) {
   const admin = useIsGlobalAdmin();
+  const actionModel = getAgentActionModel({ kind: "mcp_gateway", agent });
+  const connectAction = agentAction(actionModel, "connect");
+  const editAction = agentAction(actionModel, "edit");
+  const cloneAction = agentAction(actionModel, "clone");
+  const historyAction = agentAction(actionModel, "history");
+  const deleteAction = agentAction(actionModel, "delete");
+  const isBuiltIn = !!agent.builtIn;
 
   if (agent.deletedAt) {
     return (
@@ -61,7 +68,7 @@ export function McpGatewayActions({
           {
             icon: <RotateCcw className="h-4 w-4" />,
             label: ACTION_LABEL.restore,
-            permissions: { mcpGateway: ["delete"] },
+            permissions: deleteAction.permissions,
             disabled: !canModify,
             disabledTooltip: notYoursToChange({
               resource: "mcp_gateway",
@@ -81,17 +88,21 @@ export function McpGatewayActions({
   }
 
   const primaryActions: TableRowAction[] = [
-    {
-      icon: <Plug className="h-4 w-4" />,
-      label: ACTION_LABEL.connect,
-      permissions: { mcpGateway: ["read"] },
-      onClick: () => onConnect(agent),
-      testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
-    },
+    ...(connectAction.visible
+      ? [
+          {
+            icon: <Plug className="h-4 w-4" />,
+            label: connectAction.label,
+            permissions: connectAction.permissions,
+            href: connectAction.href,
+            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
+          },
+        ]
+      : []),
     {
       icon: <Pencil className="h-4 w-4" />,
-      label: ACTION_LABEL.edit,
-      permissions: { mcpGateway: ["update"] },
+      label: editAction.label,
+      permissions: editAction.permissions,
       disabled: !canModify,
       disabledTooltip: notYoursToChange({
         resource: "mcp_gateway",
@@ -105,27 +116,33 @@ export function McpGatewayActions({
   const dropdownActions: TableRowAction[] = [
     {
       icon: <Copy className="h-4 w-4" />,
-      label: ACTION_LABEL.clone,
-      permissions: { mcpGateway: ["create"] },
+      label: cloneAction.label,
+      permissions: cloneAction.permissions,
+      disabled: isBuiltIn,
+      disabledTooltip: isBuiltIn
+        ? "Built-in MCP gateways cannot be cloned"
+        : undefined,
       onClick: () => onClone(agent),
       testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
     {
       icon: <History className="h-4 w-4" />,
-      label: ACTION_LABEL.versionHistory,
-      permissions: { mcpGateway: ["read"] },
+      label: historyAction.label,
+      permissions: historyAction.permissions,
       onClick: () => onHistory(agent.id, canModify),
       testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
     },
     {
       icon: <Trash2 className="h-4 w-4" />,
-      label: ACTION_LABEL.delete,
-      permissions: { mcpGateway: ["delete"] },
-      disabled: !canModify,
-      disabledTooltip: notYoursToChange({
-        resource: "mcp_gateway",
-        scope: agent.scope,
-      }),
+      label: deleteAction.label,
+      permissions: deleteAction.permissions,
+      disabled: isBuiltIn || !canModify,
+      disabledTooltip: isBuiltIn
+        ? "Built-in MCP gateways cannot be deleted"
+        : notYoursToChange({
+            resource: "mcp_gateway",
+            scope: agent.scope,
+          }),
       variant: "destructive",
       onClick: () => onDelete(agent.id),
       testId: `${E2eTestId.DeleteAgentButton}-${agent.name}`,

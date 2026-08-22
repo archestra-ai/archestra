@@ -1101,70 +1101,68 @@ export function InternalMCPCatalog({
 
   return (
     <div className="space-y-4">
-      <div className="@container/registry-controls">
-        <div className="flex flex-col gap-3 @[78rem]/registry-controls:flex-row @[78rem]/registry-controls:items-center">
-          <div className="order-2 flex min-w-0 flex-1 flex-wrap items-center gap-2 @[78rem]/registry-controls:order-1">
-            <SearchInput
-              objectNamePlural="MCP servers"
-              searchFields={["name"]}
-              value={searchQueryFromUrl}
-              onSearchChange={handleSearchChange}
-              syncQueryParams={false}
-              debounceMs={300}
-              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+      <div className="space-y-3">
+        {alertingEnabled && (
+          <div className="min-w-0 overflow-x-auto">
+            <RegistryAttentionFacets
+              counts={facetCounts}
+              totalCount={registryItems.length}
+              othersLabel={othersFacetLabel}
+              showOthers={!userIsMcpServerAdmin}
+              selected={selectedFacet}
+              onSelect={selectFacet}
             />
-            <McpCatalogLabelFilter />
-            {selectedFacet ? (
-              <RegistryFilterDropdown
-                label="Issue"
-                options={ISSUE_OPTIONS}
-                selected={filters.issue}
-                onToggle={(value) => toggleFilter("issue", value)}
-              />
-            ) : (
-              <RegistryFilterDropdown
-                label="Status"
-                options={STATUS_OPTIONS}
-                selected={filters.status}
-                onToggle={(value) => toggleFilter("status", value)}
-              />
-            )}
-            {environmentOptions.length > 0 && (
-              <RegistryFilterDropdown
-                label="Environment"
-                options={environmentOptions}
-                selected={filters.environment}
-                onToggle={(value) => toggleFilter("environment", value)}
-              />
-            )}
-            {authorOptions.length > 0 && (
-              <RegistryFilterDropdown
-                label="Author"
-                options={authorOptions}
-                selected={filters.author}
-                onToggle={(value) => toggleFilter("author", value)}
-              />
-            )}
-            <RegistrySortMenu value={sort} onChange={setSort} />
-            {!selectedFacet && (
-              <ListViewToggle
-                value={viewMode}
-                onChange={setViewMode}
-                order={["table", "cards"]}
-              />
-            )}
           </div>
-          {alertingEnabled && (
-            <div className="order-1 min-w-0 overflow-x-auto @[78rem]/registry-controls:order-2 @[78rem]/registry-controls:ml-auto @[78rem]/registry-controls:shrink-0">
-              <RegistryAttentionFacets
-                counts={facetCounts}
-                totalCount={registryItems.length}
-                othersLabel={othersFacetLabel}
-                showOthers={!userIsMcpServerAdmin}
-                selected={selectedFacet}
-                onSelect={selectFacet}
-              />
-            </div>
+        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <SearchInput
+            objectNamePlural="MCP servers"
+            searchFields={["name"]}
+            value={searchQueryFromUrl}
+            onSearchChange={handleSearchChange}
+            syncQueryParams={false}
+            debounceMs={300}
+            inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+          />
+          <McpCatalogLabelFilter />
+          {selectedFacet ? (
+            <RegistryFilterDropdown
+              label="Issue"
+              options={ISSUE_OPTIONS}
+              selected={filters.issue}
+              onToggle={(value) => toggleFilter("issue", value)}
+            />
+          ) : (
+            <RegistryFilterDropdown
+              label="Status"
+              options={STATUS_OPTIONS}
+              selected={filters.status}
+              onToggle={(value) => toggleFilter("status", value)}
+            />
+          )}
+          {environmentOptions.length > 0 && (
+            <RegistryFilterDropdown
+              label="Environment"
+              options={environmentOptions}
+              selected={filters.environment}
+              onToggle={(value) => toggleFilter("environment", value)}
+            />
+          )}
+          {authorOptions.length > 0 && (
+            <RegistryFilterDropdown
+              label="Author"
+              options={authorOptions}
+              selected={filters.author}
+              onToggle={(value) => toggleFilter("author", value)}
+            />
+          )}
+          <RegistrySortMenu value={sort} onChange={setSort} />
+          {!selectedFacet && (
+            <ListViewToggle
+              value={viewMode}
+              onChange={setViewMode}
+              order={["table", "cards"]}
+            />
           )}
         </div>
       </div>

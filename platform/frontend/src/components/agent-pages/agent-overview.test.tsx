@@ -625,15 +625,15 @@ describe("AgentOverview", () => {
     ).toBeNull();
   });
 
-  it("keeps the Subagents section for a gateway and a legacy profile, but not for an LLM proxy", () => {
+  it("omits agent-only Subagents from gateways, legacy profiles, and LLM proxies", () => {
     const gateway = renderOverview("mcp_gateway", {
       agentType: "mcp_gateway",
     });
-    expect(screen.getByRole("heading", { name: "Subagents" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     gateway.unmount();
 
     const profile = renderOverview("llm_proxy", { agentType: "profile" });
-    expect(screen.getByRole("heading", { name: "Subagents" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     profile.unmount();
 
     renderOverview("llm_proxy", { agentType: "llm_proxy" });

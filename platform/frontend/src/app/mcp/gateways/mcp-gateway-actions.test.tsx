@@ -28,7 +28,6 @@ function renderActions(agent: GatewayProp, canModify = true) {
     <McpGatewayActions
       agent={agent}
       canModify={canModify}
-      onConnect={vi.fn()}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
       onRestore={vi.fn()}

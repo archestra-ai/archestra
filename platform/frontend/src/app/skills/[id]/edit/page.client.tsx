@@ -12,6 +12,7 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import {
   backToRecordLabel,
@@ -28,7 +29,7 @@ import {
 } from "../../_parts/github-sync-panel";
 import { SkillAccessFields } from "../../_parts/skill-access-fields";
 import {
-  SKILL_PAGE_EDITOR_CLASS,
+  SKILL_WIZARD_EDITOR_CLASS,
   SkillContentEditor,
 } from "../../_parts/skill-content-editor";
 import {
@@ -237,8 +238,8 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
           </Alert>
         )}
 
-        <div className="flex flex-col rounded-lg border">
-          <div className="flex min-h-0 flex-col gap-4 p-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
             {step === "content" &&
               (isSynced ? (
                 <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
@@ -267,7 +268,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                   }))
                 }
                 readOnly={isSynced || isReadOnly}
-                className={SKILL_PAGE_EDITOR_CLASS}
+                className={SKILL_WIZARD_EDITOR_CLASS}
               />
             </div>
             {step === "access" && (
@@ -276,7 +277,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
               </fieldset>
             )}
           </div>
-          <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+          <WizardFooter>
             <div className="flex items-center gap-2">
               {prevStep ? (
                 <Button
@@ -355,7 +356,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                   </Button>
                 ))}
             </div>
-          </div>
+          </WizardFooter>
         </div>
 
         <UnsavedChangesDialog

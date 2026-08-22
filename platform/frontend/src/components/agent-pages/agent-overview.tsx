@@ -87,13 +87,11 @@ export function AgentOverview({
   const isBuiltIn = !!agent.builtIn;
   const showsTools = kind !== "llm_proxy" && !isBuiltIn;
   const showsInstruction = kind === "agent" && !!agent.systemPrompt?.trim();
-  // Delegation is keyed on the stored type, not the route family: gateways and
-  // legacy profiles have subagents too, only true LLM proxies do not.
-  const showsSubagents = agent.agentType !== "llm_proxy" && !isBuiltIn;
+  const showsSubagents = kind === "agent" && !isBuiltIn;
 
   return (
     <div className="space-y-4">
-      <SummarySection kind={kind} agent={agent} />
+      {kind === "agent" && <SummarySection kind={kind} agent={agent} />}
       {showsInstruction && <InstructionSection agent={agent} />}
       {kind === "agent" && agent.suggestedPrompts.length > 0 && (
         <SuggestedPromptsSection agent={agent} />

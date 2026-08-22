@@ -389,6 +389,36 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
   });
 
+  it("keeps dismissed alerts off the server details page", () => {
+    installedWithNoDeploymentEntry();
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "invalid_grant",
+              since: null,
+              fingerprint: "v1:needs-reauth:test",
+              muted: true,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(
+      screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
+    ).toBeNull();
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+  });
+
   it("repairs the selected connection inline without opening a dialog", async () => {
     const user = userEvent.setup();
     const replace = vi.fn();
@@ -491,6 +521,54 @@ describe("McpCatalogItemDetailPage overview", () => {
       "/mcp/registry/cat-1?tab=credentials",
       { scroll: false },
     );
+  });
+
+  it("keeps the OAuth reconnect form flat inside the credentials card", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-1") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-1",
+          catalogId: "cat-1",
+          name: "Linear Test",
+          serverType: "remote",
+          ownerId: "u1",
+          ownerEmail: "admin@example.com",
+          teamId: null,
+          scope: "org",
+          secretStorageType: "none",
+          createdAt: "2026-08-02T10:00:00.000Z",
+          assignedAgents: [],
+          oauthRefreshError: "refresh_failed",
+        },
+      ],
+    });
+    renderPage({
+      serverType: "remote",
+      localConfig: null,
+      oauthConfig: {
+        grantType: "authorization_code",
+        client_id: "abc123",
+        tokenEndpoint: "https://auth.example.com/token",
+        scopes: ["read"],
+      },
+    });
+
+    const form = screen.getByTestId("inline-mcp-reauthentication-form");
+    expect(form.parentElement).toHaveClass(
+      "rounded-lg",
+      "border",
+      "bg-card",
+      "p-4",
+    );
+    expect(form).not.toHaveClass("rounded-lg", "border", "bg-muted/20");
+    expect(
+      within(form).getByRole("button", { name: "Cancel" }).parentElement,
+    ).not.toHaveClass("border-t", "bg-background/60");
   });
 
   it("reports the live fault, not the one the reader silenced", () => {

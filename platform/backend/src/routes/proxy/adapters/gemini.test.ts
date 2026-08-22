@@ -645,6 +645,58 @@ describe("geminiAdapterFactory", () => {
 });
 
 describe("GeminiStreamAdapter", () => {
+  // The model's text streamed live and the refusal was appended after it, so
+  // the record has to carry both. Reporting the refusal alone erased the
+  // model's own answer — the loss that makes a refused turn unreadable after
+  // the fact. The withheld function call stays withheld: it never reached the
+  // client, and recording it would leave a turn owing a response nothing sends.
+  describe("policy refusal", () => {
+    test("toProviderResponse keeps streamed text, drops the withheld call, appends the refusal", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+      adapter.processChunk({
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "let me check" }] },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as GeminiStreamChunk);
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "test_tool",
+                    id: "call_123",
+                    args: {},
+                  },
+                },
+              ],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as unknown as GeminiStreamChunk);
+
+      adapter.formatCompleteTextSSE("blocked message");
+      const response = adapter.toProviderResponse();
+
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      expect(
+        parts.map((part) => ("text" in part ? part.text : undefined)),
+      ).toEqual(["let me check", "blocked message"]);
+      expect(parts.some((part) => "functionCall" in part)).toBe(false);
+      expect(response.candidates?.[0]?.finishReason).toBe("STOP");
+    });
+  });
+
   describe("processChunk", () => {
     test("processes text chunks correctly", () => {
       const adapter = geminiAdapterFactory.createStreamAdapter();

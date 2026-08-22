@@ -919,19 +919,6 @@ class AnthropicStreamAdapter
   }
 
   toProviderResponse(): AnthropicResponse {
-    if (this.replacedText !== null) {
-      return {
-        id: this.state.responseId,
-        type: "message",
-        role: "assistant",
-        content: [{ type: "text", text: this.replacedText, citations: null }],
-        model: this.state.model,
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: this.responseUsage(),
-      };
-    }
-
     const content: AnthropicResponse["content"] = [];
 
     // Add text block if we have text
@@ -960,6 +947,19 @@ class AnthropicStreamAdapter
       });
     }
 
+    // A refusal does not erase what the model already said. Its text streamed as
+    // it arrived and the refusal was appended after it as a further content
+    // block, so the client holds both — and the reconstructed turn has to say
+    // the same thing. Returning the refusal alone drops the model's own answer
+    // from the record, and whatever reads the turn back later (conversation
+    // history, a summarizer, a human debugging a failed run) then sees a turn
+    // in which the model never spoke. The withheld tool calls stay withheld:
+    // `toolCallsReleased` is false on this path, so the loop above skipped
+    // them, which is right — the client never received them.
+    if (this.replacedText !== null) {
+      content.push({ type: "text", text: this.replacedText, citations: null });
+    }
+
     const upstreamStopReason = this.state
       .stopReason as AnthropicResponse["stop_reason"];
     // A turn that delivered no tool call cannot owe a tool result. Upstream may
@@ -968,7 +968,8 @@ class AnthropicStreamAdapter
     // that contradicts its own content.
     const hasToolUse = content.some((block) => block.type === "tool_use");
     const stopReason =
-      upstreamStopReason === "tool_use" && !hasToolUse
+      this.responseReplacedWithText ||
+      (upstreamStopReason === "tool_use" && !hasToolUse)
         ? "end_turn"
         : (upstreamStopReason ?? "end_turn");
 

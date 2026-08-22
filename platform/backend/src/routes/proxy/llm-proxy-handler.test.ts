@@ -1534,7 +1534,10 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     // A refusal replaces the recorded turn with the refusal text alone, so the
     // text the client already saw streaming is not in the record. Pinned as the
     // existing behaviour: withholding tool calls does not change it either way.
-    test("a streamed refusal records the refusal text alone", async () => {
+    // Both text blocks streamed live to the client before the gate refused the
+    // call between them, so the record has to carry them and then the refusal.
+    // Recording the refusal alone erased the model's own answer from history.
+    test("a streamed refusal keeps the text the client already received", async () => {
       anthropicStubOptions.toolUseBetweenText = true;
       anthropicStubOptions.streamStopReason = "tool_use";
 
@@ -1570,8 +1573,13 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         content: { type: string; text?: string }[];
       };
       expect(logged.content.map((block) => block.text)).toEqual([
+        "Let me check.Then I will summarise.",
         "Tool get_weather is not enabled here",
       ]);
+      // The blocked call was never delivered, so it stays out of the record.
+      expect(logged.content.some((block) => block.type === "tool_use")).toBe(
+        false,
+      );
     });
 
     // Holding tool calls until the gate decides moves them behind any text that

@@ -1039,6 +1039,24 @@ export class OpenAIStreamAdapter
   // the upstream "tool_calls" finish reason (a text-only turn ending in
   // "tool_calls" with no tool_calls makes agent harnesses retry), and
   // toProviderResponse persists the refusal rather than the blocked tool calls.
+  /**
+   * The assistant text as the CLIENT received it.
+   *
+   * A refusal does not erase what the model already said: its text was streamed
+   * as it arrived, and the refusal is appended afterwards as one more delta,
+   * which clients concatenate onto the content they are accumulating. So the
+   * reconstructed turn has to carry both, in that order — reporting the refusal
+   * alone loses the model's own answer from the record, and anything that later
+   * reads the turn back (conversation history, a summarizer, a human debugging
+   * it) sees a turn in which the model never spoke.
+   */
+  private contentWithAnyReplacement(): string | null {
+    if (this.replacedText === null) {
+      return this.state.text || null;
+    }
+    return `${this.state.text}${this.replacedText}`;
+  }
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -1327,7 +1345,7 @@ export class OpenAIStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.replacedText ?? (this.state.text || null),
+            content: this.contentWithAnyReplacement(),
             refusal: null,
             tool_calls: toolCalls,
           },

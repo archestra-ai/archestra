@@ -21,15 +21,16 @@ const ISSUE_TONE: Record<McpServerIssue["kind"], string> = {
   "not-running":
     "border border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-300",
   "needs-reauth":
-    "border border-amber-500/20 bg-amber-500/8 text-amber-800 dark:text-amber-300",
+    "border border-cyan-500/20 bg-cyan-500/8 text-cyan-800 dark:text-cyan-300",
 };
 
 /**
  * One status pill for one issue: the vocabulary label, tinted by the kind of
- * attention it needs. Runtime failures use the down tone; re-authentication is
- * actionable attention rather than a broken runtime. When the issue carries a
- * cause it is exposed through a tooltip on a focusable trigger, so keyboard
- * and touch users can reach it too.
+ * attention it needs. Runtime failures use red; re-authentication uses cyan so
+ * alert state cannot be confused with the blue, green, amber, and purple scope
+ * colors in the neighboring visibility column. When the issue carries a cause
+ * it is exposed through a tooltip on a focusable trigger, so keyboard and touch
+ * users can reach it too.
  *
  * The trigger is a focusable note, not a button: pressing it does nothing, and
  * a control announced as a button that answers no press is worse than a label.

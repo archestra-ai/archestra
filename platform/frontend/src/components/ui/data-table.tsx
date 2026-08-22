@@ -30,7 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DataTablePagination } from "./data-table-pagination";
 
-const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
+const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
 
 interface DataTableProps<TData, TValue> {
@@ -94,6 +94,10 @@ interface DataTableProps<TData, TValue> {
    * the contents overlap.
    */
   tableClassName?: string;
+  /** Column ids whose configured sizes must remain fixed pixels. */
+  fixedWidthColumnIds?: string[];
+  /** Column ids that absorb remaining table width. */
+  flexibleColumnIds?: string[];
 }
 
 export function DataTable<TData, TValue>({
@@ -123,6 +127,8 @@ export function DataTable<TData, TValue>({
   hideHeader = false,
   compactPagination = false,
   tableClassName,
+  fixedWidthColumnIds = [],
+  flexibleColumnIds = [],
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -271,6 +277,12 @@ export function DataTable<TData, TValue>({
                           minSize: header.column.columnDef.minSize,
                           renderedSize: header.getSize(),
                           totalSize: table.getTotalSize(),
+                          fixedWidth: fixedWidthColumnIds.includes(
+                            header.column.id,
+                          ),
+                          flexibleWidth: flexibleColumnIds.includes(
+                            header.column.id,
+                          ),
                         })}
                       >
                         {header.isPlaceholder
@@ -309,6 +321,12 @@ export function DataTable<TData, TValue>({
                           minSize: cell.column.columnDef.minSize,
                           renderedSize: cell.column.getSize(),
                           totalSize: table.getTotalSize(),
+                          fixedWidth: fixedWidthColumnIds.includes(
+                            cell.column.id,
+                          ),
+                          flexibleWidth: flexibleColumnIds.includes(
+                            cell.column.id,
+                          ),
                         })}
                       >
                         {flexRender(
@@ -402,9 +420,11 @@ function getColumnStyle(params: {
   minSize?: number;
   renderedSize: number;
   totalSize: number;
+  fixedWidth?: boolean;
+  flexibleWidth?: boolean;
 }): React.CSSProperties | undefined {
   const style: React.CSSProperties = {};
-  if (params.configuredSize) {
+  if (params.configuredSize && !params.flexibleWidth) {
     // On a fixed-layout table an absolute pixel width forces the table wider
     // than its container when the sizes don't fit, hiding trailing columns
     // behind the horizontal scroll. The actions column keeps its pixel width
@@ -412,7 +432,11 @@ function getColumnStyle(params: {
     // share of the summed sizes, which the browser scales down to fit the
     // container. Only px and % work here — fixed table layout ignores
     // min()/calc() widths and min-width on cells.
-    if (params.columnId === ACTIONS_COLUMN_ID) {
+    if (
+      params.columnId === ACTIONS_COLUMN_ID ||
+      COMPACT_ICON_COLUMN_IDS.has(params.columnId) ||
+      params.fixedWidth
+    ) {
       style.width = params.renderedSize;
     } else {
       const share = (params.renderedSize / params.totalSize) * 100;

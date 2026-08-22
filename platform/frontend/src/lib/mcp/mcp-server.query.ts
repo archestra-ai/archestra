@@ -43,10 +43,12 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
+  muteMcpCatalogAlert,
   muteMcpServerAlert,
   reauthenticateMcpServer,
   reinstallMcpServer,
   reloadMcpServerTools,
+  unmuteMcpCatalogAlert,
   unmuteMcpServerAlert,
 } = archestraApiSdk;
 
@@ -682,73 +684,150 @@ export function useReinstallMcpServer() {
   });
 }
 
-/**
- * The alert kinds the API accepts a mute for. Deliberately taken from the
- * generated path type rather than restated: offering Mute on a kind the
- * backend rejects turns a menu item into a 400, so the menu is built from the
- * same list the route validates against.
- */
-export type MutableAlertKind =
+/** The alert kinds the API lets a viewer dismiss from their own queue. */
+export type DismissibleAlertKind =
   archestraApiTypes.MuteMcpServerAlertData["path"]["kind"];
 
+export type DismissibleMcpAlert = {
+  catalogId: string;
+  catalogName: string;
+  serverId: string | null;
+  serverName?: string;
+  kind: DismissibleAlertKind;
+  issueFingerprint: string;
+};
+
 /**
- * Silence one alert on one connection, for the calling user only. The mute is
- * pinned server-side to the failure being reported, so it lapses on its own
- * when the connection breaks again for a new reason.
+ * Dismiss one or more alerts from the calling viewer's queue. The backend
+ * still calls this state a mute; that transport vocabulary is deliberately
+ * kept behind this UI-facing hook.
  */
-export function useMuteMcpServerAlert() {
+export function useDismissMcpServerAlerts() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (variables: {
-      serverId: string;
-      serverName: string;
-      kind: MutableAlertKind;
-      reason: string;
+      alerts: DismissibleMcpAlert[];
+      reason?: string;
     }) => {
-      const response = await muteMcpServerAlert({
-        path: { id: variables.serverId, kind: variables.kind },
-        body: { reason: variables.reason },
-      });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
-      return response.data;
+      const results = await Promise.all(
+        variables.alerts.map(async (alert) => {
+          try {
+            const response = alert.serverId
+              ? await muteMcpServerAlert({
+                  path: { id: alert.serverId, kind: alert.kind },
+                  body: {
+                    issueFingerprint: alert.issueFingerprint,
+                    ...(variables.reason ? { reason: variables.reason } : {}),
+                  },
+                })
+              : await muteMcpCatalogAlert({
+                  path: { id: alert.catalogId, kind: alert.kind },
+                  body: {
+                    issueFingerprint: alert.issueFingerprint,
+                    ...(variables.reason ? { reason: variables.reason } : {}),
+                  },
+                });
+            if (response.error) {
+              handleApiError(response.error);
+              return { alert, succeeded: false };
+            }
+            return { alert, succeeded: true };
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : `Could not dismiss alert for ${alertDisplayName(alert)}`,
+            );
+            return { alert, succeeded: false };
+          }
+        }),
+      );
+      return {
+        succeeded: results
+          .filter((result) => result.succeeded)
+          .map((result) => result.alert),
+        failed: results
+          .filter((result) => !result.succeeded)
+          .map((result) => result.alert),
+      };
     },
-    onSuccess: async (mute, variables) => {
-      if (!mute) return;
-      // `alertMutes` rides on the server rows, so the list is the thing that
-      // has to come back before the row can stop counting itself.
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`Muted this alert for ${variables.serverName}`);
+    onSuccess: async ({ succeeded, failed }, variables) => {
+      if (succeeded.length === 0) return;
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.refetchQueries({ queryKey: ["mcp-catalog"] }),
+      ]);
+      toast.success(
+        succeeded.length === 1 && failed.length === 0
+          ? `Dismissed alert for ${alertDisplayName(succeeded[0])}`
+          : failed.length > 0
+            ? `Dismissed ${succeeded.length} of ${variables.alerts.length} alerts`
+            : `Dismissed ${succeeded.length} alerts`,
+      );
     },
   });
 }
 
-/** Bring a muted alert back into the viewer's own counts. */
-export function useUnmuteMcpServerAlert() {
+/** Restore one or more dismissed alerts to the calling viewer's queue. */
+export function useRestoreMcpServerAlerts() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (variables: {
-      serverId: string;
-      serverName: string;
-      kind: MutableAlertKind;
-    }) => {
-      const response = await unmuteMcpServerAlert({
-        path: { id: variables.serverId, kind: variables.kind },
-      });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
-      return response.data;
+    mutationFn: async (variables: { alerts: DismissibleMcpAlert[] }) => {
+      const results = await Promise.all(
+        variables.alerts.map(async (alert) => {
+          try {
+            const response = alert.serverId
+              ? await unmuteMcpServerAlert({
+                  path: { id: alert.serverId, kind: alert.kind },
+                  query: { issueFingerprint: alert.issueFingerprint },
+                })
+              : await unmuteMcpCatalogAlert({
+                  path: { id: alert.catalogId, kind: alert.kind },
+                  query: { issueFingerprint: alert.issueFingerprint },
+                });
+            if (response.error) {
+              handleApiError(response.error);
+              return { alert, succeeded: false };
+            }
+            return { alert, succeeded: true };
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : `Could not restore alert for ${alertDisplayName(alert)}`,
+            );
+            return { alert, succeeded: false };
+          }
+        }),
+      );
+      return {
+        succeeded: results
+          .filter((result) => result.succeeded)
+          .map((result) => result.alert),
+        failed: results
+          .filter((result) => !result.succeeded)
+          .map((result) => result.alert),
+      };
     },
-    onSuccess: async (result, variables) => {
-      if (!result) return;
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`Unmuted this alert for ${variables.serverName}`);
+    onSuccess: async ({ succeeded, failed }, variables) => {
+      if (succeeded.length === 0) return;
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.refetchQueries({ queryKey: ["mcp-catalog"] }),
+      ]);
+      toast.success(
+        succeeded.length === 1 && failed.length === 0
+          ? `Restored alert for ${alertDisplayName(succeeded[0])}`
+          : failed.length > 0
+            ? `Restored ${succeeded.length} of ${variables.alerts.length} alerts`
+            : `Restored ${succeeded.length} alerts`,
+      );
     },
   });
+}
+
+function alertDisplayName(alert: DismissibleMcpAlert | undefined): string {
+  return alert?.serverName ?? alert?.catalogName ?? "MCP server";
 }
 
 export type McpDeploymentFeedState =
@@ -976,7 +1055,6 @@ const noCachedMcpServersSignature = () => null;
  */
 export function useMcpDeploymentStatuses(): McpDeploymentStatusFeed {
   const isK8sEnabled = useFeature("orchestratorK8sRuntime");
-  const queryClient = useQueryClient();
   const { data: session } = useSession();
   const sessionUserId = session?.user?.id ?? null;
   const [feed, setFeed] = useState(deploymentFeed);

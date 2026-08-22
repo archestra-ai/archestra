@@ -18,7 +18,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { typeRole } from "@/lib/design/type-scale";
-import type { McpServerAttentionFacet } from "@/lib/mcp/mcp-server-issues";
+import {
+  MCP_SERVER_ISSUE_KINDS,
+  type McpServerAttentionFacet,
+} from "@/lib/mcp/mcp-server-issues";
 import type { McpServerFacetCounts } from "@/lib/mcp/use-mcp-server-issues";
 import { cn } from "@/lib/utils";
 
@@ -46,15 +49,25 @@ export interface FilterOption {
   label: string;
 }
 
-export type FilterGroup = "status" | "environment" | "author";
+export type FilterGroup = "status" | "issue" | "environment" | "author";
 
 /** Also the search-param names the groups are addressable through. */
-export const FILTER_GROUPS: FilterGroup[] = ["status", "environment", "author"];
+export const FILTER_GROUPS: FilterGroup[] = [
+  "status",
+  "issue",
+  "environment",
+  "author",
+];
 
 export type RegistryFilters = Record<FilterGroup, Set<string>>;
 
 export function emptyRegistryFilters(): RegistryFilters {
-  return { status: new Set(), environment: new Set(), author: new Set() };
+  return {
+    status: new Set(),
+    issue: new Set(),
+    environment: new Set(),
+    author: new Set(),
+  };
 }
 
 /**
@@ -124,15 +137,22 @@ export const STATUS_OPTIONS: FilterOption[] = [
   { value: INSTALLED_STATUS_VALUE, label: "Installed" },
   { value: NOT_INSTALLED_STATUS_VALUE, label: "Not installed" },
 ];
+export const ISSUE_OPTIONS: FilterOption[] = MCP_SERVER_ISSUE_KINDS.map(
+  ({ kind, label }) => ({ value: kind, label }),
+);
 
 const GROUP_LABELS: Record<FilterGroup, string> = {
   status: "Status",
+  issue: "Issue",
   environment: "Environment",
   author: "Author",
 };
 
 const STATUS_LABELS: Record<string, string> = Object.fromEntries(
   STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
+const ISSUE_LABELS: Record<string, string> = Object.fromEntries(
+  ISSUE_OPTIONS.map((o) => [o.value, o.label]),
 );
 
 // Facet labels are written out in full on the segmented control, so the chips
@@ -183,9 +203,8 @@ export function RegistrySortMenu({
 
 /**
  * The list's audience facets, always visible rather than folded into the
- * Status popover. An admin who personally owns nothing still has to be able to
- * see, without opening anything, that two servers are waiting on them and one
- * is waiting on somebody else.
+ * Status popover. Installation admins omit the others facet because every
+ * visible issue is actionable for them.
  *
  * Each count comes from `attentionCatalogIds`, so the numbers here and the
  * rows the list renders are the same computation.
@@ -193,12 +212,17 @@ export function RegistrySortMenu({
 export function RegistryAttentionFacets({
   counts,
   totalCount,
+  othersLabel,
+  showOthers,
   selected,
   onSelect,
 }: {
   counts: McpServerFacetCounts;
   /** Catalog items the list would show with no facet applied. */
   totalCount: number;
+  othersLabel: string;
+  /** Installation admins can act on every visible issue. */
+  showOthers: boolean;
   selected: McpServerAttentionFacet | null;
   onSelect: (facet: McpServerAttentionFacet | null) => void;
 }) {
@@ -208,39 +232,51 @@ export function RegistryAttentionFacets({
     count: number;
   }[] = [
     { facet: null, label: "All", count: totalCount },
-    { facet: "you", label: "Needs my action", count: counts.you },
-    { facet: "others", label: "Waiting on someone else", count: counts.others },
+    { facet: "you", label: "Action required", count: counts.you },
   ];
-  // Muted is a facet the viewer created; nobody else needs a button for an
+  if (showOthers) {
+    facets.push({ facet: "others", label: othersLabel, count: counts.others });
+  }
+  // Dismissed is a facet the viewer created; nobody else needs a button for an
   // empty box they have never used.
   if (counts.muted > 0) {
-    facets.push({ facet: "muted", label: "Muted", count: counts.muted });
+    facets.push({ facet: "muted", label: "Dismissed", count: counts.muted });
   }
 
   return (
-    <fieldset
-      className="inline-flex items-center rounded-md border p-0.5"
-      data-testid="mcp-registry-attention-facets"
-    >
-      <legend className="sr-only">Filter MCP servers by who has to act</legend>
-      {facets.map(({ facet, label, count }) => (
-        <button
-          key={facet ?? "all"}
-          type="button"
-          aria-pressed={selected === facet}
-          onClick={() => onSelect(facet)}
-          data-testid={`mcp-registry-facet-${facet ?? "all"}`}
-          className={cn(
-            typeRole({ role: "body" }),
-            "rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent",
-            selected === facet && "bg-secondary font-medium",
-          )}
-        >
-          {label}{" "}
-          <span className="tabular-nums text-muted-foreground">({count})</span>
-        </button>
-      ))}
-    </fieldset>
+    <div className="flex items-center gap-2">
+      <fieldset
+        className="flex min-w-0 flex-1 items-stretch rounded-md border p-0.5 sm:flex-none"
+        data-testid="mcp-registry-attention-facets"
+      >
+        <legend className="sr-only">
+          Filter MCP servers by who has to act
+        </legend>
+        {facets.map(({ facet, label, count }) => (
+          <button
+            key={facet ?? "all"}
+            type="button"
+            aria-label={`${label} (${count})`}
+            aria-pressed={selected === facet}
+            onClick={() => onSelect(facet)}
+            data-testid={`mcp-registry-facet-${facet ?? "all"}`}
+            className={cn(
+              typeRole({ role: "body" }),
+              "inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent sm:flex-none",
+              selected === facet && "bg-secondary font-medium",
+            )}
+          >
+            <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+            <span className="tabular-nums text-muted-foreground">
+              ({count})
+            </span>
+          </button>
+        ))}
+      </fieldset>
+      <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">
+        Beta
+      </Badge>
+    </div>
   );
 }
 
@@ -369,7 +405,12 @@ export function RegistryFilterChips({
       entries.push({
         group,
         value,
-        label: group === "status" ? (STATUS_LABELS[value] ?? value) : value,
+        label:
+          group === "status"
+            ? (STATUS_LABELS[value] ?? value)
+            : group === "issue"
+              ? (ISSUE_LABELS[value] ?? value)
+              : value,
       });
     });
   });

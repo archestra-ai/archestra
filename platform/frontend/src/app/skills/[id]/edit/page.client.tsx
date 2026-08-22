@@ -27,7 +27,10 @@ import {
   type SkillDetail,
 } from "../../_parts/github-sync-panel";
 import { SkillAccessFields } from "../../_parts/skill-access-fields";
-import { SkillContentEditor } from "../../_parts/skill-content-editor";
+import {
+  SKILL_PAGE_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../../_parts/skill-content-editor";
 import {
   buildSkillSaveBody,
   isSkillDraftDirty,
@@ -264,7 +267,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                   }))
                 }
                 readOnly={isSynced || isReadOnly}
-                className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                className={SKILL_PAGE_EDITOR_CLASS}
               />
             </div>
             {step === "access" && (

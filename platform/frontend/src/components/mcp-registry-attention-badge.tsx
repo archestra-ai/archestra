@@ -20,7 +20,7 @@ import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
  * It reads the same live deployment feed the registry page does. Runtime
  * faults (a crash-looping pod, an image that will not pull) exist only for a
  * caller holding those statuses, so a badge without them said "0" one click
- * away from a list saying "Needs my action (3)". The subscription is already
+ * away from a list saying "Action required (3)". The subscription is already
  * open app-wide from `<McpDeploymentStatusFeed />`, so this costs nothing.
  */
 export function McpRegistryAttentionBadge() {

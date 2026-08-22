@@ -146,18 +146,20 @@ describe("SkillDetailPage", () => {
     expect(details.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 
-  it("sends each card to the wizard step that wrote it, and the header to the wizard's start", () => {
+  it("keeps a single Edit in the header instead of repeating it on cards", () => {
     render(<SkillDetailPage id="skill-1" />);
 
+    const edits = screen.getAllByRole("link", { name: /^Edit\b/ });
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toHaveAttribute("href", "/skills/skill-1/edit");
     expect(
-      screen
-        .getAllByRole("link", { name: /^Edit\b/ })
-        .map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/skills/skill-1/edit",
-      "/skills/skill-1/edit?step=content",
-      "/skills/skill-1/edit?step=access",
-    ]);
+      section("Instructions and files").queryByRole("link", {
+        name: /^Edit\b/,
+      }),
+    ).toBeNull();
+    expect(
+      section("Who can use it").queryByRole("link", { name: /^Edit\b/ }),
+    ).toBeNull();
   });
 
   it("offers no Edit anywhere to someone who may not update skills", () => {

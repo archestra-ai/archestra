@@ -21,6 +21,7 @@ import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-cr
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { McpServerHibernationModeSchema } from "./mcp-hibernation";
+import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
 // SPDX-SnippetEnd
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
@@ -179,6 +180,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
 
 export const ListInternalMcpCatalogSchema =
   SelectInternalMcpCatalogSchema.extend({
+    /** The calling viewer's own alert dismissals for this catalog. */
+    alertMutes: z.array(McpServerAlertMuteSchema).optional(),
     toolCount: z.number().int().default(0),
     // True when the catalog exposes a tool with a `ui://` MCP App resource —
     // an external UI-providing server or an owned-app backing. Derived from the

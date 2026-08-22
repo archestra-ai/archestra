@@ -172,6 +172,7 @@ export function McpServerCard({
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
+  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -358,9 +359,9 @@ export function McpServerCard({
     </PermissionButton>
   ) : null;
 
-  // The same rule the "Reinstall required" issue is raised under, so an
-  // installs admin is never told to reinstall a connection whose button the
-  // card then withholds because they do not own it.
+  // The reinstall button follows `canFixInstall`, so an installs admin is
+  // never shown a reinstall prompt for a connection whose button the card
+  // then withholds because they do not own it.
   const userFlaggedInstalls = allServersForCatalog.filter(
     (s) =>
       s.reinstallRequired &&
@@ -395,13 +396,12 @@ export function McpServerCard({
 
   // Check for OAuth refresh errors on any credential the user can see
   // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  const isOAuthServer = !!item.oauthConfig;
   // Re-auth entry point gated by per-connection permission, not catalog-edit
   // access; the detailed reason lives on the credentials tab. When several
   // connections have failed, prefer one the caller can re-authenticate so the
   // marker stays actionable regardless of row order.
   const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers = isOAuthServer
+  const oauthFailedServers = alertingEnabled
     ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
     : [];
   const oauthFailedServer =

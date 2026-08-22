@@ -27,20 +27,37 @@ vi.mock("./use-chat-with-catalog-item", () => ({
   useChatWithCatalogItem: () => ({ startChat: vi.fn(), isCreating: false }),
 }));
 
-const { useMcpServersMock } = vi.hoisted(() => ({
+const {
+  dismissMutateAsync,
+  restoreMutate,
+  restoreMutateAsync,
+  useMcpServersMock,
+} = vi.hoisted(() => ({
+  dismissMutateAsync: vi.fn(),
+  restoreMutate: vi.fn(),
+  restoreMutateAsync: vi.fn(),
   useMcpServersMock: vi.fn(),
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
+  useBulkUninstallMcpServers: () => ({ mutate: vi.fn(), isPending: false }),
   useMcpServers: useMcpServersMock,
-  useMuteMcpServerAlert: () => ({ mutate: vi.fn(), isPending: false }),
-  useUnmuteMcpServerAlert: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissMcpServerAlerts: () => ({
+    mutateAsync: dismissMutateAsync,
+    isPending: false,
+  }),
+  useRestoreMcpServerAlerts: () => ({
+    mutate: restoreMutate,
+    mutateAsync: restoreMutateAsync,
+    isPending: false,
+  }),
   useDeleteMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import type { Permissions } from "@archestra/shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useAppearanceSettings } from "@/lib/organization.query";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
@@ -129,7 +146,9 @@ describe("McpServerTable uninstall permission", () => {
     const user = userEvent.setup();
     renderTable(table);
 
-    await user.click(screen.getByRole("button", { name: "Uninstall" }));
+    await user.click(
+      screen.getByRole("button", { name: "Uninstall some-remote-server" }),
+    );
 
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
   });
@@ -145,5 +164,65 @@ describe("McpServerTable uninstall permission", () => {
     await user.click(uninstall);
 
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
+  });
+
+  it("renders Dismiss as a visible row action, never an overflow item", async () => {
+    const user = userEvent.setup();
+    const issue = {
+      kind: "needs-reauth",
+      audience: "you",
+      catalogId: item.id,
+      serverId: personalInstall.id,
+      detail: null,
+      since: null,
+      fingerprint: "v1:needs-reauth:test",
+      muted: false,
+      mutedReason: null,
+    } satisfies McpServerIssue;
+
+    renderTable(
+      <McpServerTable
+        items={[item]}
+        getServerInfo={() => ({ installedServer: personalInstall })}
+        envLabelByCatalog={new Map()}
+        issuesByCatalog={new Map([[item.id, [issue]]])}
+        deploymentFeedState="ready"
+        deploymentStatuses={{}}
+        installingItemId={null}
+        onInstall={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    const dismiss = screen.getByRole("button", {
+      name: "Dismiss alert some-remote-server",
+    });
+    expect(screen.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "The provider rejected the stored token, so this connection's tools fail.",
+      ),
+    ).toBeNull();
+    await user.click(dismiss);
+    expect(
+      screen.getByRole("heading", { name: "Dismiss alert" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.getByRole("link", {
+        name: "Re-authenticate some-remote-server",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Manage credentials some-remote-server",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "More actions some-remote-server",
+      }),
+    ).toBeNull();
   });
 });

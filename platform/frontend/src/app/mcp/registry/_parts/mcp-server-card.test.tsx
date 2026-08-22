@@ -171,4 +171,29 @@ describe("McpServerCard uninstall permission", () => {
 
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
+
+  it("hides OAuth failure diagnostics while MCP alerting is disabled", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          oauthRefreshError: "refresh_failed",
+        },
+      ],
+    });
+    renderCard(
+      <McpServerCard
+        variant="remote"
+        item={{ ...item, oauthConfig: {} } as unknown as CatalogItem}
+        installingItemId={null}
+        deploymentStatuses={{}}
+        deploymentFeedState="ready"
+        onInstallRemoteServer={vi.fn()}
+        onInstallLocalServer={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("oauth-reauth-state")).toBeNull();
+  });
 });

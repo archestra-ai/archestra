@@ -2045,6 +2045,13 @@ const config = {
   },
   mcpServer: {
     /**
+     * BETA: operational attention facets, issue diagnostics and per-viewer
+     * dismissals. Off by default; blank falls back to ARCHESTRA_BETA.
+     */
+    alertingEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_MCP_SERVER_ALERTING_ENABLED,
+    ),
+    /**
      * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
      * minutes each installed server's catalog tool snapshot is re-synced from
      * the live server (add/update/remove — same as the reload-tools endpoint,

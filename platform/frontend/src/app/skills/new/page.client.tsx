@@ -28,7 +28,10 @@ import {
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
 import { SkillAccessFields } from "../_parts/skill-access-fields";
-import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  SKILL_PAGE_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../_parts/skill-content-editor";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
@@ -294,7 +297,7 @@ function NewSkillWizard() {
                           files: update(prev.files),
                         }))
                       }
-                      className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                      className={SKILL_PAGE_EDITOR_CLASS}
                     />
                   </div>
                   <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">

@@ -1,5 +1,3 @@
-import type { McpServerIssueSeverity } from "@/lib/mcp/mcp-server-issues";
-
 /**
  * The three tones a status pill can carry, and the only place their colours
  * are written down.
@@ -32,11 +30,6 @@ import type { McpServerIssueSeverity } from "@/lib/mcp/mcp-server-issues";
  * Down: the thing is not working and somebody has to act.
  * Attention: it works, but it is degraded or waiting on a decision.
  * Progress: the system is working on it and nobody needs to act.
- *
- * Keyed by `McpServerIssueSeverity` so an issue's severity indexes the map
- * directly. The `satisfies` is the link: renaming a severity on the MCP side
- * breaks this build rather than silently returning `undefined` and painting a
- * badge with no tone at all.
  */
 export const STATUS_TONE = {
   down: "border border-tone-down/35 bg-tone-down/12 text-tone-down-foreground",
@@ -44,6 +37,6 @@ export const STATUS_TONE = {
     "border border-tone-attention/35 bg-tone-attention/12 text-tone-attention-foreground",
   progress:
     "border border-tone-progress/35 bg-tone-progress/12 text-tone-progress-foreground",
-} satisfies Record<McpServerIssueSeverity, string>;
+};
 
 export type StatusTone = keyof typeof STATUS_TONE;

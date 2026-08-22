@@ -42,8 +42,9 @@ const ROLE_CLASSES = {
   "page-description": "text-sm font-normal text-muted-foreground",
   /** A card header or a heading inside the page body. */
   "section-title": "text-sm font-medium text-foreground",
-  /** A field name, a column head, a key in a key/value pair. */
-  label: "text-xs font-medium uppercase tracking-wide text-muted-foreground",
+  /** A field name, a column head, a key in a key/value pair. Sentence case:
+      all-caps eyebrow labels add a ninth style and shout at field names. */
+  label: "text-xs font-medium text-muted-foreground",
   /** Prose and values. Never muted. */
   body: "text-sm font-normal text-foreground",
   /** Provenance and timestamps. Never load-bearing (rule 2). */

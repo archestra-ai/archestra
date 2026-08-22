@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { createMcpServerAlertFingerprint } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -8,15 +9,28 @@ import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { AuditEventName, User } from "@/types";
+import type { User } from "@/types";
 
 vi.mock("@/auth");
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    mcpServer: { alertingEnabled: true },
+  }),
+);
 
 import { hasPermission } from "@/auth";
 
 const mockHasPermission = hasPermission as Mock;
 
 const FAILED_AT = new Date("2026-08-01T10:00:00.000Z");
+const REAUTH_FINGERPRINT = `v1:needs-reauth:${FAILED_AT.toISOString()}`;
+
+const dismissBody = (reason: string) => ({
+  issueFingerprint: REAUTH_FINGERPRINT,
+  reason,
+});
+const restoreUrl = (serverId: string, fingerprint = REAUTH_FINGERPRINT) =>
+  `/api/mcp_server/${serverId}/alert-mutes/needs-reauth?issueFingerprint=${encodeURIComponent(fingerprint)}`;
 
 /**
  * Muting a connection's "needs re-authentication" alert. The rules under test
@@ -101,29 +115,7 @@ describe("MCP server alert mute routes", () => {
     };
   }
 
-  async function auditRow(action: AuditEventName, resourceId: string) {
-    for (let i = 0; i < 20; i++) {
-      const rows = await db
-        .select({
-          resourceType: schema.auditLogsTable.resourceType,
-          resourceName: schema.auditLogsTable.resourceName,
-          before: schema.auditLogsTable.before,
-          after: schema.auditLogsTable.after,
-        })
-        .from(schema.auditLogsTable)
-        .where(
-          and(
-            eq(schema.auditLogsTable.action, action),
-            eq(schema.auditLogsTable.resourceId, resourceId),
-          ),
-        );
-      if (rows.length > 0) return rows[0];
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    return null;
-  }
-
-  test("mutes the alert for the caller, carries it on the listing, and audits it", async ({
+  test("mutes the alert for the caller without writing organization audit history", async ({
     makeMcpServer,
   }) => {
     const server = await makeAlertingServer(makeMcpServer, {
@@ -133,7 +125,7 @@ describe("MCP server alert mute routes", () => {
     const response = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Owner is on leave until the 12th" },
+      payload: dismissBody("Owner is on leave until the 12th"),
     });
 
     expect(response.statusCode).toBe(200);
@@ -150,36 +142,39 @@ describe("MCP server alert mute routes", () => {
       }),
     ]);
 
-    const audit = await auditRow("mcpServer.alert_muted", server.id);
-    expect(audit).not.toBeNull();
-    expect(audit?.resourceType).toBe("mcpServer");
-    expect(audit?.resourceName).toBe("Jira (org)");
-    expect(audit?.before).toBeNull();
-    expect(audit?.after).toMatchObject({
-      alertKind: "needs-reauth",
-      reason: "Owner is on leave until the 12th",
-    });
+    expect(await db.select().from(schema.auditLogsTable)).toEqual([]);
   });
 
-  test("refuses a kind that is not mutable", async ({ makeMcpServer }) => {
-    const server = await makeAlertingServer(makeMcpServer);
-
+  test("accepts a live reinstall-required connection alert", async ({
+    makeMcpServer,
+  }) => {
+    const created = await makeMcpServer({ catalogId, scope: "org" });
+    const server = await McpServerModel.update(created.id, {
+      reinstallRequired: true,
+    });
+    if (!server) throw new Error("MCP server fixture disappeared");
+    const fingerprint = createMcpServerAlertFingerprint({
+      kind: "reinstall-required",
+      catalogId,
+      serverId: server.id,
+      source: server.updatedAt,
+    });
     const response = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/reinstall-required`,
-      payload: { reason: "Not urgent" },
+      payload: { issueFingerprint: fingerprint, reason: "Deferred" },
     });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("needs-reauth");
-
-    // Nothing was recorded — an unmutable kind must not become mutable by
-    // landing a row the listing would then honour.
+    expect(response.statusCode).toBe(200);
     const rows = await db.select().from(schema.mcpServerAlertMutesTable);
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        issueKind: "reinstall-required",
+        issueFingerprint: fingerprint,
+      }),
+    ]);
   });
 
-  test("refuses to mute a connection that is not reporting the alert", async ({
+  test("stores an opaque fingerprint without claiming the backend observed it", async ({
     makeMcpServer,
   }) => {
     const server = await makeMcpServer({ catalogId, scope: "org" });
@@ -187,22 +182,26 @@ describe("MCP server alert mute routes", () => {
     const response = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Pre-emptive" },
+      payload: dismissBody("Pre-emptive"),
     });
 
     expect(response.statusCode).toBe(409);
   });
 
-  test("requires a reason", async ({ makeMcpServer }) => {
-    const server = await makeAlertingServer(makeMcpServer);
+  test("accepts an omitted reason", async ({ makeMcpServer }) => {
+    const server = await makeAlertingServer(makeMcpServer, {
+      name: "Connection without note",
+    });
 
     const response = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "   " },
+      payload: { issueFingerprint: REAUTH_FINGERPRINT },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ reason: "" });
+    expect(await db.select().from(schema.auditLogsTable)).toEqual([]);
   });
 
   test("another user's mute does not hide the alert from me", async ({
@@ -211,10 +210,12 @@ describe("MCP server alert mute routes", () => {
   }) => {
     const server = await makeAlertingServer(makeMcpServer);
     const otherUser = await makeUser();
-    await McpServerAlertMuteModel.muteLiveAlert({
+    await McpServerAlertMuteModel.dismiss({
       userId: otherUser.id,
+      catalogId,
       mcpServerId: server.id,
       issueKind: "needs-reauth",
+      issueFingerprint: `v1:needs-reauth:${FAILED_AT.toISOString()}`,
       reason: "I know about this one",
     });
 
@@ -223,7 +224,7 @@ describe("MCP server alert mute routes", () => {
     // And I cannot lift their mute either — the delete is keyed by viewer.
     const response = await app.inject({
       method: "DELETE",
-      url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
+      url: restoreUrl(server.id),
     });
     expect(response.statusCode).toBe(404);
 
@@ -232,58 +233,66 @@ describe("MCP server alert mute routes", () => {
     expect(rows[0]?.userId).toBe(otherUser.id);
   });
 
-  test("a mute stops applying once oauthRefreshFailedAt changes", async ({
+  test("re-dismissing replaces the failure fingerprint in place", async ({
     makeMcpServer,
   }) => {
     const server = await makeAlertingServer(makeMcpServer);
     await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Owner is on leave" },
+      payload: dismissBody("Owner is on leave"),
     });
     expect((await listedServer(server.id)).alertMutes).toHaveLength(1);
 
-    // A new failure episode carries a new timestamp, and the mute was pinned
-    // to the old one.
+    const rows = await db.select().from(schema.mcpServerAlertMutesTable);
+    expect(rows).toHaveLength(1);
+
+    const freshFingerprint = "v1:needs-reauth:2026-08-04T09:30:00.000Z";
     await db
       .update(schema.mcpServersTable)
       .set({ oauthRefreshFailedAt: new Date("2026-08-04T09:30:00.000Z") })
       .where(eq(schema.mcpServersTable.id, server.id));
-
-    expect((await listedServer(server.id)).alertMutes).toEqual([]);
-
-    // The read computed applicability; it did not delete the row. The next
-    // mute replaces it in place.
-    const rows = await db.select().from(schema.mcpServerAlertMutesTable);
-    expect(rows).toHaveLength(1);
-
     const remute = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Still on leave" },
+      payload: {
+        issueFingerprint: freshFingerprint,
+        reason: "Still on leave",
+      },
     });
     expect(remute.statusCode).toBe(200);
     expect(
       await db.select().from(schema.mcpServerAlertMutesTable),
     ).toHaveLength(1);
     expect((await listedServer(server.id)).alertMutes).toEqual([
-      expect.objectContaining({ reason: "Still on leave" }),
+      expect.objectContaining({
+        issueFingerprint: freshFingerprint,
+        reason: "Still on leave",
+      }),
+    ]);
+    const staleRestore = await app.inject({
+      method: "DELETE",
+      url: restoreUrl(server.id, REAUTH_FINGERPRINT),
+    });
+    expect(staleRestore.statusCode).toBe(404);
+    expect((await listedServer(server.id)).alertMutes).toEqual([
+      expect.objectContaining({ issueFingerprint: freshFingerprint }),
     ]);
   });
 
-  test("unmuting brings the alert back, audits it, and is not repeatable", async ({
+  test("unmuting brings the alert back without audit history and is not repeatable", async ({
     makeMcpServer,
   }) => {
     const server = await makeAlertingServer(makeMcpServer, { name: "Jira" });
     await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Owner is on leave" },
+      payload: dismissBody("Owner is on leave"),
     });
 
     const response = await app.inject({
       method: "DELETE",
-      url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
+      url: restoreUrl(server.id),
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
@@ -291,18 +300,11 @@ describe("MCP server alert mute routes", () => {
     expect((await listedServer(server.id)).alertMutes).toEqual([]);
     expect(await db.select().from(schema.mcpServerAlertMutesTable)).toEqual([]);
 
-    const audit = await auditRow("mcpServer.alert_unmuted", server.id);
-    expect(audit).not.toBeNull();
-    expect(audit?.resourceName).toBe("Jira");
-    expect(audit?.before).toMatchObject({
-      alertKind: "needs-reauth",
-      reason: "Owner is on leave",
-    });
-    expect(audit?.after).toBeNull();
+    expect(await db.select().from(schema.auditLogsTable)).toEqual([]);
 
     const again = await app.inject({
       method: "DELETE",
-      url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
+      url: restoreUrl(server.id),
     });
     expect(again.statusCode).toBe(404);
   });
@@ -320,16 +322,40 @@ describe("MCP server alert mute routes", () => {
     const muteResponse = await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Not mine to see" },
+      payload: dismissBody("Not mine to see"),
     });
     expect(muteResponse.statusCode).toBe(404);
 
     const unmuteResponse = await app.inject({
       method: "DELETE",
-      url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
+      url: restoreUrl(server.id),
     });
     expect(unmuteResponse.statusCode).toBe(404);
 
+    expect(await db.select().from(schema.mcpServerAlertMutesTable)).toEqual([]);
+  });
+
+  test("cannot dismiss an organization-scoped connection from another organization", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const otherCatalog = await makeInternalMcpCatalog({
+      organizationId: otherOrganization.id,
+    });
+    const server = await makeAlertingServer(makeMcpServer, {
+      catalogId: otherCatalog.id,
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
+      payload: dismissBody("Not in this organization"),
+    });
+
+    expect(response.statusCode).toBe(404);
     expect(await db.select().from(schema.mcpServerAlertMutesTable)).toEqual([]);
   });
 
@@ -346,7 +372,7 @@ describe("MCP server alert mute routes", () => {
     await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Owner is on leave" },
+      payload: dismissBody("Owner is on leave"),
     });
     expect((await listedServer(server.id)).alertMutes).toHaveLength(1);
 
@@ -399,7 +425,7 @@ describe("MCP server alert mute routes", () => {
     await app.inject({
       method: "PUT",
       url: `/api/mcp_server/${server.id}/alert-mutes/needs-reauth`,
-      payload: { reason: "Owner is on leave" },
+      payload: dismissBody("Owner is on leave"),
     });
     expect((await listedServer(server.id)).alertMutes).toHaveLength(1);
 

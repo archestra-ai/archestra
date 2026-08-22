@@ -14,7 +14,6 @@ import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useFeature } from "@/lib/config/config.query";
-import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
@@ -111,13 +110,11 @@ const baseAgent = {
 function renderOverview(
   kind: "agent" | "llm_proxy" | "mcp_gateway",
   overrides: Partial<typeof baseAgent> = {},
-  { canEdit = false }: { canEdit?: boolean } = {},
 ) {
   return render(
     <AgentOverview
       kind={kind}
       agent={{ ...baseAgent, ...overrides } as unknown as Agent}
-      canEdit={canEdit}
     />,
   );
 }
@@ -129,17 +126,6 @@ function section(name: string) {
   const element = heading.closest("section");
   if (!element) throw new Error(`No section around "${name}"`);
   return within(element);
-}
-
-/** The Edit link of the card named, or null when the card offers none. */
-function cardEditHref(name: string) {
-  return (
-    // Each card carries at most one Edit, and its accessible name is suffixed
-    // with the card's own title so seven of them are not one set.
-    section(name)
-      .queryByRole("link", { name: new RegExp(`^${ACTION_LABEL.edit}\\b`) })
-      ?.getAttribute("href") ?? null
-  );
 }
 
 /** A labelled field of the summary card, so assertions can be scoped to it. */
@@ -211,56 +197,13 @@ describe("AgentOverview", () => {
     } as unknown as ReturnType<typeof useAgentSkillExclusions>);
   });
 
-  it("offers no edit control to a reader who may not change the record", () => {
+  it("leaves editing to the page header instead of repeating it on cards", () => {
     renderOverview("agent", {
       systemPrompt: "Be brief.",
     } as unknown as Partial<typeof baseAgent>);
 
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
-  });
-
-  it("sends every card to the one wizard step that wrote it, and every step is reachable", () => {
-    vi.mocked(useFeature).mockReturnValue(
-      true as unknown as ReturnType<typeof useFeature>,
-    );
-    // Published skills is the one card gated on a read permission.
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useAgentSkills).mockReturnValue({
-      data: { accessAllSkills: false, skillIds: [], skills: [] },
-    } as unknown as ReturnType<typeof useAgentSkills>);
-    renderOverview(
-      "agent",
-      {
-        systemPrompt: "Be brief.",
-        suggestedPrompts: [{ summaryTitle: "Status", prompt: "How are we?" }],
-      } as unknown as Partial<typeof baseAgent>,
-      { canEdit: true },
-    );
-
-    expect(cardEditHref("Model and environment")).toBe(
-      "/agents/a1/edit?step=configuration",
-    );
-    expect(cardEditHref("Instruction")).toBe(
-      "/agents/a1/edit?step=configuration",
-    );
-    expect(cardEditHref("Suggested prompts")).toBe(
-      "/agents/a1/edit?step=configuration",
-    );
-    expect(cardEditHref("Tools and knowledge sources")).toBe(
-      "/agents/a1/edit?step=tools",
-    );
-    expect(cardEditHref("Subagents")).toBe("/agents/a1/edit?step=tools");
-    expect(cardEditHref("Published skills")).toBe("/agents/a1/edit?step=tools");
-    expect(cardEditHref("Security and identity")).toBe(
-      "/agents/a1/edit?step=advanced",
-    );
-    // The record's own facts were never written on a wizard step, so the
-    // card that shows them offers no way into one.
-    expect(cardEditHref("Details")).toBeNull();
   });
 
   it("closes with the record itself: id, dates, owner and labels, never an updater", () => {
@@ -399,11 +342,12 @@ describe("AgentOverview", () => {
     expect(model.getByRole("img", { name: /anthropic logo/i })).toBeVisible();
   });
 
-  it("says the best available model answers when the organization set no default", () => {
+  it("shows the fallback model as a value without explanatory prose", () => {
     renderOverview("agent");
     const model = field("Model");
     expect(model.getByText("Best available model")).toBeVisible();
-    expect(model.getByText(/No organization default is set/)).toBeVisible();
+    expect(model.getByText("Organization default")).toBeVisible();
+    expect(model.queryByText(/No organization default is set/)).toBeNull();
   });
 
   it("shows the agent's own key and model with the provider's logo", () => {
@@ -525,7 +469,7 @@ describe("AgentOverview", () => {
     );
   });
 
-  it("shows Auto mode as the wizard describes it, with both settings as rows — the connection one dormant", () => {
+  it("shows Auto mode as compact state rows, with connections dormant", () => {
     vi.mocked(useAgentToolExclusions).mockReturnValue({
       data: { excludedToolIds: ["x1", "x2"] },
     } as unknown as ReturnType<typeof useAgentToolExclusions>);
@@ -545,16 +489,10 @@ describe("AgentOverview", () => {
     expect(tools.queryByText(/discovered on demand/)).toBeNull();
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Progressively")).toBeInTheDocument();
-    expect(tools.getByText("search_tools")).toBeInTheDocument();
-    expect(tools.getByText("run_tool")).toBeInTheDocument();
-    // The connection setting shows in Auto too, but says it lies dormant
-    // there — Auto reaches only what each caller can already use.
     expect(tools.getByText("Tool connections")).toBeInTheDocument();
     expect(tools.getByText("Not needed")).toBeInTheDocument();
     expect(tools.queryByText("Required before use")).toBeNull();
-    expect(
-      tools.getByText(/reaches only servers each caller has already connected/),
-    ).toBeInTheDocument();
+    expect(tools.getAllByRole("link", { name: /Learn more/ })).toHaveLength(2);
   });
 
   it("names the knowledge sources Auto mode searches — the environment's, not the stored assignment", () => {
@@ -596,12 +534,6 @@ describe("AgentOverview", () => {
     expect(tools.getByText("Handbook")).toBeInTheDocument();
     expect(tools.getByText("Tickets")).toBeInTheDocument();
     expect(tools.queryByText("Staging wiki")).toBeNull();
-    // The chips are this reader's view, and the set is resolved per caller.
-    expect(
-      tools.getByText(
-        /each conversation searches the ones its own caller may query/i,
-      ),
-    ).toBeInTheDocument();
   });
 
   it("counts assigned sources it cannot name rather than dropping them", () => {
@@ -645,7 +577,7 @@ describe("AgentOverview", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the Custom-mode settings as rows: the state as a badge, with what it means", () => {
+  it("shows Custom-mode settings as compact state rows with docs links", () => {
     renderOverview("agent", {
       toolExposureMode: "search_and_run_only",
       missingCredentialBehavior: "warn",
@@ -654,11 +586,6 @@ describe("AgentOverview", () => {
     const tools = section("Tools and knowledge sources");
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Progressively")).toBeInTheDocument();
-    expect(
-      tools.getByText(
-        /reaches the rest by searching for them mid-conversation/,
-      ),
-    ).toBeInTheDocument();
     // Each setting points at its public docs.
     const learnMore = tools.getAllByRole("link", { name: /Learn more/ });
     expect(learnMore[0]).toHaveAttribute(
@@ -669,16 +596,11 @@ describe("AgentOverview", () => {
       "href",
       expect.stringContaining("#tool-connections"),
     );
-    // The state names the choice as the wizard does; the line under it says
-    // what a user will actually see happen, without repeating "agent".
     expect(tools.getByText("Tool connections")).toBeInTheDocument();
     expect(tools.getByText("Requested at chat start")).toBeInTheDocument();
-    expect(
-      tools.getByText(/opens by listing the servers not connected yet/),
-    ).toBeInTheDocument();
   });
 
-  it("names upfront loading as the value when progressive loading is off, and says what it means", () => {
+  it("names upfront loading and on-demand connections as values", () => {
     renderOverview("agent", {
       toolExposureMode: "full",
       missingCredentialBehavior: "allow",
@@ -688,15 +610,7 @@ describe("AgentOverview", () => {
     expect(tools.getByText("Tools loaded")).toBeInTheDocument();
     expect(tools.getByText("Upfront")).toBeInTheDocument();
     expect(tools.queryByText("Off")).toBeNull();
-    expect(
-      tools.getByText(
-        "Every assigned tool is in the model's context from the first message.",
-      ),
-    ).toBeInTheDocument();
     expect(tools.getByText("Requested when needed")).toBeInTheDocument();
-    expect(
-      tools.getByText(/first tool call that needs a server prompts to connect/),
-    ).toBeInTheDocument();
   });
 
   it("names the delegation targets and the advisor's state, without counting the advisor", () => {
@@ -727,9 +641,6 @@ describe("AgentOverview", () => {
     // pills — the way the tool settings are — not as plain text.
     expect(subagents.getByText("Advisor Subagent")).toBeInTheDocument();
     expect(subagents.getByText("On")).toBeInTheDocument();
-    expect(
-      subagents.getByText(/consults a stronger model when making decisions/),
-    ).toBeInTheDocument();
     expect(subagents.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
       "href",
       expect.stringContaining("#advisor"),

@@ -1364,6 +1364,11 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
 ### MCP Servers
 
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools and Skills metadata. Every N minutes, each installed server's stored listing is re-synced from the live server — new entries are added, changed metadata is updated, and removed entries are dropped. No restart or reinstall happens. Tool assignments and policies are preserved; Skill content is always read live rather than copied.
+
+- **`ARCHESTRA_MCP_SERVER_ALERTING_ENABLED`** - Beta gate for MCP Registry attention facets, issue diagnostics, ownership guidance, and per-viewer alert dismissal.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. An explicit `false` keeps alerting and its dismissal APIs hidden even when the master switch is enabled.
+
   - Default: unset (disabled). Set to `0` to disable explicitly.
   - Example: `30`
   - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.

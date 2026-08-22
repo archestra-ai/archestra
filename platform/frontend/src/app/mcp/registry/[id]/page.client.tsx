@@ -51,11 +51,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
-import {
-  ACTION_LABEL,
-  FIELD_LABEL,
-  formatCreated,
-} from "@/lib/design/resource-lexicon";
+import { FIELD_LABEL, formatCreated } from "@/lib/design/resource-lexicon";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import {
@@ -82,7 +78,6 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
-import type { SetupStepId } from "../_parts/catalog-setup-wizard";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
@@ -92,6 +87,7 @@ import {
   getDeploymentStatusChipLabel,
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
+import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
@@ -358,6 +354,23 @@ function CatalogItemDetails({
     tabParam && tabIds.includes(tabParam as DetailTab)
       ? (tabParam as DetailTab)
       : "overview";
+  const reauthServer =
+    effectiveTab === "credentials" && serverParam
+      ? allServersForCatalog.find(
+          (server) => server.id === serverParam && !!server.oauthRefreshError,
+        )
+      : undefined;
+  const selectReauthServer = (server: InstalledServer) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "credentials");
+    params.set("server", server.id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+  const closeReauthentication = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("server");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   const [logsServerId, setLogsServerId] = useState<string | null>(serverParam);
 
@@ -466,6 +479,11 @@ function CatalogItemDetails({
           />
         </div>
       }
+      status={
+        statusIssue ? (
+          <McpServerIssueBadge issue={statusIssue} showDetail={false} />
+        ) : undefined
+      }
       documentTitle={item.name}
       backLink={<BackToRegistryLink />}
       description={item.description ?? ""}
@@ -561,30 +579,12 @@ function CatalogItemDetails({
 
         {effectiveTab === "overview" && (
           <div className="space-y-4">
-            {/* One card per subject rather than one panel of bands: whether
-                the server is working, how it is reached, how callers
-                authenticate, what it is given, what it exposes, and last the
-                record itself. */}
-            <DetailCard
-              title="Status"
-              description="Whether this server is answering right now."
-              // Health is not something the wizard wrote, so this card has no
-              // Edit; what it reports on is the wizard's Test Connection step,
-              // which is where a reader who wants to change the answer goes.
-              action={
-                canModify && variant !== "builtin" ? (
-                  <CardLink
-                    href={catalogEditHref(item.id, "test")}
-                    icon={<PlugZap className="h-4 w-4" />}
-                    label="Test connection"
-                    cardTitle="Status"
-                  />
-                ) : null
-              }
-            >
+            {/* One compact card per subject. The aggregate issue is visible
+                beside the page title; its diagnosis appears only in the card
+                that owns the failing configuration. */}
+            <DetailCard title="Status">
               <ServerStatus
                 variant={variant}
-                issue={statusIssue}
                 deploymentSummary={deploymentSummary}
                 deploymentFeedState={deploymentFeedState}
                 connectionsCount={connectionsCount}
@@ -600,28 +600,12 @@ function CatalogItemDetails({
 
             <ConfigurationSections
               item={item}
-              canModify={canModify}
               environmentLabel={environmentLabel ?? defaultEnvironment.name}
               servers={allServersForCatalog}
               issues={issuesByCard}
             />
 
-            <DetailCard
-              title="Tools"
-              description="What this server exposes to agents, and the guardrails on it."
-              // "Guardrails" named half of what the control reaches: the
-              // wizard's Tools & Guardrails step edits the tool list too, and
-              // a card titled "Tools" whose only action says "Guardrails"
-              // leaves no way in for someone looking to change the tools.
-              action={
-                canModify ? (
-                  <CardEditLink
-                    href={catalogEditHref(item.id, "tools")}
-                    cardTitle="Tools"
-                  />
-                ) : null
-              }
-            >
+            <DetailCard title="Tools">
               {tools.length === 0 ? (
                 <Empty className="border-0 py-8">
                   <EmptyHeader>
@@ -663,22 +647,11 @@ function CatalogItemDetails({
                       </li>
                     ))}
                   </ul>
-                  {tools.length > TOOLS_PREVIEW_LIMIT &&
-                    // The only listing of every tool is the wizard's step, so
-                    // a reader who may not edit the catalog is told how many
-                    // are hidden rather than sent to a route they cannot open.
-                    (canModify ? (
-                      <Link
-                        href={catalogEditHref(item.id, "tools")}
-                        className="inline-block text-sm font-medium text-primary hover:underline"
-                      >
-                        View all {tools.length} tools
-                      </Link>
-                    ) : (
-                      <p className={typeRole({ role: "meta" })}>
-                        Showing {TOOLS_PREVIEW_LIMIT} of {tools.length} tools.
-                      </p>
-                    ))}
+                  {tools.length > TOOLS_PREVIEW_LIMIT && (
+                    <p className={typeRole({ role: "meta" })}>
+                      Showing {TOOLS_PREVIEW_LIMIT} of {tools.length} tools.
+                    </p>
+                  )}
                 </>
               )}
             </DetailCard>
@@ -687,7 +660,7 @@ function CatalogItemDetails({
                 step, so the card offers no way into one, and the last change
                 is a date alone — the catalog row records when it changed,
                 never by whom. */}
-            <DetailCard title="Details" action={null}>
+            <DetailCard title="Details">
               <FieldGrid>
                 <OverviewField label="ID">
                   <span className="flex min-w-0 items-center gap-1">
@@ -763,7 +736,21 @@ function CatalogItemDetails({
                 {variant === "local" ? "Installations" : "Credentials"}
               </h2>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {reauthServer ? (
+                <InlineMcpReauthentication
+                  item={item}
+                  server={reauthServer}
+                  onClose={closeReauthentication}
+                  onCompleted={closeReauthentication}
+                />
+              ) : (
+                <CardIssues
+                  item={item}
+                  issues={issuesByCard.authentication}
+                  servers={allServersForCatalog}
+                />
+              )}
               <ManageUsersContent
                 isActive
                 onClose={() => {}}
@@ -780,6 +767,7 @@ function CatalogItemDetails({
                 hideHeader
                 bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
                 isInstalling={install.installingItemId === item.id}
+                onReauthenticate={selectReauthServer}
                 onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
               />
             </CardContent>
@@ -839,13 +827,11 @@ function CatalogItemDetails({
  */
 function ConfigurationSections({
   item,
-  canModify,
   environmentLabel,
   servers,
   issues,
 }: {
   item: CatalogItem;
-  canModify: boolean;
   environmentLabel: string;
   servers: InstalledServer[];
   issues: IssuesByCard;
@@ -857,7 +843,8 @@ function ConfigurationSections({
   // its `localConfig` is textarea-shaped — `arguments` is one newline-joined
   // string there — so everything factual reads the API's own object.
   const local = item.localConfig;
-  const auth = AUTH_METHOD_COPY[values.authMethod] ?? AUTH_METHOD_COPY.none;
+  const authLabel =
+    AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none;
   const oauth = values.oauthConfig;
   const managed = values.enterpriseManagedConfig;
   const identityProviderName = managed?.identityProviderId
@@ -877,26 +864,12 @@ function ConfigurationSections({
   );
   const envFrom = local?.envFrom ?? [];
   const headers = values.additionalHeaders ?? [];
-  const editHref = canModify ? catalogEditHref(item.id, "configuration") : null;
-
   return (
     <>
       {/* The built-in server is not reached over a connection anybody
           configures, so it has no Connection card rather than an empty one. */}
       {item.serverType !== "builtin" && (
-        <DetailCard
-          title="Connection"
-          description={
-            isLocal
-              ? "How this server is built and run."
-              : "Where this server is reached."
-          }
-          action={
-            editHref ? (
-              <CardEditLink href={editHref} cardTitle="Connection" />
-            ) : null
-          }
-        >
+        <DetailCard title="Connection">
           <FieldGrid>
             <OverviewField label={FIELD_LABEL.environment}>
               {environmentLabel}
@@ -983,24 +956,14 @@ function ConfigurationSections({
         </DetailCard>
       )}
 
-      <DetailCard
-        title="Authentication"
-        description="How callers prove who they are to this server."
-        action={
-          editHref ? (
-            <CardEditLink href={editHref} cardTitle="Authentication" />
-          ) : null
-        }
-      >
+      <DetailCard title="Authentication">
         <SettingGroup>
           <SettingRow
             icon={<KeyRound className="size-4" />}
             title="Method"
             tone={values.authMethod === "none" ? "off" : "on"}
-            state={auth.label}
-          >
-            {auth.describe}
-          </SettingRow>
+            state={authLabel}
+          />
         </SettingGroup>
         {(values.authMethod === "oauth" ||
           values.authMethod === "oauth_client_credentials") &&
@@ -1079,15 +1042,7 @@ function ConfigurationSections({
       </DetailCard>
 
       {isLocal && (envVars.length > 0 || envFrom.length > 0) && (
-        <DetailCard
-          title="Environment variables"
-          description="What the server's container is given at run time."
-          action={
-            editHref ? (
-              <CardEditLink href={editHref} cardTitle="Environment variables" />
-            ) : null
-          }
-        >
+        <DetailCard title="Environment variables">
           {promptedVars.length > 0 && (
             <div className="space-y-1.5">
               <SubHeading label="Asked at installation" />
@@ -1162,37 +1117,24 @@ function IdleHibernationRow({ item }: { item: CatalogItem }) {
         title="Idle hibernation"
         tone={copy?.tone ?? "info"}
         state={copy?.label ?? (modes.length === 0 ? "Not installed" : "Mixed")}
-      >
-        {copy?.describe ??
-          (modes.length === 0
-            ? "No installation to hibernate yet."
-            : "Installations of this server disagree; the edit page can set them all.")}
-      </SettingRow>
+      />
     </SettingGroup>
   );
 }
 
 /** What each hibernation choice means for a server that goes idle. */
-const HIBERNATION_COPY: Record<
-  string,
-  { label: string; tone: SettingTone; describe: string }
-> = {
+const HIBERNATION_COPY: Record<string, { label: string; tone: SettingTone }> = {
   inherit: {
     label: "Organization setting",
     tone: "info",
-    describe:
-      "Hibernates when idle if the organization hibernates idle servers.",
   },
   enabled: {
     label: "Always allowed",
     tone: "on",
-    describe: "Scales to zero when idle and starts again on the next call.",
   },
   disabled: {
     label: "Never",
     tone: "off",
-    describe:
-      "Stays running even while the organization hibernates idle servers.",
   },
 };
 
@@ -1228,97 +1170,19 @@ function EnvVarPills({
   );
 }
 
-/**
- * One card of the overview: its title, a line on what is inside, and one
- * action — the wizard step that wrote it, or nothing on the cards the wizard
- * never wrote. Every title is the same rank; the cards are siblings, and the
- * page title above is the only thing that outranks them.
- */
+/** One compact subject card. Editing starts from the page header. */
 function DetailCard({
   title,
-  description,
-  action,
   children,
 }: {
   title: string;
-  description?: string;
-  /** Explicit, including the `null` that says this card has no action. */
-  action: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
-          {description && (
-            <p className={typeRole({ role: "meta" })}>{description}</p>
-          )}
-        </div>
-        {action}
-      </div>
+      <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
       {children}
     </section>
-  );
-}
-
-/**
- * A card's own way into the wizard, in the header's top-right corner. The
- * `data-testid` marks it as the header's action rather than merely the first
- * link inside the card: card bodies carry links of their own.
- */
-function CardLink({
-  href,
-  icon,
-  label,
-  cardTitle,
-}: {
-  href: string;
-  icon: ReactNode;
-  label: string;
-  /**
-   * The card this action belongs to, appended to the accessible name. This
-   * page renders several actions labelled only "Edit", and a links list or a
-   * voice command of five identical "Edit" entries names nothing.
-   */
-  cardTitle: string;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      asChild
-      className="-mr-2 shrink-0 text-muted-foreground"
-      data-testid={CARD_ACTION_TEST_ID}
-    >
-      {/* `aria-label` rather than an extra sr-only span: the accessible name
-          of two adjacent inline spans concatenates with no separator, so they
-          read as one run-together word. The visible label stays inside the
-          aria-label, so a voice command on it still matches. */}
-      <Link href={href} aria-label={`${label} ${cardTitle}`}>
-        {icon}
-        <span>{label}</span>
-      </Link>
-    </Button>
-  );
-}
-
-const CARD_ACTION_TEST_ID = "card-action";
-
-function CardEditLink({
-  href,
-  cardTitle,
-}: {
-  href: string;
-  cardTitle: string;
-}) {
-  return (
-    <CardLink
-      href={href}
-      cardTitle={cardTitle}
-      icon={<Pencil className="h-4 w-4" />}
-      label={ACTION_LABEL.edit}
-    />
   );
 }
 
@@ -1331,22 +1195,16 @@ function FieldGrid({ children }: { children: ReactNode }) {
 }
 
 /**
- * The status the registry list shows for this server, derived the same way:
- * an outstanding issue IS the status, and only a server with none reads as
- * installed. Deriving it from row existence alone put a green "Connected"
- * directly above a notice saying the token had been rejected, and left the
- * built-in server — which nobody installs — reading "Not installed".
+ * Runtime state for the Status card. Outstanding issues live beside the page
+ * title and in their owning configuration card, so they are not repeated here.
  */
 function ServerStatus({
   variant,
-  issue,
   deploymentSummary,
   deploymentFeedState,
   connectionsCount,
 }: {
   variant: "builtin" | "local" | "remote";
-  /** The worst outstanding issue, as the list's Status column reads it. */
-  issue: McpServerIssue | undefined;
   deploymentSummary: DeploymentStatusSummary | null;
   /** Whether pod statuses can arrive at all, and whether any have yet. */
   deploymentFeedState: McpDeploymentFeedState;
@@ -1354,9 +1212,6 @@ function ServerStatus({
 }) {
   if (variant === "builtin") {
     return <Badge variant="secondary">Built-in</Badge>;
-  }
-  if (issue) {
-    return <McpServerIssueBadge issue={issue} />;
   }
   // A dot is a claim about a pod, so it is drawn only where a pod's state was
   // actually reported.
@@ -1460,16 +1315,7 @@ const ISSUE_CARD: Record<McpServerIssueKind, "connection" | "authentication"> =
     "needs-reauth": "authentication",
     "failed-to-start": "connection",
     "not-running": "connection",
-    "stuck-starting": "connection",
-    starting: "connection",
-    "reinstall-required": "connection",
-    "awaiting-approval": "connection",
   };
-
-/** The wizard, opened on the step that wrote what the reader is looking at. */
-function catalogEditHref(catalogId: string, step: SetupStepId) {
-  return `/mcp/registry/${encodeURIComponent(catalogId)}/edit?step=${step}`;
-}
 
 function SubHeading({ label }: { label: string }) {
   return <p className={typeRole({ role: "label" })}>{label}</p>;
@@ -1483,33 +1329,14 @@ function CodeLine({ children }: { children: ReactNode }) {
   );
 }
 
-/** What each authentication method means, in the wizard's own words. */
-const AUTH_METHOD_COPY: Record<string, { label: string; describe: string }> = {
-  none: {
-    label: "None",
-    describe: "Callers reach this server without credentials.",
-  },
-  bearer: {
-    label: "Token header",
-    describe: "Each person supplies a token when they connect.",
-  },
-  oauth: {
-    label: "OAuth 2.1",
-    describe: "Each person signs in to the server, which issues the token.",
-  },
-  oauth_client_credentials: {
-    label: "OAuth client credentials",
-    describe: "One machine identity authenticates every call.",
-  },
-  enterprise_managed: {
-    label: "Identity provider exchange",
-    describe:
-      "The gateway exchanges the caller's identity for a credential the server accepts.",
-  },
-  idp_jwt: {
-    label: "Identity provider JWT",
-    describe: "The caller's signed identity token is passed through as it is.",
-  },
+/** Authentication method names from the wizard, without its helper prose. */
+const AUTH_METHOD_LABEL: Record<string, string> = {
+  none: "None",
+  bearer: "Token header",
+  oauth: "OAuth 2.1",
+  oauth_client_credentials: "OAuth client credentials",
+  enterprise_managed: "Identity provider exchange",
+  idp_jwt: "Identity provider JWT",
 };
 
 function OverviewField({

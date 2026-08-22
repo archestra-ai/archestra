@@ -46,7 +46,10 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
 import type { SkillDetail } from "../_parts/github-sync-panel";
-import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  SKILL_PAGE_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../_parts/skill-content-editor";
 import { isSyncedGithubSkill } from "../_parts/skill-draft";
 import {
   SKILL_DESCRIPTION_FALLBACK,
@@ -256,13 +259,9 @@ function SkillDetailView({
     >
       {/* One card per subject, the wizard's column wide and in the wizard's
           order: what the skill says, then who may use it, then the record
-          itself. Each card that mirrors a wizard step opens that step. */}
+          itself. The page's single Edit lives in the header. */}
       <div className="space-y-4">
-        <SkillCard
-          title="Instructions and files"
-          description="The SKILL.md instruction set beside its resource files."
-          editHref={canEdit ? skillEditHref(skill.id, "content") : null}
-        >
+        <SkillCard title="Instructions and files" spacious>
           <SkillContentEditor
             manifest={manifest}
             files={skill.files}
@@ -270,15 +269,11 @@ function SkillDetailView({
             onFilesChange={noop}
             readOnly
             readOnlyMarker={false}
-            className="h-[calc(100vh-28rem)] min-h-[24rem]"
+            className={SKILL_PAGE_EDITOR_CLASS}
           />
         </SkillCard>
 
-        <SkillCard
-          title="Who can use it"
-          description="The environments this skill is offered in, and anyone it is shared with beyond its own scope."
-          editHref={canEdit ? skillEditHref(skill.id, "access") : null}
-        >
+        <SkillCard title="Who can use it">
           <FactGrid>
             <Fact label={FIELD_LABEL.environment}>
               {skill.environments.length === 0 ? (
@@ -314,11 +309,9 @@ function SkillDetailView({
           </FactGrid>
         </SkillCard>
 
-        {/* The record itself. Nothing here was written on a wizard step, so
-            the card offers no way into one — and the last change is a date
-            only: a skill row records when it changed, never by whom, and its
-            author is not resolvable to a name on this page at all. */}
-        <SkillCard title="Details" editHref={null}>
+        {/* The last change is a date only: a skill row records when it changed,
+            never by whom, and its author is not resolvable on this page. */}
+        <SkillCard title="Details">
           <FactGrid>
             <Fact label="ID">
               <span className="flex min-w-0 items-center gap-1">
@@ -448,51 +441,24 @@ function SourceFact({ skill }: { skill: SkillDetail }) {
   );
 }
 
-/**
- * One card of the page: its title, a line on what is inside, and the way into
- * the wizard step that wrote it. Every title is the same rank — the cards are
- * siblings, and the page title above is the only thing that outranks them.
- */
+/** One subject card. Editing starts from the page header, not each card. */
 function SkillCard({
   title,
-  description,
-  editHref,
+  spacious = false,
   children,
 }: {
   title: string;
-  description?: string;
-  /** Null on the cards nothing on the wizard wrote, and for a reader who may not edit. */
-  editHref: string | null;
+  spacious?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
-          {description && (
-            <p className={typeRole({ role: "meta" })}>{description}</p>
-          )}
-        </div>
-        {editHref && (
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="-mr-2 shrink-0 text-muted-foreground"
-          >
-            {/* Several cards on this page each carry an Edit. Named only
-                "Edit", they are one unresolvable set in a screen reader's
-                links list and to a voice command. `aria-label` rather than a
-                second span: adjacent inline spans concatenate with no
-                separator, so the name comes out as one run-together word. */}
-            <Link href={editHref} aria-label={`${ACTION_LABEL.edit} ${title}`}>
-              <Pencil className="h-4 w-4" />
-              <span>{ACTION_LABEL.edit}</span>
-            </Link>
-          </Button>
-        )}
-      </div>
+    <section
+      className={cn(
+        "space-y-4 rounded-lg border bg-card",
+        spacious ? "p-6" : "p-4",
+      )}
+    >
+      <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
       {children}
     </section>
   );

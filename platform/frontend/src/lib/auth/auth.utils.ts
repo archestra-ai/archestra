@@ -1,4 +1,6 @@
 import {
+  type Action,
+  isPermissionActionGranted,
   type Permissions,
   type Resource,
   resourceLabels,
@@ -47,7 +49,13 @@ export function hasPermissions(
     }
 
     for (const action of actions) {
-      if (!(userActions as readonly string[]).includes(action)) {
+      if (
+        !isPermissionActionGranted({
+          resource: resource as Resource,
+          grantedActions: userActions as readonly Action[],
+          requiredAction: action as Action,
+        })
+      ) {
         return false;
       }
     }

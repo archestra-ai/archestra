@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * One of the wizard's switch-and-select settings, read-only: the wizard's own
- * row — an icon, the setting's name and a line on what its current state
- * means — with the control replaced by the state, as one badge on the right.
+ * row — an icon, the setting's name and its state as one badge on the right.
+ * `children` carries an optional one-line gloss on what the state means; most
+ * rows on a read page need only the badge, and the docs link holds the rest.
  */
 export function SettingRow({
   icon,
@@ -32,9 +33,10 @@ export function SettingRow({
   learnMoreHref?: string;
   /** Where the setting itself is configured, at the row's right edge. */
   action?: ReactNode;
-  /** What the current state means, in one line. */
-  children: ReactNode;
+  /** What the current state means, in one line. Optional. */
+  children?: ReactNode;
 }) {
+  const showGloss = !!children;
   return (
     // The icon centres on the two-line text block; the state sits right
     // after the setting's name, where the eye lands first. The icon's tint
@@ -57,22 +59,35 @@ export function SettingRow({
             />
             {state}
           </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {children}
-          {learnMoreHref && (
-            <>
-              {" "}
-              <ExternalDocsLink
-                href={learnMoreHref}
-                className="underline"
-                showIcon={false}
-              >
-                Learn more
-              </ExternalDocsLink>
-            </>
+          {/* With no gloss line the docs link rides beside the state rather
+              than taking a line of its own. */}
+          {learnMoreHref && !showGloss && (
+            <ExternalDocsLink
+              href={learnMoreHref}
+              className="text-xs text-muted-foreground underline underline-offset-2"
+              showIcon={false}
+            >
+              Learn more
+            </ExternalDocsLink>
           )}
-        </p>
+        </div>
+        {showGloss && (
+          <p className="text-xs text-muted-foreground">
+            {children}
+            {learnMoreHref && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={learnMoreHref}
+                  className="underline"
+                  showIcon={false}
+                >
+                  Learn more
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        )}
       </div>
       {action}
     </div>

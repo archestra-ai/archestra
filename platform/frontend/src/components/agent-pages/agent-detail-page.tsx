@@ -409,9 +409,7 @@ function AgentDetails({
       }
     >
       <div className="space-y-4">
-        {tab === "overview" && (
-          <AgentOverview kind={kind} agent={agent} canEdit={canEdit} />
-        )}
+        {tab === "overview" && <AgentOverview kind={kind} agent={agent} />}
         {tab === "connect" && (
           <div className="rounded-lg border bg-card p-6">
             <AgentConnectContent kind={kind} agent={agent} origin="table" />

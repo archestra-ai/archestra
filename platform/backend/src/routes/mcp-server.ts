@@ -1,6 +1,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  createMcpServerAlertFingerprint,
   isPlaywrightCatalogItem,
+  mcpRuntimeAlertSource,
   OAUTH_TOKEN_TYPE,
   RouteId,
 } from "@archestra/shared";
@@ -15,6 +17,7 @@ import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
+import config from "@/config";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -74,20 +77,23 @@ import {
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
+  type McpServer,
   McpServerAgentUsageSchema,
   type McpServerAlertMute,
   McpServerAlertMuteSchema,
+  type McpServerDismissibleAlertKind,
+  // SPDX-SnippetEnd
+  McpServerDismissibleAlertKindSchema,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   McpServerHibernationModeSchema,
-  // SPDX-SnippetEnd
   McpServerListEntrySchema,
-  McpServerMutableAlertKindSchema,
   MuteMcpServerAlertBodySchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectMcpServerSchema,
+  UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
 import {
@@ -210,25 +216,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // The caller's own still-applicable alert mutes, batched over the whole
-      // listing so the registry can render a silenced alert without a second
-      // round trip. Never anyone else's — a mute hides an alert for one person.
-      //
-      // Only connections that are actually failing can carry an applicable
-      // mute, and most listings have none, so the query is handed just those —
-      // and skipped entirely when there are none at all.
-      const alertMutesByServerId =
-        await McpServerAlertMuteModel.findApplicableForViewer({
-          userId: user.id,
-          mcpServers: allServers.filter(
-            (server) => server.oauthRefreshFailedAt !== null,
-          ),
-        });
+      const alertMutesByCatalogId = config.mcpServer.alertingEnabled
+        ? await McpServerAlertMuteModel.findForViewer({
+            userId: user.id,
+            catalogIds: [
+              ...new Set(allServers.map((server) => server.catalogId)),
+            ],
+          })
+        : new Map<string, McpServerAlertMute[]>();
 
       return reply.send(
         allServers.map((server) => ({
           ...server,
-          alertMutes: alertMutesByServerId.get(server.id) ?? [],
+          alertMutes: (
+            alertMutesByCatalogId.get(server.catalogId) ?? []
+          ).filter((mute) => mute.mcpServerId === server.id),
         })),
       );
     },
@@ -1295,7 +1297,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Get the existing MCP server
-      const mcpServer = await McpServerModel.findById(id);
+      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1306,18 +1308,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "App servers are managed via the Apps API and have no credentials to re-authenticate.",
         );
       }
-      // Check mcpServer create permission (required for re-authentication)
-      const { success: hasMcpServerCreatePermission } = await hasPermission(
-        { mcpServerInstallation: ["create"] },
+      await assertLifecycleRoutePermission({
         headers,
-      );
-
-      if (!hasMcpServerCreatePermission) {
-        throw new ApiError(
-          403,
-          "You need MCP server create permission to re-authenticate",
-        );
-      }
+        ordinaryAction: "create",
+        verb: "re-authenticate",
+      });
 
       // Scope-aware lifecycle authorization.
       await assertScopedLifecycleAuthorization({
@@ -1837,25 +1832,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.MuteMcpServerAlert,
         description:
-          "Mute one alert on an MCP connection for the calling user only — it stays visible to everyone else. " +
-          "Only `needs-reauth` is mutable, and only while the connection is actually reporting it: the mute is " +
-          "pinned to that refresh failure and stops applying the moment a fresh one is recorded. " +
-          "Re-muting replaces the caller's previous mute for the same alert.",
+          "Dismiss one alert on an MCP connection for the calling user only. " +
+          "The fingerprint pins it to one failure episode; dismissing again replaces the previous decision.",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
-          kind: McpServerMutableAlertKindSchema,
+          kind: McpServerDismissibleAlertKindSchema,
         }),
         body: MuteMcpServerAlertBodySchema,
         response: constructResponseSchema(McpServerAlertMuteSchema),
       },
     },
     async (request, reply) => {
+      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
-        body: { reason },
+        body: { issueFingerprint, reason },
         user,
         headers,
+        organizationId,
       } = request;
 
       // Visibility is the whole authorization rule here, deliberately weaker
@@ -1866,39 +1861,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServerId,
         userId: user.id,
         headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      assertCurrentServerAlertFingerprint({
+        mcpServer,
+        kind,
+        issueFingerprint,
+      });
 
-      // The mute has to be pinned to a specific failure, so there must be one.
-      // The check and the write happen together under a row lock on the
-      // install: a failure that clears (or begins) mid-request must not leave
-      // behind a mute pinned to an episode that is already over, which the
-      // listing would ignore while the caller was told the alert was silenced.
-      const muted = await McpServerAlertMuteModel.muteLiveAlert({
+      const muted = await McpServerAlertMuteModel.dismiss({
         userId: user.id,
+        catalogId: mcpServer.catalogId,
         mcpServerId,
         issueKind: kind,
+        issueFingerprint,
         reason,
-      });
-      if (!muted) {
-        throw new ApiError(
-          409,
-          "This connection is not reporting a re-authentication alert, so there is nothing to mute.",
-        );
-      }
-
-      // The connection row is untouched by a mute, so the audit registry
-      // registers this route without a snapshot fetcher and the handler
-      // supplies both sides: the caller's mute before and after.
-      request.auditBefore = toAlertMuteAuditSnapshot({
-        mcpServerName: mcpServer.name,
-        mute: muted.previous,
-      });
-      request.auditAfter = toAlertMuteAuditSnapshot({
-        mcpServerName: mcpServer.name,
-        mute: muted.mute,
       });
 
       return reply.send(muted.mute);
@@ -1911,27 +1891,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UnmuteMcpServerAlert,
         description:
-          "Remove the calling user's mute on one MCP connection alert, bringing it back into their own view. " +
-          "404 when the caller has no mute for that alert.",
+          "Restore one dismissed MCP connection alert to the calling user's view.",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
-          kind: McpServerMutableAlertKindSchema,
+          kind: McpServerDismissibleAlertKindSchema,
         }),
+        querystring: UnmuteMcpServerAlertQuerySchema,
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async (request, reply) => {
+      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
+        query: { issueFingerprint },
         user,
         headers,
+        organizationId,
       } = request;
 
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId,
         userId: user.id,
         headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1939,20 +1923,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Deleting by (viewer, connection, kind) can only ever reach the
       // caller's own row, so another user's mute is untouchable from here.
-      const removed = await McpServerAlertMuteModel.unmute({
+      const removed = await McpServerAlertMuteModel.restore({
         userId: user.id,
+        catalogId: mcpServer.catalogId,
         mcpServerId,
         issueKind: kind,
+        issueFingerprint,
       });
       if (!removed) {
-        throw new ApiError(404, "You have not muted this alert.");
+        throw new ApiError(404, "You have not dismissed this alert.");
       }
-
-      request.auditBefore = toAlertMuteAuditSnapshot({
-        mcpServerName: mcpServer.name,
-        mute: removed,
-      });
-      request.auditAfter = null;
 
       return reply.send({ success: true });
     },
@@ -1977,11 +1957,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
+    async ({ params: { id }, user, headers, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
+        organizationId,
       });
 
       if (!mcpServer) {
@@ -2030,11 +2011,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
+    async ({ params: { id }, user, headers, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
+        organizationId,
       });
 
       if (!mcpServer) {
@@ -2068,11 +2050,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.record(z.string(), z.unknown())),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async ({ params: { id }, body, user, headers, organizationId }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2226,7 +2209,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetEnd
 
       // Get the existing MCP server
-      const mcpServer = await McpServerModel.findById(id);
+      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2925,8 +2908,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers }) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, user, headers, organizationId }) => {
+      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -3011,12 +2994,18 @@ async function findAccessibleMcpServer(params: {
   mcpServerId: string;
   userId: string;
   headers: IncomingHttpHeaders;
+  organizationId: string;
 }) {
   const { success: isMcpServerAdmin } = await hasPermission(
     { mcpServerInstallation: ["admin"] },
     params.headers,
   );
 
+  const server = await McpServerModel.findByIdInOrg(
+    params.mcpServerId,
+    params.organizationId,
+  );
+  if (!server) return undefined;
   return McpServerModel.findById(
     params.mcpServerId,
     params.userId,
@@ -3024,28 +3013,95 @@ async function findAccessibleMcpServer(params: {
   );
 }
 
+function assertCurrentServerAlertFingerprint(params: {
+  mcpServer: McpServer;
+  kind: McpServerDismissibleAlertKind;
+  issueFingerprint: string;
+}): void {
+  const current = currentServerAlertFingerprint(params);
+  if (!current || current !== params.issueFingerprint) {
+    throw new ApiError(
+      409,
+      "This alert changed or cleared. Refresh the registry and try again.",
+    );
+  }
+}
+
+function currentServerAlertFingerprint(params: {
+  mcpServer: McpServer;
+  kind: McpServerDismissibleAlertKind;
+}): string | null {
+  const { mcpServer, kind } = params;
+  let source: unknown;
+  if (kind === "needs-reauth") {
+    if (!mcpServer.oauthRefreshError) return null;
+    source = mcpServer.oauthRefreshFailedAt ?? "current";
+  } else if (kind === "reinstall-required") {
+    if (!mcpServer.reinstallRequired) return null;
+    source = mcpServer.updatedAt;
+  } else if (kind === "failed-to-start") {
+    if (mcpServer.localInstallationStatus === "error") {
+      source = mcpServer.updatedAt;
+    } else {
+      const runtime = currentRuntimeAlert(mcpServer);
+      if (!runtime || runtime.kind !== kind) return null;
+      source = runtime.source;
+    }
+  } else if (kind === "not-running" || kind === "stuck-starting") {
+    const runtime = currentRuntimeAlert(mcpServer);
+    if (!runtime || runtime.kind !== kind) return null;
+    source = runtime.source;
+  } else {
+    return null;
+  }
+  return createMcpServerAlertFingerprint({
+    kind,
+    catalogId: mcpServer.catalogId,
+    serverId: mcpServer.id,
+    source,
+  });
+}
+
+function currentRuntimeAlert(mcpServer: McpServer): {
+  kind: "failed-to-start" | "not-running" | "stuck-starting";
+  source: string;
+} | null {
+  const runtime =
+    McpServerRuntimeManager.statusSummary.mcpServers[mcpServer.id];
+  if (!runtime) return null;
+  const installing =
+    mcpServer.localInstallationStatus === "pending" ||
+    mcpServer.localInstallationStatus === "discovering-tools";
+  const kind =
+    runtime.state === "failed"
+      ? installing
+        ? "failed-to-start"
+        : "not-running"
+      : !installing && runtime.state === "pending" && runtime.error
+        ? "stuck-starting"
+        : null;
+  if (!kind) return null;
+  return {
+    kind,
+    source: mcpRuntimeAlertSource({
+      serverId: mcpServer.id,
+      deploymentName: runtime.deploymentName ?? undefined,
+      podName: runtime.podName,
+      state: runtime.state,
+      error: runtime.error,
+      restartCount: runtime.restartCount,
+    }),
+  };
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
 
-/**
- * One side of a mute/unmute audit record. The connection's name rides along
- * because the audit hook reads `name` to label the row, and the resource being
- * labelled is the connection the alert was silenced on. Null means "no mute" —
- * the `before` of a first mute, the `after` of an unmute.
- */
-function toAlertMuteAuditSnapshot(params: {
-  mcpServerName: string;
-  mute: McpServerAlertMute | null;
-}): Record<string, unknown> | null {
-  const { mcpServerName, mute } = params;
-  if (!mute) return null;
-  return {
-    name: mcpServerName,
-    alertKind: mute.issueKind,
-    reason: mute.reason,
-    mutedAt: mute.mutedAt.toISOString(),
-  };
+function assertMcpServerAlertingEnabled(): void {
+  if (!config.mcpServer.alertingEnabled) {
+    throw new ApiError(404, "Not found");
+  }
 }
 
 /**
@@ -3174,8 +3230,32 @@ async function failHardReset(
 }
 
 /**
+ * Re-authentication repeats the route-level capability check because it
+ * replaces credentials. Installation admin subsumes create permission.
+ */
+async function assertLifecycleRoutePermission(params: {
+  headers: IncomingHttpHeaders;
+  ordinaryAction: "create";
+  verb: string;
+}): Promise<void> {
+  const [ordinary, admin] = await Promise.all([
+    hasPermission(
+      { mcpServerInstallation: [params.ordinaryAction] },
+      params.headers,
+    ),
+    hasPermission({ mcpServerInstallation: ["admin"] }, params.headers),
+  ]);
+  if (ordinary.success || admin.success) return;
+  throw new ApiError(
+    403,
+    `You do not have permission to ${params.verb} this MCP server`,
+  );
+}
+
+/**
  * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)
  * on an already-fetched MCP server by its scope. Rules:
+ *   - mcpServerInstallation:admin: every scope, regardless of ownership
  *   - personal:
  *       - revoke: owner OR mcpServerInstallation:update
  *       - re-authenticate / reinstall: owner only (these replace the
@@ -3194,6 +3274,12 @@ async function assertScopedLifecycleAuthorization(params: {
   action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
   const { mcpServer, userId, headers, action } = params;
+
+  const { success: isMcpServerInstallationAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    headers,
+  );
+  if (isMcpServerInstallationAdmin) return;
 
   switch (mcpServer.scope) {
     case "personal": {
@@ -3250,17 +3336,10 @@ async function assertScopedLifecycleAuthorization(params: {
       return;
     }
     case "org": {
-      const { success: isMcpServerInstallationAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
+      throw new ApiError(
+        403,
+        `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
       );
-      if (!isMcpServerInstallationAdmin) {
-        throw new ApiError(
-          403,
-          `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
-        );
-      }
-      return;
     }
   }
 }

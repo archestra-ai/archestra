@@ -1,17 +1,27 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  createMcpServerAlertFingerprint,
   type McpDeploymentStatusEntry,
+  mcpRuntimeAlertSource,
 } from "@archestra/shared";
 
 /**
  * The one rule for "which MCP servers need attention", shared by the sidebar
  * count, the registry list's audience facets, the table Status column and the
- * cards. Everything is derived from data the registry already loads: installed
- * server rows (installation and OAuth state, reinstall flags, the viewer's own
- * alert mutes), the live K8s deployment statuses (when the caller has them),
- * and the catalog item's own flags. Kept pure so every surface counts the same
- * way.
+ * cards. There is no state mapping to maintain: a server is flagged exactly
+ * when an error payload says it cannot operate, and the payload itself says
+ * why. Three sources, three statuses:
+ *
+ *   localInstallationError   Failed to start          fix the configuration
+ *   deployment failed/gone   Not running              logs, then restart
+ *   oauthRefreshError        Needs re-authentication  sign in again
+ *
+ * Everything else is normal operation or transient progress and never raises
+ * an alert: pending installs, image approval, reinstall hints, a pod that is
+ * merely starting. A healthy running pod also clears the flag regardless of
+ * what stale state the server row carries — the running pod is proof the
+ * installation works.
  *
  * `attentionCatalogIds` is the single predicate behind every number the
  * registry prints. Its `audience` argument is a whole item's bucket
@@ -21,43 +31,31 @@ import {
  * the predicate, because the list excludes it too, and a badge counting rows
  * the list refuses to render sends people looking for something that is not
  * there.
- *
- * Vocabulary (also the words shown to users):
- *   down       Failed to start · Not running · Needs re-authentication
- *   attention  Reinstall required · Awaiting image approval · Stuck starting
- *   progress   Starting (installing / pod starting / waking) — never counted
  */
 export type McpServerIssueKind =
   | "failed-to-start"
   | "not-running"
-  | "needs-reauth"
-  | "reinstall-required"
-  | "awaiting-approval"
-  | "stuck-starting"
-  | "starting";
-
-export type McpServerIssueSeverity = "down" | "attention" | "progress";
+  | "needs-reauth";
 
 /** Who can clear the issue from where they are. */
 export type McpServerIssueAudience =
-  /** The viewer can act on it (re-authenticate, reinstall, approve, fix). */
+  /** The viewer can act on it (re-authenticate, fix the configuration). */
   | "you"
-  /** Somebody else's connection or a step only another role can take. */
-  | "others"
-  /** Nobody needs to act; the system is working on it. */
-  | "system";
+  /** Somebody else's connection; only they or an admin can act. */
+  | "others";
 
 export interface McpServerIssue {
   kind: McpServerIssueKind;
-  severity: McpServerIssueSeverity;
   audience: McpServerIssueAudience;
   catalogId: string;
   /** The install this issue is about; absent for catalog-scope issues. */
   serverId?: string;
-  /** Free-text cause (an error message), if the source has one. */
+  /** The error text that raised the issue, tidied for display. */
   detail: string | null;
   /** When the issue started, if the source records it. */
   since: string | null;
+  /** Stable for this failure episode; changes when the underlying state does. */
+  fingerprint: string;
   /**
    * The viewer silenced this issue for themselves. It leaves every count and
    * still renders under the Muted facet, so the state stays visible.
@@ -72,13 +70,12 @@ export interface McpServerIssue {
   mutedReason: string | null;
 }
 
+type AlertMuteForIssues =
+  archestraApiTypes.GetMcpServersResponses["200"][number]["alertMutes"][number];
+
 export type CatalogItemForIssues = Pick<
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-  | "id"
-  | "serverType"
-  | "multitenant"
-  | "catalogReinstallRequired"
-  | "imageApprovalRequired"
+  "id" | "serverType" | "multitenant" | "alertMutes"
 >;
 
 export type InstalledServerForIssues = Pick<
@@ -86,16 +83,13 @@ export type InstalledServerForIssues = Pick<
   | "id"
   | "catalogId"
   | "ownerId"
-  | "teamId"
-  | "scope"
   | "localInstallationStatus"
   | "localInstallationError"
   | "oauthRefreshError"
   | "oauthRefreshErrorMessage"
   | "oauthRefreshErrorDescription"
   | "oauthRefreshFailedAt"
-  | "reinstallRequired"
-  | "reinstallReason"
+  | "updatedAt"
   | "alertMutes"
 >;
 
@@ -103,68 +97,22 @@ export type InstalledServerForIssues = Pick<
 export interface IssueViewer {
   userId: string | null;
   canReauthenticate: (server: InstalledServerForIssues) => boolean;
-  /** mcpServerInstallation:admin — may reinstall any install, restart pods, approve images. */
+  /** mcpServerInstallation:admin — may act on any install, not just their own. */
   canManageInstalls: boolean;
-  /** mcpRegistry:update — may recreate a multi-tenant catalog's shared pod. */
-  canEditCatalog: boolean;
 }
 
 export interface McpServerIssueKindMeta {
   kind: McpServerIssueKind;
-  severity: McpServerIssueSeverity;
   /** Status string shown on pills, rows and cards. */
   label: string;
-  /** Sentence fragment for the summary: "N <phrase>". */
-  phrase: (count: number) => string;
 }
 
-// Ordered by severity, then by how urgently the operator has to act — this
-// is the order pills, filter options and summary fragments render in.
+// Ordered by how urgently the operator has to act — this is the order pills,
+// filter options and rows render in.
 export const MCP_SERVER_ISSUE_KINDS: McpServerIssueKindMeta[] = [
-  {
-    kind: "failed-to-start",
-    severity: "down",
-    label: "Failed to start",
-    phrase: (n) => `${n} failed to start`,
-  },
-  {
-    kind: "not-running",
-    severity: "down",
-    label: "Not running",
-    phrase: (n) => `${n} not running`,
-  },
-  {
-    kind: "needs-reauth",
-    severity: "down",
-    label: "Needs re-authentication",
-    phrase: (n) =>
-      n === 1 ? "1 needs re-authentication" : `${n} need re-authentication`,
-  },
-  {
-    kind: "reinstall-required",
-    severity: "attention",
-    label: "Reinstall required",
-    phrase: (n) => (n === 1 ? "1 needs a reinstall" : `${n} need a reinstall`),
-  },
-  {
-    kind: "awaiting-approval",
-    severity: "attention",
-    label: "Awaiting image approval",
-    phrase: (n) =>
-      n === 1 ? "1 awaiting image approval" : `${n} awaiting image approval`,
-  },
-  {
-    kind: "stuck-starting",
-    severity: "attention",
-    label: "Stuck starting",
-    phrase: (n) => `${n} stuck starting`,
-  },
-  {
-    kind: "starting",
-    severity: "progress",
-    label: "Starting",
-    phrase: (n) => `${n} starting`,
-  },
+  { kind: "failed-to-start", label: "Failed to start" },
+  { kind: "not-running", label: "Not running" },
+  { kind: "needs-reauth", label: "Needs re-authentication" },
 ];
 
 const KIND_META = new Map(MCP_SERVER_ISSUE_KINDS.map((m) => [m.kind, m]));
@@ -252,14 +200,12 @@ export function attentionCatalogIds(
 
 /**
  * Which audience an item belongs to: "you" if any of its issues is the
- * viewer's to fix, else "others" if somebody else has to, else "system".
- * Muted issues are excluded by the caller, not here — the server page shows
- * the true bucket whether or not the viewer silenced the alert.
+ * viewer's to fix, else "others". Muted issues are excluded by the caller,
+ * not here — the server page shows the true bucket whether or not the viewer
+ * silenced the alert.
  */
 export function bucketOf(issues: McpServerIssue[]): McpServerIssueAudience {
-  if (issues.some((i) => i.audience === "you")) return "you";
-  if (issues.some((i) => i.audience === "others")) return "others";
-  return "system";
+  return issues.some((i) => i.audience === "you") ? "you" : "others";
 }
 
 /** The issues one facet is about, in the order the kinds are declared. */
@@ -269,21 +215,15 @@ export function facetIssues(
 ): McpServerIssue[] {
   if (facet === "muted") return issues.filter((i) => i.muted);
   const live = issues.filter((i) => !i.muted);
-  if (facet === "you") return live.filter((i) => i.audience === "you");
-  // Everything left that somebody has to act on. Audience "system" is included
-  // deliberately: see `audienceFacetOf`.
-  return live.filter((i) => i.audience !== "you" && i.severity !== "progress");
+  return live.filter(
+    (i) => i.audience === (facet === "you" ? "you" : "others"),
+  );
 }
 
 /**
- * Whether the viewer may repair one install: reinstall it, restart its pod or
- * cancel it. An installs admin may act on anybody's, everybody else only on
- * their own.
- *
- * Exported because the card and the table decide whether to render the button
- * this module's "Reinstall required" issue tells the user to press. While the
- * two rules differed, an admin who did not own the install was told to
- * reinstall and found no button anywhere.
+ * Whether the viewer may repair one install: fix its configuration, restart
+ * its pod or remove it. An installs admin may act on anybody's, everybody
+ * else only on their own.
  */
 export function canFixInstall({
   server,
@@ -298,11 +238,8 @@ export function canFixInstall({
 /**
  * What the status means and what clears it, in the words a row or banner
  * shows under the status pill. `what` states the condition; `fix` names the
- * concrete next step — including which part of the configuration to look at,
- * so an admin doesn't have to guess from a raw runtime message. `whoActs`
- * names who can take that step, for the rows where the viewer cannot: waiting
- * on a colleague is not a permission failure, and a row that just hides its
- * button reads like one.
+ * concrete next step. `whoActs` names the role that can take that step when
+ * the viewer cannot.
  */
 export function describeMcpServerIssue(issue: McpServerIssue): {
   what: string;
@@ -312,20 +249,14 @@ export function describeMcpServerIssue(issue: McpServerIssue): {
   switch (issue.kind) {
     case "failed-to-start":
       return {
-        what: "The server exited before it answered the first request.",
-        fix: "Check the logs for the error, then correct the command, arguments or environment variables in the configuration.",
+        what: "The server could not start.",
+        fix: "Check the logs for the error, then correct the image, command, arguments or environment variables in the configuration.",
         whoActs: INSTALL_OWNER_OR_ADMIN_ACTS,
       };
     case "not-running":
       return {
         what: "The server keeps crashing after a successful install.",
         fix: "Check the logs; if the configuration is right, restart the server from its page.",
-        whoActs: INSTALL_OWNER_OR_ADMIN_ACTS,
-      };
-    case "stuck-starting":
-      return {
-        what: "Kubernetes cannot pull the container image, so the server never starts.",
-        fix: "Check the image name, tag and registry access in the configuration.",
         whoActs: INSTALL_OWNER_OR_ADMIN_ACTS,
       };
     case "needs-reauth":
@@ -335,29 +266,6 @@ export function describeMcpServerIssue(issue: McpServerIssue): {
         whoActs:
           "Only the person who owns this connection can sign in to the provider again.",
       };
-    case "reinstall-required":
-      return {
-        what:
-          issue.detail ?? "The configuration changed after this was installed.",
-        fix: "Reinstall to apply it — tool assignments and policies are kept.",
-        // A catalog-scope reinstall recreates the pod everyone shares, which
-        // only somebody who may edit the registry entry can do.
-        whoActs: issue.serverId
-          ? INSTALL_OWNER_OR_ADMIN_ACTS
-          : "An admin who can edit this registry entry has to recreate the shared server.",
-      };
-    case "awaiting-approval":
-      return {
-        what: "The Docker image is not from a trusted registry, so nobody can install this server yet.",
-        fix: "Review the image and approve it in the server's configuration.",
-        whoActs: "An MCP installations admin has to approve the image.",
-      };
-    case "starting":
-      return {
-        what: "The server is starting.",
-        fix: "",
-        whoActs: "",
-      };
     default:
       return { what: issue.detail ?? "", fix: "", whoActs: "" };
   }
@@ -365,11 +273,6 @@ export function describeMcpServerIssue(issue: McpServerIssue): {
 
 const INSTALL_OWNER_OR_ADMIN_ACTS =
   "Whoever installed this connection, or an MCP installations admin, can fix it.";
-
-/** True when the item has an issue somebody (viewer or others) must act on. */
-export function needsAttention(issues: McpServerIssue[] | undefined): boolean {
-  return !!issues?.some((i) => i.severity !== "progress");
-}
 
 /**
  * A runtime / install error for a surface that already names the server: the
@@ -391,22 +294,16 @@ export function tidyMcpServerErrorText(
 // ===== Internal pieces =====
 
 /**
- * The audience facet an item lands in, or null when it has nothing outstanding
- * left. Muted issues are dropped first: a muted item leaves both audience
- * counts and is reached through the Muted facet instead.
- *
- * The "others" case is decided by severity rather than by audience, so nothing
- * broken can fall out of every facet. An image awaiting approval is audience
- * "system" to somebody who cannot approve it — nobody they can name is acting
- * on it — but it is still stopping installs, and hiding it entirely would make
- * the facets add up to less than the trouble on the page.
+ * The audience facet an item lands in, or null when it has nothing
+ * outstanding left. Muted issues are dropped first: a muted item leaves both
+ * audience counts and is reached through the Muted facet instead.
  */
 function audienceFacetOf(
   issues: McpServerIssue[],
 ): Exclude<McpServerAttentionFacet, "muted"> | null {
   const live = issues.filter((issue) => !issue.muted);
-  if (bucketOf(live) === "you") return "you";
-  return needsAttention(live) ? "others" : null;
+  if (live.length === 0) return null;
+  return bucketOf(live);
 }
 
 function compareKinds(a: McpServerIssueKind, b: McpServerIssueKind): number {
@@ -429,84 +326,118 @@ function computeItemIssues({
   const viewerCanFix = (s: InstalledServerForIssues) =>
     canFixInstall({ server: s, viewer });
   const push = (
-    issue: Omit<
+    input: Omit<
       McpServerIssue,
-      "severity" | "catalogId" | "detail" | "since" | "muted" | "mutedReason"
+      "catalogId" | "detail" | "since" | "fingerprint" | "muted" | "mutedReason"
     > &
       Partial<
         Pick<McpServerIssue, "detail" | "since" | "muted" | "mutedReason">
-      >,
-  ) =>
+      > & { fingerprintSource?: string | null },
+  ) => {
+    const { fingerprintSource, ...issue } = input;
+    const fingerprint = createMcpServerAlertFingerprint({
+      kind: issue.kind,
+      catalogId: item.id,
+      serverId: issue.serverId,
+      source: fingerprintSource ?? issue.since ?? issue.detail ?? "current",
+    });
+    const dismissals = [
+      ...(item.alertMutes ?? []),
+      ...(issue.serverId
+        ? (servers.find((server) => server.id === issue.serverId)?.alertMutes ??
+          [])
+        : []),
+    ] as AlertMuteForIssues[];
+    const dismissal = dismissals.find(
+      (candidate) =>
+        candidate.issueKind === issue.kind &&
+        candidate.mcpServerId === (issue.serverId ?? null) &&
+        candidate.issueFingerprint === fingerprint,
+    );
     issues.push({
-      severity: getMcpServerIssueKindMeta(issue.kind).severity,
       catalogId: item.id,
       detail: null,
       since: null,
-      // Only `needs-reauth` is mutable, so everything else is live by
-      // construction rather than by a per-kind check at each call site.
-      muted: false,
-      mutedReason: null,
+      fingerprint,
+      muted: !!dismissal,
+      mutedReason: dismissal?.reason ?? null,
       ...issue,
     });
+  };
 
-  // Failed installs. Multi-tenant catalogs alias one pod across many
-  // mcp_server rows, so every sibling reports the same error — collapse to
-  // one per catalog. Single-tenant installs own their pods; dedupe by pod,
-  // falling back to the row itself.
-  const failedInstallServerIds = new Set<string>();
+  // Local servers: the row's installation error and the runtime's deployment
+  // state are the error payloads. Multi-tenant rows alias one pod, so
+  // collapse siblings by deployment identity.
   if (isLocal) {
-    const seen = new Set<string>();
-    for (const s of servers) {
-      if (s.localInstallationStatus !== "error") continue;
-      failedInstallServerIds.add(s.id);
-      const key = item.multitenant
-        ? `catalog:${item.id}`
-        : (deploymentStatuses[s.id]?.podName ?? s.id);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      push({
-        kind: "failed-to-start",
-        audience: viewerCanFix(s) ? "you" : "others",
-        serverId: s.id,
-        detail: tidyMcpServerErrorText(s.localInstallationError),
-      });
-    }
-  }
-
-  // Runtime state after a successful install: a pod that failed (crash loop,
-  // config error), a pod the kubelet keeps retrying to pull the image for
-  // ("pending" with an error), and plain starting/waking. Dedupe by
-  // deployment identity, so multi-tenant siblings count as one pod.
-  if (isLocal) {
+    const sharedInstallFailureSource = item.multitenant
+      ? mcpRuntimeAlertSource({
+          serverId: `catalog:${item.id}`,
+          deploymentName: item.id,
+          state: "failed",
+          error: JSON.stringify(
+            servers
+              .filter((server) => server.localInstallationStatus === "error")
+              .map((server) => server.localInstallationError ?? "")
+              .sort(),
+          ),
+        })
+      : null;
     const seenDeployments = new Set<string>();
     for (const s of servers) {
-      if (failedInstallServerIds.has(s.id)) continue;
       const entry = deploymentStatuses[s.id];
+      // A healthy or on-demand pod proves the current installation works,
+      // whatever stale state the row carries.
+      if (entry?.state === "running" || entry?.state === "hibernated") {
+        continue;
+      }
       const installing =
         s.localInstallationStatus === "pending" ||
         s.localInstallationStatus === "discovering-tools";
+      const installFailed = s.localInstallationStatus === "error";
       let kind: McpServerIssueKind | null = null;
-      if (entry?.state === "failed") {
-        // A pod that failed while the install is still pending will fail the
-        // install too — say so now rather than "Starting" (mirrors the card).
-        kind = installing ? "failed-to-start" : "not-running";
-      } else if (installing) {
-        kind = "starting";
-      } else if (entry?.state === "pending" && entry.error) {
-        kind = "stuck-starting";
-      } else if (entry?.state === "pending" || entry?.state === "waking") {
-        kind = "starting";
+      if (entry?.state === "failed" || entry?.state === "succeeded") {
+        kind = installing || installFailed ? "failed-to-start" : "not-running";
+      } else if (entry?.state === "not_created") {
+        if (installFailed) kind = "failed-to-start";
+        else if (s.localInstallationStatus === "success") kind = "not-running";
+      } else if (entry?.state === "pending") {
+        // The kubelet reporting an error (it cannot pull or schedule the
+        // image) is a start failure; merely pending is normal progress.
+        if (entry.error) kind = "failed-to-start";
+      } else if (installFailed) {
+        kind = "failed-to-start";
       }
       if (!kind) continue;
-      const key = entry?.deploymentName ?? entry?.podName ?? s.id;
+      const key =
+        entry?.deploymentName ??
+        entry?.podName ??
+        (item.multitenant ? `catalog:${item.id}` : s.id);
       if (seenDeployments.has(key)) continue;
       seenDeployments.add(key);
+      const installError = tidyMcpServerErrorText(s.localInstallationError);
       push({
         kind,
-        audience:
-          kind === "starting" ? "system" : viewerCanFix(s) ? "you" : "others",
-        serverId: s.id,
-        detail: entry ? formatRuntimeDetail(entry) : null,
+        audience: viewerCanFix(s) ? "you" : "others",
+        serverId: item.multitenant ? undefined : s.id,
+        detail:
+          kind === "failed-to-start" && installError
+            ? installError
+            : entry
+              ? formatRuntimeDetail(entry)
+              : null,
+        fingerprintSource:
+          kind === "failed-to-start" && installFailed
+            ? item.multitenant
+              ? sharedInstallFailureSource
+              : String(s.updatedAt)
+            : mcpRuntimeAlertSource({
+                serverId: item.multitenant ? `catalog:${item.id}` : s.id,
+                deploymentName: entry?.deploymentName,
+                podName: entry?.podName,
+                state: entry?.state ?? kind,
+                error: entry?.error ?? null,
+                restartCount: entry?.restartCount ?? 0,
+              }),
       });
     }
   }
@@ -515,9 +446,6 @@ function computeItemIssues({
   // re-authenticated by whoever owns it, so no dedup.
   for (const s of servers) {
     if (!s.oauthRefreshError) continue;
-    // The API returns only the caller's own mutes, and only while they still
-    // apply to the failure being reported, so presence is the whole answer.
-    const mute = s.alertMutes.find((m) => m.issueKind === "needs-reauth");
     push({
       kind: "needs-reauth",
       audience: viewer.canReauthenticate(s) ? "you" : "others",
@@ -525,38 +453,7 @@ function computeItemIssues({
       detail:
         s.oauthRefreshErrorDescription ?? s.oauthRefreshErrorMessage ?? null,
       since: s.oauthRefreshFailedAt ?? null,
-      muted: !!mute,
-      mutedReason: mute?.reason ?? null,
-    });
-  }
-
-  // Reinstall: a multi-tenant local catalog whose execution config changed
-  // needs its shared pod recreated once (catalog scope). Otherwise, each
-  // install flagged after a config edit needs its own reinstall.
-  if (isLocal && item.multitenant && item.catalogReinstallRequired) {
-    push({
-      kind: "reinstall-required",
-      audience: viewer.canEditCatalog ? "you" : "others",
-      detail: "Server configuration changed since the shared pod was created",
-    });
-  } else {
-    for (const s of servers) {
-      if (!s.reinstallRequired) continue;
-      push({
-        kind: "reinstall-required",
-        audience: viewerCanFix(s) ? "you" : "others",
-        serverId: s.id,
-        detail: reinstallReasonText(s.reinstallReason),
-      });
-    }
-  }
-
-  if (item.imageApprovalRequired) {
-    push({
-      kind: "awaiting-approval",
-      // Non-approvers can't do anything about it; to them it is "in progress".
-      audience: viewer.canManageInstalls ? "you" : "system",
-      detail: "Docker image is not from a trusted registry",
+      fingerprintSource: s.oauthRefreshFailedAt,
     });
   }
 
@@ -568,17 +465,4 @@ function formatRuntimeDetail(entry: McpDeploymentStatusEntry): string {
   return entry.restartCount && entry.restartCount > 0
     ? `${base} · ${entry.restartCount} restart${entry.restartCount === 1 ? "" : "s"}`
     : base;
-}
-
-function reinstallReasonText(
-  reason: InstalledServerForIssues["reinstallReason"],
-): string {
-  switch (reason) {
-    case "new-input":
-      return "Configuration asks for new values since this was installed";
-    case "restart":
-      return "Configuration changed since this was installed";
-    default:
-      return "Configuration changed since this was installed";
-  }
 }

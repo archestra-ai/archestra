@@ -20,7 +20,7 @@ import {
   test,
 } from "@/test";
 import { auth as betterAuth } from "./better-auth";
-import { hasPermission } from "./utils";
+import { hasPermission, userHasPermission } from "./utils";
 
 const mockBetterAuth = betterAuth as unknown as {
   api: {
@@ -124,6 +124,55 @@ describe("hasPermission", () => {
       );
 
       expect(result).toEqual({ success: true, error: null });
+    });
+
+    test("treats MCP installation admin as every lower installation action", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const role = await makeCustomRole(org.id, {
+        permission: { mcpServerInstallation: ["admin"] },
+      });
+      await makeMember(user.id, org.id, { role: role.role });
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: { id: user.id },
+        session: { activeOrganizationId: org.id },
+      });
+
+      for (const action of ["read", "create", "update", "delete"] as const) {
+        await expect(
+          hasPermission(
+            { mcpServerInstallation: [action] },
+            { cookie: "session-cookie" },
+          ),
+        ).resolves.toEqual({ success: true, error: null });
+      }
+      await expect(
+        hasPermission(
+          { mcpServerInstallation: ["manage-deleted"] },
+          { cookie: "session-cookie" },
+        ),
+      ).resolves.toMatchObject({
+        success: false,
+        missingPermissions: {
+          mcpServerInstallation: ["manage-deleted"],
+        },
+      });
+      await expect(
+        userHasPermission(user.id, org.id, "mcpServerInstallation", "update"),
+      ).resolves.toBe(true);
+      await expect(
+        userHasPermission(
+          user.id,
+          org.id,
+          "mcpServerInstallation",
+          "manage-deleted",
+        ),
+      ).resolves.toBe(false);
     });
 
     test("skips session resolution when the caller provides a DB-fresh user context", async ({

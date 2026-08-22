@@ -53,6 +53,22 @@ describe("hasPermissions", () => {
 
     expect(hasPermissions(userPermissions, required)).toBe(false);
   });
+
+  it("lets installation admin satisfy CRUD but not manage-deleted", () => {
+    const userPermissions: Permissions = {
+      mcpServerInstallation: ["admin"],
+    };
+    expect(
+      hasPermissions(userPermissions, {
+        mcpServerInstallation: ["read", "create", "update", "delete"],
+      }),
+    ).toBe(true);
+    expect(
+      hasPermissions(userPermissions, {
+        mcpServerInstallation: ["manage-deleted"],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("formatMissingPermissions", () => {

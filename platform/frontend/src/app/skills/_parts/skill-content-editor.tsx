@@ -54,6 +54,10 @@ Step-by-step instructions for the agent...`;
 
 const ROOT_ADD_KEY = "";
 
+/** Shared height contract for full-page skill content editors. */
+export const SKILL_PAGE_EDITOR_CLASS =
+  "h-[calc(100vh-26rem)] min-h-[28rem] shrink-0";
+
 /**
  * The content half of a skill: SKILL.md manifest plus resource files, as a
  * file tree beside a text editor. Controlled — the manifest and file set live
@@ -230,11 +234,11 @@ export function SkillContentEditor({
   return (
     <div
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3",
+        "grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(8rem,auto)_minmax(20rem,1fr)] gap-3 overflow-y-auto md:grid-cols-[240px_1fr] md:grid-rows-1 md:overflow-hidden",
         className,
       )}
     >
-      <div className="flex min-h-0 flex-col rounded-md border">
+      <div className="flex max-h-48 min-h-0 flex-col rounded-md border md:max-h-none">
         <div className="flex-1 overflow-y-auto p-2">
           <ul className="space-y-0.5">
             <ManifestRow

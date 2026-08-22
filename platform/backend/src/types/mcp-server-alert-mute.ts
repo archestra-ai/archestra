@@ -1,32 +1,25 @@
+import {
+  MCP_SERVER_DISMISSIBLE_ALERT_KINDS,
+  type McpServerDismissibleAlertKind,
+} from "@archestra/shared";
 import { z } from "zod";
 
-/**
- * The alert kinds a viewer is allowed to mute. Only "needs-reauth" qualifies:
- * it is the one alert whose fix belongs to a single person (re-connect the
- * credential), so hiding it from everyone else's view costs nothing. A
- * reinstall requirement or a runtime fault is a state of the deployment that
- * every viewer needs to keep seeing, so neither is mutable.
- */
-export const McpServerMutableAlertKindSchema = z.enum(["needs-reauth"], {
-  error: 'Only "needs-reauth" alerts can be muted.',
-});
+/** Every terminal/actionable registry alert may be dismissed per viewer. */
+export const McpServerDismissibleAlertKindSchema = z.enum(
+  MCP_SERVER_DISMISSIBLE_ALERT_KINDS,
+);
 
-export type McpServerMutableAlertKind = z.infer<
-  typeof McpServerMutableAlertKindSchema
->;
+export type { McpServerDismissibleAlertKind };
 
 /**
- * A mute as the viewer who owns it sees it. The alert it silences is identified
- * by `(mcpServerId, issueKind)`; the viewer is implicit, because a listing only
- * ever carries the caller's own mutes.
- *
- * Mutes reaching the API have already been checked for applicability against
- * the server's current `oauthRefreshFailedAt`, so the failure timestamp the
- * mute was taken against is not part of the read shape.
+ * A per-viewer dismissal. Catalog-level alerts have no `mcpServerId`; the
+ * fingerprint pins the dismissal to one failure episode.
  */
 export const McpServerAlertMuteSchema = z.object({
-  mcpServerId: z.string(),
-  issueKind: McpServerMutableAlertKindSchema,
+  catalogId: z.string(),
+  mcpServerId: z.string().nullable(),
+  issueKind: McpServerDismissibleAlertKindSchema,
+  issueFingerprint: z.string(),
   reason: z.string(),
   /** When the mute was last (re-)taken, not when it was first created. */
   mutedAt: z.coerce.date(),
@@ -34,11 +27,13 @@ export const McpServerAlertMuteSchema = z.object({
 
 export type McpServerAlertMute = z.infer<typeof McpServerAlertMuteSchema>;
 
-/** A mute must say why; the cap keeps a free-text field out of blob territory. */
+/** A dismissal identifies the exact failure episode; its note is optional. */
 export const MuteMcpServerAlertBodySchema = z.object({
-  reason: z
-    .string()
-    .trim()
-    .min(1, "A reason is required to mute an alert.")
-    .max(500),
+  mcpServerId: z.string().uuid().nullable().optional(),
+  issueFingerprint: z.string().trim().min(1).max(500),
+  reason: z.string().trim().max(500).optional().default(""),
+});
+
+export const UnmuteMcpServerAlertQuerySchema = z.object({
+  issueFingerprint: z.string().trim().min(1).max(500),
 });

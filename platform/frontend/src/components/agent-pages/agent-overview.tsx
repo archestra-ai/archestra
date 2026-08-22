@@ -7,18 +7,14 @@ import {
   DocsPage,
   getDocsUrl,
   parseFullToolName,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
 import { useQueries } from "@tanstack/react-query";
 import {
   BookOpen,
-  CheckIcon,
   ChevronDown,
   KeyRound,
   PackageSearch,
-  Pencil,
   Settings2,
   Unplug,
 } from "lucide-react";
@@ -28,7 +24,6 @@ import {
   MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
   MISSING_CREDENTIAL_TONE,
   shouldOfferAppCatalogs,
-  TOOL_CONNECTION_PROMPTING,
 } from "@/components/agent-form.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { filterExcludableTools } from "@/components/agent-tool-exclusions-editor.utils";
@@ -59,11 +54,7 @@ import { useAgentDelegations } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useFeature } from "@/lib/config/config.query";
-import {
-  ACTION_LABEL,
-  FIELD_LABEL,
-  formatCreated,
-} from "@/lib/design/resource-lexicon";
+import { FIELD_LABEL, formatCreated } from "@/lib/design/resource-lexicon";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
@@ -86,9 +77,7 @@ import { cn, formatDate } from "@/lib/utils";
 import {
   AGENT_PAGE_CONFIGS,
   type AgentPageKind,
-  type AgentSetupStepId,
   agentDetailHref,
-  agentEditHref,
 } from "./agent-page-config";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
@@ -101,20 +90,16 @@ const PREVIEW_LIMIT = 12;
  * the wizard's column wide, as the wizard itself is. Each card that mirrors
  * one of the setup wizard's steps repeats it read-only, in the wizard's order
  * and with the wizard's own visuals (server pills with icons and counts,
- * agent and skill chips, the Auto-mode check list), and carries its own way
- * back into exactly that step. Counts live on the pills themselves, never
- * repeated in a heading. The record's provenance — id, dates, owner — closes
+ * agent and skill chips), as values rather than prose — the page's one Edit
+ * lives in the header. The record's provenance — id, dates, owner — closes
  * the page in a card the wizard never wrote and so cannot edit.
  */
 export function AgentOverview({
   kind,
   agent,
-  canEdit,
 }: {
   kind: AgentPageKind;
   agent: Agent;
-  /** Whether this reader may change the record, resolved by the page. */
-  canEdit: boolean;
 }) {
   const isBuiltIn = !!agent.builtIn;
   const showsTools = kind !== "llm_proxy" && !isBuiltIn;
@@ -123,51 +108,19 @@ export function AgentOverview({
   // legacy profiles have subagents too, only true LLM proxies do not.
   const showsSubagents = agent.agentType !== "llm_proxy" && !isBuiltIn;
   const showsAdvanced = !isBuiltIn;
-  // A reader who may not change the record gets no card-level Edit at all,
-  // rather than links that answer with a permission error.
-  const stepHref = (step: AgentSetupStepId) =>
-    canEdit ? agentEditHref(kind, agent.id, step) : null;
 
   return (
     <div className="space-y-4">
-      <SummarySection
-        kind={kind}
-        agent={agent}
-        editHref={stepHref("configuration")}
-      />
-      {showsInstruction && (
-        <InstructionSection
-          agent={agent}
-          editHref={stepHref("configuration")}
-        />
-      )}
+      <SummarySection kind={kind} agent={agent} />
+      {showsInstruction && <InstructionSection agent={agent} />}
       {showsInstruction && agent.suggestedPrompts.length > 0 && (
-        <SuggestedPromptsSection
-          agent={agent}
-          editHref={stepHref("configuration")}
-        />
+        <SuggestedPromptsSection agent={agent} />
       )}
-      {showsTools && (
-        <ToolsSection kind={kind} agent={agent} editHref={stepHref("tools")} />
-      )}
-      {showsSubagents && (
-        <SubagentsSection
-          kind={kind}
-          agent={agent}
-          editHref={stepHref("tools")}
-        />
-      )}
-      {showsTools && (
-        <SkillsSection kind={kind} agent={agent} editHref={stepHref("tools")} />
-      )}
+      {showsTools && <ToolsSection kind={kind} agent={agent} />}
+      {showsSubagents && <SubagentsSection agent={agent} />}
+      {showsTools && <SkillsSection agent={agent} />}
       {/* Last of the wizard's steps, as on the wizard itself. */}
-      {showsAdvanced && (
-        <AdvancedSection
-          kind={kind}
-          agent={agent}
-          editHref={stepHref("advanced")}
-        />
-      )}
+      {showsAdvanced && <AdvancedSection kind={kind} agent={agent} />}
       <DetailsSection agent={agent} />
     </div>
   );
@@ -182,11 +135,9 @@ export function AgentOverview({
 function SummarySection({
   kind,
   agent,
-  editHref,
 }: {
   kind: AgentPageKind;
   agent: Agent;
-  editHref: string | null;
 }) {
   const isBuiltIn = !!agent.builtIn;
   const { data: environmentsData } = useEnvironments();
@@ -215,7 +166,6 @@ function SummarySection({
             ? "Model"
             : "Where it runs"
       }
-      editHref={editHref}
     >
       <FieldGrid>
         {showsModel && <ModelField agent={agent} />}
@@ -252,7 +202,7 @@ function DetailsSection({ agent }: { agent: Agent }) {
     users.length > 0 || (agent.scope !== "team" && teams.length > 0);
 
   return (
-    <OverviewSection title="Details" editHref={null}>
+    <OverviewSection title="Details">
       <FieldGrid>
         <OverviewField label="ID">
           <IdWithCopy id={agent.id} />
@@ -362,23 +312,12 @@ function ModelField({ agent }: { agent: Agent }) {
               : "Organization default"}
           </span>
         </span>
-        {!hasOwnModel && !organizationDefault.isSet && (
-          <p className="text-xs text-muted-foreground">
-            No organization default is set, so the best available model answers.
-          </p>
-        )}
       </div>
     </OverviewField>
   );
 }
 
-function InstructionSection({
-  agent,
-  editHref,
-}: {
-  agent: Agent;
-  editHref: string | null;
-}) {
+function InstructionSection({ agent }: { agent: Agent }) {
   const prompt = agent.systemPrompt?.trim() ?? "";
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
@@ -395,11 +334,7 @@ function InstructionSection({
   const isLong = contentHeight > COLLAPSED_PROMPT_HEIGHT_PX;
 
   return (
-    <OverviewSection
-      title="Instruction"
-      description="The system prompt every conversation with this agent starts from."
-      editHref={editHref}
-    >
+    <OverviewSection title="Instruction">
       {prompt ? (
         // `group`: the toggle brightens when the pointer is anywhere over the
         // instruction, not only over the toggle itself.
@@ -476,26 +411,16 @@ function InstructionSection({
         </div>
       ) : (
         <p className={typeRole({ role: "body" })}>
-          No instruction — the agent answers with the platform defaults.
+          None — platform defaults apply.
         </p>
       )}
     </OverviewSection>
   );
 }
 
-function SuggestedPromptsSection({
-  agent,
-  editHref,
-}: {
-  agent: Agent;
-  editHref: string | null;
-}) {
+function SuggestedPromptsSection({ agent }: { agent: Agent }) {
   return (
-    <OverviewSection
-      title="Suggested prompts"
-      description="Offered when someone starts a new chat with this agent."
-      editHref={editHref}
-    >
+    <OverviewSection title="Suggested prompts">
       <ul className="space-y-2">
         {agent.suggestedPrompts.map((prompt, index) => (
           <li
@@ -523,11 +448,9 @@ function SuggestedPromptsSection({
 function AdvancedSection({
   kind,
   agent,
-  editHref,
 }: {
   kind: AgentPageKind;
   agent: Agent;
-  editHref: string | null;
 }) {
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
@@ -541,14 +464,14 @@ function AdvancedSection({
   const showsSecurity = kind === "agent" || kind === "llm_proxy";
 
   return (
-    <OverviewSection title="Security and identity" editHref={editHref}>
+    <OverviewSection title="Security and identity">
       <FieldGrid>
         {showsSecurity && (
           <OverviewField label="Security">
             <span>
               {agent.considerContextUntrusted
-                ? "Context is treated as sensitive from the start of chat"
-                : "Context is trusted"}
+                ? "Sensitive from the start"
+                : "Trusted"}
             </span>
           </OverviewField>
         )}
@@ -587,15 +510,7 @@ function AdvancedSection({
   );
 }
 
-function ToolsSection({
-  kind,
-  agent,
-  editHref,
-}: {
-  kind: AgentPageKind;
-  agent: Agent;
-  editHref: string | null;
-}) {
+function ToolsSection({ kind, agent }: { kind: AgentPageKind; agent: Agent }) {
   const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
   const { catalogName: archestraCatalogName } = useArchestraMcpIdentity();
   const { data: exclusions } = useAgentToolExclusions(
@@ -738,22 +653,13 @@ function ToolsSection({
     <OverviewSection
       title="Tools and knowledge sources"
       mode={agent.accessAllTools ? "Auto" : "Custom"}
-      editHref={editHref}
     >
       {agent.accessAllTools ? (
         <>
-          <ModeNotes
-            notes={[
-              `Every MCP tool and knowledge source the calling user can access, in this ${noun}'s environment — new servers included automatically`,
-              "Credentials resolve at call time per each server's default credential setting — on behalf of the calling user unless the server always uses one account",
-            ]}
-          />
           <div className="space-y-1.5">
             <SubHeading label="Disabled tools" />
             {excludedCount === 0 ? (
-              <p className={typeRole({ role: "body" })}>
-                None — every tool stays available.
-              </p>
+              <p className={typeRole({ role: "body" })}>None</p>
             ) : disabledByServer.length === 0 ? (
               <p className={typeRole({ role: "body" })}>
                 <span>Resolving which servers they belong to…</span>
@@ -793,7 +699,6 @@ function ToolsSection({
               href: knowledgeConnectorHref(connector.id),
             }))}
             emptyLabel={`No source is set up in this ${noun}'s environment yet.`}
-            note={`Sources in this ${noun}'s environment, as you can see them — each conversation searches the ones its own caller may query.`}
           />
           {/* Both settings, as under Custom — but Auto resolves tools from
               what each caller can already reach, so nothing can be missing
@@ -810,16 +715,11 @@ function ToolsSection({
                 DocsPage.PlatformAgents,
                 "tool-connections",
               )}
-            >
-              {`Auto reaches only servers each caller has already connected, so nobody is ever asked to connect one.`}
-            </SettingRow>
+            />
           </SettingGroup>
         </>
       ) : (
         <>
-          <p className={typeRole({ role: "body" })}>
-            Only the tools and knowledge sources assigned here are available.
-          </p>
           {servers.length === 0 ? (
             <p className={typeRole({ role: "body" })}>No tools assigned yet.</p>
           ) : (
@@ -867,7 +767,6 @@ function ToolsSection({
               sources={knowledgeSources}
               hiddenCount={knowledgeCount - knowledgeSources.length}
               emptyLabel="None assigned."
-              note={`Each conversation searches the assigned sources its own caller may query, in this ${noun}'s environment.`}
             />
           )}
           {/* The form's two Custom-mode settings, as status indicators: both
@@ -884,16 +783,7 @@ function ToolsSection({
   );
 }
 
-function SubagentsSection({
-  kind,
-  agent,
-  editHref,
-}: {
-  kind: AgentPageKind;
-  agent: Agent;
-  editHref: string | null;
-}) {
-  const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
+function SubagentsSection({ agent }: { agent: Agent }) {
   const { data: delegations = [] } = useAgentDelegations(
     agent.accessAllSubagents ? undefined : agent.id,
   );
@@ -939,59 +829,46 @@ function SubagentsSection({
     <OverviewSection
       title="Subagents"
       mode={agent.accessAllSubagents ? "Auto" : "Custom"}
-      editHref={editHref}
     >
       {agent.accessAllSubagents ? (
-        <>
-          <ModeNotes
-            notes={[
-              `Can delegate to any agent the calling user can access, in this ${noun}'s environment — new agents included automatically`,
-            ]}
-          />
-          <div className="space-y-1.5">
-            <SubHeading label="Disabled subagents" />
-            {disabled.length === 0 ? (
-              <p className={typeRole({ role: "body" })}>
-                None — every agent stays available.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-1.5">
-                {namedDisabled.slice(0, PREVIEW_LIMIT).map((target) => (
-                  <li key={target.id}>
-                    <Pill
-                      icon={<AgentIcon icon={iconOf(target.id)} size={14} />}
-                      name={target.name}
-                      tone="exclude"
-                      href={agentDetailHref("agent", target.id)}
-                    />
-                  </li>
-                ))}
-                {/* The cap applies here as it does to every other list on the
-                    page: without this the thirteenth disabled agent onwards
-                    simply vanished. */}
-                {namedDisabled.length > PREVIEW_LIMIT && (
-                  <li>
-                    <Badge variant="outline" className="font-normal">
-                      +{namedDisabled.length - PREVIEW_LIMIT} more
-                    </Badge>
-                  </li>
-                )}
-                {disabled.length > namedDisabled.length && (
-                  <li>
-                    <Badge variant="outline" className="font-normal">
-                      +{disabled.length - namedDisabled.length} not visible to
-                      you
-                    </Badge>
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-        </>
+        <div className="space-y-1.5">
+          <SubHeading label="Disabled subagents" />
+          {disabled.length === 0 ? (
+            <p className={typeRole({ role: "body" })}>None</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {namedDisabled.slice(0, PREVIEW_LIMIT).map((target) => (
+                <li key={target.id}>
+                  <Pill
+                    icon={<AgentIcon icon={iconOf(target.id)} size={14} />}
+                    name={target.name}
+                    tone="exclude"
+                    href={agentDetailHref("agent", target.id)}
+                  />
+                </li>
+              ))}
+              {/* The cap applies here as it does to every other list on the
+                  page: without this the thirteenth disabled agent onwards
+                  simply vanished. */}
+              {namedDisabled.length > PREVIEW_LIMIT && (
+                <li>
+                  <Badge variant="outline" className="font-normal">
+                    +{namedDisabled.length - PREVIEW_LIMIT} more
+                  </Badge>
+                </li>
+              )}
+              {disabled.length > namedDisabled.length && (
+                <li>
+                  <Badge variant="outline" className="font-normal">
+                    +{disabled.length - namedDisabled.length} not visible to you
+                  </Badge>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
       ) : targets.length === 0 ? (
-        <p className={typeRole({ role: "body" })}>
-          Delegates to no other agent.
-        </p>
+        <p className={typeRole({ role: "body" })}>None</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {targets.slice(0, PREVIEW_LIMIT).map((target) => (
@@ -1033,27 +910,14 @@ function SubagentsSection({
               "advisor",
             )}
             action={canReadLlmSettings ? <AdvisorSettingsLink /> : undefined}
-          >
-            {advisorEnabled
-              ? `This ${noun} consults a stronger model when making decisions.`
-              : `This ${noun} answers on its own model throughout.`}
-          </SettingRow>
+          />
         </SettingGroup>
       )}
     </OverviewSection>
   );
 }
 
-function SkillsSection({
-  kind,
-  agent,
-  editHref,
-}: {
-  kind: AgentPageKind;
-  agent: Agent;
-  editHref: string | null;
-}) {
-  const noun = AGENT_PAGE_CONFIGS[kind].singularInSentence;
+function SkillsSection({ agent }: { agent: Agent }) {
   const skillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const enabled = skillsEnabled && !!canReadSkills;
@@ -1073,28 +937,16 @@ function SkillsSection({
     <OverviewSection
       title="Published skills"
       mode={assignments.accessAllSkills ? "Auto" : "Custom"}
-      description={`Skills this ${noun} serves to MCP clients as skill:// resources.`}
-      editHref={editHref}
     >
       {assignments.accessAllSkills ? (
-        <>
-          <ModeNotes
-            notes={[
-              `Publishes every organization-scoped skill in this ${noun}'s environment — new ones included automatically`,
-              "Team and personal skills are never published automatically",
-            ]}
-          />
-          <div className="space-y-1.5">
-            <SubHeading label="Excluded skills" />
-            {excluded.length === 0 ? (
-              <p className={typeRole({ role: "body" })}>
-                No skill is held back.
-              </p>
-            ) : (
-              <SkillPills skills={excluded} tone="exclude" />
-            )}
-          </div>
-        </>
+        <div className="space-y-1.5">
+          <SubHeading label="Excluded skills" />
+          {excluded.length === 0 ? (
+            <p className={typeRole({ role: "body" })}>None</p>
+          ) : (
+            <SkillPills skills={excluded} tone="exclude" />
+          )}
+        </div>
       ) : published.length === 0 ? (
         <p className={typeRole({ role: "body" })}>No skills published yet.</p>
       ) : (
@@ -1105,8 +957,9 @@ function SkillsSection({
 }
 
 /**
- * One card of the overview: title, optional Auto/Custom mode, one-line
- * description, and the way into the wizard step that wrote what is inside.
+ * One card of the overview: title, optional Auto/Custom mode, and the facts.
+ * The page's single Edit lives in the header, so a card carries no chrome of
+ * its own.
  *
  * Every title is the same rank. The sections used to split between an h2 for
  * the two that were wizard steps and an h3 for the rest, which put three h3s
@@ -1116,53 +969,20 @@ function SkillsSection({
 function OverviewSection({
   title,
   mode,
-  description,
-  editHref,
   children,
 }: {
   title: string;
   mode?: "Auto" | "Custom";
-  description?: string;
-  /**
-   * The wizard step this card mirrors. Null when the reader may not edit, and
-   * on the cards nothing on the wizard wrote — the record's own details.
-   */
-  editHref: string | null;
   children: ReactNode;
 }) {
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
-            {mode && (
-              <Badge variant="secondary" className="font-normal">
-                {mode}
-              </Badge>
-            )}
-          </div>
-          {description && (
-            <p className={typeRole({ role: "meta" })}>{description}</p>
-          )}
-        </div>
-        {editHref && (
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="-mr-2 shrink-0 text-muted-foreground"
-          >
-            {/* This page stacks up to seven cards, each with an Edit. Named
-                only "Edit", they are one unresolvable set in a screen reader's
-                links list and to a voice command. `aria-label` rather than a
-                second span: adjacent inline spans concatenate with no
-                separator, so the name comes out as one run-together word. */}
-            <Link href={editHref} aria-label={`${ACTION_LABEL.edit} ${title}`}>
-              <Pencil className="size-4" />
-              <span>{ACTION_LABEL.edit}</span>
-            </Link>
-          </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
+        {mode && (
+          <Badge variant="secondary" className="font-normal">
+            {mode}
+          </Badge>
         )}
       </div>
       {children}
@@ -1197,9 +1017,9 @@ function IdWithCopy({ id }: { id: string }) {
 
 /**
  * The knowledge half of the section, in the tools' own vocabulary: a
- * sub-heading, a wrap of source chips, and one line saying whose reach the
- * chips describe. Auto mode passes the environment's sources, Custom mode the
- * assignment; neither is a promise about another caller, which the note says.
+ * sub-heading and a wrap of source chips. Auto mode passes the environment's
+ * sources, Custom mode the assignment; neither is a promise about another
+ * caller.
  */
 function KnowledgeBlock({
   canRead,
@@ -1207,7 +1027,6 @@ function KnowledgeBlock({
   sources,
   hiddenCount = 0,
   emptyLabel,
-  note,
 }: {
   canRead: boolean;
   configured: boolean;
@@ -1221,7 +1040,6 @@ function KnowledgeBlock({
   /** Assigned sources this reader cannot see, counted rather than named. */
   hiddenCount?: number;
   emptyLabel: string;
-  note: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -1237,52 +1055,35 @@ function KnowledgeBlock({
       ) : sources.length === 0 && hiddenCount === 0 ? (
         <p className={typeRole({ role: "body" })}>{emptyLabel}</p>
       ) : (
-        <>
-          <ul className="flex flex-wrap gap-1.5">
-            {sources.slice(0, PREVIEW_LIMIT).map((source) => (
-              <li key={source.id}>
-                <Pill
-                  icon={
-                    <KnowledgeSourceIcon connectorType={source.connectorType} />
-                  }
-                  name={source.name}
-                  href={source.href}
-                />
-              </li>
-            ))}
-            {sources.length > PREVIEW_LIMIT && (
-              <li>
-                <Badge variant="outline" className="font-normal">
-                  +{sources.length - PREVIEW_LIMIT} more
-                </Badge>
-              </li>
-            )}
-            {hiddenCount > 0 && (
-              <li>
-                <Badge variant="outline" className="font-normal">
-                  +{hiddenCount} not visible to you
-                </Badge>
-              </li>
-            )}
-          </ul>
-          <p className={typeRole({ role: "meta" })}>{note}</p>
-        </>
+        <ul className="flex flex-wrap gap-1.5">
+          {sources.slice(0, PREVIEW_LIMIT).map((source) => (
+            <li key={source.id}>
+              <Pill
+                icon={
+                  <KnowledgeSourceIcon connectorType={source.connectorType} />
+                }
+                name={source.name}
+                href={source.href}
+              />
+            </li>
+          ))}
+          {sources.length > PREVIEW_LIMIT && (
+            <li>
+              <Badge variant="outline" className="font-normal">
+                +{sources.length - PREVIEW_LIMIT} more
+              </Badge>
+            </li>
+          )}
+          {hiddenCount > 0 && (
+            <li>
+              <Badge variant="outline" className="font-normal">
+                +{hiddenCount} not visible to you
+              </Badge>
+            </li>
+          )}
+        </ul>
       )}
     </div>
-  );
-}
-
-/** The wizard's Auto-mode check list, read-only. */
-function ModeNotes({ notes }: { notes: readonly string[] }) {
-  return (
-    <ul className={cn("space-y-1.5", typeRole({ role: "meta" }))}>
-      {notes.map((note) => (
-        <li key={note} className="flex gap-2">
-          <CheckIcon className="mt-px size-3.5 shrink-0" />
-          <span>{note}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -1314,33 +1115,15 @@ function ProgressiveToolLoadingRow({
           : DocsPage.PlatformAgents,
         "load-tools-when-needed",
       )}
-    >
-      {on ? (
-        <>
-          The model starts with <Code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</Code> and{" "}
-          <Code>{TOOL_RUN_TOOL_SHORT_NAME}</Code> only, and reaches the rest by
-          searching for them mid-conversation.
-        </>
-      ) : (
-        <>
-          Every assigned tool is in the model's context from the first message.
-        </>
-      )}
-    </SettingRow>
+    />
   );
 }
 
 /**
- * When users get prompted to connect the servers behind these tools, and what
- * that looks like to them under the saved choice.
- *
- * Both the badge and the line come from the wizard's own module, so the choice
- * a reader looks up here is worded exactly as it was worded to whoever made it.
- *
- * That framing sentence is deliberately not rendered above the row: each of
- * the three per-state lines already opens on its own subject, so printing it
- * as well would give one setting two sentences of preamble before the answer.
- * `SettingRow` has no description slot for the same reason.
+ * When users get prompted to connect the servers behind these tools, under the
+ * saved choice. The badge and its label come from the wizard's own module, so
+ * the choice a reader looks up here is worded exactly as it was worded to
+ * whoever made it.
  */
 function MissingConnectionRow({
   behavior,
@@ -1359,14 +1142,8 @@ function MissingConnectionRow({
       state={option.label}
       // The agents page documents the setting for gateways too.
       learnMoreHref={getDocsUrl(DocsPage.PlatformAgents, "tool-connections")}
-    >
-      {TOOL_CONNECTION_PROMPTING[behavior]}
-    </SettingRow>
+    />
   );
-}
-
-function Code({ children }: { children: ReactNode }) {
-  return <code className="font-mono">{children}</code>;
 }
 
 /** The Advisor is a beta capability; the form and LLM settings say so too. */

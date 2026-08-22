@@ -108,4 +108,51 @@ describe("DataTable column widths", () => {
     const actions = container.querySelector('th[data-column-id="actions"]');
     expect(actions).toHaveStyle({ width: "150px" });
   });
+
+  it("keeps selection controls at their configured compact width", () => {
+    const compactColumns: ColumnDef<Row>[] = [
+      { id: "select", header: "Select", size: 36, cell: () => null },
+      { id: "name", accessorKey: "name", header: "Name", size: 300 },
+    ];
+    const { container } = render(
+      <DataTable columns={compactColumns} data={data} />,
+    );
+
+    const select = container.querySelector('th[data-column-id="select"]');
+    expect(select).toHaveStyle({ width: "36px" });
+    expect(select).toHaveClass("px-2");
+  });
+
+  it("keeps utility columns fixed and lets the server column grow past its minimum", () => {
+    const flexibleColumns: ColumnDef<Row>[] = [
+      { id: "select", header: "Select", size: 36, cell: () => null },
+      { id: "name", accessorKey: "name", header: "Name", size: 540 },
+      { id: "issue", header: "Issue", size: 220, cell: () => null },
+      { id: "owner", header: "Owner", size: 220, cell: () => null },
+      { id: "actions", header: "Actions", size: 160, cell: () => null },
+    ];
+    const { container } = render(
+      <DataTable
+        columns={flexibleColumns}
+        data={data}
+        fixedWidthColumnIds={["select", "issue", "owner", "actions"]}
+        flexibleColumnIds={["name"]}
+      />,
+    );
+
+    expect(container.querySelector("table")).toHaveClass("w-full");
+    expect(container.querySelector("table")).toHaveStyle({
+      minWidth: "1176px",
+    });
+    expect(
+      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
+        .style.width,
+    ).toBe("");
+    expect(container.querySelector('th[data-column-id="issue"]')).toHaveStyle({
+      width: "220px",
+    });
+    expect(container.querySelector('th[data-column-id="owner"]')).toHaveStyle({
+      width: "220px",
+    });
+  });
 });

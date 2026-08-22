@@ -60,6 +60,7 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import {
   attentionCatalogIds,
+  facetIssues,
   type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
@@ -73,12 +74,13 @@ import {
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
+import { McpServerAttentionList } from "./mcp-server-attention-list";
+import { waitingActionFacetLabel } from "./mcp-server-attention-owner";
 import {
   type CatalogItem,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
-import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { McpServerTable } from "./mcp-server-table";
 import {
   emptyRegistryFilters,
@@ -86,6 +88,7 @@ import {
   type FilterGroup,
   type FilterOption,
   INSTALLED_STATUS_VALUE,
+  ISSUE_OPTIONS,
   NOT_INSTALLED_STATUS_VALUE,
   REGISTRY_STATUS_PARAM,
   RegistryAttentionFacets,
@@ -157,6 +160,8 @@ export function InternalMCPCatalog({
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
   const byosEnabled = Boolean(useFeature("byosEnabled"));
+  const alertingFeature = useFeature("mcpServerAlertingEnabled");
+  const alertingEnabled = alertingFeature === true;
 
   const [sort, setSort] = useState<SortKey>("name-asc");
   // The table is the registry's default view: it is the one that reads a
@@ -225,6 +230,7 @@ export function InternalMCPCatalog({
       writeFilters({
         ...filters,
         status: withAttentionFacet(filters.status, facet),
+        issue: facet ? filters.issue : new Set(),
       }),
     [filters, writeFilters],
   );
@@ -275,18 +281,18 @@ export function InternalMCPCatalog({
   const [reinstallServerId, setReinstallServerId] = useState<string | null>(
     null,
   );
-  // Track the team ID of the server being reinstalled (to pre-select credential type)
-  const [reinstallServerTeamId, setReinstallServerTeamId] = useState<
-    string | null
-  >(null);
-  // Track the scope of the server being reinstalled (to pre-select scope)
-  const [reinstallServerScope, setReinstallServerScope] = useState<
+  // Track the existing target's scope so reinstall and reauth dialogs do not
+  // misleadingly default an organization/team connection to Personal.
+  const [targetServerTeamId, setTargetServerTeamId] = useState<string | null>(
+    null,
+  );
+  const [targetServerScope, setTargetServerScope] = useState<
     McpServerInstallScope | undefined
   >(undefined);
   // Track server ID for re-authentication (preserves tool assignments)
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
-  const { data: _userIsMcpServerAdmin } = useHasPermissions({
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
 
@@ -342,8 +348,16 @@ export function InternalMCPCatalog({
   const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
     const catalogItem = catalogItems?.find((item) => item.id === catalogId);
     if (!catalogItem) return;
+    const targetServer = installedServers?.find(
+      (server) => server.id === serverId,
+    );
 
     setReauthServerId(serverId);
+    setTargetServerTeamId(targetServer?.teamId ?? null);
+    setTargetServerScope(
+      (targetServer as unknown as { scope?: McpServerInstallScope } | undefined)
+        ?.scope,
+    );
 
     if (catalogItem.oauthConfig) {
       // OAuth server: go through OAuth flow with reauth context
@@ -452,8 +466,8 @@ export function InternalMCPCatalog({
       const catalogItemName = localServerCatalogItem.name;
       setLocalServerCatalogItem(null);
       setReinstallServerId(null);
-      setReinstallServerTeamId(null);
-      setReinstallServerScope(undefined);
+      setTargetServerTeamId(null);
+      setTargetServerScope(undefined);
 
       try {
         await Promise.all(
@@ -635,6 +649,13 @@ export function InternalMCPCatalog({
     }
 
     if (!installedServer) {
+      if (options?.alsoReinstallCatalog) {
+        setPendingCatalogReinstallId(catalogItem.id);
+        setReinstallFlaggedTargets([]);
+        setCatalogItemForReinstall(catalogItem);
+        openDialog("reinstall");
+        return;
+      }
       toast.error("Server not found, cannot reinstall");
       return;
     }
@@ -699,8 +720,8 @@ export function InternalMCPCatalog({
       if (dialogKind === "collect-input") {
         setLocalServerCatalogItem(catalogItem);
         setReinstallServerId(installedServer.id);
-        setReinstallServerTeamId(installedServer.teamId ?? null);
-        setReinstallServerScope(
+        setTargetServerTeamId(installedServer.teamId ?? null);
+        setTargetServerScope(
           (installedServer as unknown as { scope?: McpServerInstallScope })
             .scope,
         );
@@ -718,8 +739,8 @@ export function InternalMCPCatalog({
     ) {
       setSelectedCatalogItem(catalogItem);
       setReinstallServerId(installedServer.id);
-      setReinstallServerTeamId(installedServer.teamId ?? null);
-      setReinstallServerScope(
+      setTargetServerTeamId(installedServer.teamId ?? null);
+      setTargetServerScope(
         (installedServer as unknown as { scope?: McpServerInstallScope }).scope,
       );
       openDialog("remote-install");
@@ -753,7 +774,7 @@ export function InternalMCPCatalog({
             return fallback ? [fallback] : [];
           })();
 
-    if (targets.length === 0) {
+    if (targets.length === 0 && !pendingCatalogReinstallId) {
       toast.error("Server not found, cannot reinstall");
       closeDialog("reinstall");
       setCatalogItemForReinstall(null);
@@ -864,13 +885,35 @@ export function InternalMCPCatalog({
     }
     return [...set].sort().map((value) => ({ value, label: value }));
   }, [catalogItems]);
-  // Outstanding issues per catalog item (failed to start, not running,
-  // re-authentication, reinstall, image approval), from the same signals the
-  // cards render — feeds the Needs-attention tab, its count, the Status
-  // filter and the table Status column.
+  // Outstanding issues per catalog item, from the same signals every registry
+  // surface renders. This feeds the audience facets, Issue filter and table.
   const { issuesByCatalog, facetCounts } =
     useMcpServerIssues(deploymentStatuses);
-  const selectedFacet = selectedAttentionFacet(filters.status);
+  const selectedFacet = alertingEnabled
+    ? selectedAttentionFacet(filters.status)
+    : null;
+  const othersFacetLabel = useMemo(
+    () =>
+      waitingActionFacetLabel({
+        issuesByCatalog,
+        servers: installedServers ?? [],
+      }),
+    [issuesByCatalog, installedServers],
+  );
+  useEffect(() => {
+    const requestedFacet = selectedAttentionFacet(filters.status);
+    if (alertingFeature === false && requestedFacet) {
+      selectFacet(null);
+    } else if (userIsMcpServerAdmin && selectedFacet === "others") {
+      selectFacet("you");
+    }
+  }, [
+    alertingFeature,
+    filters.status,
+    userIsMcpServerAdmin,
+    selectedFacet,
+    selectFacet,
+  ]);
   // The facet's membership and its count come out of the same call, so the
   // number on the button is always the number of rows below it.
   const facetCatalogIds = useMemo(
@@ -884,6 +927,15 @@ export function InternalMCPCatalog({
   );
   const matchesAdvancedFilters = (item: CatalogItem) => {
     if (facetCatalogIds && !facetCatalogIds.has(item.id)) return false;
+    if (filters.issue.size > 0) {
+      const itemIssues = issuesByCatalog.get(item.id) ?? [];
+      const visibleIssues = selectedFacet
+        ? facetIssues(itemIssues, selectedFacet)
+        : itemIssues;
+      if (!visibleIssues.some((issue) => filters.issue.has(issue.kind))) {
+        return false;
+      }
+    }
     const wantsInstalled = filters.status.has(INSTALLED_STATUS_VALUE);
     const wantsNotInstalled = filters.status.has(NOT_INSTALLED_STATUS_VALUE);
     if (wantsInstalled || wantsNotInstalled) {
@@ -944,7 +996,6 @@ export function InternalMCPCatalog({
       .filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID)
       .filter(matchesAdvancedFilters),
   );
-
   const personalItems = allFilteredItems.filter(
     (item) => item.scope === "personal",
   );
@@ -1050,51 +1101,72 @@ export function InternalMCPCatalog({
 
   return (
     <div className="space-y-4">
-      <RegistryAttentionFacets
-        counts={facetCounts}
-        totalCount={registryItems.length}
-        selected={selectedFacet}
-        onSelect={selectFacet}
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput
-          objectNamePlural="MCP servers"
-          searchFields={["name"]}
-          value={searchQueryFromUrl}
-          onSearchChange={handleSearchChange}
-          syncQueryParams={false}
-          debounceMs={300}
-          inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
-        />
-        <McpCatalogLabelFilter />
-        <RegistryFilterDropdown
-          label="Status"
-          options={STATUS_OPTIONS}
-          selected={filters.status}
-          onToggle={(value) => toggleFilter("status", value)}
-        />
-        {environmentOptions.length > 0 && (
-          <RegistryFilterDropdown
-            label="Environment"
-            options={environmentOptions}
-            selected={filters.environment}
-            onToggle={(value) => toggleFilter("environment", value)}
-          />
-        )}
-        {authorOptions.length > 0 && (
-          <RegistryFilterDropdown
-            label="Author"
-            options={authorOptions}
-            selected={filters.author}
-            onToggle={(value) => toggleFilter("author", value)}
-          />
-        )}
-        <RegistrySortMenu value={sort} onChange={setSort} />
-        <ListViewToggle
-          value={viewMode}
-          onChange={setViewMode}
-          order={["table", "cards"]}
-        />
+      <div className="@container/registry-controls">
+        <div className="flex flex-col gap-3 @[78rem]/registry-controls:flex-row @[78rem]/registry-controls:items-center">
+          <div className="order-2 flex min-w-0 flex-1 flex-wrap items-center gap-2 @[78rem]/registry-controls:order-1">
+            <SearchInput
+              objectNamePlural="MCP servers"
+              searchFields={["name"]}
+              value={searchQueryFromUrl}
+              onSearchChange={handleSearchChange}
+              syncQueryParams={false}
+              debounceMs={300}
+              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+            />
+            <McpCatalogLabelFilter />
+            {selectedFacet ? (
+              <RegistryFilterDropdown
+                label="Issue"
+                options={ISSUE_OPTIONS}
+                selected={filters.issue}
+                onToggle={(value) => toggleFilter("issue", value)}
+              />
+            ) : (
+              <RegistryFilterDropdown
+                label="Status"
+                options={STATUS_OPTIONS}
+                selected={filters.status}
+                onToggle={(value) => toggleFilter("status", value)}
+              />
+            )}
+            {environmentOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Environment"
+                options={environmentOptions}
+                selected={filters.environment}
+                onToggle={(value) => toggleFilter("environment", value)}
+              />
+            )}
+            {authorOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Author"
+                options={authorOptions}
+                selected={filters.author}
+                onToggle={(value) => toggleFilter("author", value)}
+              />
+            )}
+            <RegistrySortMenu value={sort} onChange={setSort} />
+            {!selectedFacet && (
+              <ListViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                order={["table", "cards"]}
+              />
+            )}
+          </div>
+          {alertingEnabled && (
+            <div className="order-1 min-w-0 overflow-x-auto @[78rem]/registry-controls:order-2 @[78rem]/registry-controls:ml-auto @[78rem]/registry-controls:shrink-0">
+              <RegistryAttentionFacets
+                counts={facetCounts}
+                totalCount={registryItems.length}
+                othersLabel={othersFacetLabel}
+                showOthers={!userIsMcpServerAdmin}
+                selected={selectedFacet}
+                onSelect={selectFacet}
+              />
+            </div>
+          )}
+        </div>
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
@@ -1119,15 +1191,19 @@ export function InternalMCPCatalog({
                   </EmptyMedia>
                   <EmptyTitle>
                     {selectedFacet === "muted"
-                      ? "You have not muted any alerts"
-                      : installedCatalogCount === 1
-                        ? "Your installed MCP server is healthy"
-                        : `All ${installedCatalogCount} installed MCP servers are healthy`}
+                      ? "You have not dismissed any alerts"
+                      : selectedFacet === "others"
+                        ? "No alerts need action by another user"
+                        : installedCatalogCount === 1
+                          ? "Your installed MCP server is healthy"
+                          : `All ${installedCatalogCount} installed MCP servers are healthy`}
                   </EmptyTitle>
                   <EmptyDescription>
                     {selectedFacet === "muted"
-                      ? "Alerts you silence for yourself stay listed here, so a muted problem is never an invisible one."
-                      : "Servers that fail to start, stop running, or need re-authentication, a reinstall or an image approval show up here."}
+                      ? "Alerts you dismiss stay listed here, so a dismissed problem is never invisible."
+                      : selectedFacet === "others"
+                        ? "This view contains unresolved issues owned by someone you can identify only when your role permits it."
+                        : "Servers that fail to start, stop running, or need re-authentication show up here."}
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -1151,21 +1227,26 @@ export function InternalMCPCatalog({
             </div>
           )
         ) : (
-          <div className="space-y-2" data-testid="mcp-registry-attention-list">
-            {allFilteredItems.map((item) => (
-              <McpServerIssueNotice
-                key={item.id}
-                variant="row"
-                item={item}
-                issues={issuesByCatalog.get(item.id) ?? []}
-                facet={selectedFacet}
-                servers={(installedServers ?? []).filter(
-                  (s) => s.catalogId === item.id,
-                )}
-                onReinstall={handleReinstall}
-              />
-            ))}
-          </div>
+          <McpServerAttentionList
+            // Match Guardrails: changing URL-owned filters clears selection.
+            // Live issue refetches keep the component mounted so failed
+            // targets survive a partial bulk action.
+            key={searchParams.toString()}
+            items={allFilteredItems}
+            issuesByCatalog={issuesByCatalog}
+            servers={installedServers ?? []}
+            facet={selectedFacet}
+            tableContext={{
+              getServerInfo: getInstalledServerInfo,
+              envLabelByCatalog,
+              deploymentFeedState,
+              deploymentStatuses,
+              installingItemId,
+              onInstall: handleTableInstall,
+              onCancelInstallation: install.cancelInstallation,
+            }}
+            onReinstall={handleReinstall}
+          />
         )
       ) : (
         <div className="space-y-6">
@@ -1334,16 +1415,16 @@ export function InternalMCPCatalog({
           setSelectedCatalogItem(null);
           setReauthServerId(null);
           setReinstallServerId(null);
-          setReinstallServerTeamId(null);
-          setReinstallServerScope(undefined);
+          setTargetServerTeamId(null);
+          setTargetServerScope(undefined);
         }}
         onConfirm={handleRemoteServerReauthOrReinstallConfirm}
         catalogItem={selectedCatalogItem}
         isInstalling={reauthMutation.isPending || reinstallMutation.isPending}
         isReauth={!!reauthServerId}
         isReinstall={!!reinstallServerId && !reauthServerId}
-        existingTeamId={reinstallServerTeamId}
-        existingScope={reinstallServerScope}
+        existingTeamId={targetServerTeamId}
+        existingScope={targetServerScope}
       />
 
       <OAuthConfirmationDialog
@@ -1372,7 +1453,9 @@ export function InternalMCPCatalog({
         }}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
-        isReinstalling={reinstallMutation.isPending}
+        isReinstalling={
+          reinstallMutation.isPending || reinstallCatalogMutation.isPending
+        }
         targets={reinstallFlaggedTargets}
       />
 
@@ -1383,16 +1466,16 @@ export function InternalMCPCatalog({
             closeDialog("local-install");
             setLocalServerCatalogItem(null);
             setReinstallServerId(null);
-            setReinstallServerTeamId(null);
-            setReinstallServerScope(undefined);
+            setTargetServerTeamId(null);
+            setTargetServerScope(undefined);
             setReauthServerId(null);
           }}
           onConfirm={handleLocalServerReauthOrReinstallConfirm}
           catalogItem={localServerCatalogItem}
           isInstalling={reinstallMutation.isPending || reauthMutation.isPending}
           isReinstall={!!reinstallServerId}
-          existingTeamId={reinstallServerTeamId}
-          existingScope={reinstallServerScope}
+          existingTeamId={targetServerTeamId}
+          existingScope={targetServerScope}
           isReauth={!!reauthServerId}
         />
       )}

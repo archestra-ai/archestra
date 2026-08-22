@@ -1,0 +1,307 @@
+"use client";
+
+import type { archestraApiTypes } from "@archestra/shared";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import {
+  ChartColumn,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  Server,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import { useSession } from "@/lib/auth/auth.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { SkillUsageDialog } from "./skill-usage-dialog";
+
+type ExternalSkill =
+  archestraApiTypes.GetExternalMcpSkillsResponses["200"][number];
+
+export function filterExternalMcpSkills({
+  skills,
+  search,
+  scope,
+}: {
+  skills: ExternalSkill[];
+  search?: string;
+  scope?: "personal" | "team" | "org";
+}) {
+  const needle = search?.trim().toLowerCase();
+  return skills.filter(
+    (skill) =>
+      (!scope || skill.scope === scope) &&
+      (!needle ||
+        skill.name.toLowerCase().includes(needle) ||
+        skill.description.toLowerCase().includes(needle) ||
+        skill.serverName.toLowerCase().includes(needle)),
+  );
+}
+
+export function ExternalMcpSkillsSection({
+  skills,
+  showWhenEmpty = false,
+}: {
+  skills: ExternalSkill[];
+  showWhenEmpty?: boolean;
+}) {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [usageSkill, setUsageSkill] = useState<ExternalSkill | null>(null);
+
+  const columns: ColumnDef<ExternalSkill>[] = [
+    {
+      id: "serverName",
+      accessorKey: "serverName",
+      size: 180,
+      minSize: 180,
+      maxSize: 240,
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          MCP server
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
+            <McpCatalogIcon
+              icon={row.original.icon}
+              catalogId={row.original.catalogId}
+              size={20}
+            />
+          </div>
+          <span
+            className="truncate font-medium"
+            title={row.original.serverName}
+          >
+            {row.original.serverName}
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "name",
+      accessorKey: "name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Skill
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      size: 450,
+      minSize: 320,
+      maxSize: 600,
+      cell: ({ row }) => {
+        const skill = row.original;
+        return (
+          <div className="min-w-0">
+            <div className="truncate font-medium">{skill.name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {skill.description || "No description"}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "visibility",
+      size: 130,
+      header: "Visibility",
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={undefined}
+          users={undefined}
+          authorId={currentUserId}
+          authorName={session?.user?.name}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
+    {
+      id: "files",
+      size: 90,
+      header: () => <div className="text-right">Files</div>,
+      cell: ({ row }) => {
+        // The digest manifest covers SKILL.md plus every resource file.
+        const fileCount = row.original.resources?.length ?? 1;
+        return (
+          <div className="text-right text-sm text-muted-foreground">
+            {fileCount} {fileCount === 1 ? "file" : "files"}
+          </div>
+        );
+      },
+    },
+    {
+      id: "usageCount",
+      accessorKey: "usageCount",
+      size: 120,
+      header: ({ column }) => (
+        <div className="flex justify-end pr-4">
+          <Button
+            variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Uses
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex justify-end pr-4">
+          <div className="w-full px-1.5 py-0.5 text-right text-sm">
+            <div>
+              {row.original.usageCount}
+              {row.original.usageUserCount > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  by {row.original.usageUserCount}{" "}
+                  {row.original.usageUserCount === 1 ? "user" : "users"}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {formatRelativeTimeFromNow(row.original.lastUsedAt, {
+                neverLabel: "Never used",
+              })}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      size: 150,
+      header: () => <div className="text-right">Actions</div>,
+      cell: ({ row }) => {
+        const skill = row.original;
+        const actions: TableRowAction[] = [
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Chat",
+            permissions: { chat: ["read", "create"] },
+            href: externalSkillChatHref(skill),
+          },
+          {
+            icon: <ChartColumn className="h-4 w-4" />,
+            label: "Usage",
+            permissions: {
+              skill: ["read"],
+              mcpServerInstallation: ["read"],
+            },
+            onClick: () => setUsageSkill(skill),
+          },
+          {
+            icon: <Server className="h-4 w-4" />,
+            label: "Manage MCP server",
+            href: externalSkillSourceHref(skill),
+          },
+        ];
+        return (
+          <div className="flex justify-end">
+            <TableRowActions actions={actions} itemName={skill.name} />
+          </div>
+        );
+      },
+    },
+  ];
+
+  if (skills.length === 0 && !showWhenEmpty) return null;
+
+  return (
+    <section className="space-y-3" aria-labelledby="external-skills-title">
+      <div className="flex items-center gap-2">
+        <h2
+          id="external-skills-title"
+          className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+        >
+          Skills from installed MCP servers
+        </h2>
+        <Badge variant="secondary" className="px-1.5 py-0">
+          Beta
+        </Badge>
+      </div>
+      <DataTable
+        columns={columns}
+        data={skills}
+        getRowId={(row) => `${row.mcpServerId}:${row.id}`}
+        emptyMessage="No MCP skills match the current filters."
+        hideSelectedCount
+        sorting={sorting}
+        onSortingChange={setSorting}
+        onRowClick={(row) => router.push(externalSkillHref(row))}
+      />
+      {usageSkill && (
+        <SkillUsageDialog
+          skillRef={{
+            kind: "externalMcp",
+            mcpServerId: usageSkill.mcpServerId,
+            uri: usageSkill.uri,
+          }}
+          skillName={usageSkill.name}
+          open
+          onOpenChange={(open) => !open && setUsageSkill(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+function externalSkillHref(skill: ExternalSkill) {
+  return `/skills/external/${skill.id}?mcpServerId=${skill.mcpServerId}`;
+}
+
+function externalSkillSourceHref(skill: ExternalSkill) {
+  return `/mcp/registry/${skill.catalogId}`;
+}
+
+function externalSkillChatHref(skill: ExternalSkill) {
+  const params = new URLSearchParams({
+    mcp_skill_id: skill.id,
+    mcp_server_id: skill.mcpServerId,
+    mcp_skill_uri: skill.uri,
+    mcp_skill_name: skill.name,
+    mcp_server_name: skill.serverName,
+    mcp_skill_display_name: `${skill.serverName} [${skill.scope}:${skill.mcpServerId.slice(0, 8)}] / ${skill.name}`,
+  });
+  return `/chat/new?${params.toString()}`;
+}
+
+function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
+    </div>
+  );
+}

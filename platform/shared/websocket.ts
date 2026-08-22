@@ -392,6 +392,25 @@ export type McpInstallationStatusMessage = {
   };
 };
 
+/**
+ * MCP source rows removed from one organization. Clients use this to evict
+ * server-backed projections immediately across tabs without polling.
+ */
+export type McpServersChangedMessage = {
+  type: "mcp_servers_changed";
+  payload: {
+    change: "uninstalled";
+    serverIds: string[];
+    catalogIds: string[];
+  };
+};
+
+/** Sent after the server has authenticated and scoped a WebSocket client. */
+export type WebSocketReadyMessage = {
+  type: "websocket_ready";
+  payload: Record<string, never>;
+};
+
 export type ErrorMessage = {
   type: "error";
   payload: {
@@ -430,6 +449,8 @@ export type ServerWebSocketMessage =
   | McpExecClosedMessage
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
+  | McpServersChangedMessage
+  | WebSocketReadyMessage
   | ConversationUpdatedMessage
   | ErrorMessage;
 

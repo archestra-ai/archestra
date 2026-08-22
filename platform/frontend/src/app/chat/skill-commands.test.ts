@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSkillCommands,
+  externalMcpSkillCommandValue,
   isDebugCommand,
+  parseExternalMcpSkillCommand,
   parseSkillCommand,
   resolveUrlSkillAction,
   skillCommandValue,
@@ -33,6 +35,67 @@ describe("skillCommandValue", () => {
   });
 });
 
+describe("parseExternalMcpSkillCommand", () => {
+  const skill = {
+    id: "11111111-1111-4111-8111-111111111111",
+    mcpServerId: "33333333-3333-4333-8333-333333333333",
+    uri: "skill://example/fallout/SKILL.md",
+    name: "Fallout RPG",
+    serverName: "TTRPG Helper",
+    commandValue: "/ttrpg-helper-fallout-rpg",
+    displayName: "TTRPG Helper [personal:33333333] / Fallout RPG",
+  };
+
+  it("uses the human slash token as the attachment source of truth", () => {
+    expect(
+      parseExternalMcpSkillCommand({
+        text: "/ttrpg-helper-fallout-rpg Create a campaign outline",
+        skill,
+      }),
+    ).toEqual({
+      skill,
+      value: "/ttrpg-helper-fallout-rpg",
+      remaining: "Create a campaign outline",
+    });
+  });
+
+  it("detaches when the token was removed or replaced", () => {
+    expect(
+      parseExternalMcpSkillCommand({
+        text: "Create a campaign",
+        skill,
+      }),
+    ).toBeNull();
+    expect(
+      parseExternalMcpSkillCommand({
+        text: "/another-skill Create a campaign",
+        skill,
+      }),
+    ).toBeNull();
+  });
+
+  it("suffixes a pathological collision with a local Skill token", () => {
+    const skillCommands = buildSkillCommands([
+      {
+        id: "local-1",
+        name: "TTRPG Helper Fallout RPG",
+        description: "Local collision",
+      },
+    ]);
+    const commandValue = externalMcpSkillCommandValue({
+      skill,
+      skillCommands,
+    });
+    expect(commandValue).toBe("/ttrpg-helper-fallout-rpg-2");
+    expect(
+      parseExternalMcpSkillCommand({
+        text: `${commandValue} Outline`,
+        skill: { ...skill, commandValue },
+      })?.value,
+    ).toBe(commandValue);
+  });
+});
+
 describe("buildSkillCommands", () => {
   it("builds one command per skill", () => {
     const commands = buildSkillCommands([
@@ -59,6 +122,20 @@ describe("buildSkillCommands", () => {
         command.skill,
       );
     }
+  });
+
+  it("allocates local commands around a staged external token", () => {
+    const commands = buildSkillCommands(
+      [
+        {
+          id: "local-1",
+          name: "TTRPG Helper Fallout RPG",
+          description: "Local collision",
+        },
+      ],
+      ["/ttrpg-helper-fallout-rpg"],
+    );
+    expect(commands[0]?.value).toBe("/ttrpg-helper-fallout-rpg-2");
   });
 });
 

@@ -709,6 +709,9 @@ export const RouteId = {
 
   // Agent Skill Routes
   GetSkills: "getSkills",
+  GetExternalMcpSkills: "getExternalMcpSkills",
+  GetExternalMcpSkill: "getExternalMcpSkill",
+  GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
   CreateSkill: "createSkill",
   ConvertAgentToSkill: "convertAgentToSkill",
   SuggestSkillDescription: "suggestSkillDescription",

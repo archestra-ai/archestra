@@ -61,6 +61,7 @@ import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   type Account,
   AgentScopeSchema,
@@ -83,7 +84,10 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
-import { broadcastMcpInstallationStatus } from "@/websocket";
+import {
+  broadcastMcpInstallationStatus,
+  broadcastMcpServersChanged,
+} from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -1001,6 +1005,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 }
 
+                await refreshMcpSkillMetadata({
+                  catalogId: capturedCatalogId,
+                  mcpServerId: mcpServer.id,
+                });
+
                 // Set status to success after tools are fetched
                 await McpServerModel.update(mcpServer.id, {
                   localInstallationStatus: "success",
@@ -1624,6 +1633,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         audit: { target: request, snapshot },
       });
 
+      broadcastMcpServersChanged({
+        organizationId,
+        serverIds: outcome.succeeded.map((server) => server.id),
+      });
+
       return reply.send(outcome);
     },
   );
@@ -1641,9 +1655,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id: mcpServerId }, user, headers }, reply) => {
-      // Fetch the MCP server first to get secretId and serverType
-      const mcpServer = await McpServerModel.findById(mcpServerId);
+    async (
+      { params: { id: mcpServerId }, user, headers, organizationId },
+      reply,
+    ) => {
+      // The server table has no organization id; resolve it through the same
+      // owner/team organization fence used by bulk uninstall.
+      const mcpServer = await McpServerModel.findByIdInOrg(
+        mcpServerId,
+        organizationId,
+      );
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1694,6 +1715,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Soft-delete the MCP server record (uninstall = recoverable delete).
       const success = await McpServerModel.delete(mcpServerId);
+      if (success) {
+        broadcastMcpServersChanged({
+          organizationId,
+          serverIds: [mcpServerId],
+        });
+      }
 
       return reply.send({ success });
     },
@@ -3098,13 +3125,19 @@ async function connectAndGetToolsForInstallation(params: {
   }
 
   try {
-    return await mcpClient.connectAndGetTools({
+    const tools = await mcpClient.connectAndGetTools({
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets,
       secretId: params.secretId,
       enterpriseTransportCredential: installDiscoveryCredential,
     });
+    await refreshMcpSkillMetadata({
+      catalogId: catalogItem.id,
+      mcpServerId: params.mcpServerId,
+      enterpriseTransportCredential: installDiscoveryCredential,
+    });
+    return tools;
   } catch (error) {
     if (
       catalogItem.enterpriseManagedConfig ||
@@ -3134,7 +3167,7 @@ async function connectAndGetToolsForInstallation(params: {
       "Retrying MCP install-time tool discovery with the current user's identity-provider access token",
     );
 
-    return await mcpClient.connectAndGetTools({
+    const tools = await mcpClient.connectAndGetTools({
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets: {
@@ -3143,6 +3176,16 @@ async function connectAndGetToolsForInstallation(params: {
       },
       secretId: params.secretId,
     });
+    await refreshMcpSkillMetadata({
+      catalogId: catalogItem.id,
+      mcpServerId: params.mcpServerId,
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: `Bearer ${accessToken}`,
+        expiresInSeconds: null,
+      },
+    });
+    return tools;
   }
 }
 

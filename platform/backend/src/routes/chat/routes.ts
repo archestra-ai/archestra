@@ -188,7 +188,10 @@ import {
 } from "./errors";
 import { buildGeminiProviderOptions } from "./gemini-provider-options";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
-import { injectSkillActivation } from "./inject-skill-activation";
+import {
+  injectExternalMcpSkillActivation,
+  injectSkillActivation,
+} from "./inject-skill-activation";
 import {
   LOCKED_CHAT_STATIC_TITLE,
   requireLockedChatKey,
@@ -980,13 +983,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   model: selectedModel,
                 })
               : (messages as ChatMessage[]);
+            const messagesWithExternalSkill =
+              await injectExternalMcpSkillActivation({
+                messages: messagesWithSkill,
+                organizationId,
+                userId: user.id,
+                agentId: conversation.agentId ?? undefined,
+                conversationId,
+                provider,
+                model: selectedModel,
+              });
 
             // Render-loop diagnostics from owned MCP App renders ride the last
             // user message's metadata; inject them (delimited, framed as
             // untrusted) so the model can fix the app via edit_app. No-op
             // when absent or when the apps feature is off.
-            const messagesForLLM =
-              await injectAppDiagnostics(messagesWithSkill);
+            const messagesForLLM = await injectAppDiagnostics(
+              messagesWithExternalSkill,
+            );
 
             // Normalize chat history before replaying it to the model.
             // This dedupes repeated tool parts, drops dangling interrupted tool calls,

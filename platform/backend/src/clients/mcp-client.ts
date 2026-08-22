@@ -14,6 +14,8 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_EXECUTED_AS_META_KEY,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
+  MCP_SKILLS_EXTENSION_ID,
   type McpExecutedAs,
   type McpToolError,
   parseFullToolName,
@@ -120,11 +122,10 @@ import {
   withMcpElicitationCapability,
 } from "./mcp-elicitation";
 import { mcpParamHeadersForCall } from "./mcp-param-headers";
-
-const MCP_CLIENT_EXTENSION_CAPABILITIES = {
-  ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-  ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-} as const;
+import {
+  captureServerExtensions,
+  type DirectServerSession,
+} from "./mcp-server-extensions";
 
 type PassiveMcpClient = {
   execute: <T>(operation: (client: Client) => Promise<T>) => Promise<
@@ -1454,7 +1455,7 @@ class McpClient {
     // invited upstream servers to call a method we always failed. Deprecated
     // in 2026-07-28 besides.
     const baseCapabilities: ClientCapabilitiesWithExtensions = {
-      extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
+      extensions: mcpClientExtensionCapabilities(),
     };
     const capabilities = elicitationHandler
       ? withMcpElicitationCapability(baseCapabilities)
@@ -3612,13 +3613,14 @@ class McpClient {
 
         // No `roots` — see the identical omission above.
         const capabilities: ClientCapabilitiesWithExtensions = {
-          extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
+          extensions: mcpClientExtensionCapabilities(),
         };
 
         // Create client with transport
         client = new Client(buildMcpClientInfo("archestra-platform"), {
           capabilities,
         });
+        const serverExtensions = captureServerExtensions(transport);
 
         // Connect with timeout
         await this.raceWithTimeout(
@@ -3630,7 +3632,22 @@ class McpClient {
         // List tools with timeout. Some MCP servers expose only resources; for
         // those, synthesize read-resource tools so agents can still exercise the
         // server through the normal tool-assignment path.
-        const tools = await this.discoverToolsOrResourceTools(client);
+        let tools: Tool[];
+        try {
+          tools = await this.discoverToolsOrResourceTools(client);
+        } catch (error) {
+          // A Skills-only server may intentionally expose neither tools/list
+          // nor resources/list. Its declared extension is enough to keep the
+          // installation; the companion metadata pass will call skills/list.
+          if (
+            config.mcpGateway.skillsEnabled &&
+            Object.hasOwn(serverExtensions(), MCP_SKILLS_EXTENSION_ID)
+          ) {
+            tools = [];
+          } else {
+            throw error;
+          }
+        }
 
         // Close connection (we just needed the tools)
         await client.close();
@@ -3841,7 +3858,14 @@ class McpClient {
    */
   private async withDirectServerClient<T>(
     mcpServerId: string,
-    run: (client: Client) => Promise<T>,
+    run: (client: Client, session: DirectServerSession) => Promise<T>,
+    options?: {
+      clientName?: string;
+      capabilities?: ClientCapabilitiesWithExtensions;
+      owner?: ToolOwner;
+      tokenAuth?: TokenAuthContext;
+      enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
+    },
   ): Promise<T> {
     const [server] = await McpServerModel.findByIdsBasic([mcpServerId]);
     if (!server) {
@@ -3861,22 +3885,36 @@ class McpClient {
         id: mcpServerId,
         secretId: server.secretId,
       });
+      const enterpriseTransportCredential =
+        options?.enterpriseTransportCredential ??
+        (options?.owner
+          ? await this.resolveCachedEnterpriseTransportCredential({
+              owner: options.owner,
+              tokenAuth: options.tokenAuth,
+              enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+            })
+          : null);
       const transport = await this.getTransport(
         catalogItem,
         mcpServerId,
         secrets,
         server.secretId ?? undefined,
+        undefined,
+        options?.tokenAuth,
+        enterpriseTransportCredential ?? undefined,
       );
-      const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
-        capabilities: {},
-      });
+      const client = new Client(
+        buildMcpClientInfo(options?.clientName ?? "archestra-app-runner"),
+        { capabilities: options?.capabilities ?? {} },
+      );
+      const serverExtensions = captureServerExtensions(transport);
       try {
         await this.raceWithTimeout(
           client.connect(transport),
           30000,
           new McpServerConnectionTimeoutError(),
         );
-        return await run(client);
+        return await run(client, { serverExtensions });
       } finally {
         await client.close().catch(() => {});
       }
@@ -3893,6 +3931,25 @@ class McpClient {
     }
     // SPDX-SnippetEnd
     return runWithClient();
+  }
+
+  /** Fresh source-scoped session for Skills discovery and live reads. */
+  async withSkillsSession<T>(params: {
+    mcpServerId: string;
+    run: (client: Client, session: DirectServerSession) => Promise<T>;
+    owner?: ToolOwner;
+    tokenAuth?: TokenAuthContext;
+    enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
+  }): Promise<T> {
+    return this.withDirectServerClient(params.mcpServerId, params.run, {
+      clientName: "archestra-skills-client",
+      capabilities: {
+        extensions: MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
+      },
+      owner: params.owner,
+      tokenAuth: params.tokenAuth,
+      enterpriseTransportCredential: params.enterpriseTransportCredential,
+    });
   }
 
   /** Read a UI (`ui://`) resource directly from one installed server. */
@@ -5350,6 +5407,16 @@ function applyEnterpriseCredentialHeader(
   }
 
   headers[credential.headerName] = credential.headerValue;
+}
+
+function mcpClientExtensionCapabilities() {
+  return {
+    ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+    ...(config.mcpGateway.skillsEnabled
+      ? MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES
+      : {}),
+  } as const;
 }
 
 function resolveContentDisposition(

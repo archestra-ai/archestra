@@ -1045,11 +1045,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
-                                  skill={
-                                    ChatMessageMetadataSchema.safeParse(
-                                      message.metadata,
-                                    ).data?.skill
-                                  }
+                                  skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
@@ -1159,11 +1155,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
-                                  skill={
-                                    ChatMessageMetadataSchema.safeParse(
-                                      message.metadata,
-                                    ).data?.skill
-                                  }
+                                  skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
@@ -3057,4 +3049,17 @@ function ContextCompactionTimelineEvent({
       </div>
     </div>
   );
+}
+
+function getSkillAttribution(
+  metadata: unknown,
+): { name: string; href?: string } | undefined {
+  const parsed = ChatMessageMetadataSchema.safeParse(metadata).data;
+  if (parsed?.skill) return parsed.skill;
+  return parsed?.externalMcpSkill
+    ? {
+        name: parsed.externalMcpSkill.displayName,
+        href: `/skills/external/${parsed.externalMcpSkill.id}?mcpServerId=${parsed.externalMcpSkill.mcpServerId}`,
+      }
+    : undefined;
 }

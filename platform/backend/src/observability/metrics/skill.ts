@@ -19,10 +19,14 @@ import client from "prom-client";
 import logger from "@/logging";
 
 /**
- * How a skill entered the context: a chat slash command, a `load_skill` tool
- * call, or dispatch to the skill's designated agent.
+ * How a skill entered the context: a chat slash command or attachment, a
+ * `load_skill` tool call, or dispatch to the skill's designated agent.
  */
-type SkillActivationType = "slash_command" | "load_skill" | "delegation";
+type SkillActivationType =
+  | "slash_command"
+  | "chat_attachment"
+  | "load_skill"
+  | "delegation";
 
 let skillActivationsTotal: client.Counter<string>;
 let skillContextTokensTotal: client.Counter<string>;
@@ -35,7 +39,7 @@ export function initializeSkillMetrics(): void {
 
   skillActivationsTotal = new client.Counter({
     name: "skill_activations_total",
-    help: "Total skill activations, by activation path (slash_command, load_skill, delegation)",
+    help: "Total skill activations, by activation path (slash_command, chat_attachment, load_skill, delegation)",
     labelNames: ["activation_type"],
   });
 

@@ -44,6 +44,7 @@ export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
+export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as GithubPatModel } from "./github-pat";
@@ -71,6 +72,7 @@ export {
   selectionKey,
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";
 export type { ClusterLeaseGuard } from "./mcp-deployment-lease";
 export {
   ClusterLeaseHeldError,

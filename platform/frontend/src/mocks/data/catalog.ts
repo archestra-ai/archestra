@@ -48,6 +48,8 @@ export function makeCatalogItem(
     labels: [],
     teams: [],
     toolCount: 0,
+    skillCount: 0,
+    providesSkills: false,
     ...overrides,
   };
 }

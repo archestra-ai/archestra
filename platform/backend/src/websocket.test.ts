@@ -112,6 +112,74 @@ describe("websocket authentication", () => {
   });
 });
 
+describe("websocket MCP server lifecycle", () => {
+  test("scopes uninstall events to clients in the affected organization", () => {
+    const matchingSend = vi.fn();
+    const foreignSend = vi.fn();
+    const matchingClient = {
+      readyState: WS.OPEN,
+      send: matchingSend,
+    } as unknown as WS;
+    const foreignClient = {
+      readyState: WS.OPEN,
+      send: foreignSend,
+    } as unknown as WS;
+    const previousWss = service.wss;
+    service.wss = { clients: new Set([matchingClient, foreignClient]) };
+    service.clientContexts.set(matchingClient, {
+      userId: "user-1",
+      organizationId: "org-1",
+      userIsMcpServerAdmin: false,
+    });
+    service.clientContexts.set(foreignClient, {
+      userId: "user-2",
+      organizationId: "org-2",
+      userIsMcpServerAdmin: false,
+    });
+
+    try {
+      websocketService.broadcastMcpServersChanged({
+        organizationId: "org-1",
+        serverIds: ["server-1"],
+        catalogIds: ["catalog-1"],
+      });
+
+      expect(matchingSend).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: "mcp_servers_changed",
+          payload: {
+            change: "uninstalled",
+            serverIds: ["server-1"],
+            catalogIds: ["catalog-1"],
+          },
+        }),
+      );
+      expect(foreignSend).not.toHaveBeenCalled();
+
+      matchingSend.mockClear();
+      foreignSend.mockClear();
+      websocketService.broadcastMcpServersChanged({
+        organizationId: null,
+        catalogIds: ["global-catalog"],
+      });
+      const globalMessage = JSON.stringify({
+        type: "mcp_servers_changed",
+        payload: {
+          change: "uninstalled",
+          serverIds: [],
+          catalogIds: ["global-catalog"],
+        },
+      });
+      expect(matchingSend).toHaveBeenCalledWith(globalMessage);
+      expect(foreignSend).toHaveBeenCalledWith(globalMessage);
+    } finally {
+      service.wss = previousWss;
+      service.clientContexts.delete(matchingClient);
+      service.clientContexts.delete(foreignClient);
+    }
+  });
+});
+
 describe("websocket browser-stream authorization", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

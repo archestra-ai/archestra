@@ -554,6 +554,28 @@ export const ChatSkillMetadataSchema = z.object({
 export type ChatSkillMetadata = z.infer<typeof ChatSkillMetadataSchema>;
 
 /**
+ * An external MCP Skill explicitly attached to a chat turn. Identity fields
+ * are untrusted hints: the backend re-resolves installation access and the
+ * catalog URI before fetching live source bytes. displayName is UI-only.
+ */
+export const ChatExternalMcpSkillMetadataSchema = z.object({
+  id: z.string().uuid(),
+  mcpServerId: z.string().uuid(),
+  uri: z.string().min(1).max(4096),
+  name: z.string().min(1).max(200),
+  serverName: z.string().min(1).max(200),
+  commandValue: z
+    .string()
+    .regex(/^\/[a-z0-9][a-z0-9-]*$/)
+    .max(500),
+  displayName: z.string().min(1).max(500),
+});
+
+export type ChatExternalMcpSkillMetadata = z.infer<
+  typeof ChatExternalMcpSkillMetadataSchema
+>;
+
+/**
  * Render-loop diagnostics from owned MCP App renders, attached once by the
  * chat UI to the next outgoing user message. Collected inside an untrusted
  * sandboxed iframe — the backend re-validates and frames them as data, never
@@ -611,6 +633,7 @@ export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
 export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
+    externalMcpSkill: ChatExternalMcpSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
     openedApp: ChatOpenedAppMetadataSchema.optional(),
     /**

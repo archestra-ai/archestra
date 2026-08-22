@@ -7,6 +7,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
+import websocketService from "@/websocket";
 
 vi.mock("@/auth");
 
@@ -89,6 +90,10 @@ describe("MCP server soft-delete routes", () => {
       .update(schema.mcpServersTable)
       .set({ secretId: secret.id })
       .where(eq(schema.mcpServersTable.id, server.id));
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
 
     const res = await app.inject({
       method: "DELETE",
@@ -96,6 +101,10 @@ describe("MCP server soft-delete routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ success: true });
+    expect(lifecycleBroadcast).toHaveBeenCalledWith({
+      organizationId,
+      serverIds: [server.id],
+    });
 
     const [row] = await db
       .select()
@@ -149,6 +158,38 @@ describe("MCP server soft-delete routes", () => {
     expect(audit?.resourceType).toBe("mcpServer");
     expect(audit?.before).toMatchObject({ deletedAt: expect.any(String) });
     expect(audit?.after).toMatchObject({ deletedAt: null });
+  });
+
+  test("DELETE cannot uninstall a server belonging to another organization", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const foreignOrganization = await makeOrganization();
+    const foreignUser = await makeUser({ email: "foreign-server@test.com" });
+    await makeMember(foreignUser.id, foreignOrganization.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: foreignOrganization.id,
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: foreignUser.id,
+    });
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/mcp_server/${server.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(lifecycleBroadcast).not.toHaveBeenCalled();
   });
 
   test("restore is rejected (409) while the parent catalog is still soft-deleted", async ({

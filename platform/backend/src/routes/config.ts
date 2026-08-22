@@ -141,8 +141,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 redirectUri: z.string(),
               }),
               /**
-               * BETA: gateways publish this deployment's skills over MCP as
-               * `skill://` resources. Gates the per-gateway skill selection UI.
+               * BETA: publish local Skills over gateways and project Skills
+               * discovered from installed MCP servers.
                */
               mcpGatewaySkillsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */

@@ -7,6 +7,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import websocketService from "@/websocket";
 
 vi.mock("@/auth");
 
@@ -82,6 +83,10 @@ describe("DELETE /api/mcp_server/bulk", () => {
       ownerId: user.id,
       name: "bulk-mcp-kept",
     });
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
 
     const response = await bulkDelete([first.id, second.id]);
 
@@ -94,6 +99,10 @@ describe("DELETE /api/mcp_server/bulk", () => {
     expect(await isDeleted(first.id)).toBe(true);
     expect(await isDeleted(second.id)).toBe(true);
     expect(await isDeleted(kept.id)).toBe(false);
+    expect(lifecycleBroadcast).toHaveBeenCalledWith({
+      organizationId,
+      serverIds: [first.id, second.id],
+    });
   });
 
   /**

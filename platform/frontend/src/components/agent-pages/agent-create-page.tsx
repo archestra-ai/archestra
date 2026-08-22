@@ -35,7 +35,7 @@ import { AgentPageShell, AgentWizardFooter } from "./agent-page-shell";
  * Every step fills one form that lives for the whole wizard; nothing reaches
  * the backend until the last step's Create, which writes the record and
  * everything picked for it together, then lands on the detail page's Connect
- * tab — the way the skills wizard collects a draft and creates at the end.
+ * section — the way the skills wizard collects a draft and creates at the end.
  */
 export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
   const config = AGENT_PAGE_CONFIGS[kind];
@@ -110,7 +110,7 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
           </EmptyHeader>
         </Empty>
       ) : created ? (
-        // Created, and on its way to the Connect tab as soon as the read
+        // Created, and on its way to the Connect section as soon as the read
         // permission answers. The form stays unmounted so it cannot be
         // submitted a second time.
         <Empty className="border">

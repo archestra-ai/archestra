@@ -2,6 +2,7 @@
 
 import { E2eTestId } from "@archestra/shared";
 import {
+  ChevronDown,
   Copy,
   Download,
   History,
@@ -25,6 +26,11 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +63,6 @@ import { AgentConnectContent } from "./agent-connect-content";
 import { AgentOverview } from "./agent-overview";
 import {
   AGENT_PAGE_CONFIGS,
-  type AgentDetailTab,
   type AgentPageKind,
   agentDetailHref,
   agentEditHref,
@@ -70,8 +75,8 @@ import { useAgentAccess } from "./use-agent-access";
 
 /**
  * `/<family>/[id]` — one agent-shaped resource's page: header with the
- * actions the list row used to offer, an Overview tab, and a Connect tab with
- * the "how do I use this?" instructions that used to open in a dialog.
+ * actions the list row used to offer, the essential record facts, and the
+ * connection instructions on the same page.
  *
  * Trashed records are not routable: `GET /api/agents/:id` filters them out, so
  * they only ever reach the not-found state. Restore and permanent delete stay
@@ -211,18 +216,15 @@ function AgentDetails({
   });
   const { data: canCreateSkill } = useHasPermissions({ skill: ["create"] });
 
-  // Built-in agents are not connectable.
-  const showConnectTab = !isBuiltIn;
-  const tabParam = searchParams.get("tab");
-  const tab: AgentDetailTab =
-    tabParam === "connect" && showConnectTab ? "connect" : "overview";
-  // A built-in agent has only the Overview: no tab strip for a single tab.
-  const tabs = showConnectTab
-    ? [
-        { label: "Overview", href: agentDetailHref(kind, agent.id) },
-        { label: "Connect", href: agentDetailHref(kind, agent.id, "connect") },
-      ]
-    : [];
+  const showConnect = !isBuiltIn;
+  const legacyConnectRequested = searchParams.get("tab") === "connect";
+
+  useEffect(() => {
+    if (!legacyConnectRequested || !showConnect) return;
+    document
+      .getElementById(AGENT_CONNECT_SECTION_ID)
+      ?.scrollIntoView({ block: "start" });
+  }, [legacyConnectRequested, showConnect]);
 
   const [cloning, setCloning] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -313,7 +315,6 @@ function AgentDetails({
       documentTitle={agent.name}
       backLink={backLink}
       description={agent.description ?? ""}
-      tabs={tabs}
       actionButton={
         // One primary (Edit), one secondary (Chat), the rest in the kebab with
         // the destructive item under a divider.
@@ -408,12 +409,37 @@ function AgentDetails({
         </div>
       }
     >
-      <div className="space-y-4">
-        {tab === "overview" && <AgentOverview kind={kind} agent={agent} />}
-        {tab === "connect" && (
-          <div className="rounded-lg border bg-card p-6">
+      <div className="space-y-10">
+        <section aria-labelledby="agent-overview-heading">
+          <Collapsible>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+              <h2
+                id="agent-overview-heading"
+                className="text-base font-semibold tracking-tight text-foreground"
+              >
+                Overview
+              </h2>
+              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <AgentOverview kind={kind} agent={agent} />
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
+        {showConnect && (
+          <section
+            id={AGENT_CONNECT_SECTION_ID}
+            aria-labelledby="agent-connect-heading"
+            className="scroll-mt-24 space-y-4"
+          >
+            <h2
+              id="agent-connect-heading"
+              className="text-base font-semibold tracking-tight text-foreground"
+            >
+              Connect
+            </h2>
             <AgentConnectContent kind={kind} agent={agent} origin="table" />
-          </div>
+          </section>
         )}
       </div>
 
@@ -532,6 +558,8 @@ function KebabItem({
     </DropdownMenuItem>
   );
 }
+
+const AGENT_CONNECT_SECTION_ID = "connect";
 
 function DetailPageSkeleton() {
   return (

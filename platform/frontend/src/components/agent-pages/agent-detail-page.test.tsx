@@ -145,23 +145,45 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /restore/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /permanently/i })).toBeNull();
     expect(screen.queryByText(/is in the trash/i)).toBeNull();
-    // Connect stays offered, and Edit stays in the header. (PageLayout renders
-    // each tab in a desktop row and a mobile row, hence getAllByRole.)
+    // Connect stays on the same page, and Edit stays in the header.
     expect(
-      screen.getAllByRole("link", { name: "Connect" }).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("heading", { name: "Connect" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("connect content")).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.AgentDetailEditButton),
     ).toBeInTheDocument();
   });
 
-  it("shows no tab strip for a built-in agent, which has only the Overview", () => {
+  it("collapses the overview by default and reveals it before the connection instructions", async () => {
+    const user = userEvent.setup();
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    const overviewToggle = screen.getByRole("button", { name: "Overview" });
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("overview")).toBeNull();
+
+    await user.click(overviewToggle);
+    const overview = screen.getByText("overview");
+    const connect = screen.getByText("connect content");
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      overview.compareDocumentPosition(connect) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("omits the connection section for a built-in agent", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
-    expect(screen.getByText("overview")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Connect" })).toBeNull();
+    expect(screen.queryByText("connect content")).toBeNull();
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText("overview")).toBeNull();
   });
 });

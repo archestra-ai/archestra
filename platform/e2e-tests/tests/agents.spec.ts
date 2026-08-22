@@ -87,8 +87,8 @@ async function createViaWizard(
   }).toPass({ timeout: 20_000 });
   await createResponsePromise;
 
-  // 5. The create lands on the new record's Connect tab.
-  const connectUrl = new RegExp(`${listPath}/([^/?]+)\\?tab=connect`);
+  // 5. The create lands on the new record's Connect section.
+  const connectUrl = new RegExp(`${listPath}/([^/?#]+)#connect`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];
@@ -135,7 +135,7 @@ test(
 
     const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
 
-    // The create lands on the Connect tab, which shows the agent's A2A
+    // The create lands on the Connect section, which shows the agent's A2A
     // endpoint so the user knows how to use it.
     await expect(
       page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
@@ -217,10 +217,8 @@ test(
 
     const proxyId = await createViaWizard(page, "/llm/proxies", PROXY_NAME);
 
-    // The create lands on the proxy's Connect tab (endpoint + auth).
-    await expect(page).toHaveURL(
-      new RegExp(`/llm/proxies/${proxyId}\\?tab=connect`),
-    );
+    // The create lands on the proxy's Connect section (endpoint + auth).
+    await expect(page).toHaveURL(new RegExp(`/llm/proxies/${proxyId}#connect`));
     await expect(page.getByRole("tab", { name: "Virtual keys" })).toBeVisible({
       timeout: 15_000,
     });
@@ -254,7 +252,7 @@ test(
       GATEWAY_NAME,
     );
 
-    // The create lands on the Connect tab, whose "Open the Connect page" link
+    // The create lands on the Connect section, whose "Open the Connect page" link
     // lands on /connection with the new gateway pre-selected.
     await page.getByRole("link", { name: /Open the Connect page/ }).click();
     await page.waitForURL(

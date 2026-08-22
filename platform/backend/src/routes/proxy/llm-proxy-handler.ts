@@ -90,6 +90,7 @@ import {
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
+  type ToolCallBlock,
   type ToolCompressionStats,
   type ToonSkipReason,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
@@ -119,6 +120,7 @@ import {
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
+  toToolCallBlock,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
@@ -1537,6 +1539,11 @@ async function handleStreaming<
     `[${providerName}Proxy] Starting streaming request`,
   );
 
+  // Hoisted out of the try: the refusal is decided inside it, but the
+  // interaction is written in the finally, and a row that does not say it was
+  // refused is indistinguishable from a healthy one.
+  let toolCallBlock: ToolCallBlock | undefined;
+
   try {
     // Execute streaming request with tracing — the span covers the full streaming
     // operation (request → all chunks consumed) so we can set response attributes
@@ -1770,6 +1777,8 @@ async function handleStreaming<
         { refused: !!toolInvocationRefusal },
         "Tool invocation policy result",
       );
+
+      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
     }
 
     if (toolInvocationRefusal) {
@@ -1968,6 +1977,7 @@ async function handleStreaming<
           toonSkipReason,
           dualLlmAnalyses,
           unsafeContextBoundary,
+          toolCallBlock,
         });
         await persistProxyInteraction(
           record,
@@ -2314,6 +2324,7 @@ async function handleNonStreaming<
         toonSkipReason,
         dualLlmAnalyses,
         unsafeContextBoundary,
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
       });
       await persistProxyInteraction(
         refusalRecord,

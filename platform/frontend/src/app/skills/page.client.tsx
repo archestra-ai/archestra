@@ -69,11 +69,13 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useAllMatchingSkills,
   useBulkDeleteSkills,
+  useExternalMcpSkills,
   usePermanentlyDeleteSkill,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -84,11 +86,16 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
+import {
+  ExternalMcpSkillsSection,
+  filterExternalMcpSkills,
+} from "./_parts/external-mcp-skills-section";
 import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
+type SkillKind = "all" | "standalone" | "mcp";
 
 const SYNC_INTERVAL_LABELS: Record<string, string> = {
   "15m": "Synced every 15 minutes",
@@ -165,6 +172,26 @@ function SkillsList() {
   );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
+  const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
+  const kindParam = searchParams.get("kind");
+  const requestedKind: SkillKind =
+    kindParam === "standalone" || kindParam === "mcp" ? kindParam : "all";
+  const kind: SkillKind =
+    isDeletedView || !mcpSkillsEnabled ? "standalone" : requestedKind;
+  const showStandaloneSkills = kind !== "mcp";
+  const showMcpSkills =
+    mcpSkillsEnabled && !isDeletedView && kind !== "standalone";
+  const { data: externalSkills = [], isPending: isExternalSkillsPending } =
+    useExternalMcpSkills({
+      enabled: showMcpSkills,
+    });
+  const visibleExternalSkills = sourceRepo
+    ? []
+    : filterExternalMcpSkills({
+        skills: externalSkills,
+        search,
+        scope: scopeFilter.scope,
+      });
   const restoreSkill = useRestoreSkill();
   const admin = useIsGlobalAdmin();
 
@@ -174,6 +201,23 @@ function SkillsList() {
       if (value) {
         params.set("sourceRepo", value);
       } else {
+        params.delete("sourceRepo");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const setKindFilter = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "all") {
+        params.delete("kind");
+      } else {
+        params.set("kind", value);
+      }
+      if (value === "mcp") {
         params.delete("sourceRepo");
       }
       params.set("page", "1");
@@ -281,8 +325,26 @@ function SkillsList() {
     !!search ||
     !!sourceRepo ||
     scopeFilter.hasActiveScopeFilters ||
-    isDeletedView;
-  const showEmptyState = !isPending && totalSkills === 0 && !hasActiveFilters;
+    isDeletedView ||
+    (mcpSkillsEnabled && !isDeletedView && kind !== "all");
+  const hasVisibleSkills =
+    (showStandaloneSkills && totalSkills > 0) ||
+    (showMcpSkills && visibleExternalSkills.length > 0);
+  const showEmptyState =
+    !isPending &&
+    !(showMcpSkills && isExternalSkillsPending) &&
+    !hasVisibleSkills &&
+    !hasActiveFilters;
+  const noVisibleFilterResults =
+    totalSkills === 0 && visibleExternalSkills.length === 0;
+  const showStandaloneSection =
+    showStandaloneSkills &&
+    (totalSkills > 0 ||
+      kind === "standalone" ||
+      isDeletedView ||
+      (kind === "all" && noVisibleFilterResults));
+  const showMcpSection =
+    showMcpSkills && (visibleExternalSkills.length > 0 || kind === "mcp");
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -294,6 +356,7 @@ function SkillsList() {
       "authorIds",
       "excludeAuthorIds",
       "status",
+      "kind",
     ]) {
       params.delete(key);
     }
@@ -590,6 +653,27 @@ function SkillsList() {
                   paramName="search"
                   className="relative w-[370px]"
                 />
+                {mcpSkillsEnabled && !isDeletedView && (
+                  <Select value={kind} onValueChange={setKindFilter}>
+                    <SelectTrigger
+                      aria-label="Filter by skill source"
+                      className="w-[180px]"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      side="bottom"
+                      align="start"
+                    >
+                      <SelectItem value="all">All kinds</SelectItem>
+                      <SelectItem value="standalone">
+                        Standalone skills
+                      </SelectItem>
+                      <SelectItem value="mcp">MCP skills</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <ResourceScopeFilter
                   ownerLabelPlural="skills"
                   adminPermission={{ skill: ["admin"] }}
@@ -603,7 +687,7 @@ function SkillsList() {
                 {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
                     one skill is imported. */}
-                {sourceRepos.length > 0 && (
+                {showStandaloneSkills && sourceRepos.length > 0 && (
                   <Select
                     value={sourceRepo || "all"}
                     onValueChange={(value) =>
@@ -632,84 +716,109 @@ function SkillsList() {
               <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>
 
-            <BulkActionsBar
-              count={selectedSkills.length}
-              noun="skill"
-              countTestId={E2eTestId.SkillsBulkSelectionCount}
-              onClear={clearSelection}
-              busy={isFetchingAllMatching}
-              selectAllMatching={{
-                total: totalSkills,
-                pageFullySelected:
-                  items.length > 0 && pageSelection.length === items.length,
-                active: allMatchingSelected,
-                onSelectAll: () => setEscalatedFor(filterSignature),
-                matchDescription: search
-                  ? "match this search query"
-                  : "match the current filters",
-                max: MAX_BULK_IDS,
-              }}
-              className="mb-3"
-            >
-              <PermissionButton
-                permissions={{ skill: ["update"] }}
-                variant="outline"
-                size="sm"
-                onClick={() => setBulkVisibilityOpen(true)}
-              >
-                <Pencil className="h-4 w-4" />
-                <span>Edit visibility</span>
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ skill: ["delete"] }}
-                variant="destructive"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </PermissionButton>
-            </BulkActionsBar>
+            <div className="space-y-6">
+              {showStandaloneSection && (
+                <section
+                  className="space-y-3"
+                  aria-labelledby="standalone-skills-title"
+                >
+                  <h2
+                    id="standalone-skills-title"
+                    className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+                  >
+                    {isDeletedView ? "Deleted skills" : "Standalone skills"}
+                  </h2>
 
-            <DataTable
-              columns={columns}
-              data={items}
-              getRowId={(row) => row.id}
-              emptyMessage="No skills yet."
-              hasActiveFilters={hasActiveFilters}
-              filteredEmptyMessage={
-                isDeletedView
-                  ? "No deleted skills found."
-                  : "No skills match the current filters."
-              }
-              onClearFilters={clearFilters}
-              hideSelectedCount
-              manualPagination
-              manualSorting
-              sorting={sorting}
-              onSortingChange={handleSortingChange}
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: totalSkills,
-              }}
-              onPaginationChange={(newPagination) => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.set("page", String(newPagination.pageIndex + 1));
-                params.set("pageSize", String(newPagination.pageSize));
-                router.push(`${pathname}?${params.toString()}`, {
-                  scroll: false,
-                });
-              }}
-              onRowClick={
-                isDeletedView
-                  ? undefined
-                  : (row) => router.push(`/skills/${row.id}`)
-              }
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              isLoading={isFetching}
-            />
+                  <BulkActionsBar
+                    count={selectedSkills.length}
+                    noun="skill"
+                    countTestId={E2eTestId.SkillsBulkSelectionCount}
+                    onClear={clearSelection}
+                    busy={isFetchingAllMatching}
+                    selectAllMatching={{
+                      total: totalSkills,
+                      pageFullySelected:
+                        items.length > 0 &&
+                        pageSelection.length === items.length,
+                      active: allMatchingSelected,
+                      onSelectAll: () => setEscalatedFor(filterSignature),
+                      matchDescription: search
+                        ? "match this search query"
+                        : "match the current filters",
+                      max: MAX_BULK_IDS,
+                    }}
+                  >
+                    <PermissionButton
+                      permissions={{ skill: ["update"] }}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkVisibilityOpen(true)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      <span>Edit visibility</span>
+                    </PermissionButton>
+                    <PermissionButton
+                      permissions={{ skill: ["delete"] }}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </PermissionButton>
+                  </BulkActionsBar>
+
+                  <DataTable
+                    columns={columns}
+                    data={items}
+                    getRowId={(row) => row.id}
+                    emptyMessage="No standalone skills yet."
+                    hasActiveFilters={hasActiveFilters}
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted skills found."
+                        : "No standalone skills match the current filters."
+                    }
+                    onClearFilters={clearFilters}
+                    hideSelectedCount
+                    manualPagination
+                    manualSorting
+                    sorting={sorting}
+                    onSortingChange={handleSortingChange}
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: totalSkills,
+                    }}
+                    onPaginationChange={(newPagination) => {
+                      const params = new URLSearchParams(
+                        searchParams.toString(),
+                      );
+                      params.set("page", String(newPagination.pageIndex + 1));
+                      params.set("pageSize", String(newPagination.pageSize));
+                      router.push(`${pathname}?${params.toString()}`, {
+                        scroll: false,
+                      });
+                    }}
+                    onRowClick={
+                      isDeletedView
+                        ? undefined
+                        : (row) => router.push(`/skills/${row.id}`)
+                    }
+                    rowSelection={rowSelection}
+                    onRowSelectionChange={setRowSelection}
+                    isLoading={isFetching}
+                  />
+                </section>
+              )}
+
+              {showMcpSection && (
+                <ExternalMcpSkillsSection
+                  skills={visibleExternalSkills}
+                  showWhenEmpty={kind === "mcp"}
+                />
+              )}
+            </div>
           </>
         )}
       </PageLayout>
@@ -775,7 +884,7 @@ function SkillsList() {
 
       {usageSkill && (
         <SkillUsageDialog
-          skillId={usageSkill.id}
+          skillRef={{ kind: "standalone", skillId: usageSkill.id }}
           skillName={usageSkill.name}
           open={!!usageSkill}
           onOpenChange={(open) => !open && setUsageSkill(null)}

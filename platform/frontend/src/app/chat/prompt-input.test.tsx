@@ -1299,6 +1299,158 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
+  describe("external MCP Skill attachment", () => {
+    const attachment = {
+      id: "11111111-1111-4111-8111-111111111111",
+      mcpServerId: "33333333-3333-4333-8333-333333333333",
+      uri: "skill://example/fallout/SKILL.md",
+      name: "fallout-rpg",
+      serverName: "TTRPG Helper",
+      commandValue: "/ttrpg-helper-fallout-rpg",
+      displayName: "TTRPG Helper [personal:33333333] / fallout-rpg",
+    };
+
+    it("submits identity metadata when the human slash token remains", () => {
+      const onSubmit = vi.fn();
+      const onRemove = vi.fn();
+      mockControllerState.value =
+        "/ttrpg-helper-fallout-rpg Create a campaign outline";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          externalMcpSkillAttachment={attachment}
+          onRemoveExternalMcpSkillAttachment={onRemove}
+        />,
+      );
+
+      expect(screen.queryByText(/Load and use/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Remove attached Skill" }),
+      ).not.toBeInTheDocument();
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("Create a campaign outline");
+      expect(options).toEqual({ externalMcpSkill: attachment });
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it("detaches the MCP Skill when the slash token was deleted", () => {
+      const onSubmit = vi.fn();
+      const onRemove = vi.fn();
+      mockControllerState.value = "Create a campaign outline";
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          externalMcpSkillAttachment={attachment}
+          onRemoveExternalMcpSkillAttachment={onRemove}
+        />,
+      );
+
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("Create a campaign outline");
+      expect(options).toBeUndefined();
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets a replacement local Skill command become the source of truth", () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { skillToolsEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof useOrganization>);
+      mockUseSkillsPaginated.mockReturnValue({
+        data: {
+          data: [
+            { id: "local-skill", name: "Local Skill", description: "Local" },
+          ],
+        },
+        isLoading: false,
+      });
+      mockControllerState.value = "/local-skill do the thing";
+      const onSubmit = vi.fn();
+      const onRemove = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          externalMcpSkillAttachment={attachment}
+          onRemoveExternalMcpSkillAttachment={onRemove}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("do the thing");
+      expect(options).toEqual({
+        skill: { id: "local-skill", name: "Local Skill" },
+      });
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it("reserves the staged MCP token from later local Skill collisions", () => {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { skillToolsEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof useOrganization>);
+      mockUseSkillsPaginated.mockReturnValue({
+        data: {
+          data: [
+            {
+              id: "local-collision",
+              name: "TTRPG Helper Fallout RPG",
+              description: "Local collision",
+            },
+          ],
+        },
+        isLoading: false,
+      });
+      mockControllerState.value = "/ttrpg-helper-fallout-rpg-2 local task";
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          externalMcpSkillAttachment={attachment}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("local task");
+      expect(options).toEqual({
+        skill: { id: "local-collision", name: "TTRPG Helper Fallout RPG" },
+      });
+    });
+
+    it("lets a replacement sandbox command keep its no-LLM metadata", () => {
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "! echo sensitive";
+      const onSubmit = vi.fn();
+      const onRemove = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          externalMcpSkillAttachment={attachment}
+          onRemoveExternalMcpSkillAttachment={onRemove}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("! echo sensitive");
+      expect(options).toEqual({ sandboxCommand: true });
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("sandbox commands", () => {
     it("sandbox available: a `!` message dispatches with the sandboxCommand option and unchanged text", () => {
       const onSubmit = vi.fn();
@@ -1466,6 +1618,43 @@ describe("ArchestraPromptInput", () => {
       expect(mockTextInputSetInput).toHaveBeenCalledWith(
         "/helper do the thing",
       );
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("restores a queued external MCP Skill attachment", () => {
+      const conversationId = "conv-arrowup-external-skill";
+      const externalMcpSkill = {
+        id: "11111111-1111-4111-8111-111111111111",
+        mcpServerId: "33333333-3333-4333-8333-333333333333",
+        uri: "skill://example/release/SKILL.md",
+        name: "release-checklist",
+        serverName: "Operations server",
+        commandValue: "/operations-server-release-checklist",
+        displayName: "Operations server [team:33333333] / release-checklist",
+      };
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, {
+        text: "do the thing",
+        externalMcpSkill,
+      });
+      mockControllerState.value = "";
+      const onRestore = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          onRestoreExternalMcpSkillAttachment={onRestore}
+        />,
+      );
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      expect(mockTextInputSetInput).toHaveBeenCalledWith(
+        "/operations-server-release-checklist do the thing",
+      );
+      expect(onRestore).toHaveBeenCalledWith(externalMcpSkill);
       chatMessageQueue.clear(conversationId);
     });
 

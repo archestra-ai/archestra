@@ -80,6 +80,7 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
+import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
@@ -441,6 +442,11 @@ function CatalogItemDetails({
           <Badge variant="secondary" className="capitalize font-normal">
             {item.serverType}
           </Badge>
+          <McpCapabilityBadges
+            providesUi={item.providesUi}
+            providesSkills={item.providesSkills}
+            skillCount={item.skillCount}
+          />
         </div>
       }
       documentTitle={item.name}

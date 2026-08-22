@@ -1,7 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
+import { externalMcpSkillsQueryKey } from "@/lib/skills/skill.query";
 import { throwOnApiError } from "@/lib/utils";
 
 const {
@@ -189,6 +195,7 @@ export function useUpdateInternalMcpCatalogItem() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
       // A rename re-slugs tool names without any reinstall, so the unified
@@ -236,6 +243,7 @@ export function useReinstallInternalMcpCatalogItem() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       toast.success("Catalog reinstalled successfully");
     },
@@ -275,10 +283,13 @@ export function useDeleteInternalMcpCatalogItem() {
   return useMutation({
     mutationFn: async (id: string) => {
       const response = await deleteInternalMcpCatalogItem({ path: { id } });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, catalogId) => {
+      removeExternalMcpSkillsForCatalog(queryClient, catalogId);
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       toast.success("Catalog item deleted successfully");
     },
     onError: (error) => {
@@ -394,4 +405,15 @@ export function useK8sImagePullSecrets() {
       return data ?? [];
     },
   });
+}
+
+function removeExternalMcpSkillsForCatalog(
+  queryClient: QueryClient,
+  catalogId: string,
+) {
+  queryClient.setQueriesData<
+    archestraApiTypes.GetExternalMcpSkillsResponses["200"]
+  >({ queryKey: externalMcpSkillsQueryKey }, (skills) =>
+    skills?.filter((skill) => skill.catalogId !== catalogId),
+  );
 }

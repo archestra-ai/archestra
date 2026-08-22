@@ -46,7 +46,7 @@ import {
   McpTaskStatusRow,
   useElapsedSince,
 } from "./mcp-task-status";
-import { SkillPill } from "./skill-pill";
+import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
@@ -206,14 +206,9 @@ function CompactCircle({
 }
 
 /**
- * Variant of CompactCircle for `archestra__load_skill` activation calls (no
- * `path`). Same chrome as the circle (32px tall, rounded-full, bordered) but
- * the pill extends horizontally to surface the skill name inline. The pill
- * itself does NOT expand the tool-call detail card on click — only the skill
- * name navigates to the Skills list (filtered by name) and only when the user
- * has `skill:read`. A `load_skill` call with a `path` reads a bundled file from
- * an already-loaded skill; that's not a skill trigger, so it renders as a plain
- * tool circle instead of this pill (#6184).
+ * Quiet inline marker for `archestra__load_skill` activation calls (no path).
+ * External MCP qualifiers are collapsed to a human Skill name; the source is
+ * retained in the tooltip. File reads remain normal tool circles (#6184).
  */
 function ToolCallSkillPill({
   toolName,
@@ -224,18 +219,30 @@ function ToolCallSkillPill({
   skillName: string | null;
   state: "running" | "completed" | "error" | "denied";
 }) {
+  const display = getSkillPillDisplay(skillName);
   const tooltipLabel = (() => {
-    const base = skillName ? `Skill: ${skillName}` : "Loading skill";
-    if (state === "running") return `${base} (running)`;
-    if (state === "error") return `${base} (error)`;
-    return base;
+    if (!display.name) return "Loading skill";
+    const target = display.source
+      ? `${display.name} from ${display.source}`
+      : display.name;
+    if (state === "running") return `Loading ${target}`;
+    if (state === "error") return `Failed to load ${target}`;
+    if (state === "denied") return `Access denied for ${target}`;
+    return target;
   })();
 
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <SkillPill skillName={skillName} data-tool-name={toolName}>
+          <SkillPill
+            skillName={skillName}
+            data-tool-name={toolName}
+            role="status"
+            aria-label={tooltipLabel}
+            tabIndex={display.source ? 0 : undefined}
+            showNativeTitle={false}
+          >
             {state === "running" || state === "error" ? (
               <span
                 className={cn(

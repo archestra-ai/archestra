@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   Download,
   FileSearch,
@@ -14,7 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -39,6 +39,7 @@ import {
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
+import { McpCapabilityBadges } from "./mcp-capability-badges";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import {
@@ -145,6 +146,11 @@ export function McpServerTable({
                   <span className="max-w-32 truncate">{environmentLabel}</span>
                 </Badge>
               )}
+              <McpCapabilityBadges
+                providesUi={item.providesUi}
+                providesSkills={item.providesSkills}
+                skillCount={item.skillCount}
+              />
             </div>
             {item.description && (
               <div className="truncate text-xs text-muted-foreground">

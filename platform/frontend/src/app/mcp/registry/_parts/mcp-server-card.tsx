@@ -82,6 +82,7 @@ import {
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
+import { McpCapabilityBadges } from "./mcp-capability-badges";
 import {
   type AgentUsage,
   agentOwnerLabel,
@@ -1066,6 +1067,12 @@ export function McpServerCard({
                 {item.description}
               </p>
             )}
+            <McpCapabilityBadges
+              providesUi={item.providesUi}
+              providesSkills={item.providesSkills}
+              skillCount={item.skillCount}
+              className="mt-2"
+            />
           </div>
           {canEditCatalog && settingsButton}
         </div>

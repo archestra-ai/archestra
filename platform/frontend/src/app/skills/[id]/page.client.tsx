@@ -259,7 +259,7 @@ function SkillDetailView({
       )}
       {usageOpen && (
         <SkillUsageDialog
-          skillId={skill.id}
+          skillRef={{ kind: "standalone", skillId: skill.id }}
           skillName={skill.name}
           open={usageOpen}
           onOpenChange={setUsageOpen}

@@ -1,6 +1,5 @@
 "use client";
 
-import type { ChatSkillMetadata } from "@archestra/shared";
 import { AlertTriangle, BookPlus, FileText, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -41,7 +40,7 @@ interface EditableUserMessageProps {
   editDisabled?: boolean;
   attachments?: FileAttachment[];
   /** Skill the user invoked via slash command for this message, if any. */
-  skill?: ChatSkillMetadata;
+  skill?: { name: string; href?: string };
   onStartEdit: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
@@ -137,7 +136,13 @@ export function EditableUserMessage({
             load_skill call read as the same thing. Right-aligned (inheriting
             the parent column's `items-end`) so it sits above the bubble it
             belongs to rather than drifting to the far-left column edge. */}
-        {skill && <SkillPill skillName={skill.name} className="mb-2" />}
+        {skill && (
+          <SkillPill
+            skillName={skill.name}
+            href={skill.href}
+            className="mb-2"
+          />
+        )}
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">

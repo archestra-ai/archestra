@@ -4,8 +4,14 @@ import {
   type McpDeploymentStatusEntry,
   type McpDeploymentStatusesMessage,
   type McpInstallationStatusMessage,
+  type McpServersChangedMessage,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
@@ -13,6 +19,10 @@ import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  externalMcpSkillDetailQueryKey,
+  externalMcpSkillsQueryKey,
+} from "@/lib/skills/skill.query";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -113,7 +123,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
     if (!enabled) return;
 
     websocketService.connect();
-    const unsubscribe = websocketService.subscribe(
+    const unsubscribeStatus = websocketService.subscribe(
       "mcp_installation_status",
       (message: McpInstallationStatusMessage) => {
         const { serverId, status, error } = message.payload;
@@ -172,11 +182,46 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
           void queryClient.invalidateQueries({
             queryKey: ["mcp-servers", serverId, "tools"],
           });
+          if (status === "success") {
+            void invalidateExternalMcpSkillQueries(queryClient);
+          }
         }
       },
     );
+    const unsubscribeLifecycle = websocketService.subscribe(
+      "mcp_servers_changed",
+      (message: McpServersChangedMessage) => {
+        const { serverIds, catalogIds } = message.payload;
+        removeExternalMcpSkillCachesForSources({
+          queryClient,
+          serverIds,
+          catalogIds,
+        });
+        removeMcpServersFromCache({ queryClient, serverIds, catalogIds });
+        void invalidateExternalMcpSkillQueries(queryClient);
+        void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+        void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        invalidateToolAssignmentQueries(queryClient);
+      },
+    );
+    const unsubscribeReady = websocketService.subscribe(
+      "websocket_ready",
+      () => {
+        void invalidateExternalMcpSkillQueries(queryClient);
+        void queryClient.invalidateQueries({
+          queryKey: externalMcpSkillDetailQueryKey,
+        });
+        void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+        void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        invalidateToolAssignmentQueries(queryClient);
+      },
+    );
 
-    return unsubscribe;
+    return () => {
+      unsubscribeStatus();
+      unsubscribeLifecycle();
+      unsubscribeReady();
+    };
   }, [enabled, queryClient]);
 }
 
@@ -263,6 +308,9 @@ export function useInstallMcpServer() {
       }
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      if (installedServer) {
+        await invalidateExternalMcpSkillQueries(queryClient);
+      }
       // Invalidate tools queries since MCP server installation creates new tools
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
@@ -314,10 +362,23 @@ export function useBulkUninstallMcpServers() {
         body: { ids: servers.map((server) => server.id) },
       }).then(({ data, error }) => {
         throwOnApiError(error, { toastOnError: false });
-        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+        const result = data ?? { succeeded: [], failed: [] };
+        return {
+          ...toBulkOutcome(result),
+          succeededIds: result.succeeded.map((server) => server.id),
+        };
       }),
+    onSuccess: (outcome) => {
+      removeExternalMcpSkillCachesForSources({
+        queryClient,
+        serverIds: outcome.succeededIds,
+      });
+    },
     onSettled: async () => {
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
       invalidateToolAssignmentQueries(queryClient);
     },
   });
@@ -328,6 +389,7 @@ export function useDeleteMcpServer() {
   return useMutation({
     mutationFn: async (data: { id: string; name: string }) => {
       const response = await deleteMcpServer({ path: { id: data.id } });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data;
     },
     onSuccess: async (_, variables) => {
@@ -335,8 +397,15 @@ export function useDeleteMcpServer() {
         serverId: variables.id,
         serverName: variables.name,
       });
+      removeExternalMcpSkillCachesForSources({
+        queryClient,
+        serverIds: [variables.id],
+      });
       // Refetch instead of just invalidating to ensure data is fresh
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
       invalidateToolAssignmentQueries(queryClient);
       toast.success(`Successfully uninstalled ${variables.name}`);
@@ -384,7 +453,10 @@ export function useReloadMcpServerTools() {
       const name = variables.name ?? cachedServer?.name;
       const catalogId = variables.catalogId ?? cachedServer?.catalogId;
 
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
       invalidateToolAssignmentQueries(queryClient);
       queryClient.invalidateQueries({
         queryKey: ["mcp-servers", variables.id, "tools"],
@@ -496,6 +568,7 @@ export function useMcpServerInstallationStatus(
           void queryClient.refetchQueries({
             queryKey: ["mcp-servers", installingMcpServerId],
           });
+          void invalidateExternalMcpSkillQueries(queryClient);
           toast.success("Successfully installed server");
         } else if (status === "error" && previous !== "error") {
           void queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
@@ -574,7 +647,10 @@ export function useReinstallMcpServer() {
     },
     onSuccess: async (_result, variables) => {
       // Refetch servers to get updated status (will show "pending" initially)
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        invalidateExternalMcpSkillQueries(queryClient),
+      ]);
       // Invalidate tools queries since tools may have been synced
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
@@ -637,3 +713,53 @@ export function useMcpDeploymentStatuses(): Record<
 // analytics. Module-level so the capture happens once regardless of how many
 // components have `useMcpInstallationStatusCacheSync` mounted.
 const runtimeInstallErrorsAlreadyTracked = new Set<string>();
+
+function invalidateExternalMcpSkillQueries(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
+}
+
+function removeExternalMcpSkillCachesForSources(params: {
+  queryClient: QueryClient;
+  serverIds?: string[];
+  catalogIds?: string[];
+}) {
+  const serverIds = new Set(params.serverIds ?? []);
+  const catalogIds = new Set(params.catalogIds ?? []);
+  params.queryClient.setQueriesData<
+    archestraApiTypes.GetExternalMcpSkillsResponses["200"]
+  >(
+    { queryKey: externalMcpSkillsQueryKey },
+    (skills) =>
+      skills?.filter(
+        (skill) =>
+          !serverIds.has(skill.mcpServerId) && !catalogIds.has(skill.catalogId),
+      ) ?? skills,
+  );
+  params.queryClient.setQueriesData<
+    archestraApiTypes.GetExternalMcpSkillResponses["200"] | null
+  >({ queryKey: externalMcpSkillDetailQueryKey }, (skill) => {
+    if (!skill) return skill;
+    return serverIds.has(skill.mcpServerId) || catalogIds.has(skill.catalogId)
+      ? null
+      : skill;
+  });
+}
+
+function removeMcpServersFromCache(params: {
+  queryClient: QueryClient;
+  serverIds: string[];
+  catalogIds: string[];
+}) {
+  const serverIds = new Set(params.serverIds);
+  const catalogIds = new Set(params.catalogIds);
+  params.queryClient.setQueriesData<
+    archestraApiTypes.GetMcpServersResponses["200"]
+  >({ queryKey: ["mcp-servers"] }, (servers) =>
+    Array.isArray(servers)
+      ? servers.filter(
+          (server) =>
+            !serverIds.has(server.id) && !catalogIds.has(server.catalogId),
+        )
+      : servers,
+  );
+}

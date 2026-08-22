@@ -248,13 +248,13 @@ function CatalogItemDetails({
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
     useMcpDeploymentStatuses();
   const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
-  const itemIssues = issuesByCatalog.get(item.id);
-  // The worst live issue first, exactly as the registry table's Status column
-  // reads it (mcp-server-table.tsx). Issues are kind-ordered and `muted` cuts
-  // across that order, so taking issues[0] made a server carrying a silenced
-  // "Failed to start" plus a live "Needs re-authentication" report the
-  // silenced fault here and the live one in the list.
-  const statusIssue = itemIssues?.find((i) => !i.muted) ?? itemIssues?.[0];
+  // Dismissed alerts belong only to the registry's Dismissed facet. The
+  // server page reports live operational state, so muted issues neither render
+  // a notice here nor suppress the normal status.
+  const itemIssues = (issuesByCatalog.get(item.id) ?? []).filter(
+    (issue) => !issue.muted,
+  );
+  const statusIssue = itemIssues[0];
   useMcpInstallationStatusCacheSync();
 
   const { data: environmentList } = useEnvironments();
@@ -583,7 +583,7 @@ function CatalogItemDetails({
 
             <CardIssues
               item={item}
-              issues={itemIssues ?? []}
+              issues={itemIssues}
               servers={allServersForCatalog}
             />
 

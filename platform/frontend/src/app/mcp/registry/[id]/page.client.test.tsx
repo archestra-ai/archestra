@@ -389,6 +389,36 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
   });
 
+  it("keeps dismissed alerts off the server details page", () => {
+    installedWithNoDeploymentEntry();
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "invalid_grant",
+              since: null,
+              fingerprint: "v1:needs-reauth:test",
+              muted: true,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(
+      screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
+    ).toBeNull();
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+  });
+
   it("repairs the selected connection inline without opening a dialog", async () => {
     const user = userEvent.setup();
     const replace = vi.fn();

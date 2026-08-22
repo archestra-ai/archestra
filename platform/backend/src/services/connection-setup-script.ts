@@ -19,6 +19,7 @@ import type {
 } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
+import { describeMarketplaceContents } from "./marketplace-copy";
 import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
@@ -106,6 +107,10 @@ export interface SetupScriptProxySection {
 export interface SetupScriptSkillsSection {
   cloneUrl: string;
   marketplaceName: string;
+  /** Existing skills plugin is present. Defaults true for older callers/tests. */
+  hasSkills?: boolean;
+  /** Opaque hook-bearing plugin entries advertised by the same marketplace. */
+  pluginNames?: string[];
 }
 
 export interface SetupScriptContext {
@@ -330,7 +335,9 @@ function banner(ctx: SetupScriptContext): string {
       }`,
     );
   }
-  if (ctx.skills) configures.push("Skills marketplace");
+  if (ctx.skills) {
+    configures.push(describeMarketplaceContents(ctx.skills).label);
+  }
 
   // The one canonical Archestra mark (shared with the startup guards), block/
   // quadrant glyphs that render as solid shapes in any UTF-8 terminal.
@@ -375,7 +382,7 @@ ARCHESTRA_NEXT`);
   }
   if (ctx.skills) {
     revocation.push(
-      `revoke the "${ctx.skills.marketplaceName}" share link on the Skills page`,
+      `revoke the "${ctx.skills.marketplaceName}" marketplace share link`,
     );
   }
   if (revocation.length > 0) {
@@ -395,9 +402,14 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.mcp) {
         steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
-      if (ctx.skills) {
+      if (ctx.skills?.hasSkills ?? !!ctx.skills) {
         steps.push(
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
+        );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push(
+          `${ctx.skills.pluginNames.length} plugin${ctx.skills.pluginNames.length === 1 ? " is" : "s are"} installed and will load automatically.`,
         );
       }
       if (ctx.mcp || ctx.proxy || ctx.skills) {
@@ -422,9 +434,14 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           `Start Codex through the proxy: codex -c model_provider=${ctx.proxy.proxyName}`,
         );
       }
-      if (ctx.skills) {
+      if (ctx.skills?.hasSkills ?? !!ctx.skills) {
         steps.push(
-          'Run /plugins inside Codex and pick "Install Plugin" to install the bundled skills.',
+          'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
+        );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push(
+          "Run `/hooks` inside Codex and approve each delivered hook before it can execute.",
         );
       }
       break;
@@ -439,10 +456,13 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           'Paste the export lines printed above into your shell profile, set COPILOT_MODEL, then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"',
         );
       }
-      if (ctx.skills) {
+      if (ctx.skills?.hasSkills ?? !!ctx.skills) {
         steps.push(
           `Browse and install the shared skills: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
         );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push("The plugins are installed and enabled.");
       }
       break;
     case "cursor":
@@ -460,6 +480,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
         steps.push(
           "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
         );
+        if (ctx.skills.pluginNames?.length) {
+          steps.push(
+            `Then install these plugins from Customize → Plugins: ${ctx.skills.pluginNames.join(", ")}.`,
+          );
+        }
       }
       break;
   }
@@ -544,14 +569,29 @@ cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(
   }
 
   if (ctx.skills) {
+    const hasSkills = ctx.skills.hasSkills ?? true;
+    const pluginNames = ctx.skills.pluginNames ?? [];
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
-    sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
+    const installs = [
+      ...(hasSkills
+        ? [
+            `if ! cli claude plugin install ${sh(pluginRef)}; then
+  warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
+fi`,
+          ]
+        : []),
+      ...pluginNames.map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `if ! cli claude plugin install ${sh(ref)}; then
+  warn ${sh(`Could not install plugin — run 'claude plugin install ${ref}'.`)}
+fi`;
+      }),
+    ];
+    sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — continuing."
 fi
-if ! cli claude plugin install ${sh(pluginRef)}; then
-  warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
-fi`);
+${installs.join("\n")}`);
   }
 
   startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
@@ -827,10 +867,17 @@ echo "Codex keeps using your own OpenAI API key login."`
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const installs = (ctx.skills.pluginNames ?? []).map((pluginName) => {
+      const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+      return `if ! cli codex plugin add ${sh(ref)}; then
+  warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
+fi`;
+    });
+    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
-fi`);
+fi
+${installs.join("\n")}`);
   }
 
   startupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
@@ -877,10 +924,17 @@ ARCHESTRA_COPILOT`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const installs = (ctx.skills.pluginNames ?? []).map((pluginName) => {
+      const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+      return `if ! cli copilot plugin install ${sh(ref)}; then
+  warn ${sh(`Could not install plugin — run 'copilot plugin install ${ref}'.`)}
+fi`;
+    });
+    sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
-fi`);
+fi
+${installs.join("\n")}`);
   }
 
   startupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
@@ -1096,7 +1150,7 @@ ARCHESTRA_CURSOR`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`Skills marketplace (manual step)`)}
+    sections.push(`say ${sh(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
 cat <<'ARCHESTRA_CURSOR_SKILLS'
 
 In Cursor's command palette run /add-plugin and paste:

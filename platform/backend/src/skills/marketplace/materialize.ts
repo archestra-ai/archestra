@@ -28,7 +28,11 @@ const REVISION_APPEND_MAX_ATTEMPTS = 5;
  */
 
 /** @public — re-exported for testability */
-export type { MaterializeRequest, MaterializeSkillInput } from "./layout";
+export type {
+  MaterializePluginInput,
+  MaterializeRequest,
+  MaterializeSkillInput,
+} from "./layout";
 
 interface MaterializeResult {
   repoPath: string;
@@ -42,6 +46,13 @@ interface MaterializerOptions {
   cacheDir: string;
   gitBinaryPath?: string;
   identity?: { name: string; email: string };
+}
+
+export class MarketplaceMaterializationConflictError extends Error {
+  constructor() {
+    super("Marketplace source changed during materialization; retry");
+    this.name = "MarketplaceMaterializationConflictError";
+  }
 }
 
 const DEFAULT_IDENTITY = {
@@ -135,26 +146,30 @@ export class MarketplaceMaterializer {
   private async doMaterialize(
     req: MaterializeRequest,
   ): Promise<MaterializeResult> {
-    const files = computeLayout(req);
-    const contentHash = computeContentHash(files);
     const repoPath = this.repoPathFor(req.linkId);
 
     let latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
 
-    if (latest && latest.contentHash === contentHash) {
-      await this.syncDiskToRevisions(req.linkId);
-      return {
-        repoPath,
-        commitHash: latest.commitSha,
-        contentHash,
-        reused: true,
-      };
-    }
-
     for (let attempt = 0; ; attempt++) {
+      const currentSequence = latest?.sequence ?? 0;
+      const currentFiles = computeLayout(req, currentSequence);
+      const currentContentHash = computeContentHash(currentFiles);
+
+      if (latest && latest.contentHash === currentContentHash) {
+        await this.syncDiskToRevisions(req.linkId);
+        return {
+          repoPath,
+          commitHash: latest.commitSha,
+          contentHash: currentContentHash,
+          reused: true,
+        };
+      }
+
+      const sequence = currentSequence + 1;
+      const files = computeLayout(req, sequence);
+      const contentHash = computeContentHash(files);
       await this.syncDiskToRevisions(req.linkId);
 
-      const sequence = (latest?.sequence ?? 0) + 1;
       const createdAt = roundToSeconds(new Date());
       const message = formatMessage(sequence, contentHash);
 
@@ -191,18 +206,17 @@ export class MarketplaceMaterializer {
           throw error;
         }
 
-        // Another replica appended this sequence first. Re-read the latest
-        // revision; if it already produced our content, reuse it, otherwise
-        // retry on top of the new head.
+        // Another replica appended this sequence first. Re-read the latest and
+        // rerender against its sequence. If the winner carried different
+        // source bytes, this request is stale and must never append on top of
+        // it (that would roll the marketplace back at a higher version).
         latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
-        if (latest && latest.contentHash === contentHash) {
-          await this.syncDiskToRevisions(req.linkId);
-          return {
-            repoPath,
-            commitHash: latest.commitSha,
-            contentHash,
-            reused: true,
-          };
+        if (!latest) throw new MarketplaceMaterializationConflictError();
+        const rerenderedHash = computeContentHash(
+          computeLayout(req, latest.sequence),
+        );
+        if (latest.contentHash !== rerenderedHash) {
+          throw new MarketplaceMaterializationConflictError();
         }
       }
     }
@@ -299,6 +313,18 @@ export class MarketplaceMaterializer {
       cwd: params.repoPath,
       args: ["add", "--all", "."],
     });
+    for (const file of params.files) {
+      await runGit({
+        binary: this.gitBinaryPath,
+        cwd: params.repoPath,
+        args: [
+          "update-index",
+          file.mode === "100755" ? "--chmod=+x" : "--chmod=-x",
+          "--",
+          file.path,
+        ],
+      });
+    }
     const treeRes = await runGit({
       binary: this.gitBinaryPath,
       cwd: params.repoPath,

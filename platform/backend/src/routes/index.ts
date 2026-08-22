@@ -49,6 +49,7 @@ export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
 export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
+export { default as pluginRoutes } from "./plugin/plugin.routes";
 export { default as projectRoutes } from "./project/project.routes";
 export { default as anthropicProxyRoutes } from "./proxy/routes/anthropic";
 export { default as archestraProxyRoutes } from "./proxy/routes/archestra";

@@ -44,6 +44,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "admin",
     "deploy-to-restricted",
   ],
+  plugin: ["read", "create", "update", "delete", "admin"],
   app: [
     "read",
     "create",
@@ -186,6 +187,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "team-admin",
     "deploy-to-restricted",
   ],
+  plugin: ["read", "create", "update", "delete"],
   app: [
     "read",
     "create",
@@ -290,6 +292,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
+  plugin: [],
   app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
@@ -458,6 +461,11 @@ export const permissionDescriptions: Record<string, string> = {
     "Full administrative control over all agent skills, bypassing team restrictions",
   "skill:deploy-to-restricted":
     "Assign agent skills to restricted deployment environments",
+  "plugin:read": "View plugins and their file metadata",
+  "plugin:create": "Create plugins",
+  "plugin:update": "Modify plugin metadata and files",
+  "plugin:delete": "Delete plugins",
+  "plugin:admin": "Publish executable plugins through connection marketplaces",
   "app:read":
     "View and run MCP Apps within your scope (org, your teams, your own)",
   "app:create": "Create new MCP Apps",
@@ -1793,6 +1801,23 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
+  [RouteId.GetPlugins]: { plugin: ["read"] },
+  [RouteId.CreatePlugin]: { plugin: ["create", "admin"] },
+  [RouteId.GetPlugin]: { plugin: ["read", "admin"] },
+  [RouteId.UpdatePlugin]: { plugin: ["update", "admin"] },
+  [RouteId.DeletePlugin]: { plugin: ["delete", "admin"] },
+  [RouteId.PreviewGithubPlugin]: { plugin: ["create", "admin"] },
+  [RouteId.ImportGithubPlugin]: { plugin: ["create", "admin"] },
+  [RouteId.PreviewGithubPluginUpdate]: { plugin: ["update", "admin"] },
+  [RouteId.ApplyGithubPluginUpdate]: { plugin: ["update", "admin"] },
+  [RouteId.DiscoverGithubPluginMarketplace]: {
+    plugin: ["create", "admin"],
+  },
+  [RouteId.ImportGithubPluginMarketplace]: {
+    plugin: ["create", "admin"],
+  },
+  [RouteId.UpdatePluginGithubSync]: { plugin: ["update", "admin"] },
+  [RouteId.TriggerPluginGithubSync]: { plugin: ["update", "admin"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
@@ -1904,7 +1929,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
   // App session recordings live client-side (IndexedDB); sharing forwards a
-  // client-assembled bundle to the public demo catalog. Any viewer of an app
+  // client-assembled plugin to the public demo catalog. Any viewer of an app
   // they can see may share their own recording; the handler re-checks app
   // visibility and the feature flag.
   // Reads the recording's conversation to draft the enhancement, so it takes
@@ -1915,7 +1940,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
   [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
   // Reviewing a hackathon submission: any authenticated org member may open the
-  // read-only review player. The bundle it serves is public GitHub data fetched
+  // read-only review player. The plugin it serves is public GitHub data fetched
   // server-side, so no per-resource permission is required beyond being signed in.
   [RouteId.ReviewAppRecording]: {},
   // Same chat-scoped permission as the recording routes above: sharing starts
@@ -2029,6 +2054,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/messaging-channels/email": { agentTrigger: ["read"] },
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
+  "/plugins": { plugin: ["read"] },
+  "/plugins/new": { plugin: ["create", "admin"] },
+  "/plugins/import": { plugin: ["create", "admin"] },
+  "/plugins/[id]": { plugin: ["read", "admin"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // Apps

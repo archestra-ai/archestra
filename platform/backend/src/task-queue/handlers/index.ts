@@ -3,6 +3,7 @@ import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-handler";
+import { handleCheckDuePluginGithubSyncs } from "./check-due-plugin-github-syncs-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleCheckDueSkillGithubSyncs } from "./check-due-skill-github-syncs-handler";
 import { handleConnectorSync } from "./connector-sync-handler";
@@ -13,6 +14,7 @@ import { handleContentRetentionCleanup } from "./content-retention-cleanup-handl
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
+import { handlePluginGithubSync } from "./plugin-github-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
@@ -56,6 +58,14 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     handleCheckDueSkillGithubSyncs,
   );
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
+  taskQueueService.registerHandler(
+    "check_due_plugin_github_syncs",
+    handleCheckDuePluginGithubSyncs,
+  );
+  taskQueueService.registerHandler(
+    "plugin_github_sync",
+    handlePluginGithubSync,
+  );
   taskQueueService.registerHandler(
     "skill_publication_backfill",
     handleSkillPublicationBackfill,

@@ -85,6 +85,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpServerAlertingEnabled: z.boolean(),
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
+              plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
@@ -209,6 +210,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
+          plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:
             config.chat.attachmentStorageBytesLimit,

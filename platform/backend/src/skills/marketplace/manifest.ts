@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { urlSlugify } from "@archestra/shared";
+import type { ClientType } from "@/types";
 
 /**
  * Pure builders for the on-disk manifests served by the shared skill
@@ -10,7 +10,7 @@ import { urlSlugify } from "@archestra/shared";
  *   - Codex CLI:   `.agents/plugins/marketplace.json`
  *   - Cursor:      `.cursor-plugin/marketplace.json`
  *
- * Each one sees a marketplace with exactly one plugin that bundles every
+ * Each one sees a marketplace with exactly one plugin that plugins every
  * shared skill under a single `skills/<slug>/` directory inside the plugin.
  *
  * The output here is consumed by `materialize.ts`; this module has no I/O.
@@ -66,7 +66,16 @@ interface CodexMarketplacePluginEntry {
 interface CodexMarketplaceManifest {
   name: string;
   displayName: string;
-  plugins: CodexMarketplacePluginEntry[];
+  plugins: Array<CodexMarketplacePluginEntry | CodexPluginMarketplaceEntry>;
+}
+
+interface CodexPluginMarketplaceEntry {
+  name: string;
+  source: { source: "local"; path: string };
+  policy: { installation: "AVAILABLE"; authentication: "ON_INSTALL" };
+  category: "Hooks";
+  version: string;
+  description: string;
 }
 
 interface SimplePluginManifest {
@@ -80,6 +89,13 @@ interface CodexPluginManifest {
   version: string;
   description: string;
   skills: string;
+  interface: { displayName: string };
+}
+
+interface CodexPluginPayloadManifest {
+  name: string;
+  version: string;
+  description: string;
   interface: { displayName: string };
 }
 
@@ -131,25 +147,17 @@ export function resolveMarketplaceSkills(
 }
 
 /**
- * Version for the single bundle plugin. Derived from the layout format
- * version plus the sorted set of skill (id, updatedAt) pairs so two replicas
- * materializing the same input agree on the same value, and editing any skill
- * (or changing the layout format) bumps the version exactly once.
+ * Monotonic version for the single plugin plugin. The revision sequence is
+ * durable and advances exactly once for each changed materialized tree, so
+ * clients can compare versions using SemVer precedence instead of ignoring a
+ * content hash stored as build metadata.
  * @public — exported for testability
  */
-export function resolveBundleVersion(skills: MarketplaceSkillInput[]): string {
-  if (skills.length === 0) return "0.0.0+empty";
-  const sorted = [...skills].sort((a, b) => a.id.localeCompare(b.id));
-  const h = createHash("sha256");
-  h.update(LAYOUT_FORMAT_VERSION);
-  h.update("\0");
-  for (const s of sorted) {
-    h.update(s.id);
-    h.update("\0");
-    h.update(s.updatedAt.toISOString());
-    h.update("\0");
+export function resolvePluginVersion(revisionSequence: number): string {
+  if (!Number.isSafeInteger(revisionSequence) || revisionSequence < 0) {
+    throw new Error("revisionSequence must be a non-negative safe integer");
   }
-  return `0.0.0+${h.digest("hex").slice(0, 12)}`;
+  return `0.${revisionSequence}.0`;
 }
 
 export function buildSimpleMarketplaceManifest(
@@ -162,8 +170,8 @@ export function buildSimpleMarketplaceManifest(
       {
         name: params.marketplaceName,
         source: `./plugins/${params.marketplaceName}`,
-        description: bundleDescription(params.skills.length, params.ownerName),
-        version: resolveBundleVersion(params.skills),
+        description: pluginDescription(params.skills.length, params.ownerName),
+        version: params.version,
       },
     ],
   };
@@ -174,8 +182,8 @@ export function buildSimplePluginManifest(
 ): SimplePluginManifest {
   return {
     name: params.marketplaceName,
-    description: bundleDescription(params.skills.length, params.ownerName),
-    version: resolveBundleVersion(params.skills),
+    description: pluginDescription(params.skills.length, params.ownerName),
+    version: params.version,
   };
 }
 
@@ -183,6 +191,7 @@ export function buildCodexMarketplaceManifest(params: {
   marketplaceName: string;
   displayName: string;
   skills: MarketplaceSkillInput[];
+  version: string;
 }): CodexMarketplaceManifest {
   return {
     name: params.marketplaceName,
@@ -196,8 +205,8 @@ export function buildCodexMarketplaceManifest(params: {
         },
         policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
         category: "Skill",
-        version: resolveBundleVersion(params.skills),
-        description: bundleDescription(
+        version: params.version,
+        description: pluginDescription(
           params.skills.length,
           params.displayName,
         ),
@@ -210,14 +219,91 @@ export function buildCodexPluginManifest(params: {
   marketplaceName: string;
   displayName: string;
   skills: MarketplaceSkillInput[];
+  version: string;
 }): CodexPluginManifest {
   return {
     name: params.marketplaceName,
-    version: resolveBundleVersion(params.skills),
-    description: bundleDescription(params.skills.length, params.displayName),
+    version: params.version,
+    description: pluginDescription(params.skills.length, params.displayName),
     skills: "./skills/",
     interface: { displayName: params.displayName },
   };
+}
+
+export function buildPluginMarketplaceEntry(params: {
+  pluginName: string;
+  description: string;
+  version: string;
+}): SimpleMarketplacePluginEntry {
+  return {
+    name: params.pluginName,
+    source: `./plugins/${params.pluginName}`,
+    description: params.description,
+    version: params.version,
+  };
+}
+
+export function buildCodexPluginMarketplaceEntry(params: {
+  pluginName: string;
+  description: string;
+  version: string;
+}): CodexPluginMarketplaceEntry {
+  return {
+    name: params.pluginName,
+    source: { source: "local", path: `./plugins/${params.pluginName}` },
+    policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+    category: "Hooks",
+    version: params.version,
+    description: params.description,
+  };
+}
+
+export function buildPluginPayloadManifest(params: {
+  pluginName: string;
+  description: string;
+  version: string;
+}): SimplePluginManifest {
+  return {
+    name: params.pluginName,
+    description: params.description,
+    version: params.version,
+  };
+}
+
+export function buildCodexPluginPayloadManifest(params: {
+  pluginName: string;
+  displayName: string;
+  description: string;
+  version: string;
+}): CodexPluginPayloadManifest {
+  return {
+    name: params.pluginName,
+    version: params.version,
+    description: params.description,
+    interface: { displayName: params.displayName },
+  };
+}
+
+/**
+ * Installed identity for one opaque plugin. It is marketplace-qualified by
+ * every client, so repeating the marketplace name here only risks exceeding
+ * the clients' 64-character plugin-name cap.
+ */
+export function resolvePluginName(pluginSlug: string): string {
+  return pluginSlug;
+}
+
+export function pluginManifestPath(clientType: ClientType): string {
+  switch (clientType) {
+    case "claude-code":
+      return ".claude-plugin/plugin.json";
+    case "copilot-cli":
+      return "plugin.json";
+    case "codex":
+      return ".codex-plugin/plugin.json";
+    case "cursor":
+      return ".cursor-plugin/plugin.json";
+  }
 }
 
 // ===== Internal helpers =====
@@ -226,6 +312,7 @@ interface SimpleManifestParams {
   marketplaceName: string;
   ownerName: string;
   skills: MarketplaceSkillInput[];
+  version: string;
 }
 
 function baseSlug(skill: MarketplaceSkillInput): string {
@@ -247,14 +334,7 @@ function truncateSlug(slug: string, max: number): string {
   return slug.slice(0, max).replace(/-+$/g, "");
 }
 
-/**
- * Salt for {@link resolveBundleVersion}. Bump when the materialized layout
- * output changes shape without any skill edit, so already-installed clients
- * see a new plugin version and re-sync.
- */
-const LAYOUT_FORMAT_VERSION = "2";
-
-function bundleDescription(skillCount: number, sourceLabel: string): string {
+function pluginDescription(skillCount: number, sourceLabel: string): string {
   const noun = skillCount === 1 ? "skill" : "skills";
   return `${skillCount} ${noun} shared from ${sourceLabel}`;
 }

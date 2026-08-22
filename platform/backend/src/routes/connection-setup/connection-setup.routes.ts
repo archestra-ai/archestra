@@ -20,6 +20,7 @@ import {
   ConnectionSetupModel,
   MemberModel,
   OrganizationModel,
+  PluginModel,
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
@@ -38,7 +39,10 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/connection-setup-script";
-import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
+import {
+  isReservedMarketplaceName,
+  resolvePluginName,
+} from "@/skills/marketplace/manifest";
 import {
   ApiError,
   type ConnectionSetup,
@@ -49,6 +53,7 @@ import {
   constructResponseSchema,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type Organization,
+  type PluginPlatform,
 } from "@/types";
 import {
   CONNECTION_HEALTH_PATH,
@@ -114,6 +119,8 @@ const CreateConnectionSetupBodySchema = z.object({
       ttlDays: z.number().int().positive().max(3650).nullable(),
     })
     .optional(),
+  /** Exact enabled/approved plugins reviewed by the connection page. */
+  pluginIds: z.array(z.string().uuid()).max(50).optional(),
 });
 
 /**
@@ -135,6 +142,14 @@ const CreateConnectionSetupResponseSchema = z.object({
   tokenStart: z.string(),
   /** Present when the bound Anthropic key has no (confirmable) credit. */
   creditWarning: ConnectionCreditWarningSchema.optional(),
+  plugins: z.array(
+    z.object({
+      id: z.string().uuid(),
+      pluginSlug: z.string(),
+      displayName: z.string(),
+      clientType: ConnectionSetupClientIdSchema,
+    }),
+  ),
 });
 
 const CreateConnectionVirtualKeyBodySchema = z.object({
@@ -271,15 +286,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         attributePassthrough,
         model,
         skills,
+        pluginIds: requestedPluginIds,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
 
-      if (!mcpGatewayId && !llmProxyId && !skills) {
-        throw new ApiError(
-          400,
-          "Select at least one of: MCP gateway, LLM proxy, or skills",
-        );
-      }
       if ((llmProxyId && !provider) || (provider && !llmProxyId)) {
         throw new ApiError(400, "llmProxyId and provider must be set together");
       }
@@ -399,6 +409,78 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      let plugins: Awaited<
+        ReturnType<typeof PluginModel.findDeliverableForClient>
+      > = [];
+      if (requestedPluginIds !== undefined) {
+        const uniqueIds = Array.from(new Set(requestedPluginIds));
+        if (uniqueIds.length !== requestedPluginIds.length) {
+          throw new ApiError(400, "pluginIds must be unique");
+        }
+        if (uniqueIds.length > 0) {
+          if (!config.plugins.enabled) {
+            throw new ApiError(404, "Plugins are not enabled");
+          }
+          const canDeliverPlugins = await userCanDeliverPlugins({
+            userId: user.id,
+            organizationId,
+          });
+          if (!canDeliverPlugins) {
+            throw new ApiError(
+              403,
+              "You need plugin:read and plugin:admin permissions to install plugins",
+            );
+          }
+          plugins = await PluginModel.findApprovedByIds({
+            ids: uniqueIds,
+            organizationId,
+          });
+          if (plugins.length !== uniqueIds.length) {
+            throw new ApiError(404, "Plugin not found or not approved");
+          }
+          if (plugins.some((plugin) => plugin.clientType !== clientId)) {
+            throw new ApiError(
+              400,
+              "Plugins must target the selected connection client",
+            );
+          }
+          const requiredPlatform = resolvePluginPlatform(platform);
+          if (
+            plugins.some(
+              (plugin) => !plugin.supportedPlatforms.includes(requiredPlatform),
+            )
+          ) {
+            throw new ApiError(
+              400,
+              `Every selected plugin must support ${requiredPlatform}`,
+            );
+          }
+        }
+      } else if (config.plugins.enabled) {
+        const canDeliverPlugins = await userCanDeliverPlugins({
+          userId: user.id,
+          organizationId,
+        });
+        if (canDeliverPlugins) {
+          const requiredPlatform = resolvePluginPlatform(platform);
+          plugins = (
+            await PluginModel.findDeliverableForClient({
+              organizationId,
+              clientType: clientId,
+            })
+          ).filter((plugin) =>
+            plugin.supportedPlatforms.includes(requiredPlatform),
+          );
+        }
+      }
+      const pluginIds = plugins.map((plugin) => plugin.id);
+      if (!mcpGatewayId && !llmProxyId && !skills && pluginIds.length === 0) {
+        throw new ApiError(
+          400,
+          "Select at least one of: MCP gateway, LLM proxy, skills, or an enabled plugin",
+        );
+      }
+
       const { setup, rawToken } = await ConnectionSetupModel.create({
         organizationId,
         userId: user.id,
@@ -414,6 +496,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         includeSkills: Boolean(skills),
         skillLinkTtlDays: skills?.ttlDays ?? null,
         skillIds: skills?.skillIds ?? [],
+        pluginIds,
         expiresAt: new Date(Date.now() + CONNECTION_SETUP_TOKEN_TTL_MS),
       });
 
@@ -427,6 +510,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
         creditWarning,
+        plugins: plugins.map(({ id, pluginSlug, displayName, clientType }) => ({
+          id,
+          pluginSlug,
+          displayName,
+          clientType,
+        })),
       });
     },
   );
@@ -606,25 +695,30 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Fetch-time re-validation + context building (live reads on the
         // default pool — see claim note above; threading a tx through the
         // auth layer and secrets manager is not possible).
-        const { context, skillRender } = await buildScriptContext(setup);
+        const { context, marketplaceRender } = await buildScriptContext(setup);
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.
         script = await withDbTransaction(async (tx) => {
           let skills: SetupScriptContext["skills"] = null;
-          if (skillRender) {
+          if (marketplaceRender) {
             const { link, rawToken: linkToken } =
               await SkillShareLinkModel.create({
                 organizationId: setup.organizationId,
                 createdByUserId: setup.userId,
-                skillIds: skillRender.skillIds,
-                marketplaceName: skillRender.marketplaceName,
+                skillIds: marketplaceRender.skillIds,
+                pluginIds: marketplaceRender.pluginIds,
+                pluginClientType: marketplaceRender.pluginClientType,
+                pluginPlatform: marketplaceRender.pluginPlatform,
+                marketplaceName: marketplaceRender.marketplaceName,
                 name: `Connection setup (${setup.clientId})`,
                 expiresAt: setup.skillLinkTtlDays
                   ? new Date(
                       Date.now() + setup.skillLinkTtlDays * 24 * 60 * 60 * 1000,
                     )
-                  : null,
+                  : marketplaceRender.pluginIds.length > 0
+                    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    : null,
                 tx,
               });
             await ConnectionSetupModel.attachSkillShareLink({
@@ -634,7 +728,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
             skills = {
               cloneUrl: `${proxyBaseUrlToOrigin(setup.baseUrl)}${SKILL_MARKETPLACE_PREFIX}/${linkToken}/repo.git`,
-              marketplaceName: skillRender.marketplaceName,
+              marketplaceName: marketplaceRender.marketplaceName,
+              hasSkills: marketplaceRender.skillIds.length > 0,
+              pluginNames: marketplaceRender.pluginNames,
             };
           }
 
@@ -674,6 +770,15 @@ const GONE = () =>
     "This setup link is no longer valid. Generate a new command from the connection page.",
   );
 
+interface MarketplaceRenderContext {
+  skillIds: string[];
+  pluginIds: string[];
+  pluginNames: string[];
+  pluginClientType: ConnectionSetupClientId | null;
+  pluginPlatform: PluginPlatform | null;
+  marketplaceName: string;
+}
+
 /**
  * Builds the render context for a freshly claimed setup, re-validating that
  * the creator still exists, still belongs to the org, and still has access to
@@ -682,7 +787,7 @@ const GONE = () =>
  */
 async function buildScriptContext(setup: ConnectionSetup): Promise<{
   context: Omit<SetupScriptContext, "skills">;
-  skillRender: { skillIds: string[]; marketplaceName: string } | null;
+  marketplaceRender: MarketplaceRenderContext | null;
 }> {
   const organization = await OrganizationModel.getById(setup.organizationId);
   if (!organization) throw GONE();
@@ -768,8 +873,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     };
   }
 
-  let skillRender: { skillIds: string[]; marketplaceName: string } | null =
-    null;
+  let skillIds: string[] = [];
   if (setup.includeSkills) {
     const isSkillAdmin = await userHasPermission(
       setup.userId,
@@ -779,7 +883,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     );
     if (!isSkillAdmin) throw GONE();
 
-    const skillIds = await ConnectionSetupModel.getSkillIds({
+    skillIds = await ConnectionSetupModel.getSkillIds({
       connectionSetupId: setup.id,
     });
     if (skillIds.length === 0) throw GONE();
@@ -790,10 +894,58 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     ) {
       throw GONE();
     }
+  }
 
-    const marketplaceName = await deriveMarketplaceName(setup.organizationId);
+  const pluginIds = await ConnectionSetupModel.getPluginIds({
+    connectionSetupId: setup.id,
+  });
+  let pluginNames: string[] = [];
+  if (pluginIds.length > 0) {
+    if (!config.plugins.enabled) throw GONE();
+    const canDeliverPlugins = await userCanDeliverPlugins({
+      userId: setup.userId,
+      organizationId: setup.organizationId,
+    });
+    if (!canDeliverPlugins) throw GONE();
+    const plugins = await PluginModel.findApprovedByIds({
+      ids: pluginIds,
+      organizationId: setup.organizationId,
+    });
+    if (
+      plugins.length !== pluginIds.length ||
+      plugins.some(
+        (plugin) =>
+          plugin.clientType !== setup.clientId ||
+          !plugin.supportedPlatforms.includes(
+            resolvePluginPlatform(setup.platform),
+          ),
+      )
+    ) {
+      throw GONE();
+    }
+    pluginNames = plugins.map((plugin) => resolvePluginName(plugin.pluginSlug));
+  }
+
+  let marketplaceRender: MarketplaceRenderContext | null = null;
+  if (skillIds.length > 0 || pluginIds.length > 0) {
+    const marketplaceName = await deriveMarketplaceName(
+      setup.organizationId,
+      skillIds.length === 0
+        ? "plugins"
+        : pluginIds.length === 0
+          ? "skills"
+          : "extensions",
+    );
     if (isReservedMarketplaceName(marketplaceName)) throw GONE();
-    skillRender = { skillIds, marketplaceName };
+    marketplaceRender = {
+      skillIds,
+      pluginIds,
+      pluginNames,
+      pluginClientType: pluginIds.length > 0 ? setup.clientId : null,
+      pluginPlatform:
+        pluginIds.length > 0 ? resolvePluginPlatform(setup.platform) : null,
+      marketplaceName,
+    };
   }
 
   return {
@@ -804,8 +956,25 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       mcp,
       proxy,
     },
-    skillRender,
+    marketplaceRender,
   };
+}
+
+function resolvePluginPlatform(
+  platform: z.infer<typeof ConnectionSetupPlatformSchema>,
+): PluginPlatform {
+  return platform === "windows" ? "windows" : "posix";
+}
+
+async function userCanDeliverPlugins(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const [canRead, canAdmin] = await Promise.all([
+    userHasPermission(params.userId, params.organizationId, "plugin", "read"),
+    userHasPermission(params.userId, params.organizationId, "plugin", "admin"),
+  ]);
+  return canRead && canAdmin;
 }
 
 /**

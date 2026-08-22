@@ -1,4 +1,5 @@
 import GithubPatModel from "@/models/github-pat";
+import PluginModel from "@/models/plugin";
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -8,6 +9,7 @@ import {
   type PublicGithubPat,
   type UpdateGithubPatRequest,
 } from "@/types";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 export async function listGithubPats(
   organizationId: string,
@@ -86,11 +88,35 @@ export async function deleteGithubPat(params: {
       `GitHub token is in use by ${referencingSkills} synced skill(s) and cannot be deleted. Disconnect those skills from GitHub first.`,
     );
   }
-
-  if (existing.secretId) {
-    await secretManager().deleteSecret(existing.secretId);
+  const referencingPlugins = await PluginModel.countSyncedReferencingGithubPat(
+    existing.id,
+  );
+  if (referencingPlugins > 0) {
+    throw new ApiError(
+      409,
+      `GitHub token is in use by ${referencingPlugins} GitHub-linked plugin(s) and cannot be deleted. Remove or reconnect those plugins first.`,
+    );
   }
-  await GithubPatModel.delete(existing.id);
+
+  try {
+    await GithubPatModel.delete(existing.id);
+  } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      throw new ApiError(
+        409,
+        "GitHub token became referenced by a synced resource; disconnect it and retry",
+      );
+    }
+    throw error;
+  }
+  if (existing.secretId) {
+    try {
+      await secretManager().deleteSecret(existing.secretId);
+    } catch (error) {
+      await GithubPatModel.restore(existing);
+      throw error;
+    }
+  }
 }
 
 // ===== Internal helpers =====

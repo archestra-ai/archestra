@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { parseSkillManifest } from "@/skills/parser";
 import type { SkillFile } from "@/types";
-import { computeLayout, type MaterializeSkillInput } from "./layout";
+import {
+  computeLayout,
+  type MaterializePluginInput,
+  type MaterializeSkillInput,
+} from "./layout";
 
 function makeResourceFile(path: string): SkillFile {
   return {
@@ -39,7 +43,7 @@ function makeSkill(
 
 describe("computeLayout", () => {
   test("drops resource files whose path collides only by case", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -65,7 +69,7 @@ describe("computeLayout", () => {
   });
 
   test("keeps files whose names merely contain dots but are not `..` segments", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -84,7 +88,7 @@ describe("computeLayout", () => {
   });
 
   test("drops resource files that traverse out of the skill root", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -102,7 +106,7 @@ describe("computeLayout", () => {
   });
 
   test("drops Windows-style backslash traversal segments", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -116,7 +120,7 @@ describe("computeLayout", () => {
   });
 
   test("preserves the display name in metadata, letting an author-provided displayName win", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -141,7 +145,7 @@ describe("computeLayout", () => {
   });
 
   test("every SKILL.md frontmatter name equals its directory, matches the Agent Skills spec, and is unique", () => {
-    const files = computeLayout({
+    const files = computeTestLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
@@ -178,4 +182,121 @@ describe("computeLayout", () => {
     }
     expect(seen.size).toBe(skillMds.length);
   });
+
+  test("stamps every client manifest with the supplied revision version", () => {
+    const files = computeLayout(
+      {
+        linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+        marketplaceName: "org-abcd1234-skills",
+        ownerName: "Acme Corp",
+        displayName: "Acme Skills",
+        skills: [makeSkill([])],
+      },
+      7,
+    );
+
+    const manifests = files.filter((file) => file.path.endsWith(".json"));
+    expect(manifests).toHaveLength(8);
+    for (const manifest of manifests) {
+      const parsed = JSON.parse(manifest.content);
+      const version = parsed.plugins?.[0]?.version ?? parsed.version;
+      expect(version).toBe("0.7.0");
+    }
+  });
+
+  test("zero plugins leaves the legacy tree byte-identical", () => {
+    const req = {
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [makeSkill([])],
+    };
+    expect(computeLayout(req, 3)).toEqual(
+      computeLayout({ ...req, plugins: [] }, 3),
+    );
+  });
+
+  test("emits each plugin only into its target client catalog", () => {
+    const plugins: MaterializePluginInput[] = [
+      makePlugin("claude-code", "claude-hook"),
+      makePlugin("copilot-cli", "copilot-hook"),
+      makePlugin("codex", "codex-hook"),
+      makePlugin("cursor", "cursor-hook"),
+    ];
+    const files = computeLayout(
+      {
+        linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+        marketplaceName: "org-abcd1234-skills",
+        ownerName: "Acme Corp",
+        displayName: "Acme Skills",
+        skills: [makeSkill([])],
+        plugins,
+      },
+      9,
+    );
+    const byPath = new Map(files.map((file) => [file.path, file]));
+    const manifestNames = (filePath: string) =>
+      JSON.parse(byPath.get(filePath)?.content ?? "{}").plugins.map(
+        (plugin: { name: string }) => plugin.name,
+      );
+
+    expect(manifestNames(".claude-plugin/marketplace.json")).toEqual([
+      "org-abcd1234-skills",
+      "claude-hook",
+    ]);
+    expect(manifestNames(".cursor-plugin/marketplace.json")).toEqual([
+      "org-abcd1234-skills",
+      "cursor-hook",
+    ]);
+    expect(manifestNames(".agents/plugins/marketplace.json")).toEqual([
+      "org-abcd1234-skills",
+      "codex-hook",
+    ]);
+    expect(manifestNames(".github/plugin/marketplace.json")).toEqual([
+      "org-abcd1234-skills",
+      "copilot-hook",
+    ]);
+    expect(byPath.has("plugins/org-abcd1234-skills/plugin.json")).toBe(true);
+
+    for (const plugin of plugins) {
+      const root = `plugins/${plugin.pluginSlug}`;
+      const hookFile = byPath.get(`${root}/hooks/hooks.json`);
+      expect(hookFile?.content).toBe(plugin.files[0].content);
+      expect(hookFile?.mode).toBe("100644");
+      const pluginManifest = files.find(
+        (file) =>
+          file.path.startsWith(`${root}/`) && file.path.endsWith("plugin.json"),
+      );
+      expect(JSON.parse(pluginManifest?.content ?? "{}")).not.toHaveProperty(
+        "hooks",
+      );
+    }
+  });
 });
+
+function computeTestLayout(
+  req: Parameters<typeof computeLayout>[0],
+): ReturnType<typeof computeLayout> {
+  return computeLayout(req, 1);
+}
+
+function makePlugin(
+  clientType: MaterializePluginInput["clientType"],
+  pluginSlug: string,
+): MaterializePluginInput {
+  return {
+    pluginSlug,
+    displayName: pluginSlug,
+    description: `Plugin for ${clientType}`,
+    clientType,
+    files: [
+      {
+        path: "hooks/hooks.json",
+        content: `  { "native": "${clientType}" }  \n`,
+        encoding: "utf8",
+        mode: "100644",
+      },
+    ],
+  };
+}

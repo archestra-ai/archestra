@@ -256,6 +256,11 @@ function extractCreatedResourceId(parsed: unknown): string | null {
   }
   const obj = parsed as Record<string, unknown>;
   if (typeof obj.id === "string") return obj.id;
+  const link = obj.link;
+  if (link && typeof link === "object" && !Array.isArray(link)) {
+    const nested = (link as Record<string, unknown>).id;
+    if (typeof nested === "string") return nested;
+  }
   const data = obj.data;
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const nested = (data as Record<string, unknown>).id;

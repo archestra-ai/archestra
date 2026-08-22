@@ -35,6 +35,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  {
+    taskType: "check_due_plugin_github_syncs",
+    intervalSeconds: 60,
+    payload: {},
+  },
   // Converges the Perforce permission-sync shims on the connectors that want
   // one. Every surface that changes that answer already reconciles inside its
   // own request, so this is the backstop for the calls those lose to a crash

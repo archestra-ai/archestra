@@ -2,12 +2,19 @@ import { spawn, spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { SkillModel, SkillShareLinkModel } from "@/models";
+import { vi } from "vitest";
+import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { MarketplaceMaterializer } from "@/skills/marketplace/materialize";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    plugins: { enabled: true },
+  }),
+);
 
 async function seedSkill(params: {
   organizationId: string;
@@ -246,7 +253,7 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         ),
       );
       expect(claudeManifest.name).toBe("org-test-skills");
-      // single bundle plugin named after the marketplace; individual skills
+      // single skills plugin named after the marketplace; individual skills
       // live as subdirs under that plugin's skills/ directory.
       expect(claudeManifest.plugins).toHaveLength(1);
       expect(claudeManifest.plugins[0].name).toBe("org-test-skills");
@@ -282,6 +289,151 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       );
       expect(skillMd).toContain("name: clone-me");
       expect(skillMd).toContain("# Clone Me");
+    }, 30_000);
+
+    test("git clone preserves hookless Claude plugin components and executable modes", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const manifestBytes =
+        '  { "name": "session-attribution", "agents": "./agents" }  \n';
+      const mcpBytes = '{ "mcpServers": { "local": { "command": "tool" } } }\n';
+      const plugin = await PluginModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        input: {
+          displayName: "Session attribution",
+          description: "Attributes sessions",
+          clientType: "claude-code",
+          files: [
+            {
+              path: ".claude-plugin/plugin.json",
+              content: manifestBytes,
+              encoding: "utf8",
+              mode: "100644",
+            },
+            {
+              path: ".mcp.json",
+              content: mcpBytes,
+              encoding: "utf8",
+              mode: "100644",
+            },
+            {
+              path: "agents/reviewer.md",
+              content: "Review changes.\n",
+              encoding: "utf8",
+              mode: "100644",
+            },
+            {
+              path: "scripts/run.sh",
+              content: "#!/bin/sh\ntrue\n",
+              encoding: "utf8",
+              mode: "100755",
+            },
+          ],
+        },
+      });
+      if (!plugin) throw new Error("failed to seed plugin");
+
+      const { rawToken } = await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [],
+        pluginIds: [plugin.id],
+        pluginClientType: "claude-code",
+        pluginPlatform: "posix",
+        marketplaceName: "org-test-skills",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      });
+
+      const target = path.join(cloneDir, "plugin-out");
+      const result = await runGitClone(
+        `${baseUrl}/skills/m/${rawToken}/repo.git`,
+        target,
+      );
+      if (result.code !== 0) throw new Error(result.stderr);
+
+      const pluginName = plugin.pluginSlug;
+      const marketplace = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      expect(
+        marketplace.plugins.map((plugin: { name: string }) => plugin.name),
+      ).toContain(pluginName);
+      expect(
+        await fs.readFile(
+          path.join(
+            target,
+            "plugins",
+            pluginName,
+            ".claude-plugin/plugin.json",
+          ),
+          "utf8",
+        ),
+      ).toBe(manifestBytes);
+      expect(
+        await fs.readFile(
+          path.join(target, "plugins", pluginName, ".mcp.json"),
+          "utf8",
+        ),
+      ).toBe(mcpBytes);
+      const scriptStat = await fs.stat(
+        path.join(target, "plugins", pluginName, "scripts/run.sh"),
+      );
+      expect(scriptStat.mode & 0o111).not.toBe(0);
+    }, 30_000);
+
+    test("public materialization rejects a plugin outside the link platform", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const plugin = await PluginModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        input: {
+          displayName: "POSIX-only hook",
+          description: "Must not appear in Windows links",
+          clientType: "claude-code",
+          supportedPlatforms: ["posix"],
+          files: [
+            {
+              path: "hooks/hooks.json",
+              content: "{}\n",
+              encoding: "utf8",
+              mode: "100644",
+            },
+          ],
+        },
+      });
+      if (!plugin) throw new Error("failed to seed plugin");
+
+      const { rawToken } = await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [],
+        pluginIds: [plugin.id],
+        pluginClientType: "claude-code",
+        pluginPlatform: "windows",
+        marketplaceName: "platform-mismatch-skills",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      });
+
+      const result = await runGitClone(
+        `${baseUrl}/skills/m/${rawToken}/repo.git`,
+        path.join(cloneDir, "platform-mismatch"),
+      );
+      expect(result.code).not.toBe(0);
     }, 30_000);
   },
 );

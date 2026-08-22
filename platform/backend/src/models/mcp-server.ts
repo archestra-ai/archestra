@@ -396,27 +396,9 @@ class McpServerModel {
     ];
 
     if (organizationId) {
-      const ownerBelongsToOrganization = inArray(
-        schema.mcpServersTable.ownerId,
-        db
-          .select({ userId: schema.membersTable.userId })
-          .from(schema.membersTable)
-          .where(eq(schema.membersTable.organizationId, organizationId)),
-      );
-      const globalInstallBelongsToOrganization = and(
-        isNull(schema.internalMcpCatalogTable.organizationId),
-        or(
-          eq(schema.teamsTable.organizationId, organizationId),
-          ownerBelongsToOrganization,
-          and(
-            isNull(schema.mcpServersTable.teamId),
-            isNull(schema.mcpServersTable.ownerId),
-          ),
-        ),
-      );
       const catalogBelongsToOrganization = or(
+        isNull(schema.internalMcpCatalogTable.organizationId),
         eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-        globalInstallBelongsToOrganization,
       );
       if (catalogBelongsToOrganization) {
         conditions.push(catalogBelongsToOrganization);
@@ -430,9 +412,15 @@ class McpServerModel {
       conditions.push(catalogInEnvironmentPredicate(environmentId));
     }
 
-    // Installation admin is the cross-scope management capability, whether it
-    // comes from the predefined Admin role or a custom role.
-    if (userId && !isPredefinedAdmin && !isMcpServerAdmin) {
+    // Only the predefined Admin role may see another user's personal
+    // connection. Installation admins still manage every shared installation.
+    if (userId && !isPredefinedAdmin && isMcpServerAdmin) {
+      const sharedOrOwnedInstall = or(
+        ne(schema.mcpServersTable.scope, "personal"),
+        eq(schema.mcpServersTable.ownerId, userId),
+      );
+      if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
+    } else if (userId && !isPredefinedAdmin) {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
@@ -1126,10 +1114,6 @@ class McpServerModel {
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
       .leftJoin(
-        schema.internalMcpCatalogTable,
-        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
-      )
-      .leftJoin(
         schema.membersTable,
         and(
           eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
@@ -1141,17 +1125,11 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, id),
           notDeleted(schema.mcpServersTable),
           or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
             and(
-              isNull(schema.internalMcpCatalogTable.organizationId),
-              or(
-                eq(schema.teamsTable.organizationId, organizationId),
-                isNotNull(schema.membersTable.id),
-                and(
-                  isNull(schema.mcpServersTable.teamId),
-                  isNull(schema.mcpServersTable.ownerId),
-                ),
-              ),
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
             ),
           ),
         ),

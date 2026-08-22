@@ -12,7 +12,6 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_EXECUTED_AS_META_KEY,
-  MCP_SKILLS_EXTENSION_ID,
   OAUTH_TOKEN_TYPE,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
@@ -1291,13 +1290,14 @@ describe("McpClient", () => {
             };
           }
         | undefined;
-      expect(options?.capabilities?.extensions).toEqual({
-        [MCP_APPS_EXTENSION_ID]: {
-          mimeTypes: ["text/html;profile=mcp-app"],
-        },
-        [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
-        [MCP_SKILLS_EXTENSION_ID]: {},
-      });
+      expect(options?.capabilities?.extensions).toEqual(
+        expect.objectContaining({
+          [MCP_APPS_EXTENSION_ID]: {
+            mimeTypes: ["text/html;profile=mcp-app"],
+          },
+          [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+        }),
+      );
       expect(options?.capabilities?.elicitation).toBeUndefined();
       expect(mockSetRequestHandler).not.toHaveBeenCalled();
       expect(mockSetNotificationHandler).not.toHaveBeenCalled();

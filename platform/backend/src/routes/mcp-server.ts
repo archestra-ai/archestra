@@ -1298,7 +1298,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Get the existing MCP server
-      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
+      const mcpServer = await McpServerModel.findById(id);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1851,7 +1851,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { issueFingerprint, reason },
         user,
         headers,
-        organizationId,
       } = request;
 
       // Visibility is the whole authorization rule here, deliberately weaker
@@ -1862,7 +1861,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServerId,
         userId: user.id,
         headers,
-        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1909,14 +1907,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: { issueFingerprint },
         user,
         headers,
-        organizationId,
       } = request;
 
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId,
         userId: user.id,
         headers,
-        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1958,12 +1954,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers, organizationId }, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
-        organizationId,
       });
 
       if (!mcpServer) {
@@ -2012,12 +2007,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers, organizationId }, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
-        organizationId,
       });
 
       if (!mcpServer) {
@@ -2051,12 +2045,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.record(z.string(), z.unknown())),
       },
     },
-    async ({ params: { id }, body, user, headers, organizationId }, reply) => {
+    async ({ params: { id }, body, user, headers }, reply) => {
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId: id,
         userId: user.id,
         headers,
-        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2210,7 +2203,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetEnd
 
       // Get the existing MCP server
-      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
+      const mcpServer = await McpServerModel.findById(id);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2675,8 +2668,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { id }, organizationId, headers }, reply) => {
-      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
+    async ({ params: { id }, headers }, reply) => {
+      const mcpServer = await McpServerModel.findById(id);
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
@@ -2909,8 +2902,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { id }, user, headers, organizationId }) => {
-      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
+    async ({ params: { id }, user, headers }) => {
+      const mcpServer = await McpServerModel.findById(id);
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2995,18 +2988,12 @@ async function findAccessibleMcpServer(params: {
   mcpServerId: string;
   userId: string;
   headers: IncomingHttpHeaders;
-  organizationId: string;
 }) {
   const { success: isMcpServerAdmin } = await hasPermission(
     { mcpServerInstallation: ["admin"] },
     params.headers,
   );
 
-  const server = await McpServerModel.findByIdInOrg(
-    params.mcpServerId,
-    params.organizationId,
-  );
-  if (!server) return undefined;
   return McpServerModel.findById(
     params.mcpServerId,
     params.userId,
@@ -3247,7 +3234,6 @@ async function assertLifecycleRoutePermission(params: {
 /**
  * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)
  * on an already-fetched MCP server by its scope. Rules:
- *   - mcpServerInstallation:admin: every scope, regardless of ownership
  *   - personal:
  *       - revoke: owner OR mcpServerInstallation:update
  *       - re-authenticate / reinstall: owner only (these replace the
@@ -3266,12 +3252,6 @@ async function assertScopedLifecycleAuthorization(params: {
   action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
   const { mcpServer, userId, headers, action } = params;
-
-  const { success: isMcpServerInstallationAdmin } = await hasPermission(
-    { mcpServerInstallation: ["admin"] },
-    headers,
-  );
-  if (isMcpServerInstallationAdmin) return;
 
   switch (mcpServer.scope) {
     case "personal": {
@@ -3328,10 +3308,17 @@ async function assertScopedLifecycleAuthorization(params: {
       return;
     }
     case "org": {
-      throw new ApiError(
-        403,
-        `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
+      const { success: isMcpServerInstallationAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        headers,
       );
+      if (!isMcpServerInstallationAdmin) {
+        throw new ApiError(
+          403,
+          `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
+        );
+      }
+      return;
     }
   }
 }

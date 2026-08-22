@@ -78,10 +78,10 @@ export function InlineMcpReauthentication({
     };
     return (
       <section
-        className="rounded-lg border bg-muted/20"
+        className="space-y-4"
         data-testid="inline-mcp-reauthentication-form"
       >
-        <div className="flex items-start gap-3 p-4">
+        <div className="flex items-start gap-3">
           <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <h3 className="font-medium">Reconnect {server.name}</h3>
@@ -91,7 +91,7 @@ export function InlineMcpReauthentication({
             </p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t bg-background/60 px-4 py-3">
+        <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

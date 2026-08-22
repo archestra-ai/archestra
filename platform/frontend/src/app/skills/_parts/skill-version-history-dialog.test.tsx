@@ -300,7 +300,7 @@ describe("SkillVersionHistoryDialog", () => {
 
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("opens on the whole version, read as files rather than as a comparison", async () => {
@@ -425,8 +425,10 @@ describe("SkillVersionHistoryDialog", () => {
 
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
-    expect(screen.getByText(/synced from GitHub/)).toBeInTheDocument();
+    ).toHaveAttribute("aria-disabled", "true");
+    // Twice on purpose: the banner everyone reads, and the description on the
+    // control itself, which is the only one a screen-reader user hears on focus.
+    expect(screen.getAllByText(/synced from GitHub/)).toHaveLength(2);
   });
 
   it("lists the whole version, nested under its folders, badging what moved", async () => {

@@ -63,6 +63,7 @@ import {
   AppModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
+  McpServerAlertMuteModel,
   McpServerModel,
   McpToolCallModel,
   TeamModel,
@@ -748,7 +749,26 @@ class McpClient {
       if ("error" in secretsResult) {
         return secretsResult.error;
       }
-      const { secrets, secretId, serverState } = secretsResult;
+      const { secrets, secretId, serverState, oauthRefreshErrorRecorded } =
+        secretsResult;
+
+      // A call that succeeds with the current credential disproves a recorded
+      // refresh failure (e.g. a proactive refresh failed but the existing
+      // token still works): the connection demonstrably operates, so the
+      // re-authentication alert must go rather than flag a working server.
+      const clearStaleOAuthRefreshError = async () => {
+        if (!oauthRefreshErrorRecorded || !catalogItem.oauthConfig) return;
+        await McpServerModel.update(targetMcpServerId, {
+          oauthRefreshError: null,
+          oauthRefreshErrorMessage: null,
+          oauthRefreshErrorDescription: null,
+          oauthRefreshFailedAt: null,
+        });
+        // The failure episode every mute on this connection was pinned to is
+        // over, so the mutes go with it — same ordering as the refresh path:
+        // dropped after the clear, never before.
+        await McpServerAlertMuteModel.deleteForMcpServer(targetMcpServerId);
+      };
 
       // The outbound credential is fully settled here (install secrets loaded,
       // enterprise exchange done), so every result below can name the identity
@@ -906,6 +926,7 @@ class McpClient {
                 timeout: config.mcpGateway.toolCallTimeoutMs,
               },
             );
+            await clearStaleOAuthRefreshError();
             return await this.createSuccessResult({
               toolCall,
               owner,
@@ -1006,6 +1027,7 @@ class McpClient {
           }
 
           // Apply template and return
+          await clearStaleOAuthRefreshError();
           return await this.createSuccessResult({
             toolCall,
             owner,
@@ -1139,7 +1161,10 @@ class McpClient {
             !hasRefreshToken &&
             !usesClientCredentials
           ) {
-            await McpServerModel.update(targetMcpServerId, {
+            // Every later tool call against this connection lands here again;
+            // `recordOAuthRefreshFailure` keeps `oauthRefreshFailedAt` at the
+            // first observation so the fault has one stable start.
+            await McpServerModel.recordOAuthRefreshFailure(targetMcpServerId, {
               oauthRefreshError: "no_refresh_token",
               oauthRefreshErrorMessage: "no_refresh_token",
               oauthRefreshErrorDescription: null,
@@ -1805,6 +1830,8 @@ class McpClient {
         secrets: Record<string, unknown>;
         secretId?: string;
         serverState: CachedServerState;
+        /** The row carries a recorded refresh failure right now. */
+        oauthRefreshErrorRecorded: boolean;
       }
     | { error: CommonToolResult }
   > {
@@ -1828,9 +1855,14 @@ class McpClient {
     }
 
     const currentServerState = this.toCachedServerState(mcpServer);
+    const oauthRefreshErrorRecorded = !!mcpServer.oauthRefreshError;
     const cached = this.secretsCache.get(targetMcpServerId);
     if (cached?.secretId === currentServerState.secretId) {
-      return { ...cached, serverState: currentServerState };
+      return {
+        ...cached,
+        serverState: currentServerState,
+        oauthRefreshErrorRecorded,
+      };
     }
 
     if (cached) {
@@ -1844,7 +1876,7 @@ class McpClient {
       secretId: result.secretId,
     });
 
-    return result;
+    return { ...result, oauthRefreshErrorRecorded };
   }
 
   private async fetchSecretsForLoadedMcpServer(mcpServer: {
@@ -2893,7 +2925,10 @@ class McpClient {
       // transient failure persists nothing and is re-attempted next use.
       const failureFields = refreshFailureToServerFields(refreshResult.outcome);
       if (failureFields) {
-        await McpServerModel.update(targetMcpServerId, failureFields);
+        await McpServerModel.recordOAuthRefreshFailure(
+          targetMcpServerId,
+          failureFields,
+        );
       }
 
       return null;
@@ -2911,6 +2946,11 @@ class McpClient {
       oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
+
+    // The failure episode every mute on this connection was pinned to is over,
+    // so the mutes go with it. Dropped after the clear, never before: if the
+    // clear had failed, a still-valid mute must survive.
+    await McpServerAlertMuteModel.deleteForMcpServer(targetMcpServerId);
 
     try {
       // Re-fetch updated secrets and retry once

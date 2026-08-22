@@ -236,7 +236,7 @@ describe("AgentVersionHistoryDialog", () => {
 
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("trusts the fresh timeline over a stale profile for where the head is", () => {
@@ -250,7 +250,7 @@ describe("AgentVersionHistoryDialog", () => {
     expect(within(headRow).getByText("Current")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("passes the previewed head to the mutation so a concurrent edit is caught", async () => {
@@ -305,7 +305,7 @@ describe("AgentVersionHistoryDialog", () => {
     const restoreButton = screen.getByRole("button", {
       name: "Restore this version",
     });
-    expect(restoreButton).toBeDisabled();
+    expect(restoreButton).toHaveAttribute("aria-disabled", "true");
     await user.hover(restoreButton.parentElement as HTMLElement);
     // radix renders the content and a screen-reader copy of it
     expect(
@@ -373,7 +373,7 @@ describe("AgentVersionHistoryDialog", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("keeps the first restore's head after a second restore in the same session settles", async () => {
@@ -535,7 +535,7 @@ describe("AgentVersionHistoryDialog", () => {
     const restoreButton = screen.getByRole("button", {
       name: "Restore this version",
     });
-    expect(restoreButton).toBeDisabled();
+    expect(restoreButton).toHaveAttribute("aria-disabled", "true");
     await user.hover(restoreButton.parentElement as HTMLElement);
     // radix renders the content and a screen-reader copy of it
     expect(
@@ -609,6 +609,6 @@ describe("AgentVersionHistoryDialog", () => {
 
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 });

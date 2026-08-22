@@ -2,10 +2,7 @@ import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  useHasPermissions,
-  useMissingPermissions,
-} from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type TableRowAction, TableRowActions } from "./table-row-actions";
 
 // Mocking icons
@@ -13,17 +10,12 @@ const MockIcon = () => <span data-testid="mock-icon">Icon</span>;
 
 // The PermissionButton mock below reads the same hook the component does, so a
 // single shared hoisted driver keeps both in lockstep; the bare auth.query mock
-// delegates the real hooks to it in `beforeEach`.
-const { useHasPermissionsMock, useMissingPermissionsMock } = vi.hoisted(() => ({
+// delegates the real hook to it in `beforeEach`.
+const { useHasPermissionsMock } = vi.hoisted(() => ({
   useHasPermissionsMock: vi.fn(() => ({ data: true })),
-  useMissingPermissionsMock: vi.fn(() => ({})),
 }));
 
 vi.mock("@/lib/auth/auth.query");
-
-vi.mock("@/lib/auth/auth.utils", () => ({
-  formatMissingPermissions: vi.fn(() => "Missing permissions"),
-}));
 
 // Mocking UI components to simplify testing
 vi.mock("@/components/ui/button", () => ({
@@ -93,13 +85,17 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuItem: ({
     children,
     onClick,
-    disabled,
     className,
+    variant: _variant,
+    asChild: _asChild,
+    ...props
   }: {
     children: React.ReactNode;
     onClick?: React.MouseEventHandler;
-    disabled?: boolean;
     className?: string;
+    variant?: string;
+    asChild?: boolean;
+    [key: string]: unknown;
   }) => (
     <div
       role="menuitem"
@@ -110,8 +106,8 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
         }
       }}
       tabIndex={0}
-      data-disabled={disabled}
       className={className}
+      {...props}
     >
       {children}
     </div>
@@ -121,6 +117,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   ),
 }));
 
+// The real PermissionButton is exercised end to end in
+// table-row-actions.integration.test.tsx; this suite stands in for it so the
+// cases below stay about how TableRowActions arranges its rows.
 vi.mock("@/components/ui/permission-button", () => ({
   PermissionButton: ({
     children,
@@ -173,9 +172,6 @@ describe("TableRowActions", () => {
     vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockImplementation(
       useHasPermissionsMock as unknown as typeof useHasPermissions,
-    );
-    vi.mocked(useMissingPermissions).mockImplementation(
-      useMissingPermissionsMock as unknown as typeof useMissingPermissions,
     );
     useHasPermissionsMock.mockReturnValue({ data: true });
   });
@@ -366,8 +362,13 @@ describe("TableRowActions", () => {
       </TooltipProvider>,
     );
 
+    // `aria-disabled`, not Radix's `disabled`: a disabled item leaves the
+    // menu's roving focus and typeahead, taking its stated reason with it.
     const item = screen.getByRole("menuitem", { name: /secure delete/i });
-    expect(item).toHaveAttribute("data-disabled", "true");
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveAccessibleDescription(
+      "Available to roles with the Agents (delete) permission",
+    );
   });
 
   it("applies cursor-pointer to enabled dropdown items and cursor-not-allowed to disabled ones", () => {

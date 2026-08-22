@@ -26,6 +26,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
+  McpServerAlertMuteModel,
   McpServerModel,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1289,12 +1290,14 @@ describe("McpClient", () => {
             };
           }
         | undefined;
-      expect(options?.capabilities?.extensions).toEqual({
-        [MCP_APPS_EXTENSION_ID]: {
-          mimeTypes: ["text/html;profile=mcp-app"],
-        },
-        [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
-      });
+      expect(options?.capabilities?.extensions).toEqual(
+        expect.objectContaining({
+          [MCP_APPS_EXTENSION_ID]: {
+            mimeTypes: ["text/html;profile=mcp-app"],
+          },
+          [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+        }),
+      );
       expect(options?.capabilities?.elicitation).toBeUndefined();
       expect(mockSetRequestHandler).not.toHaveBeenCalled();
       expect(mockSetNotificationHandler).not.toHaveBeenCalled();
@@ -5156,6 +5159,120 @@ describe("McpClient", () => {
         expect(row?.oauthRefreshErrorMessage).toBeNull();
         expect(row?.oauthRefreshErrorDescription).toBeNull();
         expect(row?.oauthRefreshFailedAt).toBeNull();
+
+        refreshSpy.mockRestore();
+      });
+
+      test("a successful call with the existing token clears a stale needs-reauthentication state", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-working-token-clears@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-working-token-clears-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "still-working-token",
+            refresh_token: "refresh-token",
+            // Expired, so the proactive refresh runs — and fails — first.
+            expires_at: Date.now() - 3_600_000,
+          },
+          "jira-working-token-clears-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-working-token-clears-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        await McpServerModel.update(mcpServer.id, {
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription: "The refresh token is invalid",
+          oauthRefreshFailedAt: new Date(Date.now() - 60_000),
+        });
+        await McpServerAlertMuteModel.dismiss({
+          userId: testUser.id,
+          catalogId: oauthCatalog.id,
+          mcpServerId: mcpServer.id,
+          issueKind: "needs-reauth",
+          issueFingerprint: "v1:needs-reauth:stale-episode",
+          reason: "Owner is on leave",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-working-token-clears-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        // The provider is having a bad day, but the stored access token still
+        // works: the connection operates, so no alert may survive the call.
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockResolvedValue({
+            ok: false,
+            kind: "terminal",
+            category: "refresh_failed",
+            message: "invalid_grant",
+            description: "The refresh token is invalid or has expired",
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Issue fetched" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_working_token_clears",
+            name: "jira-working-token-clears-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        const row = await McpServerModel.findById(mcpServer.id);
+        expect(row?.oauthRefreshError).toBeNull();
+        expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshErrorDescription).toBeNull();
+        expect(row?.oauthRefreshFailedAt).toBeNull();
+        // Mutes pinned to the disproven episode go with it.
+        const mutes = await db
+          .select()
+          .from(schema.mcpServerAlertMutesTable)
+          .where(eq(schema.mcpServerAlertMutesTable.mcpServerId, mcpServer.id));
+        expect(mutes).toEqual([]);
 
         refreshSpy.mockRestore();
       });

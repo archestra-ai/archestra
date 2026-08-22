@@ -107,14 +107,14 @@ describe("AgentCreatePage", () => {
     );
   });
 
-  it("lands the created record on its Connect tab", async () => {
+  it("lands the created record on its Connect section", async () => {
     const user = userEvent.setup();
     render(<AgentCreatePage kind="agent" />);
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/agents/new-1?tab=connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1#connect");
   });
 
-  it("walks an LLM proxy through configuration and advanced, and lands on its Connect tab", async () => {
+  it("walks an LLM proxy through configuration and advanced, and lands on its Connect section", async () => {
     const user = userEvent.setup();
     render(<AgentCreatePage kind="llm_proxy" />);
     expect(
@@ -124,7 +124,7 @@ describe("AgentCreatePage", () => {
       screen.queryByTestId(`${E2eTestId.AgentSetupStep}-tools`),
     ).toBeNull();
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/llm/proxies/new-1?tab=connect");
+    expect(push).toHaveBeenCalledWith("/llm/proxies/new-1#connect");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -159,7 +159,7 @@ describe("AgentCreatePage", () => {
 
     mockPermissions({ canRead: true });
     rerender(<AgentCreatePage kind="agent" />);
-    expect(push).toHaveBeenCalledWith("/agents/new-1?tab=connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1#connect");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {

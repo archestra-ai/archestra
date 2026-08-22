@@ -1,9 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+// The scope check behind Edit/Delete asks which teams the caller belongs to.
+vi.mock("@/lib/teams/team.query");
 // Monaco does not render in jsdom; the canonical mock is a textarea.
 vi.mock("@/components/editor");
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -27,6 +30,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSkill } from "@/lib/skills/skill.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { SkillDetailPage } from "./page.client";
 
 function mockSkill(overrides: Record<string, unknown> = {}) {
@@ -67,7 +71,7 @@ function mockSkill(overrides: Record<string, unknown> = {}) {
 }
 
 function section(name: string) {
-  // Step-rank sections render h2, the sections inside a step h3.
+  // Every card title is one rank; cards are siblings, not a hierarchy.
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
   if (!root) throw new Error(`No section around "${name}"`);
@@ -95,48 +99,73 @@ describe("SkillDetailPage", () => {
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
     mockSkill();
   });
 
-  it("reads the skill: its facts as the heading section, then its content, nothing editable", () => {
+  it("keeps content primary and reveals access/source facts from a collapsed Overview", async () => {
+    const user = userEvent.setup();
     render(<SkillDetailPage id="skill-1" />);
 
     expect(
       screen.getByRole("heading", { name: /pdf-tools/ }),
     ).toBeInTheDocument();
-    // The facts: who can use it, where, where it comes from, which version.
-    expect(screen.getByText("Accessible to")).toBeInTheDocument();
-    expect(screen.getByText("All environments")).toBeInTheDocument();
-    expect(screen.getByText("Written in Archestra")).toBeInTheDocument();
-    expect(screen.getByText("v7")).toBeInTheDocument();
-    expect(screen.getByText(/3 times/)).toBeInTheDocument();
 
     // The content, in the wizard's own editor, read-only — with its files.
-    const content = section("Content");
+    const content = section("Instructions and files");
     const editor = content.getByRole("textbox", {
       name: "File contents",
     }) as HTMLTextAreaElement;
     expect(editor.value).toContain("Use pdftotext -layout.");
     expect(editor).toHaveAttribute("readonly");
     expect(content.getByText("notes.md")).toBeInTheDocument();
-    // No save anywhere: the page header's Edit is the way to change it.
+    // No save anywhere: editing goes through the wizard.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
-    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
-      "href",
-      "/skills/skill-1/edit",
-    );
+
+    const overview = screen.getByRole("button", { name: "Overview" });
+    expect(overview).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("heading", { name: "Access and source" }),
+    ).toBeNull();
+
+    await user.click(overview);
+    expect(overview).toHaveAttribute("aria-expanded", "true");
+    const access = section("Access and source");
+    expect(access.getByText("All environments")).toBeInTheDocument();
+    expect(screen.queryByText("Accessible to")).toBeNull();
+    expect(access.getByText("Written in Archestra")).toBeInTheDocument();
+    expect(access.getByText("v7")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
+    expect(screen.queryByText("skill-1")).toBeNull();
   });
 
-  it("offers no Edit to someone who may not update skills", () => {
+  it("keeps a single Edit in the header instead of repeating it on cards", () => {
+    render(<SkillDetailPage id="skill-1" />);
+
+    const edits = screen.getAllByRole("link", { name: /^Edit\b/ });
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toHaveAttribute("href", "/skills/skill-1/edit");
+    expect(
+      section("Instructions and files").queryByRole("link", {
+        name: /^Edit\b/,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers no Edit anywhere to someone who may not update skills", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
     render(<SkillDetailPage id="skill-1" />);
-    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 
-  it("says where a synced skill's content comes from and how it keeps up", () => {
+  it("says where a synced skill's content comes from and how it keeps up", async () => {
+    const user = userEvent.setup();
     mockSkill({
       sourceType: "github",
       sourceRef: "acme/skills@main",
@@ -147,6 +176,7 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Synced from GitHub")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Overview" }));
     expect(screen.getByRole("link", { name: /acme\/skills/ })).toHaveAttribute(
       "href",
       "https://github.com/acme/skills/tree/main",
@@ -165,6 +195,6 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Skill not found")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
   });
 });

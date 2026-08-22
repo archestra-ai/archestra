@@ -14,8 +14,8 @@ type ReauthCandidate = {
 /**
  * Per-connection re-authentication permission, shared by the registry card and
  * the connections dialog so both gate the OAuth re-auth entry point identically.
- * Personal: owner only. Team: team-admin, or a member with mcpServer:update.
- * Org: mcpServerInstallation:admin. All paths require mcpServerInstallation:create.
+ * Installation admins may act across every scope. Otherwise: personal owner;
+ * team admin or a member with update; org denied. All paths require create.
  */
 export function useCanReauthenticate() {
   const { data: session } = useSession();
@@ -36,10 +36,11 @@ export function useCanReauthenticate() {
   // on every page), and a fresh closure each render would defeat that.
   return useCallback(
     (server: ReauthCandidate): boolean => {
+      if (hasAdminPermission) return true;
       if (!hasCreatePermission) return false;
       const scope = server.scope ?? (server.teamId ? "team" : "personal");
 
-      if (scope === "org") return !!hasAdminPermission;
+      if (scope === "org") return false;
       if (scope === "personal") return server.ownerId === currentUserId;
 
       const team = server.teamId

@@ -10,19 +10,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useBulkUninstallMcpServers,
   useDeleteMcpServer,
+  useDismissMcpServerAlerts,
   useMcpInstallationStatusCacheSync,
+  useRestoreMcpServerAlerts,
 } from "./mcp-server.query";
 
 const {
   bulkDeleteMcpServersMock,
   connectMock,
   deleteMcpServerMock,
+  muteCatalogAlertMock,
+  muteAlertMock,
   subscribeMock,
+  toastErrorMock,
+  toastSuccessMock,
+  unmuteAlertMock,
+  unmuteCatalogAlertMock,
 } = vi.hoisted(() => ({
   bulkDeleteMcpServersMock: vi.fn(),
   connectMock: vi.fn(),
   deleteMcpServerMock: vi.fn(),
+  muteCatalogAlertMock: vi.fn(),
+  muteAlertMock: vi.fn(),
   subscribeMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
+  unmuteAlertMock: vi.fn(),
+  unmuteCatalogAlertMock: vi.fn(),
 }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
@@ -33,6 +47,22 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       ...actual.archestraApiSdk,
       bulkDeleteMcpServers: bulkDeleteMcpServersMock,
       deleteMcpServer: deleteMcpServerMock,
+      muteMcpCatalogAlert: muteCatalogAlertMock,
+      muteMcpServerAlert: muteAlertMock,
+      unmuteMcpCatalogAlert: unmuteCatalogAlertMock,
+      unmuteMcpServerAlert: unmuteAlertMock,
+    },
+  };
+});
+
+vi.mock("sonner", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("sonner")>();
+  return {
+    ...actual,
+    toast: {
+      ...actual.toast,
+      error: toastErrorMock,
+      success: toastSuccessMock,
     },
   };
 });
@@ -332,5 +362,176 @@ describe("useMcpInstallationStatusCacheSync", () => {
     expect(queryClient.getQueryData(externalKey)).toEqual([
       { mcpServerId: "server-2", name: "retained" },
     ]);
+  });
+});
+
+describe("MCP server alert queue mutations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("settles every dismissal, refreshes successful changes and reports partial success", async () => {
+    muteAlertMock
+      .mockRejectedValueOnce(new Error("Connection unavailable"))
+      .mockResolvedValueOnce({ data: { success: true }, error: undefined });
+    const queryClient = new QueryClient();
+    const refetch = vi.spyOn(queryClient, "refetchQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useDismissMcpServerAlerts(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      const mutationResult = await result.current.mutateAsync({
+        alerts: [
+          {
+            catalogId: "catalog-1",
+            catalogName: "First server",
+            serverId: "server-1",
+            serverName: "First server",
+            kind: "needs-reauth",
+            issueFingerprint: "v1:needs-reauth:first",
+          },
+          {
+            catalogId: "catalog-2",
+            catalogName: "Second server",
+            serverId: "server-2",
+            serverName: "Second server",
+            kind: "needs-reauth",
+            issueFingerprint: "v1:needs-reauth:second",
+          },
+        ],
+        reason: "Deferred",
+      });
+      expect(mutationResult.succeeded).toEqual([
+        expect.objectContaining({ serverId: "server-2" }),
+      ]);
+      expect(mutationResult.failed).toEqual([
+        expect.objectContaining({ serverId: "server-1" }),
+      ]);
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledWith("Connection unavailable");
+    expect(toastSuccessMock).toHaveBeenCalledWith("Dismissed 1 of 2 alerts");
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ["mcp-servers"] });
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ["mcp-catalog"] });
+  });
+
+  it("omits an empty dismissal reason from the API request", async () => {
+    muteAlertMock.mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    });
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useDismissMcpServerAlerts(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        alerts: [
+          {
+            catalogId: "catalog-1",
+            catalogName: "First server",
+            serverId: "server-1",
+            serverName: "First server",
+            kind: "needs-reauth",
+            issueFingerprint: "v1:needs-reauth:first",
+          },
+        ],
+      });
+    });
+
+    expect(muteAlertMock).toHaveBeenCalledWith({
+      path: { id: "server-1", kind: "needs-reauth" },
+      body: { issueFingerprint: "v1:needs-reauth:first" },
+    });
+  });
+
+  it("reports the connection that actually restored after a partial result", async () => {
+    unmuteAlertMock
+      .mockRejectedValueOnce(new Error("Connection unavailable"))
+      .mockResolvedValueOnce({ data: { success: true }, error: undefined });
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useRestoreMcpServerAlerts(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      const mutationResult = await result.current.mutateAsync({
+        alerts: [
+          {
+            catalogId: "catalog-1",
+            catalogName: "First server",
+            serverId: "server-1",
+            serverName: "First server",
+            kind: "needs-reauth",
+            issueFingerprint: "v1:needs-reauth:first",
+          },
+          {
+            catalogId: "catalog-2",
+            catalogName: "Second server",
+            serverId: "server-2",
+            serverName: "Second server",
+            kind: "needs-reauth",
+            issueFingerprint: "v1:needs-reauth:second",
+          },
+        ],
+      });
+      expect(mutationResult.succeeded).toEqual([
+        expect.objectContaining({ serverId: "server-2" }),
+      ]);
+      expect(mutationResult.failed).toEqual([
+        expect.objectContaining({ serverId: "server-1" }),
+      ]);
+    });
+
+    expect(toastSuccessMock).toHaveBeenCalledWith("Restored 1 of 2 alerts");
+  });
+
+  it("routes catalog-level alerts through the catalog dismissal API", async () => {
+    muteCatalogAlertMock.mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    });
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useDismissMcpServerAlerts(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        alerts: [
+          {
+            catalogId: "catalog-1",
+            catalogName: "Shared server",
+            serverId: null,
+            kind: "failed-to-start",
+            issueFingerprint: "v1:failed-to-start:test",
+          },
+        ],
+        reason: "Deferred",
+      });
+    });
+
+    expect(muteCatalogAlertMock).toHaveBeenCalledWith({
+      path: { id: "catalog-1", kind: "failed-to-start" },
+      body: {
+        issueFingerprint: "v1:failed-to-start:test",
+        reason: "Deferred",
+      },
+    });
+    expect(muteAlertMock).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   isPlaywrightCatalogItem,
 } from "@archestra/shared";
-import { AlertTriangle } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -42,6 +42,7 @@ import {
   toFieldValueType,
   validateFieldAgainstRegex,
 } from "./environment-validation-helpers";
+import { InlineCredentialFormShell } from "./inline-credential-form-shell";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -117,6 +118,7 @@ interface LocalServerInstallDialogProps {
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
   orgOnly?: boolean;
+  presentation?: "dialog" | "inline";
 }
 
 export function LocalServerInstallDialog({
@@ -132,12 +134,14 @@ export function LocalServerInstallDialog({
   preselectedTeamId,
   personalOnly: personalOnlyProp = false,
   orgOnly = false,
+  presentation = "dialog",
 }: LocalServerInstallDialogProps) {
+  const lockToExistingScope = isReinstall || isReauth;
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
-    isReinstall ? (existingTeamId ?? null) : null,
+    lockToExistingScope ? (existingTeamId ?? null) : null,
   );
   const [scope, setScope] = useState<McpServerInstallScope>(
-    isReinstall
+    lockToExistingScope
       ? (existingScope ?? (existingTeamId ? "team" : "personal"))
       : orgOnly
         ? "org"
@@ -508,9 +512,11 @@ export function LocalServerInstallDialog({
       ([fieldName, cfg]) =>
         !cfg.sensitive && userConfigRegexError(fieldName, cfg.type) !== null,
     );
+  const FormShell =
+    presentation === "inline" ? InlineCredentialFormShell : StandardFormDialog;
 
   return (
-    <StandardFormDialog
+    <FormShell
       open={isOpen}
       onOpenChange={handleClose}
       title={
@@ -571,12 +577,12 @@ export function LocalServerInstallDialog({
       }
     >
       {isReauth && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
+        <Alert className="bg-background/60">
+          <KeyRound className="h-4 w-4" />
           <AlertDescription>
-            Your existing credentials are expired or invalid. Submitting new
-            credentials here will replace them while preserving your tool
-            assignments.
+            Replace credentials for this existing connection only. Tool
+            assignments and policies stay unchanged. Use Manage credentials to
+            add or remove connections.
           </AlertDescription>
         </Alert>
       )}
@@ -1039,7 +1045,7 @@ export function LocalServerInstallDialog({
           )}
         </div>
       )}
-    </StandardFormDialog>
+    </FormShell>
   );
 }
 

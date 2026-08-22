@@ -322,6 +322,11 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/onboarding" },
   { kind: "route", value: "/api/apps/:appId/pin" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/pin" },
+  { kind: "route", value: "/api/mcp_server/:id/alert-mutes/:kind" },
+  {
+    kind: "route",
+    value: "/api/internal_mcp_catalog/:id/alert-mutes/:kind",
+  },
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets, incoming-email subscription
   // config, oauth grant runtime (tokens are runtime state).

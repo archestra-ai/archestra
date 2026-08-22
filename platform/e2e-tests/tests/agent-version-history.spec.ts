@@ -142,14 +142,20 @@ test("opens an MCP gateway's version history from its row button", async ({
 
     await goToPage(page, "/mcp/gateways");
 
-    const historyButton = page.getByTestId(
-      `${E2eTestId.AgentVersionHistoryButton}-${GATEWAY_NAME}`,
-    );
-    await waitForElementWithReload(page, historyButton, {
+    // Version history sits in the row's "More actions" menu on every entity
+    // list, so the row has to arrive before the menu can be opened.
+    const nameCell = page
+      .getByTestId(E2eTestId.AgentsTable)
+      .getByTitle(GATEWAY_NAME, { exact: true });
+    await waitForElementWithReload(page, nameCell, {
       timeout: 30_000,
       intervals: [2000, 3000, 5000],
+      checkEnabled: false,
     });
-    await historyButton.click();
+    await openAgentRowMenu(page, GATEWAY_NAME);
+    await page
+      .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${GATEWAY_NAME}`)
+      .click();
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();
@@ -183,14 +189,20 @@ test("opens an LLM proxy's version history from its row button", async ({
 
     await goToPage(page, "/llm/proxies");
 
-    const historyButton = page.getByTestId(
-      `${E2eTestId.AgentVersionHistoryButton}-${PROXY_NAME}`,
-    );
-    await waitForElementWithReload(page, historyButton, {
+    // Version history sits in the row's "More actions" menu on every entity
+    // list, so the row has to arrive before the menu can be opened.
+    const nameCell = page
+      .getByTestId(E2eTestId.AgentsTable)
+      .getByTitle(PROXY_NAME, { exact: true });
+    await waitForElementWithReload(page, nameCell, {
       timeout: 30_000,
       intervals: [2000, 3000, 5000],
+      checkEnabled: false,
     });
-    await historyButton.click();
+    await openAgentRowMenu(page, PROXY_NAME);
+    await page
+      .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${PROXY_NAME}`)
+      .click();
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();

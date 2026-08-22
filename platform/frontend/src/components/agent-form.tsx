@@ -62,6 +62,11 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import {
+  agentDetailHref,
+  agentListHref,
+  agentPageKindForType,
+} from "@/components/agent-pages/agent-page-config";
+import {
   AgentSkillsEditor,
   type EditableSkill,
 } from "@/components/agent-skills-editor";
@@ -143,6 +148,7 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
+import { WizardFooter } from "@/components/wizard-footer";
 
 /**
  * What the agent visibility control offers. Wider than the stored scope: an
@@ -205,6 +211,7 @@ import {
   normalizeSuggestedPrompts,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
+  TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
@@ -873,7 +880,7 @@ export function AgentForm({
   const showAdvancedSections = mountedSections.has("advanced");
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
-  const shouldLoadInternalAgents = agentType !== "llm_proxy";
+  const supportsSubagents = agentType === "agent";
   const shouldLoadIdentityProviders =
     agentType === "mcp_gateway" ||
     agentType === "llm_proxy" ||
@@ -883,7 +890,7 @@ export function AgentForm({
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
-    enabled: shouldLoadInternalAgents && !!canReadAgents,
+    enabled: supportsSubagents && !!canReadAgents,
   });
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
@@ -897,14 +904,12 @@ export function AgentForm({
   // `isFetched` also counts a failed attempt, and seeding an empty set from one
   // turns a single failed GET into a save that deletes what it could not read.
   const { data: currentDelegations = [], isSuccess: delegationsLoaded } =
-    useAgentDelegations(agentType !== "llm_proxy" ? agent?.id : undefined);
+    useAgentDelegations(supportsSubagents ? agent?.id : undefined);
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
   const {
     data: currentSubagentExclusions,
     isSuccess: subagentExclusionsLoaded,
-  } = useAgentSubagentExclusions(
-    agentType !== "llm_proxy" ? agent?.id : undefined,
-  );
+  } = useAgentSubagentExclusions(supportsSubagents ? agent?.id : undefined);
   // Which skills this gateway publishes over `skill://` (SEP-2640). Offered on
   // exactly the agent types that serve MCP resources — the same set that gets
   // the tool control, so LLM proxies have neither — and only where the
@@ -1241,11 +1246,12 @@ export function AgentForm({
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
     isDualLlmMainBuiltIn;
-  const showToolsAndSubagents =
+  const showTools =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
       agentType === "agent" ||
       agentType === "profile");
+  const showSubagents = !isBuiltIn && supportsSubagents;
   // The delegation targets and the disabled-subagent set each arrive from their
   // own request. Until both have succeeded the editors would render a
   // not-yet-seeded empty list, which reads as "delegates to nothing" and can be
@@ -1253,15 +1259,14 @@ export function AgentForm({
   // nothing to wait for.
   const subagentSetsLoaded =
     !agent?.id ||
-    agentType === "llm_proxy" ||
+    !supportsSubagents ||
     (delegationsLoaded && subagentExclusionsLoaded);
   const showSecurity =
     !isBuiltIn && (agentType === "llm_proxy" || agentType === "agent");
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an LLM
   // proxy reaches no tools, and an empty bordered panel would read as broken.
-  const toolsPanelHasContent =
-    showToolsAndSubagents || showSkills || showsHooks;
+  const toolsPanelHasContent = showTools || showSkills || showsHooks;
   // What the Advanced step holds for this record, named in its description.
   const advancedSettingsSummary = [
     "labels",
@@ -1779,7 +1784,7 @@ export function AgentForm({
     enabled:
       environmentChanged &&
       !showToolsSections &&
-      showToolsAndSubagents &&
+      showTools &&
       environmentScopingEnabled,
   });
 
@@ -1941,7 +1946,7 @@ export function AgentForm({
                 toolExposureMode,
                 missingCredentialBehavior,
                 accessAllTools,
-                accessAllSubagents,
+                ...(supportsSubagents && { accessAllSubagents }),
               }),
           },
         });
@@ -1984,7 +1989,7 @@ export function AgentForm({
             toolExposureMode,
             missingCredentialBehavior,
             accessAllTools,
-            accessAllSubagents,
+            ...(supportsSubagents && { accessAllSubagents }),
           }),
           teams: assignedTeamIds,
           users: assignedUserIds,
@@ -2020,7 +2025,7 @@ export function AgentForm({
             // Delegations and disabled subagents: the server wrote the new
             // record's defaults (advisor off, nothing listed), so only a set
             // that differs from those is worth a write.
-            if (delegationTargetIdsToSave.length > 0) {
+            if (supportsSubagents && delegationTargetIdsToSave.length > 0) {
               await syncDelegations.mutateAsync({
                 agentId: savedAgentId,
                 targetAgentIds: delegationTargetIdsToSave,
@@ -2028,6 +2033,7 @@ export function AgentForm({
             }
             const createdExclusions = advisorAgentId ? [advisorAgentId] : [];
             if (
+              supportsSubagents &&
               hasUnsavedChanges(
                 [...createdExclusions].sort(),
                 [...disabledSubagentIdsToSave].sort(),
@@ -2061,6 +2067,7 @@ export function AgentForm({
       // so on create both sets are still their untouched defaults.
       if (
         agent &&
+        supportsSubagents &&
         !isBuiltIn &&
         savedAgentId &&
         hasUnsavedChanges(
@@ -2089,6 +2096,7 @@ export function AgentForm({
       // reason). Skipped for built-ins.
       if (
         agent &&
+        supportsSubagents &&
         !isBuiltIn &&
         savedAgentId &&
         hasUnsavedChanges(
@@ -2196,6 +2204,7 @@ export function AgentForm({
     accessAllTools,
     accessAllSubagents,
     supportsEnvironment,
+    supportsSubagents,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2317,6 +2326,12 @@ export function AgentForm({
     isDirty,
     canSubmit,
   };
+  // Where a read-only form's Cancel goes: the record it is showing, which is
+  // where the editable footer's Cancel lands too. A legacy `profile` has no
+  // family of its own, so it resolves to its canonical gateway route.
+  const readOnlyExitHref = agent
+    ? agentDetailHref(agentPageKindForType(agent.agentType), agent.id)
+    : agentListHref(agentPageKindForType(agentType));
   return (
     <form
       className="flex flex-col"
@@ -2867,7 +2882,7 @@ export function AgentForm({
               )}
             >
               {/* Section 3: Tools & Knowledge Sources */}
-              {showToolsAndSubagents && (
+              {showTools && (
                 <div
                   className="space-y-4 p-4"
                   data-testid={E2eTestId.AgentToolsSection}
@@ -3333,17 +3348,21 @@ export function AgentForm({
                           Progressive tool loading
                         </Label>
                         <p className="text-xs text-muted-foreground">
+                          {/* Word for word the detail page's "Tools loaded"
+                              row, so the setting reads the same where it is
+                              chosen and where it is reported. */}
                           {toolExposureMode === "search_and_run_only" ? (
                             <>
-                              Only <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code>{" "}
-                              and <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> are
-                              pre-loaded into the context upfront. All the other
-                              tools are loaded on demand.
+                              The model starts with{" "}
+                              <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
+                              reaches the rest by searching for them
+                              mid-conversation.
                             </>
                           ) : (
                             <>
-                              All assigned tools are pre-loaded into the context
-                              upfront.
+                              Every assigned tool is in the model's context from
+                              the first message.
                             </>
                           )}{" "}
                           <ExternalDocsLink
@@ -3384,12 +3403,7 @@ export function AgentForm({
                           Tool connections
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.find(
-                            (option) =>
-                              option.value === missingCredentialBehavior,
-                          )?.describe(
-                            agentTypeDisplayName[agentType] || "agent",
-                          )}{" "}
+                          {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
                           <ExternalDocsLink
                             href={toolConnectionsDocsUrl}
                             className="underline"
@@ -3431,9 +3445,9 @@ export function AgentForm({
                             <SelectItem
                               key={option.value}
                               value={option.value}
-                              description={option.describe(
-                                agentTypeDisplayName[agentType] || "agent",
-                              )}
+                              description={
+                                TOOL_CONNECTION_PROMPTING[option.value]
+                              }
                             >
                               {option.label}
                             </SelectItem>
@@ -3446,7 +3460,7 @@ export function AgentForm({
               )}
 
               {/* Section 4: Subagents */}
-              {showToolsAndSubagents && (
+              {showSubagents && (
                 <div className="space-y-4 p-4">
                   <h3 className="text-base font-semibold">Subagents</h3>
                   {!subagentSetsLoaded ? (
@@ -3970,7 +3984,18 @@ export function AgentForm({
           </AlertDescription>
         </Alert>
       )}
-      {!readOnly && footer(footerState)}
+      {readOnly ? (
+        // A read-only form disables every field and has nothing to save, but
+        // it still needs an exit: with no footer at all, a viewer who reached
+        // this page by URL could only leave it with the browser's back button.
+        <WizardFooter>
+          <Button type="button" variant="outline" asChild>
+            <Link href={readOnlyExitHref}>Cancel</Link>
+          </Button>
+        </WizardFooter>
+      ) : (
+        footer(footerState)
+      )}
     </form>
   );
 }

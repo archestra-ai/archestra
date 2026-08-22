@@ -113,8 +113,9 @@ describe("config routes", () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Beta flag, off in the test environment (no env var, no master switch).
-      mcpIdleHibernationBetaEnabled: false,
+      // Beta-derived flags may inherit an ambient ARCHESTRA_BETA in dev/CI.
+      mcpIdleHibernationBetaEnabled: expect.any(Boolean),
+      mcpServerAlertingEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);

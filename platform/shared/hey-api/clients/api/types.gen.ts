@@ -34572,6 +34572,7 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             mcpIdleHibernationBetaEnabled: boolean;
+            mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
@@ -54613,6 +54614,14 @@ export type GetInternalMcpCatalogResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        alertMutes?: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
         toolCount: number;
         providesUi?: boolean;
         skillCount: number;
@@ -54965,6 +54974,188 @@ export type CreateInternalMcpCatalogItemResponses = {
 };
 
 export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
+
+export type UnmuteMcpCatalogAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpCatalogAlertError = UnmuteMcpCatalogAlertErrors[keyof UnmuteMcpCatalogAlertErrors];
+
+export type UnmuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpCatalogAlertResponse = UnmuteMcpCatalogAlertResponses[keyof UnmuteMcpCatalogAlertResponses];
+
+export type MuteMcpCatalogAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpCatalogAlertError = MuteMcpCatalogAlertErrors[keyof MuteMcpCatalogAlertErrors];
+
+export type MuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpCatalogAlertResponse = MuteMcpCatalogAlertResponses[keyof MuteMcpCatalogAlertResponses];
 
 export type DeleteInternalMcpCatalogItemData = {
     body?: never;
@@ -67296,6 +67487,14 @@ export type GetMcpServersResponses = {
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        alertMutes: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
     }>;
 };
 
@@ -68031,6 +68230,188 @@ export type RestoreMcpServerResponses = {
 };
 
 export type RestoreMcpServerResponse = RestoreMcpServerResponses[keyof RestoreMcpServerResponses];
+
+export type UnmuteMcpServerAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpServerAlertError = UnmuteMcpServerAlertErrors[keyof UnmuteMcpServerAlertErrors];
+
+export type UnmuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpServerAlertResponse = UnmuteMcpServerAlertResponses[keyof UnmuteMcpServerAlertResponses];
+
+export type MuteMcpServerAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpServerAlertError = MuteMcpServerAlertErrors[keyof MuteMcpServerAlertErrors];
+
+export type MuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpServerAlertResponse = MuteMcpServerAlertResponses[keyof MuteMcpServerAlertResponses];
 
 export type GetMcpServerInstallationStatusData = {
     body?: never;

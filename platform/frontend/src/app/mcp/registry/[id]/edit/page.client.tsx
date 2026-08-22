@@ -15,6 +15,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WizardFooter } from "@/components/wizard-footer";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   SETUP_STEPS,
@@ -130,7 +131,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
       <SetupStepper activeStep={step} onStepClick={goToStep} />
 
       {step === "configuration" && (
-        <div className="flex flex-col rounded-lg border">
+        <div className="flex flex-col gap-4">
           {/* SPDX-SnippetBegin */}
           {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
           {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
@@ -156,7 +157,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
             footer={({ isDirty, isSaving, hasBlockingErrors, onReset }) => {
               const savingWith = isSaving ? saveIntentRef.current : null;
               return (
-                <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                <WizardFooter>
                   <div>
                     {(isDirty || isSaving) && (
                       <Button
@@ -220,7 +221,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
                       </Button>
                     )}
                   </div>
-                </div>
+                </WizardFooter>
               );
             }}
           />

@@ -168,7 +168,7 @@ describe("AgentEditPage", () => {
     expect(push).toHaveBeenCalledWith("/agents/a1");
   });
 
-  it("sends a stale ?step=connect to the first step — connecting is the detail page's tab now", () => {
+  it("sends a stale ?step=connect to the first step because connecting is on the detail page", () => {
     mount("agent", "step=connect");
     expect(
       screen.getByText("form sections: configuration"),

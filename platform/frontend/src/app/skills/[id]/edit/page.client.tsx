@@ -12,10 +12,15 @@ import {
   useBeforeUnloadWhileDirty,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  backToRecordLabel,
+  notYoursToChange,
+} from "@/lib/design/resource-lexicon";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
+import { useSkillAccess } from "@/lib/skills/use-skill-access";
 import { cn } from "@/lib/utils";
 import {
   GithubSnapshotNotice,
@@ -23,7 +28,10 @@ import {
   type SkillDetail,
 } from "../../_parts/github-sync-panel";
 import { SkillAccessFields } from "../../_parts/skill-access-fields";
-import { SkillContentEditor } from "../../_parts/skill-content-editor";
+import {
+  SKILL_WIZARD_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../../_parts/skill-content-editor";
 import {
   buildSkillSaveBody,
   isSkillDraftDirty,
@@ -68,7 +76,17 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data: canUpdate } = useHasPermissions({ skill: ["update"] });
+  // `skill:update` alone is not enough: the backend also asks whose skill this
+  // is, so a holder of the permission editing somebody else's skill used to
+  // fill the whole wizard and collect a 403 from Save.
+  const {
+    canEdit,
+    canUpdate,
+    isPending: isAccessPending,
+  } = useSkillAccess(skill);
+  // Undecided is not refused. Reading the permissions as "no" while they load
+  // would flash the read-only notice at the author of the skill.
+  const isReadOnly = !isAccessPending && !canEdit;
   const updateSkill = useUpdateSkill();
 
   const step = resolveSkillEditStep(searchParams.get("step"));
@@ -190,7 +208,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
       backLink={
         <SkillBackLink
           href={detailHref}
-          label="Back to skill"
+          label={backToRecordLabel("skill")}
           onClick={(event) => {
             if (!isDirty) return;
             event.preventDefault();
@@ -209,17 +227,19 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
           }}
         />
 
-        {canUpdate === false && (
+        {isReadOnly && (
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              You can view this skill&apos;s configuration but not change it.
+              {canUpdate
+                ? `${notYoursToChange({ resource: "skill", scope: skill.scope })}.`
+                : "You can view this skill's configuration but not change it."}
             </AlertDescription>
           </Alert>
         )}
 
-        <div className="flex flex-col rounded-lg border">
-          <div className="flex min-h-0 flex-col gap-4 p-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
             {step === "content" &&
               (isSynced ? (
                 <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
@@ -247,17 +267,17 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                     files: update(prev.files),
                   }))
                 }
-                readOnly={isSynced || canUpdate === false}
-                className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                readOnly={isSynced || isReadOnly}
+                className={SKILL_WIZARD_EDITOR_CLASS}
               />
             </div>
             {step === "access" && (
-              <fieldset disabled={canUpdate === false} className="contents">
+              <fieldset disabled={isReadOnly} className="contents">
                 <SkillAccessFields draft={draft} onChange={patchDraft} />
               </fieldset>
             )}
           </div>
-          <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+          <WizardFooter>
             <div className="flex items-center gap-2">
               {prevStep ? (
                 <Button
@@ -336,7 +356,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
                   </Button>
                 ))}
             </div>
-          </div>
+          </WizardFooter>
         </div>
 
         <UnsavedChangesDialog

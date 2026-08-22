@@ -8,6 +8,7 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { AgentTypeSchema } from "./agent";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
+import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
 /**
@@ -107,6 +108,22 @@ export const SelectMcpServerSchema = createSelectSchema(
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   hibernationMode: McpServerHibernationModeSchema,
   // SPDX-SnippetEnd
+});
+
+/**
+ * A row of the MCP server listing: the install plus the CALLER's own alert
+ * mutes that still apply to it, so the registry can render a silenced alert
+ * without a second round trip. Never another viewer's — a mute hides an alert
+ * for one person only.
+ *
+ * Separate from `SelectMcpServerSchema` because the listing is the only route
+ * that resolves mutes: every other route answers with the bare install, and
+ * `McpServer` (the model row type) has no mutes on it at all. Keeping them here
+ * lets the field be required, so a client never has to distinguish "no mutes"
+ * from "this response did not compute them".
+ */
+export const McpServerListEntrySchema = SelectMcpServerSchema.extend({
+  alertMutes: z.array(McpServerAlertMuteSchema),
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)

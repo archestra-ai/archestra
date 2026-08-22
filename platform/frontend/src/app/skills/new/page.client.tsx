@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
@@ -28,7 +29,10 @@ import {
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
 import { SkillAccessFields } from "../_parts/skill-access-fields";
-import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  SKILL_WIZARD_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../_parts/skill-content-editor";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
@@ -282,8 +286,8 @@ function NewSkillWizard() {
               )}
 
               {effectiveStep === "content" && (
-                <div className="flex flex-col rounded-lg border">
-                  <div className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-lg border p-6">
                     <SkillContentEditor
                       manifest={draft.manifest}
                       files={draft.files}
@@ -294,10 +298,10 @@ function NewSkillWizard() {
                           files: update(prev.files),
                         }))
                       }
-                      className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                      className={SKILL_WIZARD_EDITOR_CLASS}
                     />
                   </div>
-                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                  <WizardFooter>
                     {catalogDisabled ? (
                       <Button variant="outline" asChild>
                         <Link href="/skills">Cancel</Link>
@@ -318,16 +322,16 @@ function NewSkillWizard() {
                       Continue
                       <ArrowRight className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </WizardFooter>
                 </div>
               )}
 
               {effectiveStep === "access" && (
-                <div className="flex flex-col rounded-lg border">
-                  <div className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-lg border p-6">
                     <SkillAccessFields draft={draft} onChange={patchDraft} />
                   </div>
-                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                  <WizardFooter>
                     <Button
                       variant="outline"
                       onClick={() => setStep("content")}
@@ -342,7 +346,7 @@ function NewSkillWizard() {
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}
                     </PermissionButton>
-                  </div>
+                  </WizardFooter>
                 </div>
               )}
             </>

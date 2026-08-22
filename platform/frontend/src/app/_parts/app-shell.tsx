@@ -33,6 +33,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
+import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
 import { AppSidebar } from "./sidebar";
 import {
   EnvSiteNotificationBar,
@@ -163,6 +164,7 @@ export function AppShell({ children }: AppShellProps) {
   // auth/preview/runtime branches above are intentionally outside it (no poll).
   return (
     <ConnectivityProvider>
+      <McpDeploymentStatusFeed />
       {!permissionLoaded ? (
         // Wait for the permission check before rendering the sidebar to avoid a
         // flash. Don't render Version here — the full-width layout centers

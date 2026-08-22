@@ -1122,7 +1122,6 @@ describe("mcp server inspect route", () => {
       ownerId: otherUser.id,
       catalogId: catalog.id,
     });
-
     const response = await app.inject({
       method: "POST",
       url: `/api/mcp_server/${mcpServer.id}/reinstall`,
@@ -3608,7 +3607,6 @@ describe("mcp server inspect route", () => {
       ownerId: otherUser.id,
       catalogId: catalog.id,
     });
-
     const response = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${mcpServer.id}/reauthenticate`,

@@ -28,16 +28,33 @@ export function restoreRenderableAssistantParts(params: {
   let changed = false;
 
   const restoredMessages = nextMessages.map((message, index) => {
-    if (message.role !== "assistant" || hasRenderableAssistantParts(message)) {
-      return message;
-    }
-
     const previousMessage = findPreviousRenderableAssistantMessage({
       previousMessages,
       nextMessages,
       nextMessage: message,
       index,
     });
+
+    // Starting a later turn can temporarily project an earlier tool result to
+    // its model-facing text output, dropping rawContent image bytes from the
+    // live UI state. That historical assistant is complete and immutable: keep
+    // its prior rich parts while the new tail streams. Persist/refetch restores
+    // the same payload after finish, so this only prevents the visible blink.
+    if (
+      message.role === "assistant" &&
+      index < nextMessages.length - 1 &&
+      previousMessage?.role === "assistant" &&
+      hasRenderableToolOutputImage(previousMessage) &&
+      !hasRenderableToolOutputImage(message)
+    ) {
+      changed = true;
+      return { ...message, parts: previousMessage.parts };
+    }
+
+    if (message.role !== "assistant" || hasRenderableAssistantParts(message)) {
+      return message;
+    }
+
     if (
       previousMessage?.role !== "assistant" ||
       !hasRenderableAssistantParts(previousMessage)
@@ -182,6 +199,30 @@ export function pruneEmptyTrailingAssistantMessage(
 // agree on what counts as renderable.
 function hasRenderableAssistantParts(message: UIMessage): boolean {
   return hasRenderableAssistantContent(message);
+}
+
+function hasRenderableToolOutputImage(message: UIMessage): boolean {
+  return message.parts.some((part) => {
+    if (!part.type.startsWith("tool-") || !("output" in part)) {
+      return false;
+    }
+    const output = part.output;
+    if (!output || typeof output !== "object" || !("rawContent" in output)) {
+      return false;
+    }
+    const rawContent = (output as { rawContent?: unknown }).rawContent;
+    return (
+      Array.isArray(rawContent) &&
+      rawContent.some(
+        (block) =>
+          !!block &&
+          typeof block === "object" &&
+          (block as { type?: unknown }).type === "image" &&
+          typeof (block as { data?: unknown }).data === "string" &&
+          (block as { data: string }).data.length > 0,
+      )
+    );
+  });
 }
 
 function findPreviousRenderableAssistantMessage(params: {

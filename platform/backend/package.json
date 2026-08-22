@@ -46,7 +46,7 @@
     "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli --url https://de.sentry.io/ sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli --url https://de.sentry.io/ sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.77",
+    "@ai-sdk/amazon-bedrock": "4.0.159",
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/cerebras": "^2.0.39",
     "@ai-sdk/cohere": "^3.0.25",
@@ -138,6 +138,7 @@
     "fastify-metrics": "^12.1.0",
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",
+    "google-auth-library": "^10.5.0",
     "googleapis": "^171.4.0",
     "handlebars": "^4.7.9",
     "ipaddr.js": "^2.3.0",

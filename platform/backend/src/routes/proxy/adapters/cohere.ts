@@ -734,24 +734,6 @@ class CohereStreamAdapter
   }
 
   toProviderResponse(): CohereResponse {
-    if (this.replacedText !== null) {
-      return {
-        id: this.state.responseId,
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: this.replacedText }],
-          tool_calls: undefined,
-        },
-        finish_reason: "COMPLETE",
-        usage: {
-          tokens: {
-            input_tokens: this.state.usage?.inputTokens ?? 0,
-            output_tokens: this.state.usage?.outputTokens ?? 0,
-          },
-        },
-      };
-    }
-
     const content: CohereResponse["message"]["content"] = [];
 
     if (this.state.text) {
@@ -761,8 +743,21 @@ class CohereStreamAdapter
       });
     }
 
+    // A refusal does not erase what the model already said: its text streamed as
+    // it arrived and the refusal was appended after it as a further content
+    // block, so the client holds both. Recording the refusal alone deletes the
+    // model's own answer from the turn.
+    if (this.replacedText !== null) {
+      content.push({ type: "text", text: this.replacedText });
+    }
+
+    // Calls held back by the gate never reached the client, so they must not
+    // appear in the record — a turn that names them would owe tool results
+    // nothing will ever send.
     const toolCalls: CohereResponse["message"]["tool_calls"] = [];
-    for (const toolCall of this.state.toolCalls) {
+    for (const toolCall of this.replacedText === null
+      ? this.state.toolCalls
+      : []) {
       toolCalls.push({
         id: toolCall.id,
         type: "function",
@@ -781,8 +776,10 @@ class CohereStreamAdapter
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       },
       finish_reason:
-        (this.state.stopReason as CohereResponse["finish_reason"]) ??
-        "COMPLETE",
+        this.replacedText !== null
+          ? "COMPLETE"
+          : ((this.state.stopReason as CohereResponse["finish_reason"]) ??
+            "COMPLETE"),
       usage: {
         tokens: {
           input_tokens: this.state.usage?.inputTokens ?? 0,

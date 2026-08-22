@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import {
   getApiErrorMessage,
@@ -20,6 +21,7 @@ import {
 import websocketService from "@/lib/websocket/websocket";
 
 const {
+  bulkDeleteMcpServers,
   deleteMcpServer,
   getMcpServers,
   getMcpServerTools,
@@ -294,6 +296,29 @@ export function useInstallMcpServer() {
         errorMessage: clipErrorMessage(error.message),
       });
       toast.error(`Failed to install ${variables.name}`);
+    },
+  });
+}
+
+/**
+ * Uninstalls a selection of MCP servers in one request, bypassing
+ * `useDeleteMcpServer` — which toasts and refetches per call, so a selection
+ * would fire one toast and one refetch per row. Built-in and app-backing
+ * servers come back in `failed` with the reason they cannot be uninstalled.
+ */
+export function useBulkUninstallMcpServers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (servers: readonly { id: string; name: string }[]) =>
+      bulkDeleteMcpServers({
+        body: { ids: servers.map((server) => server.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: async () => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      invalidateToolAssignmentQueries(queryClient);
     },
   });
 }

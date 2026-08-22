@@ -1235,9 +1235,18 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     });
 
     // The other half of the contract: widening what counts as declared must not
-    // hollow out the check. A tool the caller never declared is still refused,
-    // which is what per-conversation tool selection relies on.
-    test("a tool the caller never declared is still refused", async () => {
+    // hollow out the check — `enabledToolNames` must still hold exactly what
+    // this request declared and nothing else.
+    //
+    // What that buys has changed. An undeclared name is now handed back rather
+    // than refused: refusing dropped the call and ended the turn, which reads
+    // to an agent loop as "the assistant is finished" and strands an
+    // unattended run. Nothing executes either way, because the caller cannot
+    // run a tool it never declared. Per-conversation tool selection is still
+    // enforced where the tool would actually run — chat's AI SDK raises
+    // NoSuchToolError for anything unregistered, and run_tool applies the
+    // conversation gate on the dispatch path.
+    test("a tool the caller never declared is handed back, not refused", async () => {
       openAiStubOptions.includeToolCalls = true;
       const { evaluatePolicies } = await vi.importActual<
         typeof import("@/guardrails/tool-invocation")
@@ -1266,8 +1275,11 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       const enabledToolNames = mockEvaluatePolicies.mock
         .calls[0][4] as Set<string>;
       expect([...enabledToolNames]).toEqual(["something_else"]);
-      expect(response.body).toContain("are not enabled for this");
-      expect(response.body).not.toContain('"finish_reason":"tool_calls"');
+      expect(response.body).not.toContain("are not enabled for this");
+      // The turn still ends on the tool call, so the loop keeps going and the
+      // caller is the one that rejects the name.
+      expect(response.body).toContain("get_weather");
+      expect(response.body).toContain('"finish_reason":"tool_calls"');
     });
 
     // The refusal sibling above only pins that a refused call is absent, which

@@ -181,6 +181,140 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models/available marks a zero-priced audio model as not free", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openrouter",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const freeModel = await ModelModel.create({
+      externalId: "openrouter/google/gemma-4-31b-it:free",
+      provider: "openrouter",
+      modelId: "google/gemma-4-31b-it:free",
+      description: "Gemma 4 31B (free)",
+      contextLength: 64_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    // OpenRouter publishes `prompt: "0", completion: "0"` for its Lyria music
+    // models because they are billed per second of audio, not per token. They
+    // must not carry the "Free" badge or survive the "Free models only" filter.
+    const audioModel = await ModelModel.create({
+      externalId: "openrouter/google/lyria-3-pro-preview",
+      provider: "openrouter",
+      modelId: "google/lyria-3-pro-preview",
+      description: "Lyria 3 Pro Preview",
+      contextLength: 1_048_576,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: false,
+      promptPricePerToken: "0",
+      completionPricePerToken: "0",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [
+        { id: freeModel.id, modelId: freeModel.modelId },
+        { id: audioModel.id, modelId: audioModel.modelId },
+      ],
+      "openrouter",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const models: Array<{ id: string; isFree: boolean }> = response.json();
+    const freeById = (id: string) => models.find((m) => m.id === id)?.isFree;
+    expect(freeById("google/gemma-4-31b-it:free")).toBe(true);
+    expect(freeById("google/lyria-3-pro-preview")).toBe(false);
+  });
+
+  test("GET /api/llm-models/available disambiguates stored names that still collide", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Rows written before sync-time name disambiguation existed — or refreshed
+    // by a key whose catalog lists only one member of the pair — still share a
+    // description in the database. The response must tell them apart anyway.
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const base = {
+      provider: "openai" as const,
+      contextLength: 128_000,
+      inputModalities: ["text" as const],
+      outputModalities: ["text" as const],
+      supportsToolCalling: true,
+      promptPricePerToken: "0.000001",
+      completionPricePerToken: "0.000002",
+      ignored: false,
+      lastSyncedAt: new Date(),
+    };
+    const models = await Promise.all([
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1",
+        modelId: "gpt-4.1",
+        description: "GPT-4.1",
+      }),
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1-2025-04-14",
+        modelId: "gpt-4.1-2025-04-14",
+        description: "GPT-4.1",
+      }),
+      ModelModel.create({
+        ...base,
+        externalId: "openai/gpt-4.1-mini",
+        modelId: "gpt-4.1-mini",
+        description: "GPT-4.1 mini",
+      }),
+    ]);
+
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      models.map((model) => ({ id: model.id, modelId: model.modelId })),
+      "openai",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models/available",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const displayNamesById = Object.fromEntries(
+      response
+        .json<Array<{ id: string; displayName: string }>>()
+        .map((model) => [model.id, model.displayName]),
+    );
+    expect(displayNamesById).toEqual({
+      "gpt-4.1": "GPT-4.1",
+      "gpt-4.1-2025-04-14": "GPT-4.1 (2025-04-14)",
+      "gpt-4.1-mini": "GPT-4.1 mini",
+    });
+  });
+
   test("GET /api/llm-models/available?isEmbedding=true only returns embedding models with configured dimensions", async ({
     makeSecret,
     makeLlmProviderApiKey,

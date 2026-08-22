@@ -400,7 +400,7 @@ function EditProjectDialogForm({
             }
             hint={audienceHint(visibility)}
             emptyMessage="No agents this project's members can all use."
-            personalDefaultOption={{
+            sentinelOption={{
               value: NO_DEFAULT_AGENT,
               label: "Default",
             }}

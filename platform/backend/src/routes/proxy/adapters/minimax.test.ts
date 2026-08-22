@@ -21,6 +21,16 @@ function reasoningChunk(cumulativeText: string): StreamChunk {
   } as StreamChunk;
 }
 
+function textChunk(text: string): StreamChunk {
+  return {
+    id: "chatcmpl-test",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "MiniMax-M2.5",
+    choices: [{ index: 0, delta: { content: text }, finish_reason: null }],
+  } as StreamChunk;
+}
+
 function finalChunk(): StreamChunk {
   return {
     id: "chatcmpl-test",
@@ -63,6 +73,25 @@ describe("MinimaxStreamAdapter reasoning", () => {
     expect(second.choices[0].delta.reasoning_details).toEqual([
       { text: "First half, second half." },
     ]);
+  });
+
+  // A refusal appends further content deltas, which clients concatenate onto
+  // what they have accumulated — so the client holds the model's text AND the
+  // refusal. Reasoning the model produced is kept for the same reason.
+  test("a refusal keeps the streamed text and the reasoning", () => {
+    const adapter = minimaxAdapterFactory.createStreamAdapter();
+    adapter.processChunk(reasoningChunk("thinking about it"));
+    adapter.processChunk(textChunk("let me check"));
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.choices[0].message.content).toBe(
+      "let me checkblocked message",
+    );
+    expect(response.choices[0].message.reasoning_content).toBe(
+      "thinking about it",
+    );
   });
 
   test("treats non-extending reasoning text as incremental chunks", () => {

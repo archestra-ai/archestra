@@ -84,6 +84,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -1525,6 +1526,105 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(updatedServer);
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteMcpServers,
+        description:
+          "Uninstall several MCP servers in one request. Each id is " +
+          "authorized exactly as the single uninstall authorizes its own, so " +
+          "a built-in server, an app-backing server (owned by the Apps " +
+          "lifecycle), or one the caller may not revoke is reported in " +
+          "`failed` while the rest of the batch still applies. Uninstall is a " +
+          "recoverable soft delete: stored credentials are retained so a " +
+          "restore recovers them, and only the live Kubernetes Secret is torn " +
+          "down.",
+        tags: ["MCP Server"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, headers } = request;
+      const snapshot = async (ids: string[]) => {
+        const rows = await McpServerModel.findByIdsBasic(ids);
+        return {
+          mcpServers: rows
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              serverType: row.serverType,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "mcp servers bulk delete",
+        notFoundMessage: "MCP server not found",
+        unexpectedMessage: "Could not uninstall this MCP server",
+        // `mcp_server` has no organization column, so the fence is the
+        // inferred one `findByIdInOrg` applies — team-in-org, owner-is-member,
+        // or a legacy unowned system row. Resolving each id through it is what
+        // stops a foreign server being reachable from a request body.
+        load: async (ids) => {
+          const found = new Map<
+            string,
+            NonNullable<
+              Awaited<ReturnType<typeof McpServerModel.findByIdInOrg>>
+            >
+          >();
+          for (const id of ids) {
+            const server = await McpServerModel.findByIdInOrg(
+              id,
+              organizationId,
+            );
+            if (server) found.set(id, server);
+          }
+          return found;
+        },
+        describe: (server) => server.name,
+        authorize: async (server) => {
+          if (server.serverType === "builtin") {
+            throw new ApiError(400, "Cannot delete built-in MCP servers");
+          }
+          if (server.serverType === "app") {
+            throw new ApiError(
+              400,
+              "App servers are managed via the Apps API; delete the app instead.",
+            );
+          }
+          await assertScopedLifecycleAuthorization({
+            mcpServer: server,
+            userId: user.id,
+            headers,
+            action: "revoke",
+          });
+        },
+        applyEach: async (server, id) => {
+          if (server.serverType === "local") {
+            try {
+              await McpServerRuntimeManager.stopServer(id);
+            } catch (error) {
+              // Same as the single uninstall: a pod that will not stop must
+              // not strand the row as permanently installed.
+              logger.error(
+                { err: error, mcpServerId: id },
+                "Failed to stop local MCP server deployment during bulk uninstall",
+              );
+            }
+          }
+          await McpServerModel.delete(id);
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

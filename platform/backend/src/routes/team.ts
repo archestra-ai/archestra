@@ -31,6 +31,7 @@ import {
   UpdateTeamBodySchema,
   UpdateTeamMemberBodySchema,
 } from "@/types";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -201,6 +202,68 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(team);
+    },
+  );
+
+  fastify.delete(
+    "/api/teams/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteTeams,
+        description:
+          "Delete several teams in one request. Ids outside the caller's " +
+          "organization are reported in `failed` as not found and leave the " +
+          "rest of the batch applied. Resources scoped to a deleted team lose " +
+          "that assignment, exactly as they do on the single-team delete.",
+        tags: ["Teams"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, headers } = request;
+
+      // Request-level: team deletion is one org-wide permission, the same for
+      // every id, so an unauthorized caller is a 403 that writes nothing
+      // rather than N identical per-team failures.
+      const { success: canDeleteTeams } = await hasPermission(
+        { team: ["delete"] },
+        headers,
+      );
+      if (!canDeleteTeams) {
+        throw new ApiError(403, "You are not authorized to delete these teams");
+      }
+
+      const snapshot = async (ids: string[]) => ({
+        teams: (await TeamModel.findByIds(ids))
+          .filter((team) => team.organizationId === organizationId)
+          .map(({ id, name }) => ({ id, name }))
+          // Sorted so an unchanged batch snapshots identically on both sides.
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      });
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "teams bulk delete",
+        notFoundMessage: "Team not found",
+        unexpectedMessage: "Could not delete this team",
+        load: async (ids) =>
+          new Map(
+            (await TeamModel.findByIds(ids))
+              .filter((team) => team.organizationId === organizationId)
+              .map((team) => [team.id, team]),
+          ),
+        describe: (team) => team.name,
+        applyEach: async (_team, id) => {
+          const success = await TeamModel.delete(id);
+          if (!success) {
+            throw new ApiError(404, "Team not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

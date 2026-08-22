@@ -7,7 +7,7 @@ import {
   roleDescriptions,
 } from "@archestra/shared";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -22,6 +22,8 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -34,9 +36,12 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAllPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  useAllMatchingRoles,
+  useBulkDeleteRoles,
   useCreateRole,
   useDeleteRole,
   useRole,
@@ -79,6 +84,22 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   const createMutation = useCreateRole();
   const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
+  const bulkDelete = useBulkDeleteRoles();
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
+
+  const filterSignature = nameFilter ?? "";
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatchingRoles, isFetching: isFetchingAllMatching } =
+    useAllMatchingRoles(
+      { search: nameFilter || undefined },
+      { enabled: allMatchingSelected },
+    );
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -265,7 +286,28 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   });
   const total = rolesResponse?.pagination.total ?? 0;
 
+  // Predefined roles never enter a selection, so the counts and the offer are
+  // both about the custom ones alone.
+  const selectableOnPage = allRoles.filter((role) => !role.predefined);
+  const selectedOnPage = selectableOnPage.filter(
+    (role) => rowSelection[role.id],
+  );
+  const selectedRoles =
+    allMatchingSelected && allMatchingRoles
+      ? allMatchingRoles.filter((role) => !role.predefined)
+      : selectedOnPage;
+  const customRoleTotal = allMatchingRoles
+    ? allMatchingRoles.filter((role) => !role.predefined).length
+    : Math.max(total - (allRoles.length - selectableOnPage.length), 0);
+
   const columns: ColumnDef<Role>[] = [
+    createSelectColumn<Role>({
+      rowLabel: (role) => `Select ${role.name}`,
+      allLabel: "Select all roles on this page",
+      // Predefined roles are immutable — there is nothing a bulk action could
+      // do to them.
+      canSelect: (role) => !role.predefined,
+    }),
     {
       id: "icon",
       size: 24,
@@ -385,27 +427,89 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             onRetry={() => refetch()}
           />
         ) : (
-          <DataTable
-            columns={columns}
-            data={allRoles}
-            isLoading={isLoading}
-            manualPagination
-            pagination={{
-              pageIndex,
-              pageSize,
-              total,
-            }}
-            onPaginationChange={setPagination}
-            hasActiveFilters={Boolean(nameFilter)}
-            onClearFilters={() =>
-              updateQueryParams({
-                name: null,
-                page: "1",
-              })
-            }
-            emptyMessage="No roles found"
-            hideSelectedCount
-          />
+          <>
+            <BulkActionsBar
+              count={selectedRoles.length}
+              noun="role"
+              onClear={clearSelection}
+              busy={bulkDelete.isPending || isFetchingAllMatching}
+              selectAllMatching={{
+                total: customRoleTotal,
+                pageFullySelected:
+                  selectableOnPage.length > 0 &&
+                  selectedOnPage.length === selectableOnPage.length,
+                active: allMatchingSelected,
+                onSelectAll: () => setEscalatedFor(filterSignature),
+                matchDescription: nameFilter
+                  ? "match this search query"
+                  : "can be deleted",
+              }}
+              className="mb-3"
+            >
+              <PermissionButton
+                permissions={{ ac: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActionsBar>
+
+            <DataTable
+              columns={columns}
+              data={allRoles}
+              getRowId={(row) => row.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              isLoading={isLoading}
+              manualPagination
+              pagination={{
+                pageIndex,
+                pageSize,
+                total,
+              }}
+              onPaginationChange={setPagination}
+              hasActiveFilters={Boolean(nameFilter)}
+              onClearFilters={() =>
+                updateQueryParams({
+                  name: null,
+                  page: "1",
+                })
+              }
+              emptyMessage="No roles found"
+              hideSelectedCount
+            />
+
+            {bulkDeleteOpen && (
+              <DeleteConfirmDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title="Delete roles"
+                description={`Delete ${selectedRoles.length} ${
+                  selectedRoles.length === 1 ? "role" : "roles"
+                }? Members holding them fall back to the default role.`}
+                isPending={bulkDelete.isPending}
+                onConfirm={() => {
+                  bulkDelete.mutate(selectedRoles, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Deleted",
+                        failureVerb: "delete",
+                        noun: "role",
+                      });
+                      setBulkDeleteOpen(false);
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  });
+                }}
+                confirmLabel="Delete roles"
+                pendingLabel="Deleting..."
+              />
+            )}
+          </>
         )}
       </div>
 

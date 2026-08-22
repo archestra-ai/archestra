@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  type ChatProvider,
   EXTERNAL_AGENT_ID_HEADER,
   isModelRouterSupportedProvider,
   isSupportedProvider,
   providerDisplayNames,
+  providerSupportsChat,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -58,7 +60,7 @@ import { useUpdateUrlParams } from "./use-update-url-params";
 
 /** Compact provider tile — colored square with a short glyph or letter. */
 const PROVIDER_ICONS: Record<
-  SupportedProvider,
+  ChatProvider,
   { bg: string; fg: string; glyph: string }
 > = {
   openai: { bg: "#10a37f", fg: "#fff", glyph: "◎" },
@@ -90,7 +92,7 @@ const PROVIDER_ICONS: Record<
 };
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
-const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
+const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   openai: "https://api.openai.com/v1/",
   anthropic: "https://api.anthropic.com/v1/",
   gemini: "https://generativelanguage.googleapis.com/",
@@ -126,7 +128,14 @@ interface ProxyClientInstructionsProps {
   baseUrl: string;
 }
 
-const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
+/**
+ * Every provider this page can instruct a client to connect to. Embeddings-only
+ * providers are excluded: the whole page is about pointing a chat client at the
+ * proxy, and they serve no chat endpoint to point at.
+ */
+const ALL_PROVIDERS = (
+  Object.keys(providerDisplayNames) as SupportedProvider[]
+).filter(providerSupportsChat);
 
 /**
  * providerId URL value for the Model Router tile. Not a real provider —
@@ -161,7 +170,7 @@ export function ProxyClientInstructions({
     [shownProviders],
   );
   const isShown = useCallback(
-    (p: SupportedProvider) => !shownSet || shownSet.has(p),
+    (p: ChatProvider) => !shownSet || shownSet.has(p),
     [shownSet],
   );
 
@@ -182,8 +191,10 @@ export function ProxyClientInstructions({
           : [],
     [client.proxy],
   );
+  // A custom client may name providers straight from its own config, so the
+  // embeddings-only filter is reapplied here rather than trusted upstream.
   const supportedProviders = useMemo(
-    () => rawSupportedProviders.filter(isShown),
+    () => rawSupportedProviders.filter(providerSupportsChat).filter(isShown),
     [rawSupportedProviders, isShown],
   );
   const visibleAllProviders = useMemo(
@@ -193,8 +204,11 @@ export function ProxyClientInstructions({
 
   // Drive selection off the URL so client switches (which clear providerId in
   // the URL) immediately reset the picker without stale local state.
-  const selectedProvider: SupportedProvider | null =
-    urlProvider && isSupportedProvider(urlProvider) && isShown(urlProvider)
+  const selectedProvider: ChatProvider | null =
+    urlProvider &&
+    isSupportedProvider(urlProvider) &&
+    providerSupportsChat(urlProvider) &&
+    isShown(urlProvider)
       ? urlProvider
       : null;
 
@@ -221,7 +235,7 @@ export function ProxyClientInstructions({
     updateProviderInUrl,
   ]);
 
-  const handleProviderSelect = (p: SupportedProvider) => {
+  const handleProviderSelect = (p: ChatProvider) => {
     updateProviderInUrl(p);
   };
 
@@ -352,7 +366,7 @@ function GenericProxyInstructions({
   selectedProvider,
   providerLabel,
 }: {
-  selectedProvider: SupportedProvider;
+  selectedProvider: ChatProvider;
   providerLabel: string;
 }) {
   const [authMethod, setAuthMethod] =
@@ -540,8 +554,9 @@ function ModelRouterInstructions() {
       (p) => configured.has(p) && isModelRouterSupportedProvider(p),
     );
   }, [availableKeys]);
-  const [pickedProvider, setPickedProvider] =
-    useState<SupportedProvider | null>(null);
+  const [pickedProvider, setPickedProvider] = useState<ChatProvider | null>(
+    null,
+  );
   const mappedProvider =
     pickedProvider && providersWithKeys.includes(pickedProvider)
       ? pickedProvider
@@ -636,9 +651,7 @@ function ModelRouterInstructions() {
                   <span>Mint the key from the</span>
                   <Select
                     value={mappedProvider}
-                    onValueChange={(v) =>
-                      setPickedProvider(v as SupportedProvider)
-                    }
+                    onValueChange={(v) => setPickedProvider(v as ChatProvider)}
                   >
                     <SelectTrigger size="sm" className="h-7 text-xs">
                       <SelectValue />
@@ -720,16 +733,16 @@ export function GenericEndpointCard({
 }: {
   baseUrl: string;
   profileId: string;
-  providers: SupportedProvider[];
+  providers: ChatProvider[];
   routerSelected: boolean;
-  selectedProvider: SupportedProvider | null;
+  selectedProvider: ChatProvider | null;
   onSelectRouter: () => void;
-  onSelectProvider: (p: SupportedProvider) => void;
+  onSelectProvider: (p: ChatProvider) => void;
   /** Overrides the default "Replace the … base URL … with:" line. */
   caption?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
-  const PRIMARY: SupportedProvider[] = [
+  const PRIMARY: ChatProvider[] = [
     "openai",
     "anthropic",
     "gemini",
@@ -1208,10 +1221,10 @@ function ProxyNote({ note }: { note: string }) {
 }
 
 interface ProviderPickerProps {
-  providers: SupportedProvider[];
-  supported: SupportedProvider[];
-  selected: SupportedProvider | null;
-  onSelect: (p: SupportedProvider) => void;
+  providers: ChatProvider[];
+  supported: ChatProvider[];
+  selected: ChatProvider | null;
+  onSelect: (p: ChatProvider) => void;
   /**
    * Render the OpenAI-compatible Model Router as the first segment (generic
    * clients only — custom clients build per-provider instructions).
@@ -1227,7 +1240,7 @@ function ProviderPicker({
   modelRouter,
 }: ProviderPickerProps) {
   const providerCatalog = useModelProviderCatalog();
-  const PRIMARY: SupportedProvider[] = [
+  const PRIMARY: ChatProvider[] = [
     "openai",
     "anthropic",
     "gemini",
@@ -1246,7 +1259,7 @@ function ProviderPicker({
     providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
   );
 
-  const pickFromSearch = (p: SupportedProvider) => {
+  const pickFromSearch = (p: ChatProvider) => {
     onSelect(p);
     setSearchOpen(false);
     setSearch("");
@@ -1367,10 +1380,10 @@ function ProviderPickerButton({
   isSelected,
   onSelect,
 }: {
-  provider: SupportedProvider;
+  provider: ChatProvider;
   isSupported: boolean;
   isSelected: boolean;
-  onSelect: (p: SupportedProvider) => void;
+  onSelect: (p: ChatProvider) => void;
 }) {
   const providerCatalog = useModelProviderCatalog();
   return (
@@ -1391,7 +1404,7 @@ function ProviderPickerButton({
   );
 }
 
-function ProviderGlyph({ provider }: { provider: SupportedProvider }) {
+function ProviderGlyph({ provider }: { provider: ChatProvider }) {
   const icon = PROVIDER_ICONS[provider];
   return (
     <span

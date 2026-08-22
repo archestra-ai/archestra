@@ -559,6 +559,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
+  // Bulk visibility / delete act on a list of skills from the request body, so
+  // there is no single resourceId and `fetchById` (which sees route params
+  // only) cannot represent the batch. Both handlers set `auditBefore` and
+  // `auditAfter` themselves — see buildBulkSkillAuditSnapshot in
+  // routes/skill/skill.routes.ts.
+  "/api/skills/bulk-visibility": {
+    resourceType: "skill",
+    action: "skill.bulk_updated",
+    resourceIdSource: "organizationContext",
+  },
+  "/api/skills/bulk-delete": {
+    resourceType: "skill",
+    action: "skill.bulk_deleted",
+    resourceIdSource: "organizationContext",
+  },
   // Restore is a POST carrying :id; register it directly so the hook captures
   // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
   // returns soft-deleted rows, so the "before" is the still-deleted skill.
@@ -913,6 +928,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
+  // A batch of documents is still a mutation of the connector that owns them,
+  // exactly as the single-document delete is, so it keeps connector.updated
+  // and the connector's own snapshot rather than inventing a document-level
+  // resource type for rows that are never audited individually.
+  "/api/connectors/:id/documents/bulk": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
   "/api/connectors/:id/documents/:docId": {
     resourceType: "connector",
     action: "connector.updated",
@@ -975,6 +1000,105 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "mcpOauthClient",
     action: "mcpOauthClient.rotated",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
+  },
+
+  // ===== Bulk routes =====
+  //
+  // `PATCH /api/<resource>/bulk` and `DELETE /api/<resource>/bulk` share one
+  // path, so they are told apart by `actionByMethod` rather than by `action`.
+  //
+  // Every one of them is registered explicitly, for two reasons. Walking up to
+  // the parent (`/api/agents`, say) would derive `agent.updated`/`agent.deleted`
+  // and lose the fact that a batch is what happened — the one thing an auditor
+  // reading a bulk delete most needs to see. And none of them can use
+  // `fetchById`: a batch has no single resource id, and the rows it touches are
+  // named by the request body, which the fetcher never sees. The handlers set
+  // `auditBefore`/`auditAfter` themselves, through `runBulk`'s `audit` option,
+  // so one record covers the whole batch on both sides.
+  "/api/agents/bulk": {
+    resourceType: "agent",
+    resourceIdSource: "organizationContext",
+    actionByMethod: {
+      PATCH: "agent.bulk_updated",
+      DELETE: "agent.bulk_deleted",
+    },
+  },
+  "/api/apps/bulk": {
+    resourceType: "app",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { PATCH: "app.bulk_updated", DELETE: "app.bulk_deleted" },
+  },
+  "/api/projects/bulk": {
+    resourceType: "project",
+    resourceIdSource: "organizationContext",
+    actionByMethod: {
+      PATCH: "project.bulk_updated",
+      DELETE: "project.bulk_deleted",
+    },
+  },
+  "/api/api-keys/bulk": {
+    resourceType: "apiKey",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "apiKey.bulk_deleted" },
+  },
+  "/api/service-accounts/bulk": {
+    resourceType: "serviceAccount",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "serviceAccount.bulk_deleted" },
+  },
+  "/api/environments/bulk": {
+    resourceType: "environment",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "environment.bulk_deleted" },
+  },
+  "/api/roles/bulk": {
+    resourceType: "role",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "role.bulk_deleted" },
+  },
+  "/api/teams/bulk": {
+    resourceType: "team",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "team.bulk_deleted" },
+  },
+  "/api/mcp_server/bulk": {
+    resourceType: "mcpServer",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "mcpServer.bulk_deleted" },
+  },
+  "/api/llm-models/bulk": {
+    resourceType: "llmModel",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { PATCH: "llmModel.bulk_updated" },
+  },
+  "/api/knowledge-bases/bulk": {
+    resourceType: "knowledgeBase",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "knowledgeBase.bulk_deleted" },
+  },
+  "/api/connectors/bulk": {
+    resourceType: "connector",
+    resourceIdSource: "organizationContext",
+    actionByMethod: {
+      PATCH: "connector.bulk_updated",
+      DELETE: "connector.bulk_deleted",
+    },
+  },
+  "/api/knowledge-files/bulk": {
+    resourceType: "knowledgeFile",
+    resourceIdSource: "organizationContext",
+    actionByMethod: {
+      PATCH: "knowledgeFile.bulk_updated",
+      DELETE: "knowledgeFile.bulk_deleted",
+    },
+  },
+  "/api/knowledge-directories/bulk": {
+    resourceType: "knowledgeDirectory",
+    resourceIdSource: "organizationContext",
+    actionByMethod: {
+      PATCH: "knowledgeDirectory.bulk_updated",
+      DELETE: "knowledgeDirectory.bulk_deleted",
+    },
   },
 };
 

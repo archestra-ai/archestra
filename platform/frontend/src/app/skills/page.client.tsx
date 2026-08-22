@@ -1,7 +1,15 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  MAX_BULK_IDS,
+} from "@archestra/shared";
+import type {
+  ColumnDef,
+  RowSelectionState,
+  SortingState,
+} from "@tanstack/react-table";
 import {
   ArchiveRestore,
   BookOpen,
@@ -42,7 +50,9 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -62,6 +72,8 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  useAllMatchingSkills,
+  useBulkDeleteSkills,
   usePermanentlyDeleteSkill,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -70,6 +82,7 @@ import {
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
 import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
@@ -119,6 +132,23 @@ function SkillsList() {
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
 
+  /**
+   * Everything that narrows the table, with the page itself left out — the
+   * visible page and "every matching skill" differ only by limit/offset.
+   */
+  const listFilters = {
+    search: search || undefined,
+    sourceRepo: sourceRepo || undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+    status: isDeletedView ? ("deleted" as const) : undefined,
+    sortBy,
+    sortDirection,
+  };
+
   const {
     data: skills,
     isPending,
@@ -129,16 +159,7 @@ function SkillsList() {
     {
       limit: pageSize,
       offset: pageIndex * pageSize,
-      search: search || undefined,
-      sourceRepo: sourceRepo || undefined,
-      scope: scopeFilter.scope,
-      teamIds: scopeFilter.teamIds,
-      authorIds: scopeFilter.authorIds,
-      excludeAuthorIds: scopeFilter.excludeAuthorIds,
-      excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
-      status: isDeletedView ? "deleted" : undefined,
-      sortBy,
-      sortDirection,
+      ...listFilters,
     },
     { toastOnError: false },
   );
@@ -198,6 +219,9 @@ function SkillsList() {
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
     useState<SkillItem | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
@@ -206,6 +230,40 @@ function SkillsList() {
   const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
+  const bulkDeleteSkills = useBulkDeleteSkills();
+
+  // Derived from what is on screen rather than read straight out of
+  // `rowSelection`: the table is server-paginated, so a bulk action must only
+  // ever touch rows the user can actually see. Ids left over from another page
+  // simply drop out here — including in the trash view, which renders no
+  // checkbox column and so must never surface a bar for a skill that was
+  // ticked while active and deleted from under the selection.
+  const pageSelection = isDeletedView
+    ? []
+    : items.filter((skill) => rowSelection[skill.id]);
+
+  /**
+   * An escalation is remembered as the filters it was made under, so changing
+   * a filter drops it rather than silently re-pointing "all 203 skills" at a
+   * different 203. It also keeps the offer honest: it is only ever shown when
+   * the whole matching set fits in one bulk request, so an escalation that
+   * survived a filter change could otherwise claim more than it can act on.
+   */
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+
+  const { data: allMatchingSkills, isFetching: isFetchingAllMatching } =
+    useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
+
+  const selectedSkills = allMatchingSelected
+    ? (allMatchingSkills ?? pageSelection)
+    : pageSelection;
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
@@ -244,6 +302,10 @@ function SkillsList() {
   }, [pathname, router, searchParams]);
 
   const columns: ColumnDef<SkillItem>[] = [
+    // A deleted row can only be restored or purged, neither of which this
+    // selection drives, so the trash view keeps its rows unselectable rather
+    // than offering a checkbox with nothing to apply.
+    ...(isDeletedView ? [] : [selectColumn]),
     {
       id: "name",
       accessorKey: "name",
@@ -570,6 +632,45 @@ function SkillsList() {
               <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>
 
+            <BulkActionsBar
+              count={selectedSkills.length}
+              noun="skill"
+              countTestId={E2eTestId.SkillsBulkSelectionCount}
+              onClear={clearSelection}
+              busy={isFetchingAllMatching}
+              selectAllMatching={{
+                total: totalSkills,
+                pageFullySelected:
+                  items.length > 0 && pageSelection.length === items.length,
+                active: allMatchingSelected,
+                onSelectAll: () => setEscalatedFor(filterSignature),
+                matchDescription: search
+                  ? "match this search query"
+                  : "match the current filters",
+                max: MAX_BULK_IDS,
+              }}
+              className="mb-3"
+            >
+              <PermissionButton
+                permissions={{ skill: ["update"] }}
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkVisibilityOpen(true)}
+              >
+                <Pencil className="h-4 w-4" />
+                <span>Edit visibility</span>
+              </PermissionButton>
+              <PermissionButton
+                permissions={{ skill: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActionsBar>
+
             <DataTable
               columns={columns}
               data={items}
@@ -605,11 +706,48 @@ function SkillsList() {
                   ? undefined
                   : (row) => router.push(`/skills/${row.id}`)
               }
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
               isLoading={isFetching}
             />
           </>
         )}
       </PageLayout>
+
+      {bulkVisibilityOpen && (
+        <BulkVisibilityDialog
+          skills={selectedSkills}
+          open={bulkVisibilityOpen}
+          onOpenChange={setBulkVisibilityOpen}
+          onApplied={clearSelection}
+        />
+      )}
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete skills"
+          description={`Delete ${selectedSkills.length} ${
+            selectedSkills.length === 1 ? "skill" : "skills"
+          }? Each one is removed along with its instructions and resource files.`}
+          isPending={bulkDeleteSkills.isPending}
+          onConfirm={() => {
+            bulkDeleteSkills.mutate(
+              selectedSkills.map((skill) => skill.id),
+              {
+                onSuccess: (result) => {
+                  if (!result || result.succeeded.length === 0) return;
+                  clearSelection();
+                  setBulkDeleteOpen(false);
+                },
+              },
+            );
+          }}
+          confirmLabel="Delete skills"
+          pendingLabel="Deleting..."
+        />
+      )}
 
       {deletingSkill && (
         <DeleteSkillDialog
@@ -646,6 +784,35 @@ function SkillsList() {
     </LoadingWrapper>
   );
 }
+
+/**
+ * The multiselect checkbox column. Clicks are kept off the row so ticking a
+ * skill does not also open its editor, which the row click opens.
+ */
+const selectColumn: ColumnDef<SkillItem> = {
+  id: "select",
+  size: 40,
+  minSize: 44,
+  header: ({ table }) => (
+    <Checkbox
+      checked={
+        table.getIsAllPageRowsSelected() ||
+        (table.getIsSomePageRowsSelected() && "indeterminate")
+      }
+      onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+      onClick={(event) => event.stopPropagation()}
+      aria-label="Select all skills on this page"
+    />
+  ),
+  cell: ({ row }) => (
+    <Checkbox
+      checked={row.getIsSelected()}
+      onCheckedChange={(value) => row.toggleSelected(!!value)}
+      onClick={(event) => event.stopPropagation()}
+      aria-label={`Select ${row.original.name}`}
+    />
+  ),
+};
 
 function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;

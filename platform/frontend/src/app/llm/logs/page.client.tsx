@@ -12,12 +12,10 @@ import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
-import {
-  ProfileFilterOption,
-  SourceFilterOption,
-} from "@/components/log-filter-option";
+import { SourceFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
@@ -534,19 +532,25 @@ function SessionsTable() {
           )}
         </div>
 
-        <SearchableSelect
+        {/* Two people's personal proxies can both be called "My Proxy", so the
+            picker carries each one's scope and owner email rather than a bare
+            name. */}
+        <AgentSelector
+          mode="single"
+          flat
+          agents={agents ?? []}
           value={profileFilter}
           onValueChange={handleProfileFilterChange}
-          placeholder="Filter by Profile"
-          items={[
-            { value: "all", label: "All Agents & LLM Proxies" },
-            ...(agents?.map((agent) => ({
-              value: agent.id,
-              label: agent.name,
-              content: <ProfileFilterOption profile={agent} />,
-              selectedContent: <ProfileFilterOption profile={agent} />,
-            })) || []),
-          ]}
+          sentinelOption={{
+            value: "all",
+            label: "All Agents & LLM Proxies",
+          }}
+          // Only reached when the URL pins an id that no longer resolves to an
+          // agent (e.g. a bookmarked filter whose target was deleted); the
+          // sentinel label covers the ordinary unfiltered state.
+          placeholder="Filter by Agent"
+          searchPlaceholder="Search agents and LLM proxies…"
+          emptyMessage="No agents or LLM proxies found."
           className="w-full sm:w-[200px]"
         />
 

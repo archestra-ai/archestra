@@ -1516,6 +1516,7 @@ export const geminiAdapterFactory: LLMProvider<
       apiKey,
       "[GeminiProxyV2]",
       options.baseUrl,
+      options.model,
     );
 
     // Wrap with observability for request duration metrics

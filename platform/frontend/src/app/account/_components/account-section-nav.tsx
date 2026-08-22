@@ -1,28 +1,30 @@
 "use client";
 
-import {
-  type AccountSectionId,
-  accountSections,
-} from "@/app/account/_components/account-sections";
+import { usePathname } from "next/navigation";
+import { accountSections } from "@/app/account/_components/account-sections";
 import { SectionNav } from "@/components/section-nav";
 
 /**
- * Section switcher for the account page. Each entry is a real link to
- * `?section=<id>` so sections are deep-linkable and survive back/forward; the
- * link deliberately drops any other query params, so a `?highlight=` deep link
- * doesn't re-fire its dialog once the reader moves to another section.
+ * Section switcher for the account pages. Each entry is a real route, so the
+ * active one is read off the pathname rather than tracked in state.
  */
-export function AccountSectionNav({
-  activeSection,
-}: {
-  activeSection: AccountSectionId;
-}) {
+export function AccountSectionNav() {
+  const pathname = usePathname();
+
+  // Longest match wins: every href starts with "/account", so a plain
+  // `startsWith` would light up Profile on every section.
+  const activeHref =
+    accountSections
+      .map(({ href }) => href)
+      .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+      .sort((a, b) => b.length - a.length)[0] ?? "/account";
+
   return (
     <SectionNav
       label="Personal settings sections"
-      activeHref={`/account?section=${activeSection}`}
-      items={accountSections.map(({ id, label, Icon }) => ({
-        href: `/account?section=${id}`,
+      activeHref={activeHref}
+      items={accountSections.map(({ href, label, Icon }) => ({
+        href,
         label,
         Icon,
       }))}

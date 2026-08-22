@@ -341,9 +341,12 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     );
   });
 
-  // `full` exposure: a tool missing from the list really is disabled there, so
-  // the pre-existing refusal must survive untouched.
-  test("still refuses a disabled tool when the list has no dispatch pair", async ({
+  // `full` exposure, no dispatch pair: the name is absent from the caller's own
+  // tool list, so no caller would execute it anyway. Refusing dropped the tool
+  // call and ended the turn, which an agent loop reads as "the assistant is
+  // finished" — fatal for an unattended run. The call is handed back instead,
+  // and the caller rejects it the way it rejects any unknown tool.
+  test("hands an undeclared tool call back instead of ending the turn", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -372,9 +375,18 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    const message = response.json().choices[0].message;
-    expect(message.tool_calls).toBeUndefined();
-    expect(message.content).toContain("not enabled for this conversation");
+    const choice = response.json().choices[0];
+
+    // The turn still ends on the tool call. `stop` here is the bug: it is what
+    // makes an agent loop hand control back to a human who may not be there.
+    expect(choice.finish_reason).toBe("tool_calls");
+    expect(choice.message.tool_calls).toHaveLength(1);
+    expect(choice.message.tool_calls[0].function.name).toBe(
+      "gh-developer-agent__pull_request_read",
+    );
+    expect(choice.message.content ?? "").not.toContain(
+      "not enabled for this conversation",
+    );
   });
 
   // The repaired call faces the same gate a run_tool dispatch the model wrote

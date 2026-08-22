@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "@/test";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
   UnsupportedEmbeddingProviderError,
@@ -17,6 +18,37 @@ import {
   isRetryableEmbeddingError,
   OpenAIEmbeddingError,
 } from "./index";
+
+// The Vertex publisher-model gate follows Vertex AI mode; the tests flip it
+// explicitly. Nothing in this file drives the Gemini client itself, so the
+// SDK factory is an inert stub.
+const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
+vi.mock("@/clients/gemini-client", () => ({
+  createGoogleGenAIClient: vi.fn(),
+  isVertexAiEnabled: mockIsVertexAiEnabled,
+}));
+
+beforeEach(() => {
+  mockIsVertexAiEnabled.mockReturnValue(false);
+});
+
+describe("Bedrock multimodal embedding capability", () => {
+  test("drives WebP and GIF for Titan and Cohere v3 after live endpoint verification", () => {
+    for (const model of [
+      "amazon.titan-embed-image-v1",
+      "cohere.embed-english-v3",
+      "cohere.embed-multilingual-v3",
+    ]) {
+      expect(getEmbeddingClientInputModalities("bedrock", model)).toEqual([
+        "text",
+        "image",
+      ]);
+      expect(
+        getEmbeddingClientAcceptedImageMimeTypes("bedrock", model),
+      ).toEqual(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+    }
+  });
+});
 
 describe("Cohere direct embedding capability", () => {
   test("drives text and images for the table's multimodal models, with Cohere's image formats", () => {
@@ -39,6 +71,35 @@ describe("Cohere direct embedding capability", () => {
   });
 });
 
+describe("Voyage embedding capability", () => {
+  test("drives text and images only for the multimodal models", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-multimodal-3.5"),
+    ).toEqual(["text", "image"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-multimodal-3"),
+    ).toEqual(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  });
+
+  test("keeps the text-only models text-only", () => {
+    expect(getEmbeddingClientInputModalities("voyage", "voyage-4")).toEqual([
+      "text",
+    ]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-4"),
+    ).toBeNull();
+  });
+
+  test("degrades a Voyage model outside the table to text-only", () => {
+    expect(
+      getEmbeddingClientInputModalities("voyage", "voyage-99-omni"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes("voyage", "voyage-99-omni"),
+    ).toBeNull();
+  });
+});
+
 describe("Gemini multimodal embedding capability", () => {
   test("enables the stable model with only its embedding image formats", () => {
     expect(
@@ -56,6 +117,40 @@ describe("Gemini multimodal embedding capability", () => {
     expect(
       getEmbeddingClientInputModalities("gemini", "gemini-embedding-2-preview"),
     ).toEqual(["text"]);
+  });
+});
+
+describe("Vertex multimodal embedding capability", () => {
+  test("drives text and images for multimodalembedding@001 in Vertex AI mode, with its documented formats", () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+    expect(
+      getEmbeddingClientInputModalities("gemini", "multimodalembedding@001"),
+    ).toBeNull();
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes(
+        "gemini",
+        "multimodalembedding@001",
+      ),
+    ).toEqual([
+      "image/png",
+      "image/jpeg",
+      "image/bmp",
+      "image/gif",
+      "image/webp",
+    ]);
+  });
+
+  test("clamps multimodalembedding@001 to text-only outside Vertex AI mode — the model does not exist on the Gemini API", () => {
+    mockIsVertexAiEnabled.mockReturnValue(false);
+    expect(
+      getEmbeddingClientInputModalities("gemini", "multimodalembedding@001"),
+    ).toEqual(["text"]);
+    expect(
+      getEmbeddingClientAcceptedImageMimeTypes(
+        "gemini",
+        "multimodalembedding@001",
+      ),
+    ).toBeNull();
   });
 });
 

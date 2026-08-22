@@ -179,7 +179,6 @@ class KbDocumentModel {
     /** Restrict to documents whose effective audience holds this group token. */
     groupToken?: string;
   }): Promise<KbDocumentListItemWithoutContent[]> {
-    const normalizedSearch = params.search?.trim();
     let query = db
       .select({
         id: schema.kbDocumentsTable.id,
@@ -206,20 +205,7 @@ class KbDocumentModel {
           schema.kbDocumentsTable.connectorId,
         ),
       )
-      .where(
-        and(
-          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
-          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            params.organizationId,
-          ),
-          normalizedSearch
-            ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
-            : undefined,
-          groupTokenFilter(params.groupToken),
-        ),
-      )
+      .where(connectorDocumentsFilter(params))
       .orderBy(desc(schema.kbDocumentsTable.updatedAt))
       .$dynamic();
 
@@ -366,7 +352,6 @@ class KbDocumentModel {
     /** Restrict to documents whose effective audience holds this group token. */
     groupToken?: string;
   }): Promise<number> {
-    const normalizedSearch = params.search?.trim();
     const [result] = await db
       .select({ count: count() })
       .from(schema.kbDocumentsTable)
@@ -377,22 +362,89 @@ class KbDocumentModel {
           schema.kbDocumentsTable.connectorId,
         ),
       )
-      .where(
-        and(
-          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
-          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            params.organizationId,
-          ),
-          normalizedSearch
-            ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
-            : undefined,
-          groupTokenFilter(params.groupToken),
-        ),
-      );
+      .where(connectorDocumentsFilter(params));
 
     return result?.count ?? 0;
+  }
+
+  /**
+   * Deletes every document matching the caller's current filters, without the
+   * client having to enumerate ids.
+   *
+   * This is what makes "select all 22,921 documents" possible: posting that
+   * many uuids is neither a sane request body nor something worth authorizing
+   * row by row, so the filter travels instead and the database does the work
+   * in one statement.
+   *
+   * The predicate is {@link connectorDocumentsFilter}, the same one the
+   * listing and its count use, so what is destroyed is exactly what the table
+   * was showing. Ids are resolved through a subquery because the fence lives
+   * on the joined connector row, which a bare DELETE cannot see.
+   *
+   * Returns how many rows actually went, counted from the deleted rows
+   * themselves rather than a driver rowCount, which is not reported reliably
+   * on every backend this runs against.
+   */
+  static async deleteByConnectorFilter(params: {
+    connectorId: string;
+    organizationId: string;
+    search?: string;
+    groupToken?: string;
+  }): Promise<number> {
+    const matching = db
+      .select({ id: schema.kbDocumentsTable.id })
+      .from(schema.kbDocumentsTable)
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.knowledgeBaseConnectorsTable.id,
+          schema.kbDocumentsTable.connectorId,
+        ),
+      )
+      .where(connectorDocumentsFilter(params));
+
+    const deleted = await db
+      .delete(schema.kbDocumentsTable)
+      .where(inArray(schema.kbDocumentsTable.id, matching))
+      .returning({ id: schema.kbDocumentsTable.id });
+
+    return deleted.length;
+  }
+
+  /**
+   * The documents a bulk route was asked to act on, fenced to one connector
+   * AND one organization and read in a single query rather than one per id.
+   *
+   * Both fences matter: ids arrive straight from a request body, and a
+   * document id from a different connector — or a different organization —
+   * must be indistinguishable from one that never existed, which is what the
+   * single-document route answers too. Only id and title are selected, since
+   * that is all a bulk delete authorizes on or reports.
+   */
+  static async findForBulkByConnector(params: {
+    documentIds: string[];
+    connectorId: string;
+    organizationId: string;
+  }): Promise<Array<{ id: string; title: string }>> {
+    const { documentIds, connectorId, organizationId } = params;
+    if (documentIds.length === 0) return [];
+
+    return await db
+      .select({
+        id: schema.kbDocumentsTable.id,
+        title: schema.kbDocumentsTable.title,
+      })
+      .from(schema.kbDocumentsTable)
+      .where(
+        and(
+          inArray(schema.kbDocumentsTable.id, documentIds),
+          eq(schema.kbDocumentsTable.connectorId, connectorId),
+          eq(schema.kbDocumentsTable.organizationId, organizationId),
+        ),
+      )
+      // Sorted so an unchanged batch snapshots identically on both sides of
+      // the write and the audit diff stays empty; row order is unspecified.
+      .orderBy(schema.kbDocumentsTable.id);
   }
 
   static async findListItemByIdAndConnector(params: {
@@ -997,6 +1049,39 @@ class KbDocumentModel {
  * on the container-ACL row its `container_key` references (the auto-sync
  * indirection the UI expands the same way).
  */
+/**
+ * The predicate that defines "this connector's documents, as currently
+ * filtered" — shared by the listing, its count, and the bulk delete.
+ *
+ * Extracted deliberately: the bulk delete acts on everything matching the
+ * caller's filters WITHOUT enumerating ids, so if its predicate drifted from
+ * the listing's, the rows destroyed would stop being the rows the user was
+ * looking at. One definition makes that impossible.
+ *
+ * Callers must join `knowledgeBaseConnectorsTable`, which the organization
+ * fence below is expressed against.
+ */
+function connectorDocumentsFilter(params: {
+  connectorId: string;
+  organizationId: string;
+  search?: string;
+  groupToken?: string;
+}) {
+  const normalizedSearch = params.search?.trim();
+  return and(
+    eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+    eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+    eq(
+      schema.knowledgeBaseConnectorsTable.organizationId,
+      params.organizationId,
+    ),
+    normalizedSearch
+      ? ilike(schema.kbDocumentsTable.title, `%${normalizedSearch}%`)
+      : undefined,
+    groupTokenFilter(params.groupToken),
+  );
+}
+
 function groupTokenFilter(groupToken: string | undefined) {
   if (!groupToken) return undefined;
   const tokenJson = JSON.stringify([groupToken]);

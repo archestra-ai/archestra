@@ -222,6 +222,45 @@ class ModelModel {
   }
 
   /**
+   * The models a bulk route was asked to act on, read in one query rather than
+   * one per id. Model rows are global rather than per organization, so unlike
+   * the other bulk loaders there is no tenancy fence to apply here — the route
+   * gate (`llmModel:update`) is the whole permission story.
+   */
+  static async findByIds(ids: string[]): Promise<Model[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await db
+      .select()
+      .from(schema.modelsTable)
+      .where(inArray(schema.modelsTable.id, ids));
+  }
+
+  /**
+   * Ids, names and visibility for a bulk route's audit record, on both sides of
+   * the write. Nothing but what the batch can change.
+   */
+  static async findVisibilityForBulkAudit(
+    ids: string[],
+  ): Promise<Array<{ id: string; modelId: string; ignored: boolean }>> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await db
+      .select({
+        id: schema.modelsTable.id,
+        modelId: schema.modelsTable.modelId,
+        ignored: schema.modelsTable.ignored,
+      })
+      .from(schema.modelsTable)
+      .where(inArray(schema.modelsTable.id, ids))
+      // Sorted so an unchanged batch snapshots identically on both sides.
+      .orderBy(schema.modelsTable.id);
+    return rows.map((row) => ({ ...row, ignored: row.ignored === true }));
+  }
+
+  /**
    * Find model by provider and model ID
    */
   static async findByProviderAndModelId(

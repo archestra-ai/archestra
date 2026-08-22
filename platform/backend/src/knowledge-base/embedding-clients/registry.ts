@@ -12,6 +12,7 @@ import type {
   EmbeddingInput,
   EmbeddingPurpose,
 } from "./types";
+import { callVoyageEmbedding } from "./voyage";
 
 type EmbeddingCall = (params: {
   inputs: EmbeddingInput[];
@@ -88,6 +89,12 @@ export const EMBEDDING_ADAPTERS: Record<
   cohere: {
     call: withPlaceholderKey(callCohereEmbedding),
     discriminator: "cohere:embeddings",
+  },
+  // Embeddings-only provider: it has no chat path to be the "rest" of, so this
+  // adapter is the entire reason `voyage` is a SupportedProvider at all.
+  voyage: {
+    call: withPlaceholderKey(callVoyageEmbedding),
+    discriminator: "voyage:embeddings",
   },
 
   // OpenAI-compatible, honor the `dimensions` parameter.

@@ -4,6 +4,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
+  vi.fn((_parts: unknown[]) => false),
+);
+
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -78,7 +82,18 @@ vi.mock("@/components/ai-elements/tool", () => ({
 }));
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
-  EditableAssistantMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableAssistantMessage: ({
+    text,
+    citationParts,
+  }: {
+    text: string;
+    citationParts?: unknown[];
+  }) => (
+    <div>
+      <span>{text}</span>
+      {citationParts ? <span data-testid="knowledge-citations" /> : null}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/editable-user-message", () => ({
@@ -204,7 +219,8 @@ vi.mock("@/components/chat/tool-status-row", () => ({
 }));
 
 vi.mock("@/components/chat/knowledge-graph-citations", () => ({
-  hasKnowledgeBaseToolCall: () => false,
+  hasKnowledgeBaseToolCall: mockHasKnowledgeBaseToolCall,
+  KnowledgeGraphCitations: () => <div data-testid="knowledge-citations" />,
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -270,6 +286,53 @@ describe("ChatMessages", () => {
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
+    mockHasKnowledgeBaseToolCall.mockReturnValue(false);
+  });
+
+  it("keeps a completed turn's knowledge image visible while a later turn streams", () => {
+    mockHasKnowledgeBaseToolCall.mockImplementation((parts: unknown[]) =>
+      parts.some(
+        (part) =>
+          (part as { type?: string }).type ===
+          "tool-archestra__query_knowledge_sources",
+      ),
+    );
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__query_knowledge_sources",
+            toolCallId: "tool-1",
+            state: "output-available",
+            input: { query: "lobsters" },
+            output: { content: "[image]" },
+          },
+          { type: "text", text: "I found an image." },
+        ],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "What else?" }],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Still working..." }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("knowledge-citations")).toBeInTheDocument();
   });
 
   it("does not render an accordion for an empty reasoning part", () => {

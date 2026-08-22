@@ -471,6 +471,9 @@ export class ModelsDevClient {
     // derived/vertex providers. The externalId contains the original models.dev
     // provider (e.g., "google/gemini-2.5-flash" vs "google-vertex/gemini-2.5-flash").
     const preferredSourcePrefixes: Record<SupportedProvider, string[]> = {
+      // Voyage models come from the KB's own static table, never from
+      // models.dev, so there is no source to prefer.
+      voyage: [],
       gemini: ["google/"], // Prefer google over google-vertex
       openai: ["openai/"], // Prefer direct providers over aggregators
       openrouter: ["openrouter/"],

@@ -38,6 +38,8 @@ When the agent has the [code sandbox](./platform-code-sandbox) available, a mess
 
 Press Enter while a response is streaming to queue your message. Queued messages appear above the prompt input and send in order as each turn finishes — you can keep typing without waiting. Remove a queued message with its X, or press ArrowUp on an empty prompt to pull the newest one back for editing.
 
+Queueing works during [context compaction](#context-compaction) too. A message you send while the conversation is being compacted waits in the queue, then sends once compaction finishes — so a long chat never drops what you typed.
+
 While a response streams, the send button becomes Stop. Clicking it (or pressing Esc) stops the response and pauses the queue; sending a new message resumes it.
 
 ### MCP Elicitation

@@ -288,6 +288,47 @@ describe("planDispatchModeToolCallRewrites", () => {
 // normalizeToolCallsForPolicy
 // --------------------------------------------------------------------------
 describe("normalizeToolCallsForPolicy", () => {
+  // Regression: an MCP client namespaces the gateway's tools with the alias it
+  // was registered under, and that alias is free text typed at `claude mcp add`
+  // time — so the gateway's own branded prefix ends up a segment deeper than
+  // the decoration-stripping canonicalizer reaches, and a strict match misses
+  // the wrapper. A missed wrapper is not a harmless miss: the dispatch is never
+  // unwrapped, so policies are evaluated against a name that matches no `tools`
+  // row and fail open instead of against the tool the call actually runs.
+  test("unwraps a run_tool dispatch decorated with an alias the platform does not know", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "mcp__some_local_alias__archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "github__create_or_update_file",
+          tool_args: { path: "README.md" },
+        }),
+      },
+    ]);
+
+    expect(result[0].toolCallName).toBe("github__create_or_update_file");
+    expect(result[0].isRunToolDispatchTarget).toBe(true);
+    expect(JSON.parse(result[0].toolCallArgs)).toEqual({ path: "README.md" });
+  });
+
+  // The loosening must stay anchored on a prefix the branding recognizes as
+  // ours: a third-party tool that happens to be called `run_tool` is an
+  // ordinary tool, and treating it as the wrapper would hand policy evaluation
+  // whatever that server put in `tool_name`.
+  test("does not treat a third-party tool named run_tool as a dispatch", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "mcp__some_local_alias__github__run_tool",
+        arguments: JSON.stringify({ tool_name: "anything__at_all" }),
+      },
+    ]);
+
+    expect(result[0].toolCallName).toBe(
+      "mcp__some_local_alias__github__run_tool",
+    );
+    expect(result[0].isRunToolDispatchTarget).toBeUndefined();
+  });
+
   test("passes through valid JSON string arguments", () => {
     const result = normalizeToolCallsForPolicy([
       { name: "tool1", arguments: '{"key":"value"}' },

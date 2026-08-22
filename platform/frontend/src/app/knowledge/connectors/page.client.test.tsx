@@ -23,6 +23,12 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useAllMatchingConnectors: () => ({ data: [] }),
+  useBulkDeleteConnectors: () => ({ mutate: vi.fn(), isPending: false }),
+  useBulkUpdateConnectorVisibility: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useRestoreConnector: () => ({
     mutate: mockRestoreMutate,
     isPending: false,

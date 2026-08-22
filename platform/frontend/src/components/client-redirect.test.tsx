@@ -14,11 +14,9 @@ describe("ClientRedirect", () => {
   });
 
   it("forwards to the target route and renders nothing", () => {
-    const { container } = render(
-      <ClientRedirect to="/account?section=api-keys" />,
-    );
+    const { container } = render(<ClientRedirect to="/account/api-keys" />);
 
-    expect(mockReplace).toHaveBeenCalledWith("/account?section=api-keys");
+    expect(mockReplace).toHaveBeenCalledWith("/account/api-keys");
     expect(container).toBeEmptyDOMElement();
   });
 });

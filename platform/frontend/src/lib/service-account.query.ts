@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ServiceAccount =
@@ -11,6 +12,7 @@ export type ServiceAccountDetail =
 export type ServiceAccountToken = ServiceAccountDetail["tokens"][number];
 
 const {
+  bulkDeleteServiceAccounts,
   createServiceAccount,
   createServiceAccountToken,
   deleteServiceAccount,
@@ -162,6 +164,26 @@ export function useCreateServiceAccountToken() {
         queryKey: ["service-account", variables.id],
       });
     },
+  });
+}
+
+/**
+ * Deletes a selection of service accounts in one request. Deliberately not
+ * `useDeleteServiceAccount`, which toasts per call and so would fire one toast
+ * per row; the batch reports itself once, naming anything that did not go.
+ */
+export function useBulkDeleteServiceAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (accounts: readonly { id: string; name: string }[]) =>
+      bulkDeleteServiceAccounts({
+        body: { ids: accounts.map((account) => account.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] }),
   });
 }
 

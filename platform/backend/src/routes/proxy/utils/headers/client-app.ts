@@ -1,9 +1,11 @@
 import {
   CLAUDE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  CURSOR_CLIENT_ID,
   isCodexClientMetadata,
   isCodexOriginator,
   isCodexUserAgent,
+  isCursorUserAgent,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
@@ -72,6 +74,22 @@ export function detectCodexClientId(
     isCodexUserAgent(getHeaderValue(headers, "user-agent"))
   ) {
     return CODEX_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Cursor client auto-discovery — the Cursor counterpart to
+ * {@link detectClaudeClientId}. Cursor's BYOK requests are built and sent by
+ * Cursor's backend and carry exactly one client-identity signal: the
+ * `User-Agent: Cursor/<version>` header (no originator-style header, no
+ * metadata body field). See {@link isCursorUserAgent}.
+ */
+export function detectCursorClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof CURSOR_CLIENT_ID | undefined {
+  if (isCursorUserAgent(getHeaderValue(headers, "user-agent"))) {
+    return CURSOR_CLIENT_ID;
   }
   return undefined;
 }

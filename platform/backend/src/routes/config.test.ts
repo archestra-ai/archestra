@@ -154,6 +154,7 @@ describe("config routes", () => {
       "openrouter",
       "perplexity",
       "vllm",
+      "voyage",
       "xai",
       "zhipuai",
     ]);

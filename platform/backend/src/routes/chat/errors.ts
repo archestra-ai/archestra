@@ -1419,6 +1419,10 @@ function mapGithubCopilotErrorToCode(
  * if a new provider is added to SupportedProvider without updating this map.
  */
 const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
+  // Embeddings-only provider: it never reaches the chat error path. The
+  // OpenAI-compatible handler stands in so an unexpected caller still gets a
+  // classified error rather than a crash.
+  voyage: openAiCompatibleErrorHandler,
   openai: openAiCompatibleErrorHandler,
   archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),

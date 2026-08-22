@@ -267,9 +267,16 @@ jobs:
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
     # a *finished* job hanging until GitHub's 6h default. Fail fast instead.
-    # 30 (not 20) because fork PRs run without cache secrets and pay a full
-    # cold build on a 4vcpu runner.
-    timeout-minutes: 30
+    # 30 was sized for fork PRs, which run without cache secrets and pay a
+    # full cold build on a 4vcpu runner. That is too tight for the private
+    # mirror, where task-env sessions open their PRs: ubuntu-latest is
+    # 4-vCPU/16-GB for public repos but 2-vCPU/7-GB for private ones, and the
+    # job that finishes in ~5 min here needed 22m28s on its one clean mirror
+    # run while 9 of the other 11 burned the whole budget (30m19s-30m42s,
+    # including one run started after remote caching was configured there).
+    # So those cancellations were the ceiling, not a hang. Sized for the
+    # slowest hardware this runs on, as backend-unit-tests below already is.
+    timeout-minutes: 45
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:

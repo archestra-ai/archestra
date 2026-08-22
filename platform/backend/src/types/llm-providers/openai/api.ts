@@ -94,6 +94,15 @@ export const ChatCompletionRequestSchema = z
       .nullable()
       .optional(),
     stream: z.boolean().nullable().optional(),
+    stream_options: z
+      .object({ include_usage: z.boolean().optional() })
+      .nullable()
+      .optional(),
+    // A stable end-user identifier some clients send for abuse detection and
+    // request grouping. Cursor stamps it on every BYOK request; session
+    // extraction reads it as the lowest-priority session-id signal
+    // (sessionSource "openai_user"), so it must survive validation.
+    user: z.string().optional(),
   })
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487`,

@@ -627,6 +627,18 @@ class MinimaxStreamAdapter
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal (finish_reason "stop",
   // no tool calls) instead of the blocked tool calls.
+  // A refusal does not erase what the model already said: its text streamed as
+  // it arrived and the refusal was appended after it as further deltas, which
+  // clients concatenate onto what they have accumulated. Recording the refusal
+  // alone deletes the model's own answer from the turn, leaving anything that
+  // reads it back a turn in which the model never spoke.
+  private contentWithAnyRefusal(): string | null {
+    if (this.replacedText === null) {
+      return this.state.text || null;
+    }
+    return `${this.state.text}${this.replacedText}`;
+  }
+
   private replacedText: string | null = null;
   private request: MinimaxRequest | undefined; // Store request for token estimation (optional)
 
@@ -909,10 +921,13 @@ class MinimaxStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.replacedText ?? (this.state.text || null),
+            content: this.contentWithAnyRefusal(),
             // Convert accumulated reasoning back to reasoning_details format if
-            // present, mirrored into reasoning_content for OpenAI-compatible clients
-            ...(this.replacedText === null && this.lastReasoningText
+            // present, mirrored into reasoning_content for OpenAI-compatible
+            // clients. Kept when a refusal replaced the turn too: the model
+            // produced it, and dropping it is the same erasure as dropping the
+            // answer text.
+            ...(this.lastReasoningText
               ? {
                   reasoning_details: [{ text: this.lastReasoningText }],
                   reasoning_content: this.lastReasoningText,

@@ -4,6 +4,7 @@ export * from "./app-gallery-categories";
 export * from "./app-recording";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
+export * from "./bulk";
 export * from "./cascade-scenarios";
 export * from "./catalog-runtime-fields";
 export * from "./catalog-shape-fixtures";

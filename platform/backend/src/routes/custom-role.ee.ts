@@ -15,6 +15,7 @@ import {
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const CreateUpdateRoleNameSchema = z
   .string()
@@ -242,6 +243,77 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(normalizeRoleResponse(result.roleData));
+    },
+  );
+
+  fastify.delete(
+    "/api/roles/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteRoles,
+        description:
+          "Delete several custom roles in one request. A role that cannot be " +
+          "deleted — a predefined one, or one still held by a member — is " +
+          "reported in `failed` with that reason, and the rest of the batch " +
+          "still applies.",
+        tags: ["Roles"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, headers } = request;
+      const snapshot = async (ids: string[]) => {
+        const roles = await Promise.all(
+          ids.map((id) => OrganizationRoleModel.getById(id, organizationId)),
+        );
+        return {
+          roles: roles
+            .filter((role) => role !== null)
+            .map((role) => ({ id: role.id, role: role.role }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "roles bulk delete",
+        notFoundMessage: "Role not found",
+        unexpectedMessage: "Could not delete this role",
+        load: async (ids) => {
+          const roles = await Promise.all(
+            ids.map((id) => OrganizationRoleModel.getById(id, organizationId)),
+          );
+          return new Map(
+            roles
+              .filter((role) => role !== null)
+              .map((role) => [role.id, role] as const),
+          );
+        },
+        describe: (role) => role.role,
+        authorize: async (role) => {
+          const check = await OrganizationRoleModel.canDelete(
+            role.id,
+            organizationId,
+          );
+          if (!check.canDelete) {
+            throw new ApiError(400, check.reason || "Cannot delete role");
+          }
+        },
+        applyEach: async (role) => {
+          await betterAuth.api.deleteOrgRole({
+            headers: headers as HeadersInit,
+            body: { roleId: role.id, organizationId },
+          });
+          OrganizationRoleModel.invalidatePermissionsCacheForRole(
+            organizationId,
+            role.role,
+          );
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

@@ -1188,7 +1188,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
 
 - **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
-  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`, then to `us-east-1`
   - Example: `us-east-1`
 
 - **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.
@@ -1216,6 +1216,13 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `us-central1`
   - Example: `us-central1`, `europe-west1`, `asia-northeast1`
   - In our testing, `us-central1` and `global` returned the most reliable Gemini publisher model listings. Some regions, including `us-east1`, may return incomplete model catalogs from Vertex AI model discovery APIs.
+
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Use Vertex AI's global endpoint for models that only it serves.
+  - Default: `false`
+  - Vertex AI serves Gemini 3 and newer generations only from `global`. A request pinned to an ordinary region returns 404, so those models stay out of the model catalog while this is off.
+  - Set to `true` to reach them. Models the configured region serves — Gemma, `gemini-embedding-001`, the Gemini 2.5 family — keep using `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`.
+  - Leave it off when the region was chosen for data residency. The global endpoint routes to any region, and you cannot control or see which one handles a request.
+  - Has no effect when `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION` is already `global`.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to Google Cloud service account JSON key file.
   - Optional: Only needed when running outside of GCP or without Workload Identity

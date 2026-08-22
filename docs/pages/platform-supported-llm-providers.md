@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-19
+lastUpdated: 2026-08-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -159,6 +159,8 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | `ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`          | Yes      | Your GCP project ID                    |
 | `ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`         | No       | GCP region (default: `us-central1`)    |
 | `ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE` | No       | Path to service account JSON key file  |
+
+Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/platform-knowledge#image-embedding).
 
 #### GKE with Workload Identity (Recommended)
 
@@ -333,6 +335,8 @@ OpenRouter exposes `:free` model variants that cost nothing. An OpenRouter API k
 When an OpenRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
 
 Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so the pricing is dynamic.
+
+Models that generate audio or images also report a zero per-token price, because they bill per second or per image instead. Archestra doesn't mark those free — the "Free models only" filter leaves them out.
 
 ## Mistral AI
 
@@ -809,6 +813,19 @@ Each Bedrock key carries an AWS region. Amazon enables models per region, so the
 
 A key can also point at a custom endpoint instead, for a VPC or PrivateLink setup. Archestra reads the region back out of that endpoint, and falls back to `us-east-1` when the endpoint carries no region.
 
+### Prompt Caching
+
+Bedrock can reuse the unchanging prefix of a request instead of reprocessing it every turn. That prefix is the system prompt, tool definitions, and earlier turns. Reuse needs an explicit cache marker, and who sets it depends on how the request reaches Bedrock:
+
+- Chat conversations are marked automatically. Archestra marks the stable prefix and the most recent turn, so each turn reuses what the one before it wrote. There is no setting to turn that off.
+- Every other path forwards the markers its caller set, unchanged. On the LLM Proxy that leaves the decision with your own client — Claude Code, for example, marks its own requests. Agent runs reached over A2A, including the Slack, Teams, and Telegram integrations, set no marker of their own, so they go uncached unless the caller adds one.
+
+Bedrock only caches for Claude and the Nova text models. Other families reject a marked request outright, so Archestra marks none of them. An unfamiliar model forfeits the cache rather than failing.
+
+A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
+
+Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
+
 ### Authentication Methods
 
 Bedrock supports two authentication methods:
@@ -892,7 +909,7 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 
 | Variable                                 | Required | Description                                                                          |
 | ---------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `ARCHESTRA_BEDROCK_BASE_URL`             | Yes      | Bedrock runtime endpoint URL (e.g., `https://bedrock-runtime.us-east-1.amazonaws.com`) |
+| `ARCHESTRA_BEDROCK_BASE_URL`             | No       | Optional custom Bedrock runtime endpoint. Without it, Archestra derives `https://bedrock-runtime.<region>.amazonaws.com` from the selected/configured region. |
 | `ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`    | No       | Comma-separated list of provider prefixes to include. When empty (default), all profiles are returned. |
 | `ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS` | No | Comma-separated list of inference region prefixes (e.g., `us,global`). When empty (default), all regions are returned. |
 
@@ -913,7 +930,7 @@ When IAM auth is enabled, Archestra uses the [AWS credential chain](https://docs
 
 #### `ARCHESTRA_BEDROCK_BASE_URL`
 
-**Required** to enable the Bedrock provider. The URL format follows AWS regional endpoints:
+Optional custom endpoint override. Without it, Archestra builds the standard AWS runtime endpoint from the key's selected region, `ARCHESTRA_BEDROCK_REGION`, or `us-east-1` when neither is set:
 
 ```
 https://bedrock-runtime.{region}.amazonaws.com

@@ -6,7 +6,7 @@ export type ClientOptions = {
 
 export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
-export type EmbeddingDimensionsInput = 3072 | 1536 | 1024 | 768 | 384;
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -199,6 +199,35 @@ export type OpenAiChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -299,6 +328,10 @@ export type OpenAiChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type OpenAiChatCompletionResponseInput = {
@@ -1707,6 +1740,35 @@ export type CerebrasChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -1807,6 +1869,10 @@ export type CerebrasChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type CerebrasChatCompletionResponseInput = {
@@ -2188,6 +2254,35 @@ export type MistralChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -2288,6 +2383,10 @@ export type MistralChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type MistralChatCompletionResponseInput = {
@@ -2549,6 +2648,35 @@ export type PerplexityChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -2649,6 +2777,10 @@ export type PerplexityChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     stream_mode?: 'full' | 'concise';
 };
 
@@ -2911,6 +3043,35 @@ export type GroqChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -3011,6 +3172,10 @@ export type GroqChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type GroqChatCompletionResponseInput = {
@@ -3272,6 +3437,35 @@ export type OpenrouterChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -3372,6 +3566,10 @@ export type OpenrouterChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -3627,6 +3825,35 @@ export type VllmChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -3963,6 +4190,35 @@ export type OllamaChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -4573,6 +4829,35 @@ export type DeepSeekChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -4673,6 +4958,10 @@ export type DeepSeekChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -4935,6 +5224,35 @@ export type ArchestraChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -5035,6 +5353,10 @@ export type ArchestraChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -5342,6 +5664,35 @@ export type MinimaxChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -5705,6 +6056,35 @@ export type XaiChatCompletionRequestInput = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -5805,6 +6185,10 @@ export type XaiChatCompletionRequestInput = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type XaiChatCompletionResponseInput = {
@@ -5896,7 +6280,7 @@ export type UserConfigFieldInput = {
 
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
-export type EmbeddingDimensions = 3072 | 1536 | 1024 | 768 | 384;
+export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -6089,6 +6473,35 @@ export type OpenAiChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -6189,6 +6602,10 @@ export type OpenAiChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type OpenAiChatCompletionResponse = {
@@ -7597,6 +8014,35 @@ export type CerebrasChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -7697,6 +8143,10 @@ export type CerebrasChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type CerebrasChatCompletionResponse = {
@@ -8078,6 +8528,35 @@ export type MistralChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8178,6 +8657,10 @@ export type MistralChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type MistralChatCompletionResponse = {
@@ -8439,6 +8922,35 @@ export type PerplexityChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8539,6 +9051,10 @@ export type PerplexityChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     stream_mode?: 'full' | 'concise';
 };
 
@@ -8801,6 +9317,35 @@ export type GroqChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -8901,6 +9446,10 @@ export type GroqChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type GroqChatCompletionResponse = {
@@ -9162,6 +9711,35 @@ export type OpenrouterChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -9262,6 +9840,10 @@ export type OpenrouterChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
@@ -9517,6 +10099,35 @@ export type VllmChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -9853,6 +10464,35 @@ export type OllamaChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool
+         */
+        name: string;
+        /**
+         * Description of the tool
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool
+         */
+        format?: {
+            /**
+             * Unconstrained text format
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -10463,6 +11103,35 @@ export type DeepSeekChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -10563,6 +11232,10 @@ export type DeepSeekChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -10825,6 +11498,35 @@ export type ArchestraChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -10925,6 +11627,10 @@ export type ArchestraChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
     [key: string]: unknown;
 };
 
@@ -11232,6 +11938,35 @@ export type MinimaxChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
         };
     }>;
     /**
@@ -11595,6 +12330,35 @@ export type XaiChatCompletionRequest = {
                 };
             };
         };
+    } | {
+        type: 'custom';
+        /**
+         * The name of the custom tool, used to identify it in tool calls
+         */
+        name: string;
+        /**
+         * Optional description of the custom tool, used to provide more context
+         */
+        description?: string;
+        /**
+         * The input format for the custom tool. Default is unconstrained text.
+         */
+        format?: {
+            /**
+             * Unconstrained text format. Always `text`
+             */
+            type: 'text';
+        } | {
+            type: 'grammar';
+            /**
+             * The grammar definition
+             */
+            definition: string;
+            /**
+             * The syntax of the grammar definition
+             */
+            syntax: 'lark' | 'regex';
+        };
     }>;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -11695,6 +12459,10 @@ export type XaiChatCompletionRequest = {
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
+    stream_options?: {
+        include_usage?: boolean;
+    } | null;
+    user?: string;
 };
 
 export type XaiChatCompletionResponse = {
@@ -12228,7 +12996,7 @@ export type GetAgentsResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -12462,7 +13230,7 @@ export type CreateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -12660,7 +13428,7 @@ export type GetAllAgentsResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -12917,7 +13685,7 @@ export type GetDefaultMcpGatewayResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13086,7 +13854,7 @@ export type GetDefaultLlmProxyResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13335,7 +14103,7 @@ export type ImportAgentResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -13597,7 +14365,7 @@ export type GetAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13824,7 +14592,7 @@ export type UpdateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14251,7 +15019,7 @@ export type RestoreAgentVersionResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14431,7 +15199,7 @@ export type CloneAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15387,6 +16155,215 @@ export type UpdateAgentSkillExclusionsResponses = {
 
 export type UpdateAgentSkillExclusionsResponse = UpdateAgentSkillExclusionsResponses[keyof UpdateAgentSkillExclusionsResponses];
 
+export type BulkDeleteAgentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/bulk';
+};
+
+export type BulkDeleteAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentsError = BulkDeleteAgentsErrors[keyof BulkDeleteAgentsErrors];
+
+export type BulkDeleteAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentsResponse = BulkDeleteAgentsResponses[keyof BulkDeleteAgentsResponses];
+
+export type BulkUpdateAgentsData = {
+    /**
+     * Ids plus the fields to change. Shaped so further bulk-editable fields can be added here rather than as another endpoint.
+     */
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The visibility every agent in the batch moves to.
+         */
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teams?: Array<string>;
+        /**
+         * People to share with. Only meaningful for `scope = personal`; ignored otherwise. Unlike the single-agent update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-agent grant list would survive as a difference the request just asked to remove.
+         */
+        users?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/bulk';
+};
+
+export type BulkUpdateAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateAgentsError = BulkUpdateAgentsErrors[keyof BulkUpdateAgentsErrors];
+
+export type BulkUpdateAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateAgentsResponse = BulkUpdateAgentsResponses[keyof BulkUpdateAgentsResponses];
+
 export type RestoreAgentData = {
     body?: never;
     path: {
@@ -15548,7 +16525,7 @@ export type RestoreAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -18122,6 +19099,103 @@ export type GetApiKeyResponses = {
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
 
+export type BulkDeleteApiKeysData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/api-keys/bulk';
+};
+
+export type BulkDeleteApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteApiKeysError = BulkDeleteApiKeysErrors[keyof BulkDeleteApiKeysErrors];
+
+export type BulkDeleteApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteApiKeysResponse = BulkDeleteApiKeysResponses[keyof BulkDeleteApiKeysResponses];
+
 export type AppGalleryDeviceAuthStartData = {
     body?: never;
     path?: never;
@@ -20313,6 +21387,212 @@ export type UpdateAppResponses = {
 
 export type UpdateAppResponse = UpdateAppResponses[keyof UpdateAppResponses];
 
+export type BulkDeleteAppsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/apps/bulk';
+};
+
+export type BulkDeleteAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAppsError = BulkDeleteAppsErrors[keyof BulkDeleteAppsErrors];
+
+export type BulkDeleteAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAppsResponse = BulkDeleteAppsResponses[keyof BulkDeleteAppsResponses];
+
+export type BulkUpdateAppsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The visibility every app in the batch moves to.
+         */
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teamIds?: Array<string>;
+        /**
+         * People to share with. Only meaningful for `scope = personal`; omitting it revokes existing grants rather than keeping them, since this sets one visibility across the selection.
+         */
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/apps/bulk';
+};
+
+export type BulkUpdateAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateAppsError = BulkUpdateAppsErrors[keyof BulkUpdateAppsErrors];
+
+export type BulkUpdateAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateAppsResponse = BulkUpdateAppsResponses[keyof BulkUpdateAppsResponses];
+
 export type EnableAppData = {
     body?: never;
     path: {
@@ -21796,7 +23076,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -21905,7 +23185,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -22027,7 +23307,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -24755,6 +26035,8 @@ export type BedrockConverseWithDefaultAgentData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -24949,6 +26231,19 @@ export type BedrockConverseWithDefaultAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -25091,6 +26386,8 @@ export type BedrockConverseWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -25288,6 +26585,19 @@ export type BedrockConverseWithAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -25430,6 +26740,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -25638,6 +26950,8 @@ export type BedrockConverseStreamWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -25849,6 +27163,8 @@ export type BedrockConverseWithAgentAndModelData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -26046,6 +27362,19 @@ export type BedrockConverseWithAgentAndModelResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26188,6 +27517,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -28188,7 +29519,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -28236,11 +29567,11 @@ export type GetChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -28358,7 +29689,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -28406,11 +29737,11 @@ export type CreateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -28520,7 +29851,7 @@ export type GetDeletedChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -28568,11 +29899,11 @@ export type GetDeletedChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -28769,7 +30100,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -28817,11 +30148,11 @@ export type GetChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -28941,7 +30272,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -28989,11 +30320,11 @@ export type UpdateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -29545,7 +30876,7 @@ export type ForkChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -29593,11 +30924,11 @@ export type ForkChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -29798,7 +31129,7 @@ export type RestoreChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -29846,11 +31177,11 @@ export type RestoreChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30062,7 +31393,7 @@ export type CompactChatConversationResponses = {
             chatApiKeyId: string | null;
             title: string | null;
             selectedModel: string;
-            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             modelId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
@@ -30110,11 +31441,11 @@ export type CompactChatConversationResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -30500,7 +31831,7 @@ export type GetSharedConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30548,11 +31879,11 @@ export type GetSharedConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30667,7 +31998,7 @@ export type ForkSharedConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30715,11 +32046,11 @@ export type ForkSharedConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30836,7 +32167,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30884,11 +32215,11 @@ export type GenerateChatConversationTitleResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -31005,7 +32336,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -31053,11 +32384,11 @@ export type UpdateChatMessageResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -33389,7 +34720,7 @@ export type CreateConnectionSetupData = {
         baseUrl: string;
         mcpGatewayId?: string;
         llmProxyId?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
         model?: string;
@@ -33488,7 +34819,7 @@ export type CreateConnectionSetupResponse = CreateConnectionSetupResponses[keyof
 
 export type CreateConnectionVirtualKeyData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
     };
     path?: never;
     query?: never;
@@ -34744,6 +36075,103 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type BulkDeleteEnvironmentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments/bulk';
+};
+
+export type BulkDeleteEnvironmentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteEnvironmentsError = BulkDeleteEnvironmentsErrors[keyof BulkDeleteEnvironmentsErrors];
+
+export type BulkDeleteEnvironmentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
 
 export type GeminiEmbeddingsWithDefaultAgentData = {
     body: {
@@ -36165,6 +37593,35 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -36265,6 +37722,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -36614,6 +38075,35 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -36714,6 +38204,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -39044,11 +40538,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39246,11 +40740,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39364,11 +40858,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39480,11 +40974,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39596,11 +41090,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39712,11 +41206,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39805,11 +41299,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -39900,11 +41394,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -40028,6 +41522,8 @@ export type GetInteractionsResponses = {
                                 text: string;
                                 signature?: string;
                             };
+                        } | {
+                            redactedContent: string;
                         } | {
                             redactedReasoning: {
                                 data: string;
@@ -40213,6 +41709,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -40322,6 +41820,19 @@ export type GetInteractionsResponses = {
                                     [key: string]: unknown;
                                 };
                             };
+                        } | {
+                            reasoningContent: {
+                                reasoningText: {
+                                    text: string;
+                                    signature?: string;
+                                };
+                            } | {
+                                redactedContent: string;
+                            } | {
+                                redactedReasoning: {
+                                    data: string;
+                                };
+                            };
                         }>;
                     };
                 };
@@ -40419,11 +41930,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -40988,11 +42499,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41083,11 +42594,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41178,11 +42689,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41273,11 +42784,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41368,11 +42879,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41463,11 +42974,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41558,11 +43069,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41653,11 +43164,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41746,11 +43257,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41839,11 +43350,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41932,11 +43443,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42027,11 +43538,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42122,11 +43633,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42345,6 +43856,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -42445,6 +43985,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -42638,6 +44182,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -42738,6 +44311,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -42865,11 +44442,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43088,6 +44665,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43188,6 +44794,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -43381,6 +44991,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43481,6 +45120,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -43608,11 +45251,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43831,6 +45474,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -43931,6 +45603,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -44124,6 +45800,35 @@ export type GetInteractionsResponses = {
                             };
                         };
                     };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
                 }>;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -44224,6 +45929,10 @@ export type GetInteractionsResponses = {
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
                 [key: string]: unknown;
             } | {
                 [key: string]: unknown;
@@ -44351,11 +46060,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44446,11 +46155,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44609,11 +46318,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44811,11 +46520,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -45013,11 +46722,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -45215,11 +46924,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -45264,7 +46973,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'codex' | 'copilot-cli';
+        client?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Filter by session ID
          */
@@ -45734,11 +47443,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -45936,11 +47645,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46054,11 +47763,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46170,11 +47879,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46286,11 +47995,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46402,11 +48111,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46495,11 +48204,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46590,11 +48299,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -46718,6 +48427,8 @@ export type GetInteractionResponses = {
                             text: string;
                             signature?: string;
                         };
+                    } | {
+                        redactedContent: string;
                     } | {
                         redactedReasoning: {
                             data: string;
@@ -46903,6 +48614,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -47012,6 +48725,19 @@ export type GetInteractionResponses = {
                                 [key: string]: unknown;
                             };
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedContent: string;
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 };
             };
@@ -47109,11 +48835,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -47678,11 +49404,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -47773,11 +49499,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -47868,11 +49594,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -47963,11 +49689,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48058,11 +49784,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48153,11 +49879,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48248,11 +49974,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48343,11 +50069,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48436,11 +50162,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48529,11 +50255,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48622,11 +50348,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48717,11 +50443,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48812,11 +50538,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49035,6 +50761,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49135,6 +50890,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -49328,6 +51087,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49428,6 +51216,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -49555,11 +51347,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49778,6 +51570,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -49878,6 +51699,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50071,6 +51896,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50171,6 +52025,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50298,11 +52156,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50521,6 +52379,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50621,6 +52508,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -50814,6 +52705,35 @@ export type GetInteractionResponses = {
                         };
                     };
                 };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
             }>;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -50914,6 +52834,10 @@ export type GetInteractionResponses = {
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
             [key: string]: unknown;
         } | {
             [key: string]: unknown;
@@ -51041,11 +52965,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51136,11 +53060,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51299,11 +53223,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51501,11 +53425,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51703,11 +53627,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51905,11 +53829,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54891,6 +56815,35 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -54991,6 +56944,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -55340,6 +57297,35 @@ export type KimiChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -55440,6 +57426,10 @@ export type KimiChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -56084,6 +58074,103 @@ export type UpdateKnowledgeBaseResponses = {
 };
 
 export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
+
+export type BulkDeleteKnowledgeBasesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-bases/bulk';
+};
+
+export type BulkDeleteKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeBasesError = BulkDeleteKnowledgeBasesErrors[keyof BulkDeleteKnowledgeBasesErrors];
+
+export type BulkDeleteKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeBasesResponse = BulkDeleteKnowledgeBasesResponses[keyof BulkDeleteKnowledgeBasesResponses];
 
 export type RestoreKnowledgeBaseData = {
     body?: never;
@@ -58216,6 +60303,320 @@ export type GetConnectorDocumentResponses = {
 
 export type GetConnectorDocumentResponse = GetConnectorDocumentResponses[keyof GetConnectorDocumentResponses];
 
+export type BulkDeleteConnectorDocumentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    } | {
+        /**
+         * Delete everything matching the filters below rather than an id list.
+         */
+        all: true;
+        /**
+         * Same title search the listing applies.
+         */
+        search?: string;
+        /**
+         * Same group filter the listing applies.
+         */
+        group?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/bulk';
+};
+
+export type BulkDeleteConnectorDocumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteConnectorDocumentsError = BulkDeleteConnectorDocumentsErrors[keyof BulkDeleteConnectorDocumentsErrors];
+
+export type BulkDeleteConnectorDocumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteConnectorDocumentsResponse = BulkDeleteConnectorDocumentsResponses[keyof BulkDeleteConnectorDocumentsResponses];
+
+export type BulkDeleteConnectorsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connectors/bulk';
+};
+
+export type BulkDeleteConnectorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteConnectorsError = BulkDeleteConnectorsErrors[keyof BulkDeleteConnectorsErrors];
+
+export type BulkDeleteConnectorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteConnectorsResponse = BulkDeleteConnectorsResponses[keyof BulkDeleteConnectorsResponses];
+
+export type BulkUpdateConnectorsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every connector in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connectors/bulk';
+};
+
+export type BulkUpdateConnectorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateConnectorsError = BulkUpdateConnectorsErrors[keyof BulkUpdateConnectorsErrors];
+
+export type BulkUpdateConnectorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateConnectorsResponse = BulkUpdateConnectorsResponses[keyof BulkUpdateConnectorsResponses];
+
 export type RestoreConnectorData = {
     body?: never;
     path: {
@@ -60261,6 +62662,208 @@ export type UpdateKnowledgeFileResponses = {
 
 export type UpdateKnowledgeFileResponse = UpdateKnowledgeFileResponses[keyof UpdateKnowledgeFileResponses];
 
+export type BulkDeleteKnowledgeFilesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/bulk';
+};
+
+export type BulkDeleteKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeFilesError = BulkDeleteKnowledgeFilesErrors[keyof BulkDeleteKnowledgeFilesErrors];
+
+export type BulkDeleteKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeFilesResponse = BulkDeleteKnowledgeFilesResponses[keyof BulkDeleteKnowledgeFilesResponses];
+
+export type BulkUpdateKnowledgeFilesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every document in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped' | 'private';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/bulk';
+};
+
+export type BulkUpdateKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateKnowledgeFilesError = BulkUpdateKnowledgeFilesErrors[keyof BulkUpdateKnowledgeFilesErrors];
+
+export type BulkUpdateKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateKnowledgeFilesResponse = BulkUpdateKnowledgeFilesResponses[keyof BulkUpdateKnowledgeFilesResponses];
+
 export type IndexKnowledgeFilesData = {
     body: {
         fileIds?: Array<string>;
@@ -60721,6 +63324,208 @@ export type UpdateKnowledgeDirectoryResponses = {
 };
 
 export type UpdateKnowledgeDirectoryResponse = UpdateKnowledgeDirectoryResponses[keyof UpdateKnowledgeDirectoryResponses];
+
+export type BulkDeleteKnowledgeDirectoriesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories/bulk';
+};
+
+export type BulkDeleteKnowledgeDirectoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeDirectoriesError = BulkDeleteKnowledgeDirectoriesErrors[keyof BulkDeleteKnowledgeDirectoriesErrors];
+
+export type BulkDeleteKnowledgeDirectoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirectoriesResponses[keyof BulkDeleteKnowledgeDirectoriesResponses];
+
+export type BulkUpdateKnowledgeDirectoriesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every directory in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped' | 'private';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories/bulk';
+};
+
+export type BulkUpdateKnowledgeDirectoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateKnowledgeDirectoriesError = BulkUpdateKnowledgeDirectoriesErrors[keyof BulkUpdateKnowledgeDirectoriesErrors];
+
+export type BulkUpdateKnowledgeDirectoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateKnowledgeDirectoriesResponse = BulkUpdateKnowledgeDirectoriesResponses[keyof BulkUpdateKnowledgeDirectoriesResponses];
 
 export type GetLimitsData = {
     body?: never;
@@ -61225,7 +64030,7 @@ export type GetLlmModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         apiKeyId?: string;
         isEmbedding?: string;
     };
@@ -61305,7 +64110,7 @@ export type GetLlmModelsResponses = {
         id: string;
         dbId: string;
         displayName: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
@@ -61494,7 +64299,7 @@ export type GetModelsWithApiKeysResponses = {
     200: Array<{
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -61567,6 +64372,107 @@ export type GetModelsWithApiKeysResponses = {
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type BulkUpdateModelsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * Whether every model in the batch is hidden.
+         */
+        ignored: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/bulk';
+};
+
+export type BulkUpdateModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateModelsError = BulkUpdateModelsErrors[keyof BulkUpdateModelsErrors];
+
+export type BulkUpdateModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateModelsResponse = BulkUpdateModelsResponses[keyof BulkUpdateModelsResponses];
 
 export type UpdateModelData = {
     body: {
@@ -61673,7 +64579,7 @@ export type UpdateModelResponses = {
     200: {
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -61807,7 +64713,7 @@ export type GetLlmOauthClientsResponses = {
         grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -61833,7 +64739,7 @@ export type CreateLlmOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -61922,7 +64828,7 @@ export type CreateLlmOauthClientResponses = {
         grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -62034,7 +64940,7 @@ export type UpdateLlmOauthClientData = {
         grantType?: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -62125,7 +65031,7 @@ export type UpdateLlmOauthClientResponses = {
         grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -62231,7 +65137,7 @@ export type RotateLlmOauthClientSecretResponses = {
         grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -62257,7 +65163,7 @@ export type GetLlmProviderApiKeysData = {
     path?: never;
     query?: {
         search?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
     };
     url: '/api/llm-provider-api-keys';
 };
@@ -62335,7 +65241,7 @@ export type GetLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -62365,7 +65271,7 @@ export type GetLlmProviderApiKeysResponse = GetLlmProviderApiKeysResponses[keyof
 export type CreateLlmProviderApiKeyData = {
     body: {
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         apiKey?: string;
         baseUrl?: string | null;
         inferenceBaseUrl?: string | null;
@@ -62459,7 +65365,7 @@ export type CreateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -62482,7 +65388,7 @@ export type GetAvailableLlmProviderApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         includeKeyId?: string;
     };
     url: '/api/llm-provider-api-keys/available';
@@ -62561,7 +65467,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -62755,7 +65661,7 @@ export type GetLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -62880,7 +65786,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -62983,7 +65889,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -64349,6 +67255,103 @@ export type ReauthenticateMcpServerResponses = {
 };
 
 export type ReauthenticateMcpServerResponse = ReauthenticateMcpServerResponses[keyof ReauthenticateMcpServerResponses];
+
+export type BulkDeleteMcpServersData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server/bulk';
+};
+
+export type BulkDeleteMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteMcpServersError = BulkDeleteMcpServersErrors[keyof BulkDeleteMcpServersErrors];
+
+export type BulkDeleteMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteMcpServersResponse = BulkDeleteMcpServersResponses[keyof BulkDeleteMcpServersResponses];
 
 export type RestoreMcpServerData = {
     body?: never;
@@ -65938,6 +68941,35 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -66038,6 +69070,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -66387,6 +69423,35 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     };
                 };
             };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
         }>;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
@@ -66487,6 +69552,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
         [key: string]: unknown;
     };
     headers: {
@@ -70942,7 +74011,7 @@ export type GetOptimizationRulesResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -70962,7 +74031,7 @@ export type CreateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -71051,7 +74120,7 @@ export type CreateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -71233,7 +74302,7 @@ export type GetOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -71253,7 +74322,7 @@ export type UpdateOptimizationRuleData = {
         } | {
             hasTools: boolean;
         }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel?: string;
         enabled?: boolean;
         createdAt?: unknown;
@@ -71344,7 +74413,7 @@ export type UpdateOptimizationRuleResponses = {
         } | {
             hasTools: boolean;
         }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         targetModel: string;
         enabled: boolean;
         createdAt: string;
@@ -71957,7 +75026,7 @@ export type GetOrganizationResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -72273,7 +75342,7 @@ export type UpdateAppearanceSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -72472,7 +75541,7 @@ export type UpdateSecuritySettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -72666,7 +75735,7 @@ export type UpdateLlmSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -72860,7 +75929,7 @@ export type UpdateMcpSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -73053,7 +76122,7 @@ export type UpdateSkillsSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -73248,7 +76317,7 @@ export type UpdateAgentSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -73454,7 +76523,7 @@ export type UpdateConnectionSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -73662,7 +76731,7 @@ export type UpdateIntegrationSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -73866,7 +76935,7 @@ export type UpdateDefaultEnvironmentResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -74062,7 +77131,7 @@ export type UpdateAuthSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -74262,7 +77331,7 @@ export type UpdateKnowledgeSettingsResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -74453,7 +77522,7 @@ export type DropEmbeddingConfigResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -74994,7 +78063,7 @@ export type CompleteOnboardingResponses = {
         kbBm25K1: number | null;
         kbBm25B: number | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -76718,6 +79787,203 @@ export type SetProjectShareResponses = {
 };
 
 export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
+
+export type BulkDeleteProjectsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects/bulk';
+};
+
+export type BulkDeleteProjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteProjectsError = BulkDeleteProjectsErrors[keyof BulkDeleteProjectsErrors];
+
+export type BulkDeleteProjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteProjectsResponse = BulkDeleteProjectsResponses[keyof BulkDeleteProjectsResponses];
+
+export type BulkUpdateProjectsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        visibility: 'organization' | 'team' | 'user' | 'none';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects/bulk';
+};
+
+export type BulkUpdateProjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateProjectsError = BulkUpdateProjectsErrors[keyof BulkUpdateProjectsErrors];
+
+export type BulkUpdateProjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateProjectsResponse = BulkUpdateProjectsResponses[keyof BulkUpdateProjectsResponses];
 
 export type RestoreProjectData = {
     body: {
@@ -78675,7 +81941,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -78723,11 +81989,11 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -79497,6 +82763,103 @@ export type UpdateServiceAccountResponses = {
 };
 
 export type UpdateServiceAccountResponse = UpdateServiceAccountResponses[keyof UpdateServiceAccountResponses];
+
+export type BulkDeleteServiceAccountsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/service-accounts/bulk';
+};
+
+export type BulkDeleteServiceAccountsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteServiceAccountsError = BulkDeleteServiceAccountsErrors[keyof BulkDeleteServiceAccountsErrors];
+
+export type BulkDeleteServiceAccountsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteServiceAccountsResponse = BulkDeleteServiceAccountsResponses[keyof BulkDeleteServiceAccountsResponses];
 
 export type CreateServiceAccountTokenData = {
     body: {
@@ -81484,6 +84847,111 @@ export type GetSkillVersionResponses = {
 
 export type GetSkillVersionResponse = GetSkillVersionResponses[keyof GetSkillVersionResponses];
 
+export type BulkUpdateSkillsVisibilityData = {
+    body: {
+        /**
+         * Skills to act on. Duplicates are collapsed.
+         */
+        skillIds: Array<string>;
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teamIds?: Array<string>;
+        /**
+         * People to share with by name. Only meaningful for `scope = personal`; ignored for team/org skills. Unlike the single-skill update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-skill grant list would survive as a difference the request just asked to remove.
+         */
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skills/bulk-visibility';
+};
+
+export type BulkUpdateSkillsVisibilityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateSkillsVisibilityError = BulkUpdateSkillsVisibilityErrors[keyof BulkUpdateSkillsVisibilityErrors];
+
+export type BulkUpdateSkillsVisibilityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateSkillsVisibilityResponse = BulkUpdateSkillsVisibilityResponses[keyof BulkUpdateSkillsVisibilityResponses];
+
 export type GetSkillSourceReposData = {
     body?: never;
     path?: never;
@@ -81566,6 +85034,102 @@ export type GetSkillSourceReposResponses = {
 };
 
 export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
+
+export type BulkDeleteSkillsData = {
+    body: {
+        /**
+         * Skills to act on. Duplicates are collapsed.
+         */
+        skillIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skills/bulk-delete';
+};
+
+export type BulkDeleteSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteSkillsError = BulkDeleteSkillsErrors[keyof BulkDeleteSkillsErrors];
+
+export type BulkDeleteSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteSkillsResponse = BulkDeleteSkillsResponses[keyof BulkDeleteSkillsResponses];
 
 export type RestoreSkillData = {
     body?: never;
@@ -84681,6 +88245,103 @@ export type UpdateTeamResponses = {
 
 export type UpdateTeamResponse = UpdateTeamResponses[keyof UpdateTeamResponses];
 
+export type BulkDeleteTeamsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/teams/bulk';
+};
+
+export type BulkDeleteTeamsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteTeamsError = BulkDeleteTeamsErrors[keyof BulkDeleteTeamsErrors];
+
+export type BulkDeleteTeamsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteTeamsResponse = BulkDeleteTeamsResponses[keyof BulkDeleteTeamsResponses];
+
 export type GetTeamMembersData = {
     body?: never;
     path: {
@@ -85908,7 +89569,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'codex' | 'copilot-cli';
+        observedByClient?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Hide built-in Archestra tools
          */
@@ -86135,7 +89796,7 @@ export type GetToolObserversResponses = {
             name: string;
             email: string;
         }>;
-        clients: Array<'claude' | 'codex' | 'copilot-cli'>;
+        clients: Array<'claude' | 'codex' | 'copilot-cli' | 'cursor'>;
     };
 };
 
@@ -86855,7 +90516,7 @@ export type GetAllVirtualApiKeysResponses = {
             }>;
             authorName: string | null;
             providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
@@ -86881,7 +90542,7 @@ export type CreateVirtualApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         ownerId?: string;
@@ -86979,7 +90640,7 @@ export type CreateVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -87169,7 +90830,7 @@ export type GetVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -87186,7 +90847,7 @@ export type UpdateVirtualApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
     };
@@ -87284,7 +90945,7 @@ export type UpdateVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -88544,6 +92205,103 @@ export type ZhipuaiChatCompletionsWithAgentResponses = {
 };
 
 export type ZhipuaiChatCompletionsWithAgentResponse = ZhipuaiChatCompletionsWithAgentResponses[keyof ZhipuaiChatCompletionsWithAgentResponses];
+
+export type BulkDeleteRolesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles/bulk';
+};
+
+export type BulkDeleteRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteRolesError = BulkDeleteRolesErrors[keyof BulkDeleteRolesErrors];
+
+export type BulkDeleteRolesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteRolesResponse = BulkDeleteRolesResponses[keyof BulkDeleteRolesResponses];
 
 export type GetPublicIdentityProvidersData = {
     body?: never;

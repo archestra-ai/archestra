@@ -1,7 +1,7 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import { type archestraApiTypes, MAX_BULK_IDS } from "@archestra/shared";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
   ArrowLeft,
@@ -35,9 +35,13 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnectors as useAllConnectors,
@@ -47,6 +51,8 @@ import {
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
+  useAllMatchingKnowledgeBases,
+  useBulkDeleteKnowledgeBases,
   useDeleteKnowledgeBase,
   useKnowledgeBase,
   useKnowledgeBasesPaginated,
@@ -150,6 +156,38 @@ function KnowledgeBasesList() {
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectAllMatchingFor, setSelectAllMatchingFor] = useState<
+    string | null
+  >(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteKnowledgeBases();
+
+  // Changing a filter invalidates an escalation rather than silently
+  // re-pointing "all N" at a different N.
+  const filterSignature = `${search}|${isDeletedView}`;
+  const allMatchingActive = selectAllMatchingFor === filterSignature;
+  const { data: allMatching } = useAllMatchingKnowledgeBases(
+    {
+      search: search || undefined,
+      status: isDeletedView ? "deleted" : undefined,
+    },
+    { enabled: allMatchingActive },
+  );
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setSelectAllMatchingFor(null);
+  }, []);
+
+  // The deleted view has its own lifecycle actions (restore, purge), so bulk
+  // deletion is offered only over live knowledge bases.
+  const selectedKnowledgeBases = isDeletedView
+    ? []
+    : allMatchingActive
+      ? (allMatching ?? [])
+      : items.filter((kb) => rowSelection[kb.id]);
   const hasActiveFilters = !!search || isDeletedView;
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -161,6 +199,10 @@ function KnowledgeBasesList() {
   }, [pathname, router, searchParams]);
 
   const columns: ColumnDef<KnowledgeBaseItem>[] = [
+    createSelectColumn<KnowledgeBaseItem>({
+      rowLabel: (kb) => `Select ${kb.name}`,
+      allLabel: "Select all knowledge bases on this page",
+    }),
     {
       id: "expand",
       size: 40,
@@ -343,9 +385,42 @@ function KnowledgeBasesList() {
           </div>
         </div>
 
+        {!isDeletedView && (
+          <BulkActionsBar
+            count={selectedKnowledgeBases.length}
+            noun="knowledge base"
+            plural="knowledge bases"
+            onClear={clearSelection}
+            busy={bulkDelete.isPending}
+            selectAllMatching={{
+              total: pagination?.total ?? items.length,
+              pageFullySelected:
+                items.length > 0 && items.every((kb) => rowSelection[kb.id]),
+              active: allMatchingActive,
+              onSelectAll: () => setSelectAllMatchingFor(filterSignature),
+              matchDescription: "match this search",
+              max: MAX_BULK_IDS,
+            }}
+            className="mb-3"
+          >
+            <PermissionButton
+              permissions={{ knowledgeSource: ["delete"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+          </BulkActionsBar>
+        )}
+
         <DataTable
           columns={isDeletedView ? deletedColumns : columns}
           data={items}
+          rowSelection={isDeletedView ? undefined : rowSelection}
+          onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
+          hideSelectedCount
           renderSubComponent={
             isDeletedView
               ? undefined
@@ -366,7 +441,6 @@ function KnowledgeBasesList() {
               : "No knowledge bases match your filters. Try adjusting your search."
           }
           onClearFilters={clearFilters}
-          hideSelectedCount
           manualPagination
           pagination={{
             pageIndex,
@@ -381,6 +455,37 @@ function KnowledgeBasesList() {
           }}
           isLoading={isFetching}
         />
+
+        {bulkDeleteOpen && (
+          <DeleteConfirmDialog
+            open={bulkDeleteOpen}
+            onOpenChange={setBulkDeleteOpen}
+            title="Delete knowledge bases"
+            description={`Delete ${selectedKnowledgeBases.length} ${
+              selectedKnowledgeBases.length === 1
+                ? "knowledge base"
+                : "knowledge bases"
+            }? Their connectors survive and keep working; the agents using them lose that knowledge until it is reassigned.`}
+            isPending={bulkDelete.isPending}
+            onConfirm={() => {
+              bulkDelete.mutate(selectedKnowledgeBases, {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "knowledge base",
+                    plural: "knowledge bases",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              });
+            }}
+            confirmLabel="Delete knowledge bases"
+            pendingLabel="Deleting..."
+          />
+        )}
 
         {permanentlyDeletingKb && (
           <DeleteConfirmDialog

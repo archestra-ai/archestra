@@ -1,8 +1,12 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import type {
+  ColumnDef,
+  RowSelectionState,
+  SortingState,
+} from "@tanstack/react-table";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +26,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -38,6 +43,8 @@ import {
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -49,12 +56,16 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useAllMatchingProfiles,
+  useBulkDeleteProfiles,
+  useBulkUpdateProfileVisibility,
   useDeleteProfile,
   usePermanentlyDeleteProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -132,6 +143,15 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     | "deleted"
     | null;
   const isDeletedView = statusFromUrl === "deleted";
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProfiles();
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkVisibility = useBulkUpdateProfileVisibility();
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
@@ -141,10 +161,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       ? ["llm_proxy"]
       : ["llm_proxy", "profile"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
-    initialData: initialData?.agents ?? undefined,
-    limit: pageSize,
-    offset,
+  /** Everything narrowing the table, shared by the page query and
+      the "all matching" walk behind it. */
+  const listFilters = {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
@@ -156,6 +175,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+  } satisfies Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >;
+
+  const { data: agentsResponse, isPending } = useProfilesPaginated({
+    limit: pageSize,
+    offset,
+    initialData: initialData?.agents ?? undefined,
+    ...listFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -238,7 +267,32 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
 
+  // Derived from what is on screen rather than read straight out of
+  // `rowSelection`: the table is server-paginated, so ids left behind by
+  // another page drop out of both the count and the request.
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
+
+  const pageSelection = isDeletedView
+    ? []
+    : agents.filter((row) => rowSelection[row.id]);
+  const selectedProxies =
+    allMatchingSelected && allMatching ? allMatching : pageSelection;
+
   const columns: ColumnDef<ProxyData>[] = [
+    // A deleted row can only be restored or purged, neither of which this
+    // selection drives, so the trash view keeps its rows unselectable.
+    ...(isDeletedView
+      ? []
+      : [
+          createSelectColumn<ProxyData>({
+            rowLabel: (row) => `Select ${row.name}`,
+            allLabel: "Select all proxies on this page",
+          }),
+        ]),
     {
       id: "icon",
       size: 40,
@@ -439,9 +493,51 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
+              <BulkActionsBar
+                count={selectedProxies.length}
+                noun="proxy"
+                plural="proxies"
+                onClear={clearSelection}
+                busy={bulkDelete.isPending || isFetchingAllMatching}
+                selectAllMatching={{
+                  total: pagination?.total ?? 0,
+                  pageFullySelected:
+                    agents.length > 0 && pageSelection.length === agents.length,
+                  active: allMatchingSelected,
+                  onSelectAll: () => setEscalatedFor(filterSignature),
+                  matchDescription: nameFilter
+                    ? "match this search query"
+                    : "match the current filters",
+                }}
+                className="mb-3"
+              >
+                <PermissionButton
+                  permissions={{ agent: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ agent: ["delete"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
+
               <DataTable
                 columns={columns}
                 data={agents}
+                getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                hideSelectedCount
                 sorting={sorting}
                 onSortingChange={handleSortingChange}
                 manualSorting={true}
@@ -492,6 +588,70 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 }
               />
             </div>
+
+            {bulkVisibilityOpen && (
+              <BulkVisibilityDialog
+                items={selectedProxies.map((profile) => ({
+                  ...profile,
+                  teams: profile.teams ?? [],
+                  users: profile.users ?? [],
+                }))}
+                noun="proxy"
+                plural="proxies"
+                open={bulkVisibilityOpen}
+                onOpenChange={setBulkVisibilityOpen}
+                isPending={bulkVisibility.isPending}
+                onApply={async (change) => {
+                  const outcome = await bulkVisibility.mutateAsync({
+                    profiles: selectedProxies,
+                    scope: change.scope,
+                    teamIds: change.teamIds,
+                    userIds: change.userIds,
+                  });
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Updated",
+                    failureVerb: "update",
+                    noun: "proxy",
+                    plural: "proxies",
+                  });
+                  if (outcome.succeeded.length === 0) return false;
+                  if (outcome.failed.length === 0) clearSelection();
+                  return true;
+                }}
+              />
+            )}
+
+            {bulkDeleteOpen && (
+              <DeleteConfirmDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title="Delete proxies"
+                description={`Delete ${selectedProxies.length} ${
+                  selectedProxies.length === 1 ? "proxy" : "proxies"
+                }? This cannot be undone.`}
+                isPending={bulkDelete.isPending}
+                onConfirm={() => {
+                  bulkDelete.mutate(selectedProxies, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Deleted",
+                        failureVerb: "delete",
+                        noun: "proxy",
+                        plural: "proxies",
+                      });
+                      setBulkDeleteOpen(false);
+                      // Rows that failed stay ticked so the selection can be
+                      // retried rather than rebuilt.
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  });
+                }}
+                confirmLabel="Delete proxies"
+                pendingLabel="Deleting..."
+              />
+            )}
 
             {deletingProxyId && (
               <DeleteProxyDialog

@@ -1678,18 +1678,30 @@ describe("ArchestraPromptInput", () => {
       expect(getSubmitButton()).toBeDisabled();
     });
 
-    it("locks the composer during an idle (manual) compaction", () => {
+    // A manual `/compact` runs over REST with the SDK idle, so nothing about
+    // it is "in flight" from the composer's point of view — but the thread is
+    // being rewritten, and the message has a queue to wait in.
+    it("keeps the composer usable during an idle (manual) compaction", () => {
+      const onSubmit = vi.fn();
+
       render(
         <ArchestraPromptInput
           {...defaultProps}
+          onSubmit={onSubmit}
           status="ready"
           conversationId="conv-compacting-idle"
           isContextCompacting
         />,
       );
 
-      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
-      expect(getSubmitButton()).toBeDisabled();
+      expect(
+        screen.getByTestId(E2eTestId.ChatPromptTextarea),
+      ).not.toBeDisabled();
+      expect(getSubmitButton()).not.toBeDisabled();
+
+      mockControllerState.value = "queued during manual compaction";
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
     });
   });
 });

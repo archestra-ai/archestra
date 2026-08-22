@@ -1,10 +1,18 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { getRoles, createRole, getRole, updateRole, deleteRole } =
-  archestraApiSdk;
+const {
+  getRoles,
+  createRole,
+  getRole,
+  updateRole,
+  deleteRole,
+  bulkDeleteRoles,
+} = archestraApiSdk;
 
 type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
 type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
@@ -137,6 +145,42 @@ export function useUpdateRole() {
 /**
  * Hook to delete a custom role
  */
+/**
+ * Deletes a selection of custom roles in one request. Predefined roles are
+ * immutable, so the table never offers them; a role somebody still holds comes
+ * back in `failed` with that reason while the rest are deleted.
+ */
+export function useBulkDeleteRoles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (roles: readonly { id: string; name: string }[]) =>
+      bulkDeleteRoles({
+        body: { ids: roles.map((role) => role.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: roleKeys.lists() }),
+  });
+}
+
+/** Every role matching the table's filters, not just the page in view. */
+export function useAllMatchingRoles(
+  params: { search?: string },
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: [...roleKeys.lists(), "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const response = await getRoles({ query: { ...params, limit, offset } });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data?.data ?? [];
+    },
+  });
+}
+
 export function useDeleteRole() {
   const queryClient = useQueryClient();
   return useMutation({

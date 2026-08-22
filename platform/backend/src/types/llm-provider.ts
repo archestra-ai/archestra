@@ -76,6 +76,12 @@ export interface CreateClientOptions {
    * finishes. Provider clients may forward it to their upstream requests.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Model the client is being built for. Only providers whose endpoint depends
+   * on the model read it — Gemini in Vertex AI mode, where the location that
+   * serves a model varies by generation and is fixed at client construction.
+   */
+  model?: string;
 }
 
 /**

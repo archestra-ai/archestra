@@ -33,7 +33,10 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { modelSyncService } from "@/services/model-sync";
+import {
+  modelSyncService,
+  withDistinctDisplayNames,
+} from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
@@ -48,6 +51,7 @@ import {
   SelectModelSchema,
   UuidIdSchema,
 } from "@/types";
+import { BulkIdsSchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const DEFAULT_LAZY_MODEL_SYNC_TTL_MS = TimeInMs.Day;
 const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
@@ -278,7 +282,11 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning available LLM models from database",
       );
 
-      return reply.send(visibleModels);
+      // Stored descriptions can still collide at read time — rows synced
+      // before names were disambiguated, or keys whose catalogs each contain
+      // only one member of a colliding pair — so the response gets its own
+      // pass to keep picker rows tellable-apart.
+      return reply.send(withDistinctDisplayNames(visibleModels));
     },
   );
 
@@ -387,6 +395,56 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(response);
+    },
+  );
+
+  fastify.patch(
+    "/api/llm-models/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateModels,
+        description:
+          "Update several LLM models in one request. Today the only " +
+          "bulk-editable field is `ignored`, which hides a model from the " +
+          "pickers without deleting anything. Ids that match no model are " +
+          "reported in `failed` and leave the rest of the batch applied.",
+        tags: ["LLM Models"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          ignored: z
+            .boolean()
+            .describe("Whether every model in the batch is hidden."),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { ignored } = request.body;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "models bulk update",
+        notFoundMessage: "Model not found",
+        unexpectedMessage: "Could not update this model",
+        load: async (ids) =>
+          new Map(
+            (await ModelModel.findByIds(ids)).map((model) => [model.id, model]),
+          ),
+        // The row's own name, as the pickers show it.
+        describe: (model) => model.modelId,
+        applyEach: async (model, id) => {
+          if (model.ignored === ignored) return;
+          await ModelModel.update(id, { ignored });
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            models: await ModelModel.findVisibilityForBulkAudit(ids),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

@@ -14,6 +14,7 @@
  * handling to do here.
  */
 
+import type { ModelOutputModality } from "./chat";
 import {
   OPENROUTER_AUTO_MODEL_ID,
   OPENROUTER_FREE_MODEL_ID,
@@ -109,18 +110,35 @@ export function pickBestModel<T extends { isBest?: boolean }>(
 export interface ModelPricing {
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
+  /**
+   * What the model emits, when known. Zero per-token prices only prove a model
+   * is free if tokens are what it bills for — see {@link isFreeModel}.
+   */
+  outputModalities?: ModelOutputModality[] | null;
 }
 
 /**
  * A model is "free" only when both per-token prices are known and exactly zero.
  * Null pricing means unknown, not free. Shared by the backend (auto-default) and
  * the frontend (badge, filter).
+ *
+ * Zero per-token prices are only evidence of "free" for a model that bills per
+ * token. A model that emits image or audio is billed on some other axis (per
+ * image, per second of audio), and providers report "0" for the token
+ * dimensions it does not use — OpenRouter's Lyria music models publish
+ * `prompt: "0", completion: "0"` and are certainly not free. Treat a known
+ * non-text output modality as "these prices do not describe the cost".
+ * Unknown modalities stay free-if-zero, so models whose catalog entry carries
+ * no modality data keep their badge.
  */
 export function isFreeModel(model: ModelPricing): boolean {
   if (
     model.promptPricePerToken == null ||
     model.completionPricePerToken == null
   ) {
+    return false;
+  }
+  if (model.outputModalities?.some((modality) => modality !== "text")) {
     return false;
   }
   return (

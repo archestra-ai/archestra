@@ -33,6 +33,12 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "../bulk-route";
+import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "../chat/attachment-content-type";
@@ -455,6 +461,129 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.patch(
+    "/api/knowledge-files/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateKnowledgeFiles,
+        description:
+          "Update several repository documents in one request. Today the only " +
+          "bulk-editable surface is who can see them, and every document in " +
+          "the batch is moved to the same audience. The target teams are " +
+          "validated once for the whole request (a 400 changes nothing); " +
+          "documents the caller cannot see are reported in `failed` and leave " +
+          "the rest of the batch applied.",
+        tags: ["Knowledge Files"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          visibility: KnowledgeFileVisibilitySchema.describe(
+            "The audience every document in the batch moves to.",
+          ),
+          teamIds: z
+            .array(z.string())
+            .optional()
+            .describe("Only meaningful for `team-scoped`; required there."),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, body } = request;
+      const teamIds =
+        body.visibility === "team-scoped"
+          ? [...new Set(body.teamIds ?? [])]
+          : [];
+
+      // Request-level: the audience is the same for every document, so an
+      // unusable one is a bad request rather than N identical failures.
+      await assertTeamsInOrg({ teamIds, organizationId });
+
+      const viewer = await resolveViewer(request);
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "knowledge documents bulk update",
+        notFoundMessage: "File not found",
+        unexpectedMessage: "Could not update this document",
+        load: async (ids) =>
+          new Map(
+            (
+              await KbFileModel.findManyByIds({ ids, organizationId, viewer })
+            ).map((file) => [file.id, file]),
+          ),
+        describe: (file) => file.filename,
+        applyEach: async (_file, id) => {
+          const updated = await KbFileModel.update({
+            id,
+            organizationId,
+            visibility: body.visibility,
+            teamIds,
+          });
+          if (!updated) throw new ApiError(404, "File not found");
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            files: await KbFileModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-files/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteKnowledgeFiles,
+        description:
+          "Delete several repository documents in one request, along with " +
+          "every document indexed from each. Ids the caller cannot see are " +
+          "reported in `failed` and leave the rest of the batch applied.",
+        tags: ["Knowledge Files"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+      const viewer = await resolveViewer(request);
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "knowledge documents bulk delete",
+        notFoundMessage: "File not found",
+        unexpectedMessage: "Could not delete this document",
+        load: async (ids) =>
+          new Map(
+            (
+              await KbFileModel.findManyByIds({ ids, organizationId, viewer })
+            ).map((file) => [file.id, file]),
+          ),
+        describe: (file) => file.filename,
+        applyEach: async (_file, id) => {
+          const deleted = await KbFileModel.delete({ id, organizationId });
+          if (!deleted) throw new ApiError(404, "File not found");
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            files: await KbFileModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
   fastify.delete(
     "/api/knowledge-files/:fileId",
     {
@@ -648,6 +777,131 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         KbDirectoryModel.countFiles(directory.id),
       ]);
       return { ...directory, teamIds, fileCount };
+    },
+  );
+
+  fastify.patch(
+    "/api/knowledge-directories/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateKnowledgeDirectories,
+        description:
+          "Change who can see several directories in one request. The target " +
+          "teams are validated once for the whole request; per-directory " +
+          "problems are reported in `failed` and leave the rest applied. " +
+          "Directories are the other half of a repository selection, so this " +
+          "is the companion to the documents bulk update.",
+        tags: ["Knowledge Files"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          visibility: KnowledgeFileVisibilitySchema.describe(
+            "The audience every directory in the batch moves to.",
+          ),
+          teamIds: z
+            .array(z.string())
+            .optional()
+            .describe("Only meaningful for `team-scoped`; required there."),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, body } = request;
+      const teamIds =
+        body.visibility === "team-scoped"
+          ? [...new Set(body.teamIds ?? [])]
+          : [];
+
+      await assertTeamsInOrg({ teamIds, organizationId });
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "knowledge directories bulk update",
+        notFoundMessage: "Directory not found",
+        unexpectedMessage: "Could not update this directory",
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const directories = await KbDirectoryModel.findAll(organizationId);
+          return new Map(
+            directories
+              .filter((directory) => wanted.has(directory.id))
+              .map((directory) => [directory.id, directory]),
+          );
+        },
+        describe: (directory) => directory.name,
+        applyEach: async (_directory, id) => {
+          const updated = await KbDirectoryModel.update({
+            id,
+            organizationId,
+            visibility: body.visibility,
+            teamIds,
+          });
+          if (!updated) throw new ApiError(404, "Directory not found");
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            directories: await KbDirectoryModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-directories/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteKnowledgeDirectories,
+        description:
+          "Delete several directories in one request. As with the single " +
+          "delete, the files inside each move to the repository root rather " +
+          "than being destroyed. Ids that match no directory are reported in " +
+          "`failed` and leave the rest of the batch applied.",
+        tags: ["Knowledge Files"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "knowledge directories bulk delete",
+        notFoundMessage: "Directory not found",
+        unexpectedMessage: "Could not delete this directory",
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const directories = await KbDirectoryModel.findAll(organizationId);
+          return new Map(
+            directories
+              .filter((directory) => wanted.has(directory.id))
+              .map((directory) => [directory.id, directory]),
+          );
+        },
+        describe: (directory) => directory.name,
+        applyEach: async (_directory, id) => {
+          const deleted = await KbDirectoryModel.delete({ id, organizationId });
+          if (!deleted) throw new ApiError(404, "Directory not found");
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            directories: await KbDirectoryModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

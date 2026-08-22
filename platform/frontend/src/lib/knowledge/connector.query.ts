@@ -2,6 +2,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -9,6 +11,8 @@ import {
 } from "@/lib/utils";
 
 const {
+  bulkDeleteConnectors,
+  bulkUpdateConnectors,
   getConnectors,
   getConnector,
   createConnector,
@@ -94,6 +98,74 @@ export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
+  });
+}
+
+/** Every connector matching the table's filters, not just the page in view. */
+export function useAllMatchingConnectors(
+  params: Omit<ConnectorsPaginatedParams, "limit" | "offset">,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["connectors", "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getConnectors({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+  });
+}
+
+/** Deletes a selection of connectors in one request. */
+export function useBulkDeleteConnectors() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (connectors: readonly { id: string }[]) =>
+      bulkDeleteConnectors({
+        body: { ids: connectors.map((connector) => connector.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["connectors"] }),
+  });
+}
+
+/**
+ * Sets one audience across a selection of connectors, in one request.
+ *
+ * `auto-sync-permissions` is not offered: the route refuses it, because
+ * switching a connector to it fail-closes its corpus and depends on the
+ * connector's own type.
+ */
+export function useBulkUpdateConnectorVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      connectors,
+      visibility,
+      teamIds,
+    }: {
+      connectors: readonly { id: string }[];
+      visibility: "org-wide" | "team-scoped";
+      teamIds: string[];
+    }) =>
+      bulkUpdateConnectors({
+        body: {
+          ids: connectors.map((connector) => connector.id),
+          visibility,
+          teamIds,
+        },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["connectors"] }),
   });
 }
 

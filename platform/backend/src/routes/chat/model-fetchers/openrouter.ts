@@ -1,6 +1,7 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { FetchedModelCapabilities, ModelInfo } from "./types";
@@ -12,6 +13,13 @@ const OpenRouterGenerationModelsResponseSchema = z.object({
       name: z.string().optional(),
       created: z.number().optional(),
       context_length: z.number().optional(),
+      architecture: z
+        .object({
+          input_modalities: z.array(z.string()).optional(),
+          output_modalities: z.array(z.string()).optional(),
+        })
+        .partial()
+        .optional(),
       pricing: z
         .object({
           prompt: z.string().optional(),
@@ -129,13 +137,23 @@ function toFetchedCapabilities(
   if (
     model.pricing == null &&
     model.context_length == null &&
-    model.supported_parameters == null
+    model.supported_parameters == null &&
+    model.architecture == null
   ) {
     return undefined;
   }
 
   return {
     contextLength: model.context_length ?? null,
+    inputModalities: parseModalities(
+      model.architecture?.input_modalities,
+      ModelInputModalitySchema,
+      OPENROUTER_INPUT_MODALITY_ALIASES,
+    ),
+    outputModalities: parseModalities(
+      model.architecture?.output_modalities,
+      ModelOutputModalitySchema,
+    ),
     supportsToolCalling: model.supported_parameters
       ? model.supported_parameters.some(
           (param) => param === "tools" || param === "tool_choice",
@@ -158,4 +176,36 @@ function normalizePrice(price: string | undefined): string | null {
     return null;
   }
   return Number(price) < 0 ? null : price;
+}
+
+/**
+ * OpenRouter names the document modality `file`; the rest of the platform uses
+ * models.dev's vocabulary, where it is `pdf`. Every other value already matches.
+ */
+const OPENROUTER_INPUT_MODALITY_ALIASES: Record<string, string> = {
+  file: "pdf",
+};
+
+/**
+ * Validate OpenRouter's modality strings against our enum, dropping anything we
+ * do not model (e.g. `video` on the output side). Returns null when the block is
+ * absent or nothing survives, so sync falls through to the registry instead of
+ * storing an empty list.
+ */
+function parseModalities<T>(
+  modalities: string[] | undefined,
+  schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
+  aliases: Record<string, string> = {},
+): T[] | null {
+  if (modalities == null || modalities.length === 0) {
+    return null;
+  }
+  const validated: T[] = [];
+  for (const modality of modalities) {
+    const result = schema.safeParse(aliases[modality] ?? modality);
+    if (result.success && result.data !== undefined) {
+      validated.push(result.data);
+    }
+  }
+  return validated.length > 0 ? validated : null;
 }

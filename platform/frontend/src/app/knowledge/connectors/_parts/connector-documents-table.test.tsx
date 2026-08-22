@@ -86,6 +86,10 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
+  useBulkDeleteConnectorDocuments: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 describe("ConnectorDocumentsTable", () => {

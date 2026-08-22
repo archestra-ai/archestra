@@ -34,6 +34,46 @@ function asStreamChunk<T>(chunk: unknown): T {
   return chunk as T;
 }
 
+describe("Bedrock policy refusal", () => {
+  // A refusal appends further content, so the client holds the model's text AND
+  // the refusal. Recording the refusal alone deleted the model's own answer;
+  // the withheld tool call must stay out, or the turn owes a tool result
+  // nothing will ever send.
+  test("keeps the streamed text, drops the withheld call, appends the refusal", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+    type Chunk = Parameters<typeof adapter.processChunk>[0];
+
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "let me check" },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Chunk>({
+        contentBlockStart: {
+          contentBlockIndex: 1,
+          start: { toolUse: { toolUseId: "tooluse_123", name: "read_file" } },
+        },
+      }),
+    );
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    const content = response.output?.message?.content ?? [];
+    expect(
+      content.map((block) => ("text" in block ? block.text : undefined)),
+    ).toEqual(["let me check", "blocked message"]);
+    expect(content.some((block) => "toolUse" in block)).toBe(false);
+    expect(response.stopReason).toBe("end_turn");
+  });
+});
+
 describe("Bedrock tool name encoding", () => {
   test("shortens provider-facing tool names that exceed the Bedrock limit", () => {
     const toolName =
@@ -552,14 +592,16 @@ describe("Bedrock stream reasoning delta forwarding", () => {
     expect(adapter.state.text).toBe("");
   });
 
-  test("forwards reasoning signature and redacted-data deltas", () => {
+  // `redactedContent` is the Converse API's own name for the encrypted-reasoning
+  // delta, and the proxy forwards it under that name unchanged.
+  test("forwards reasoning signature and redacted-content deltas", () => {
     const adapter = bedrockAdapterFactory.createStreamAdapter(
       createConverseRequest(),
     );
 
     for (const reasoningContent of [
       { signature: "sig_abc123" },
-      { data: "cmVkYWN0ZWQ=" },
+      { redactedContent: "cmVkYWN0ZWQ=" },
     ]) {
       const result = adapter.processChunk(
         asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
@@ -627,7 +669,129 @@ describe("Bedrock stream reasoning delta forwarding", () => {
   });
 });
 
+describe("Bedrock DeepSeek DSML sentinel filtering", () => {
+  test("strips the DSML marker from streamed text before a structured tool call", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: {
+            text: "Let me check the available tools:\n\n<｜DSML｜function_calls",
+          },
+        },
+        __rawBytes: new Uint8Array([1, 2, 3]),
+      }),
+    );
+
+    expect(result.sseData).not.toBeNull();
+    const decoded = decodeEventStreamJson(result.sseData as Uint8Array);
+    expect(decoded.body).toMatchObject({
+      contentBlockIndex: 0,
+      delta: { text: "Let me check the available tools:" },
+    });
+    expect(adapter.state.text).toBe("Let me check the available tools:");
+  });
+
+  test("strips a DSML marker split across streamed text deltas", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const first = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "Searching now.\n\n<｜DSML｜func" },
+        },
+      }),
+    );
+    const second = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "tion_calls" },
+        },
+      }),
+    );
+
+    expect(
+      decodeEventStreamJson(first.sseData as Uint8Array).body,
+    ).toMatchObject({ delta: { text: "Searching now." } });
+    expect(second.sseData).toBeNull();
+    expect(adapter.state.text).toBe("Searching now.");
+  });
+
+  test("strips the ASCII-spaced DSML marker variant", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest({ modelId: "deepseek.v3.2" }),
+    );
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "Calling.\n< | DSML | function_calls >" },
+        },
+      }),
+    );
+
+    expect(
+      decodeEventStreamJson(result.sseData as Uint8Array).body,
+    ).toMatchObject({ delta: { text: "Calling." } });
+  });
+
+  test("strips the DSML marker from non-streaming responses", async () => {
+    const request = createConverseRequest({ modelId: "deepseek.v3.2" });
+    const client = {
+      converse: async () => ({
+        $metadata: { requestId: "req_dsml" },
+        output: {
+          message: {
+            role: "assistant",
+            content: [
+              { text: "Calling now.\n\n<｜DSML｜function_calls" },
+              {
+                toolUse: {
+                  toolUseId: "tooluse_dsml",
+                  name: "test_tool",
+                  input: {},
+                },
+              },
+            ],
+          },
+        },
+        stopReason: "tool_use",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      }),
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+    const adapter = bedrockAdapterFactory.createResponseAdapter(response);
+
+    expect(adapter.getText()).toBe("Calling now.");
+    expect(adapter.getToolCalls()).toHaveLength(1);
+    expect(JSON.stringify(response)).not.toContain("DSML");
+  });
+});
+
 describe("Bedrock client creation", () => {
+  test("derives the standard regional endpoint when no custom URL is stored", () => {
+    const client = bedrockAdapterFactory.createClient("test-key", {
+      source: "chat",
+    }) as unknown as {
+      config: { baseUrl: string; region: string };
+    };
+
+    expect(client.config).toMatchObject({
+      baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      region: "us-east-1",
+    });
+  });
+
   test("uses the custom base URL override", () => {
     const customBaseUrl =
       "https://bedrock-runtime.ap-southeast-1.amazonaws.com/custom-path";
@@ -802,6 +966,25 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
           role: "assistant",
           content: [
             { reasoningContent: { redactedReasoning: { data: "abc123==" } } },
+            { text: "hello" },
+          ],
+        },
+        { role: "user", content: [{ text: "again" }] },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts the Converse API's own redactedContent spelling", () => {
+    const result = Bedrock.API.ConverseRequestSchema.safeParse({
+      modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      messages: [
+        { role: "user", content: [{ text: "hi" }] },
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { redactedContent: "abc123==" } },
             { text: "hello" },
           ],
         },

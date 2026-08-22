@@ -32,6 +32,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -276,14 +277,15 @@ export async function handleLLMProxy<
   // app from the request and record it (Claude clients → "anthropic_claude"
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request).
+  // CLI stamps on every request; Cursor → "cursor" from its User-Agent).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
     utils.headers.clientApp.detectCodexClientId(
       headersForExtraction,
       bodyForExtraction,
-    );
+    ) ??
+    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -1006,10 +1008,18 @@ export async function handleLLMProxy<
     // before any guardrail evaluation — trusted-data and tool-invocation
     // lookups otherwise miss the real tool behind the decoration and the
     // dispatch wrapper.
+    // The request's own tool list is passed in so the canonicalizer can learn
+    // the client's label for the gateway when it is not a name this
+    // organization knows — the label is free text typed at `claude mcp add`
+    // time, and a label nothing matches used to leave every decorated name
+    // untouched.
     const canonicalizeToolName =
-      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer(
-        resolvedAgent.organizationId,
-      );
+      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer({
+        organizationId: resolvedAgent.organizationId,
+        declaredToolNames: utils.collectDeclaredToolNames(
+          requestAdapter.getOriginalRequest(),
+        ),
+      });
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       canonicalizeToolName,
@@ -1229,6 +1239,7 @@ export async function handleLLMProxy<
       agent: resolvedAgent,
       abortSignal,
       source,
+      model: requestAdapter.getModel(),
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,
@@ -1255,6 +1266,29 @@ export async function handleLLMProxy<
         .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
         .map(canonicalizeToolName),
     );
+
+    // A gateway tool name the client decorated with an alias the platform does
+    // not recognize survives canonicalization untouched, and every guardrail
+    // downstream then reasons about the decoration rather than the tool. That
+    // degradation is otherwise completely silent, which is why it can sit in a
+    // deployment indefinitely — so say so once per request, naming the tool, so
+    // it is greppable and the gateway can be re-registered under the name the
+    // connection-setup script derives (`toMcpClientServerName`).
+    const unrecognizedGatewayToolNames = [...enabledToolNames].filter(
+      (toolName) =>
+        archestraMcpBranding.isLikelyToolName(toolName) &&
+        !archestraMcpBranding.isToolName(toolName),
+    );
+    if (unrecognizedGatewayToolNames.length > 0) {
+      logger.warn(
+        {
+          agentId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          toolNames: unrecognizedGatewayToolNames,
+        },
+        `[${providerName}Proxy] Gateway tool names carry a client alias this organization does not know; guardrails cannot resolve the tools behind them`,
+      );
+    }
 
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};

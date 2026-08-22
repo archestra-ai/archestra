@@ -51,6 +51,7 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
+import SkillUserModel from "./skill-user";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 /**
@@ -1170,6 +1171,58 @@ class SkillModel {
   }
 
   /**
+   * Move one skill to a visibility scope, replacing its team assignments and
+   * per-person grants in the same transaction.
+   *
+   * Deliberately not routed through {@link SkillModel.updateWithFiles}: nothing
+   * versioned changes here (a version snapshots the SKILL.md body and resource
+   * files, and the publication artifacts derive from the frontmatter), so this
+   * must not read the file set back or risk forking a version. Team and user
+   * rows are replaced wholesale rather than diffed — the caller already
+   * resolved the target sets.
+   *
+   * Returns the updated row, or null when no live skill has that id.
+   */
+  static async updateVisibility(params: {
+    id: string;
+    scope: ResourceVisibilityScope;
+    /** Replaces the team assignments. Empty for non-`team` scopes. */
+    teamIds: string[];
+    /** Replaces the per-person grants. Empty for non-`personal` scopes. */
+    userIds: string[];
+  }): Promise<Skill | null> {
+    return await withDbTransaction(async (tx) => {
+      const [skill] = await tx
+        .update(schema.skillsTable)
+        .set({ scope: params.scope })
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            notDeleted(schema.skillsTable),
+          ),
+        )
+        .returning();
+
+      if (!skill) return null;
+
+      await tx
+        .delete(schema.skillTeamsTable)
+        .where(eq(schema.skillTeamsTable.skillId, params.id));
+      if (params.teamIds.length > 0) {
+        await tx
+          .insert(schema.skillTeamsTable)
+          .values(
+            params.teamIds.map((teamId) => ({ skillId: params.id, teamId })),
+          );
+      }
+
+      await SkillUserModel.syncSkillUsers(params.id, params.userIds, tx);
+
+      return skill;
+    });
+  }
+
+  /**
    * Soft-delete a skill (frees its name for re-use via the partial unique
    * indexes). Junction rows, files, and versions are kept — reads are
    * filtered instead.
@@ -1181,6 +1234,20 @@ class SkillModel {
       eq(schema.skillsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Soft-delete a batch of skills in one statement. Returns how many rows
+   * transitioned from active to deleted, so an id already deleted by a
+   * concurrent request is not double-counted.
+   */
+  static async deleteMany(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    return await softDelete(
+      db,
+      schema.skillsTable,
+      inArray(schema.skillsTable.id, ids),
+    );
   }
 
   /**
@@ -1375,6 +1442,48 @@ class SkillModel {
       )
       .limit(1);
     return row ?? null;
+  }
+
+  /**
+   * Audit lookup for the bulk routes: the visibility-relevant columns of
+   * several skills at once, scoped to an org and including soft-deleted rows —
+   * a bulk delete's "after" side has to name the skills it just removed.
+   *
+   * Sorted by id so two reads of an unchanged batch produce an identical
+   * snapshot and the audit diff stays empty; row order from the DB is
+   * unspecified.
+   */
+  static async findVisibilityForAudit(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      scope: ResourceVisibilityScope;
+      deleted: boolean;
+    }>
+  > {
+    if (params.ids.length === 0) return [];
+    const rows = await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+        scope: schema.skillsTable.scope,
+        deletedAt: schema.skillsTable.deletedAt,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          inArray(schema.skillsTable.id, params.ids),
+          eq(schema.skillsTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(asc(schema.skillsTable.id));
+    return rows.map(({ deletedAt, ...row }) => ({
+      ...row,
+      deleted: deletedAt !== null,
+    }));
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

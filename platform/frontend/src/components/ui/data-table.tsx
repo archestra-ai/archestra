@@ -52,6 +52,15 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
+  /**
+   * The ids of the rows currently on screen, whenever they change.
+   *
+   * A bulk bar sits outside the table, so it cannot otherwise tell when the
+   * visible page is fully ticked — which is what gates its "select everything
+   * that matches" offer. Pass a stable callback (`useCallback`); an inline one
+   * re-subscribes every render.
+   */
+  onPageRowIdsChange?: (ids: string[]) => void;
   /** Hide the "X of Y row(s) selected" text. Defaults to true when rowSelection is not provided. */
   hideSelectedCount?: boolean;
   /** Function to get a stable unique ID for each row. When provided, row selection will use these IDs instead of indices. */
@@ -99,6 +108,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  onPageRowIdsChange,
   hideSelectedCount,
   getRowId,
   renderSubComponent,
@@ -203,6 +213,16 @@ export function DataTable<TData, TValue>({
   // applied while on a later page) strands the table on a nonexistent page.
   // Clamp to the last valid page; setPageIndex routes through
   // onPaginationChange, covering both controlled and internal pagination.
+  // Joined rather than the array itself: a new array identity every render
+  // would re-fire the effect forever.
+  const pageRowIdsKey = table
+    .getRowModel()
+    .rows.map((row) => row.id)
+    .join(",");
+  React.useEffect(() => {
+    onPageRowIdsChange?.(pageRowIdsKey ? pageRowIdsKey.split(",") : []);
+  }, [pageRowIdsKey, onPageRowIdsChange]);
+
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   React.useEffect(() => {

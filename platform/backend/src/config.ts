@@ -2264,6 +2264,20 @@ const config = {
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
         location:
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
+        /**
+         * Whether models Vertex AI serves only from `locations/global` (the
+         * Gemini 3+ generations) may be reached there while `location` stays
+         * pinned to an ordinary region for everything else.
+         *
+         * Off by default and deliberately opt-in: the global endpoint gives up
+         * any control over which region processes a request, so turning it on
+         * for a deployment that pinned a region for data-residency reasons
+         * would quietly move part of its traffic offshore. Left off, global-only
+         * models simply stay out of the catalog.
+         */
+        allowGlobalEndpoint:
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT ===
+          "true",
         // Path to service account JSON key file for authentication (optional)
         // If not set, uses default ADC (Workload Identity, attached service account, etc.)
         credentialsFile:
@@ -2273,6 +2287,13 @@ const config = {
     cohere: {
       enabled: Boolean(process.env.ARCHESTRA_COHERE_BASE_URL),
       baseUrl: process.env.ARCHESTRA_COHERE_BASE_URL || "https://api.cohere.ai",
+    },
+    // Embeddings-only provider: this base URL roots both /v1/embeddings and
+    // /v1/multimodalembeddings; there is no chat endpoint to configure.
+    voyage: {
+      enabled: Boolean(process.env.ARCHESTRA_VOYAGE_BASE_URL),
+      baseUrl:
+        process.env.ARCHESTRA_VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
     },
     cerebras: {
       baseUrl:
@@ -2502,6 +2523,11 @@ const config = {
     },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
+    },
+    // Keeps the env-seeded-key naming uniform across providers even though
+    // Voyage serves embeddings rather than chat.
+    voyage: {
+      apiKey: process.env.ARCHESTRA_CHAT_VOYAGE_API_KEY || "",
     },
     zhipuai: {
       apiKey: process.env.ARCHESTRA_CHAT_ZHIPUAI_API_KEY || "",

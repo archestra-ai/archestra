@@ -133,7 +133,7 @@ export const BM25_B_MAX = 1;
 export const BM25_B_DEFAULT = 0.75;
 
 export const SUPPORTED_EMBEDDING_DIMENSIONS = [
-  3072, 1536, 1024, 768, 384,
+  3072, 1536, 1408, 1024, 768, 384,
 ] as const;
 export type SupportedEmbeddingDimension =
   (typeof SUPPORTED_EMBEDDING_DIMENSIONS)[number];

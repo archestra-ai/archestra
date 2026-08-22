@@ -1,35 +1,9 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  InteractionSource,
-  SupportedProvider,
-} from "@archestra/shared";
-import { AgentIcon } from "@/components/agent-icon";
-import { ProviderIcon } from "@/components/provider-icon";
+import type { ClientFamily, InteractionSource } from "@archestra/shared";
+import { ClientIcon } from "@/components/provider-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-type ProfileOption = archestraApiTypes.GetAllAgentsResponses["200"][number];
-
-export function ProfileFilterOption({
-  profile,
-}: {
-  profile: Pick<ProfileOption, "agentType" | "icon" | "name">;
-}) {
-  return (
-    <span className="flex items-center gap-2 min-w-0">
-      <AgentIcon
-        icon={profile.icon}
-        fallbackType={
-          profile.agentType === "profile" ? "agent" : profile.agentType
-        }
-        className="text-muted-foreground"
-      />
-      <span className="truncate">{profile.name}</span>
-    </span>
-  );
-}
 
 export function SourceFilterOption({ source }: { source: InteractionSource }) {
   return (
@@ -40,17 +14,14 @@ export function SourceFilterOption({ source }: { source: InteractionSource }) {
 }
 
 export function ClientFilterOption({
-  label,
-  provider,
+  client,
 }: {
-  label: string;
-  provider: SupportedProvider;
+  client: Pick<ClientFamily, "label" | "provider" | "icon">;
 }) {
-  // Each client maps to its vendor logo (Claude → Anthropic, Codex → OpenAI).
   return (
     <span className="flex items-center gap-2 min-w-0">
-      <ProviderIcon provider={provider} size={16} />
-      <span className="truncate">{label}</span>
+      <ClientIcon client={client} size={16} />
+      <span className="truncate">{client.label}</span>
     </span>
   );
 }

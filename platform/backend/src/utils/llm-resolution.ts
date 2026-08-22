@@ -2,6 +2,7 @@ import {
   DEFAULT_MODELS,
   isCompleteModelSelection,
   isSubscriptionCredential,
+  type ModelInputModality,
   type ModelSelection,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
@@ -183,14 +184,22 @@ export async function resolveConversationLlmSelectionForAgent(params: {
  */
 export async function resolveConversationModel(
   modelId: string | null,
-): Promise<{ model: string; provider: SupportedProvider }> {
+): Promise<{
+  model: string;
+  provider: SupportedProvider;
+  inputModalities: ModelInputModality[] | null;
+}> {
   if (modelId) {
     const model = await ModelModel.findById(modelId);
     if (model) {
-      return { model: model.modelId, provider: model.provider };
+      return {
+        model: model.modelId,
+        provider: model.provider,
+        inputModalities: model.inputModalities,
+      };
     }
   }
-  return resolveDefaultLlmFromEnv();
+  return { ...resolveDefaultLlmFromEnv(), inputModalities: null };
 }
 
 /**

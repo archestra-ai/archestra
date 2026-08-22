@@ -3,6 +3,7 @@ import {
   geminiThinkingConfigForEffort,
   isLegacyGeminiModel,
   isUsableGeminiCatalogModel,
+  requiresGlobalVertexEndpoint,
   supportsGeminiThinkingEffort,
   supportsGeminiThoughtSummaries,
 } from "./gemini-models";
@@ -175,5 +176,43 @@ describe("isLegacyGeminiModel", () => {
     ["aqa", false],
   ])("%s -> legacy=%s", (modelId, expected) => {
     expect(isLegacyGeminiModel(modelId)).toBe(expected);
+  });
+});
+
+describe("requiresGlobalVertexEndpoint", () => {
+  test.each([
+    // Vertex serves 3.0+ chat generations only from `global`; a regional host
+    // 404s on them.
+    ["gemini-3-pro-preview", true],
+    ["gemini-3-flash-preview", true],
+    ["gemini-3.1-pro-preview", true],
+    ["gemini-3.5-flash", true],
+    ["gemini-3.7-flash", true],
+    // Anything above the threshold is covered without touching the constant.
+    ["gemini-4-pro", true],
+    // The 2.5 family answers regionally as well, so it keeps the configured
+    // location and its data residency.
+    ["gemini-2.5-pro", false],
+    ["gemini-2.5-flash", false],
+    ["gemini-2.5-flash-lite", false],
+    // Tuple comparison, not parseFloat: 2.10 is below 3.0.
+    ["gemini-2.10-flash", false],
+    // Gemma MaaS is regional only and absent from the global catalog, whatever
+    // generation number it carries.
+    ["gemma-4-26b-a4b-it-maas", false],
+    ["gemma-3-27b-it", false],
+    // Embeddings version separately: -001 is regional, -2 global.
+    ["gemini-embedding-001", false],
+    ["gemini-embedding-2", true],
+    // Unparsable / unbranded ids stay on the configured location.
+    ["gemini-pro", false],
+    ["text-embedding-005", false],
+    ["aqa", false],
+  ])("%s -> global=%s", (modelId, expected) => {
+    expect(requiresGlobalVertexEndpoint(modelId)).toBe(expected);
+  });
+
+  test("is case-insensitive", () => {
+    expect(requiresGlobalVertexEndpoint("Gemini-3.5-Flash")).toBe(true);
   });
 });

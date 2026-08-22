@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,6 +104,12 @@ A few behaviors worth knowing:
 
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
+
+## Skills from MCP servers
+
+> **Beta feature** — set `ARCHESTRA_MCP_SKILLS_ENABLED=true` (or enable the master `ARCHESTRA_BETA` switch). See [Deployment](/docs/platform-deployment).
+
+Skills over MCP let MCP servers publish reusable, task-focused instructions and supporting resources alongside their tools. In Archestra, Skills offered by server installations you can access appear on the **Skills** page, where you can inspect them, review their usage, or start a Chat with that Skill attached to your next message. They are intended for service-owned playbooks and workflows that should remain managed by the MCP server rather than be recreated as standalone Archestra Skills. The integration follows the draft [`io.modelcontextprotocol/skills` extension in SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640); see the [rendered specification](https://mcp-sep-skills-extension.mintlify.site/seps/2640-skills-extension) and the official [Skills Over MCP working group](https://modelcontextprotocol.io/community/working-groups/skills-over-mcp) for details.
 
 ## Permissions and scope
 

@@ -68,6 +68,7 @@ archestra:
     ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_BETA: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
+    ARCHESTRA_MCP_SKILLS_ENABLED: "true"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

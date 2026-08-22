@@ -154,7 +154,7 @@ export function useTestConnectionTarget(item: CatalogItem) {
  * item prompts for them) and reports the connection status live.
  */
 export function TestConnectionStep({ item }: { item: CatalogItem }) {
-  const deploymentStatuses = useMcpDeploymentStatuses();
+  const { statuses: deploymentStatuses } = useMcpDeploymentStatuses();
   useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();

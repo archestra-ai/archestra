@@ -49,8 +49,8 @@ describe("useCanReauthenticate", () => {
     vi.clearAllMocks();
   });
 
-  it("denies everything without mcpServerInstallation:create", () => {
-    const canReauth = setup({ create: false, update: true, admin: true });
+  it("denies a non-admin without mcpServerInstallation:create", () => {
+    const canReauth = setup({ create: false, update: true, admin: false });
     expect(canReauth({ scope: "personal", ownerId: CURRENT_USER })).toBe(false);
     expect(canReauth({ scope: "org" })).toBe(false);
   });
@@ -61,6 +61,15 @@ describe("useCanReauthenticate", () => {
     expect(canReauth({ scope: "personal", ownerId: "someone-else" })).toBe(
       false,
     );
+  });
+
+  it("permits an installation admin across ownership and scope boundaries", () => {
+    const canReauth = setup({ create: false, update: false, admin: true });
+    expect(canReauth({ scope: "personal", ownerId: "someone-else" })).toBe(
+      true,
+    );
+    expect(canReauth({ scope: "team", teamId: "another-team" })).toBe(true);
+    expect(canReauth({ scope: "org" })).toBe(true);
   });
 
   it("permits an org connection only with mcpServerInstallation:admin", () => {

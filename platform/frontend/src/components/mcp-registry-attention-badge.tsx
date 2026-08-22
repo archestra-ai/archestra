@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { mcpRegistryFacetHref } from "@/app/mcp/registry/_parts/registry-list-controls";
+import { SidebarMenuAction } from "@/components/ui/sidebar";
+import { useMcpDeploymentStatuses } from "@/lib/mcp/mcp-server.query";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 
 /**
@@ -7,20 +11,38 @@ import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
  * running, needs re-authentication, reinstall, image approval), so problems
  * are visible from any page. Reads the same cached registry queries the
  * registry page uses; renders nothing while the fleet is clean.
+ *
+ * The count is a link to the list already narrowed to those servers, so it
+ * lands on the two rows it is counting rather than on the whole registry. It
+ * renders as a `SidebarMenuAction` — a sibling of the nav item's own link,
+ * not a child of it — because an anchor may not contain another anchor.
+ *
+ * It reads the same live deployment feed the registry page does. Runtime
+ * faults (a crash-looping pod, an image that will not pull) exist only for a
+ * caller holding those statuses, so a badge without them said "0" one click
+ * away from a list saying "Action required (3)". The subscription is already
+ * open app-wide from `<McpDeploymentStatusFeed />`, so this costs nothing.
  */
 export function McpRegistryAttentionBadge() {
-  const { summary } = useMcpServerIssues();
-  const count = summary.actionableServerCount;
+  const { statuses } = useMcpDeploymentStatuses();
+  const { facetCounts } = useMcpServerIssues(statuses);
+  const count = facetCounts.you;
   if (count === 0) return null;
   return (
-    <span
-      className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground group-data-[collapsible=icon]:hidden"
-      data-testid="sidebar-mcp-registry-attention-count"
+    <SidebarMenuAction
+      asChild
+      className="w-auto min-w-5 bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground"
     >
-      {count}
-      <span className="sr-only">
-        {count === 1 ? " MCP server needs" : " MCP servers need"} attention
-      </span>
-    </span>
+      <Link
+        href={mcpRegistryFacetHref("you")}
+        data-testid="sidebar-mcp-registry-attention-count"
+      >
+        {count}
+        <span className="sr-only">
+          {count === 1 ? " MCP server needs" : " MCP servers need"} attention,
+          show them
+        </span>
+      </Link>
+    </SidebarMenuAction>
   );
 }

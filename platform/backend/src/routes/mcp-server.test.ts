@@ -1109,10 +1109,12 @@ describe("mcp server inspect route", () => {
 
   test("rejects reinstall of another user's personal connection by an editor", async ({
     makeInternalMcpCatalog,
+    makeMember,
     makeMcpServer,
     makeUser,
   }) => {
     const otherUser = await makeUser({ email: "reinstall-owner@example.com" });
+    await makeMember(otherUser.id, organizationId);
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "remote",
@@ -1122,6 +1124,10 @@ describe("mcp server inspect route", () => {
       ownerId: otherUser.id,
       catalogId: catalog.id,
     });
+    hasPermissionMock.mockImplementation(async (permission) => ({
+      success: !permission.mcpServerInstallation?.includes("admin"),
+      error: null,
+    }));
 
     const response = await app.inject({
       method: "POST",
@@ -1131,6 +1137,46 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(403);
     expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+  });
+
+  test("allows an installation admin to reinstall another user's personal connection", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser({ email: "reinstall-owner@example.com" });
+    await makeMember(otherUser.id, organizationId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote", localInstallationStatus: "idle" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    hasPermissionMock.mockImplementation(async (permission) => ({
+      success: !!permission.mcpServerInstallation?.includes("admin"),
+      error: null,
+    }));
+    connectAndGetToolsMock.mockResolvedValue([]);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/reinstall`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      if (connectAndGetToolsMock.mock.calls.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(connectAndGetToolsMock).toHaveBeenCalled();
   });
 
   // Regression: the reinstall route used to short-circuit value persistence
@@ -3595,10 +3641,12 @@ describe("mcp server inspect route", () => {
 
   test("rejects re-authenticate of another user's personal connection by an editor", async ({
     makeInternalMcpCatalog,
+    makeMember,
     makeMcpServer,
     makeUser,
   }) => {
     const otherUser = await makeUser({ email: "reauth-owner@example.com" });
+    await makeMember(otherUser.id, organizationId);
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "remote",
@@ -3608,6 +3656,10 @@ describe("mcp server inspect route", () => {
       ownerId: otherUser.id,
       catalogId: catalog.id,
     });
+    hasPermissionMock.mockImplementation(async (permission) => ({
+      success: !permission.mcpServerInstallation?.includes("admin"),
+      error: null,
+    }));
 
     const response = await app.inject({
       method: "PATCH",
@@ -3617,6 +3669,101 @@ describe("mcp server inspect route", () => {
 
     expect(response.statusCode).toBe(403);
     expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+  });
+
+  test("allows an installation admin to re-authenticate another user's personal connection", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser({ email: "reauth-owner@example.com" });
+    await makeMember(otherUser.id, organizationId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ serverType: "remote", localInstallationStatus: "idle" })
+      .where(eq(schema.mcpServersTable.id, mcpServer.id));
+    hasPermissionMock.mockImplementation(async (permission) => ({
+      success: !!permission.mcpServerInstallation?.includes("admin"),
+      error: null,
+    }));
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${mcpServer.id}/reauthenticate`,
+      payload: { accessToken: "admin-replacement-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("never lets an installation admin manage connections from another organization", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeMcpServer,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const otherOwner = await makeUser({ email: "outside-owner@example.com" });
+    await makeMember(otherOwner.id, otherOrganization.id);
+    const foreignCatalog = await makeInternalMcpCatalog({
+      organizationId: otherOrganization.id,
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+    });
+    const makeForeignServer = async () => {
+      const connection = await makeMcpServer({
+        ownerId: otherOwner.id,
+        catalogId: foreignCatalog.id,
+      });
+      await db
+        .update(schema.mcpServersTable)
+        .set({ serverType: "remote", localInstallationStatus: "idle" })
+        .where(eq(schema.mcpServersTable.id, connection.id));
+      return connection;
+    };
+    const reauth = await makeForeignServer();
+    const reinstall = await makeForeignServer();
+    const reload = await makeForeignServer();
+    const remove = await makeForeignServer();
+    hasPermissionMock.mockImplementation(async (permission) => ({
+      success: !!permission.mcpServerInstallation?.includes("admin"),
+      error: null,
+    }));
+
+    const responses = await Promise.all([
+      app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${reauth.id}/reauthenticate`,
+        payload: { accessToken: "replacement-token" },
+      }),
+      app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${reinstall.id}/reinstall`,
+        payload: {},
+      }),
+      app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${reload.id}/reload-tools`,
+      }),
+      app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${remove.id}`,
+      }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode)).toEqual([
+      404, 404, 404, 404,
+    ]);
   });
 
   test("reinstalls a protected remote MCP server using the current identity-provider access token fallback", async ({

@@ -1,19 +1,18 @@
 /**
- * Builds the href for one tab on the MCP server detail page.
+ * Builds the href for one secondary tab on the MCP server detail page.
  *
  * The tab bar renders links, so the URL is the only source of truth for the
  * selected tab. Two rules make that work:
  *
  * - The rest of the query string is preserved, so `?server=` survives a move
  *   within the logs family and is dropped on the way out — a stale install
- *   selection must not linger on Overview or Credentials.
- * - Overview carries no `tab` param, matching the bare URL people land on.
+ *   selection must not linger on the unified main page.
+ * - Overview is the main page and carries no `tab` param.
  *
  * Preserving the other params also keeps each href an exact match for the URL
  * it selects. `PageLayout` compares hrefs against the full current URL and
  * falls back to a substring test when nothing matches exactly — under that
- * fallback a bare Overview href is a prefix of every other tab's URL, so
- * Overview would light up alongside whichever tab is really open.
+ * fallback a bare main-page href is a prefix of every tab's URL.
  */
 export function buildDetailTabHref({
   tab,

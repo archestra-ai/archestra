@@ -187,6 +187,8 @@ interface McpCatalogFormProps {
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   embedded?: boolean;
+  /** Frames only the form body so a shared wizard footer can sit beside it. */
+  wizardPanel?: boolean;
   /**
    * Number of installed servers that would be affected by a cascade
    * reinstall. Drives the inline confirm bar copy in edit mode. Defaults
@@ -206,6 +208,7 @@ export function McpCatalogForm({
   onDirtyChange,
   submitRef,
   embedded = false,
+  wizardPanel = false,
   affectedServerCount = 0,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
@@ -952,7 +955,7 @@ export function McpCatalogForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
-        className="flex min-h-0 flex-1 flex-col"
+        className={`flex min-h-0 flex-1 flex-col ${wizardPanel ? "gap-4" : ""}`}
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         data-1p-ignore="true"
       >
@@ -976,9 +979,7 @@ export function McpCatalogForm({
         <fieldset
           disabled={pendingSubmit !== null || isConfirming}
           inert={pendingSubmit !== null || isConfirming}
-          className={`flex min-h-0 min-w-0 flex-1 flex-col m-0 p-0 border-0 transition-opacity ${
-            pendingSubmit !== null || isConfirming ? "opacity-60" : ""
-          }`}
+          className={`m-0 flex min-h-0 min-w-0 flex-1 flex-col p-0 transition-opacity ${wizardPanel ? "rounded-lg border" : "border-0"} ${pendingSubmit !== null || isConfirming ? "opacity-60" : ""}`}
         >
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}

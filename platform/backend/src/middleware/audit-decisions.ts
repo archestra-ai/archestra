@@ -459,6 +459,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: mcp server × user; parent (mcp server) audited",
   },
+  mcpServerAlertMutesTable: {
+    audited: false,
+    reason: "per-viewer UI state; intentionally excluded from audit logs",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",

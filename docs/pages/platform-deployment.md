@@ -1368,6 +1368,10 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Example: `30`
   - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.
 
+- **`ARCHESTRA_MCP_SERVER_ALERTING_ENABLED`** - Beta gate for MCP Registry attention facets, issue diagnostics, ownership guidance, and per-viewer alert dismissal.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. An explicit `false` keeps alerting and its dismissal APIs hidden even when the master switch is enabled.
+
 ### MCP Server Orchestrator
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.

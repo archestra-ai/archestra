@@ -396,9 +396,27 @@ class McpServerModel {
     ];
 
     if (organizationId) {
-      const catalogBelongsToOrganization = or(
+      const ownerBelongsToOrganization = inArray(
+        schema.mcpServersTable.ownerId,
+        db
+          .select({ userId: schema.membersTable.userId })
+          .from(schema.membersTable)
+          .where(eq(schema.membersTable.organizationId, organizationId)),
+      );
+      const globalInstallBelongsToOrganization = and(
         isNull(schema.internalMcpCatalogTable.organizationId),
+        or(
+          eq(schema.teamsTable.organizationId, organizationId),
+          ownerBelongsToOrganization,
+          and(
+            isNull(schema.mcpServersTable.teamId),
+            isNull(schema.mcpServersTable.ownerId),
+          ),
+        ),
+      );
+      const catalogBelongsToOrganization = or(
         eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+        globalInstallBelongsToOrganization,
       );
       if (catalogBelongsToOrganization) {
         conditions.push(catalogBelongsToOrganization);
@@ -412,15 +430,9 @@ class McpServerModel {
       conditions.push(catalogInEnvironmentPredicate(environmentId));
     }
 
-    // Only the predefined Admin role may see another user's personal
-    // connection. Installation admins still manage every shared installation.
-    if (userId && !isPredefinedAdmin && isMcpServerAdmin) {
-      const sharedOrOwnedInstall = or(
-        ne(schema.mcpServersTable.scope, "personal"),
-        eq(schema.mcpServersTable.ownerId, userId),
-      );
-      if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
-    } else if (userId && !isPredefinedAdmin) {
+    // Installation admin is the cross-scope management capability, whether it
+    // comes from the predefined Admin role or a custom role.
+    if (userId && !isPredefinedAdmin && !isMcpServerAdmin) {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
@@ -1114,6 +1126,10 @@ class McpServerModel {
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
       .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
         schema.membersTable,
         and(
           eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
@@ -1125,11 +1141,17 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, id),
           notDeleted(schema.mcpServersTable),
           or(
-            eq(schema.teamsTable.organizationId, organizationId),
-            isNotNull(schema.membersTable.id),
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             and(
-              isNull(schema.mcpServersTable.teamId),
-              isNull(schema.mcpServersTable.ownerId),
+              isNull(schema.internalMcpCatalogTable.organizationId),
+              or(
+                eq(schema.teamsTable.organizationId, organizationId),
+                isNotNull(schema.membersTable.id),
+                and(
+                  isNull(schema.mcpServersTable.teamId),
+                  isNull(schema.mcpServersTable.ownerId),
+                ),
+              ),
             ),
           ),
         ),
@@ -1226,6 +1248,48 @@ class McpServerModel {
     }
 
     return updatedServer;
+  }
+
+  /**
+   * Persist a terminal OAuth refresh failure on an install.
+   *
+   * The three cause fields carry the latest diagnosis and are overwritten every
+   * time, but `oauthRefreshFailedAt` is a FIRST-failure stamp: it is written
+   * only on the transition into the failed state. Re-observing the same fault —
+   * which happens on every subsequent tool call against a connection whose
+   * credential is dead — leaves it alone.
+   *
+   * That is what makes the timestamp an episode key rather than a last-attempt
+   * clock: the registry's "failing since" reads the moment the fault began, and
+   * a viewer's alert mute pinned to it is not knocked loose seconds after it
+   * was taken. Clearing the fault (the null write, paired with dropping the
+   * connection's mutes) ends the episode.
+   *
+   * `coalesce` keeps the read and the write in one statement, so two concurrent
+   * failures cannot both conclude they are the transition.
+   */
+  static async recordOAuthRefreshFailure(
+    id: string,
+    failure: {
+      oauthRefreshError: "refresh_failed" | "no_refresh_token";
+      oauthRefreshErrorMessage: string;
+      oauthRefreshErrorDescription: string | null;
+      /**
+       * When this failure was observed. Persisted only when the install was not
+       * already failing; otherwise the existing stamp wins.
+       */
+      oauthRefreshFailedAt: Date;
+    },
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        oauthRefreshError: failure.oauthRefreshError,
+        oauthRefreshErrorMessage: failure.oauthRefreshErrorMessage,
+        oauthRefreshErrorDescription: failure.oauthRefreshErrorDescription,
+        oauthRefreshFailedAt: sql`coalesce(${schema.mcpServersTable.oauthRefreshFailedAt}, ${failure.oauthRefreshFailedAt.toISOString()})`,
+      })
+      .where(eq(schema.mcpServersTable.id, id));
   }
 
   /** Atomically move every install sharing one reset to the same status. */

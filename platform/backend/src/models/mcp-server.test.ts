@@ -178,20 +178,85 @@ describe("McpServerModel", () => {
       expect(visible.find((s) => s.id === theirs.id)).toBeUndefined();
     });
 
-    test("installation admin does not see another user's personal connection", async ({
+    test("installation admin sees another user's personal connection in their organization only", async ({
+      makeInternalMcpCatalog,
       makeMcpServer,
+      makeOrganization,
       makeUser,
     }) => {
       const me = await makeUser();
       const colleague = await makeUser();
+      const outsideUser = await makeUser();
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const otherCatalog = await makeInternalMcpCatalog({
+        organizationId: otherOrganization.id,
+      });
       const theirs = await makeMcpServer({
+        catalogId: catalog.id,
         scope: "personal",
         ownerId: colleague.id,
       });
-      await McpServerUserModel.assignUserToMcpServer(theirs.id, colleague.id);
-      const visible = await McpServerModel.findAll(me.id, true);
+      const outside = await makeMcpServer({
+        catalogId: otherCatalog.id,
+        scope: "personal",
+        ownerId: outsideUser.id,
+      });
+      const visible = await McpServerModel.findAll(
+        me.id,
+        true,
+        organization.id,
+      );
 
-      expect(visible.find((s) => s.id === theirs.id)).toBeUndefined();
+      expect(visible.map((server) => server.id)).toContain(theirs.id);
+      expect(visible.map((server) => server.id)).not.toContain(outside.id);
+    });
+
+    test("installation admin scopes global-catalog personal connections by owner organization", async ({
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const admin = await makeUser();
+      const colleague = await makeUser();
+      const outsideUser = await makeUser();
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+      await makeMember(admin.id, organization.id);
+      await makeMember(colleague.id, organization.id);
+      await makeMember(outsideUser.id, otherOrganization.id);
+      const globalCatalog = await InternalMcpCatalogModel.create({
+        name: `global-admin-scope-${crypto.randomUUID()}`,
+        serverType: "remote",
+        serverUrl: "https://global.example.com/mcp",
+      });
+      const colleagueConnection = await makeMcpServer({
+        catalogId: globalCatalog.id,
+        scope: "personal",
+        ownerId: colleague.id,
+      });
+      const outsideConnection = await makeMcpServer({
+        catalogId: globalCatalog.id,
+        scope: "personal",
+        ownerId: outsideUser.id,
+      });
+
+      const visible = await McpServerModel.findAll(
+        admin.id,
+        true,
+        organization.id,
+      );
+
+      expect(visible.map((server) => server.id)).toContain(
+        colleagueConnection.id,
+      );
+      expect(visible.map((server) => server.id)).not.toContain(
+        outsideConnection.id,
+      );
     });
 
     test("predefined admin sees another user's personal connection in their organization only", async ({
@@ -443,11 +508,13 @@ describe("McpServerModel", () => {
   describe("findAll with scope filter", () => {
     test("returns the owner's personal installation from a global catalog when organization-scoped", async ({
       makeInternalMcpCatalog,
+      makeMember,
       makeOrganization,
       makeUser,
     }) => {
       const organization = await makeOrganization();
       const owner = await makeUser();
+      await makeMember(owner.id, organization.id);
       const catalog = await makeInternalMcpCatalog();
       await db
         .update(schema.internalMcpCatalogTable)

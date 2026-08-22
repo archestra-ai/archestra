@@ -19,8 +19,11 @@ describe("PluginPlatforms", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("checkbox", { name: /Windows/ }));
-    await user.click(screen.getByRole("checkbox", { name: /macOS \/ Linux/ }));
+    await user.click(screen.getByRole("combobox", { name: /platform/i }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /Windows/ }));
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: /macOS \/ Linux/ }),
+    );
 
     expect(screen.getByTestId("platforms")).toHaveTextContent("windows");
   });
@@ -29,7 +32,10 @@ describe("PluginPlatforms", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("checkbox", { name: /macOS \/ Linux/ }));
+    await user.click(screen.getByRole("combobox", { name: /platform/i }));
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: /macOS \/ Linux/ }),
+    );
 
     expect(screen.getByTestId("platforms")).toHaveTextContent("posix");
   });

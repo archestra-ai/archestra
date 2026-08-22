@@ -107,6 +107,38 @@ describe("PluginInstallDialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("preselects the detected operating system when it is compatible", async () => {
+    const platformSpy = vi
+      .spyOn(window.navigator, "platform", "get")
+      .mockReturnValue("Win32");
+
+    try {
+      render(
+        <PluginInstallDialog
+          plugins={[
+            {
+              id: "plugin-windows",
+              displayName: "Cross-platform plugin",
+              clientType: "claude-code",
+              supportedPlatforms: ["posix", "windows"],
+            },
+          ]}
+          open
+          onOpenChange={() => {}}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(createSetup).toHaveBeenCalledWith(
+          expect.objectContaining({ platform: "windows" }),
+        ),
+      );
+      expect(screen.getByText("Windows")).toBeVisible();
+    } finally {
+      platformSpy.mockRestore();
+    }
+  });
+
   it("generates one setup command for a compatible Plugin selection", async () => {
     render(
       <PluginInstallDialog

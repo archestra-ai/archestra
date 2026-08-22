@@ -66,6 +66,7 @@ import {
   usePreviewGithubPlugin,
 } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils";
+import { PluginClientIcon } from "./plugin-client-icon";
 import { PluginPreviewDialog } from "./plugin-preview-dialog";
 import { PluginScopeSelector } from "./plugin-scope-selector";
 
@@ -619,6 +620,12 @@ export function ImportMarketplaceDialog({
                           value={clients}
                           onValueChange={handleClientsChange}
                           options={availableClients}
+                          renderIcon={(client) => (
+                            <PluginClientIcon
+                              clientType={client.id}
+                              size={18}
+                            />
+                          )}
                         />
                         <p className="text-xs text-muted-foreground">
                           All detected clients are selected by default. Hiding a

@@ -1,15 +1,10 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
+import { PluginClientIcon } from "./plugin-client-icon";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
 
 export interface PluginFileDraft {
@@ -76,23 +71,16 @@ export function PluginContentFields({
         {onClientTypeChange && clientType ? (
           <label htmlFor="plugin-client-type" className="space-y-2">
             <span className="text-sm font-medium">Target client</span>
-            <Select
+            <SingleSelectCombobox
+              id="plugin-client-type"
               value={clientType}
-              onValueChange={(value) =>
+              onChange={(value) =>
                 onClientTypeChange(value as PluginClientType)
               }
+              options={PLUGIN_CLIENT_OPTIONS}
+              searchPlaceholder="Search clients..."
               disabled={readOnly}
-            >
-              <SelectTrigger id="plugin-client-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="claude-code">Claude Code</SelectItem>
-                <SelectItem value="copilot-cli">Copilot CLI</SelectItem>
-                <SelectItem value="codex">Codex</SelectItem>
-                <SelectItem value="cursor">Cursor (advertised only)</SelectItem>
-              </SelectContent>
-            </Select>
+            />
           </label>
         ) : null}
         {pluginSlug ? (
@@ -155,3 +143,14 @@ export function PluginContentFields({
     </div>
   );
 }
+
+const PLUGIN_CLIENT_OPTIONS = [
+  ["claude-code", "Claude Code"],
+  ["copilot-cli", "Copilot CLI"],
+  ["codex", "Codex"],
+  ["cursor", "Cursor (advertised only)"],
+].map(([value, label]) => ({
+  value: value as PluginClientType,
+  label,
+  icon: <PluginClientIcon clientType={value as PluginClientType} size={18} />,
+}));

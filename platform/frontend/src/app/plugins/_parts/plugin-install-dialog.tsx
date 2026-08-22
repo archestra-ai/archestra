@@ -23,8 +23,12 @@ import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "../../connection/connection-flow.utils";
-import type { ConnectPlatformOption } from "../../connection/platform.utils";
-import { platformLabels } from "../../connection/platform.utils";
+import {
+  type ConnectPlatformOption,
+  detectPlatform,
+  platformLabels,
+  toPlatformOption,
+} from "../../connection/platform.utils";
 import { ConnectionPlatformSelect } from "../../connection/platform-select";
 import { SetupCommandLine } from "../../connection/setup-command-line";
 import { SetupSummaryRow } from "../../connection/setup-summary-row";
@@ -70,6 +74,7 @@ export function PluginInstallDialog({
     [platformKey],
   );
   const [platform, setPlatform] = useState<ConnectPlatformOption>(platforms[0]);
+  const [platformDetected, setPlatformDetected] = useState(false);
   const [selectedBaseUrl, setSelectedBaseUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState<"platform" | "endpoint" | null>(null);
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
@@ -100,6 +105,12 @@ export function PluginInstallDialog({
       ? selectedBaseUrl
       : defaultBaseUrl;
 
+  useEffect(() => {
+    const detected = toPlatformOption(detectPlatform());
+    setPlatform(platforms.includes(detected) ? detected : platforms[0]);
+    setPlatformDetected(true);
+  }, [platforms]);
+
   const generate = useCallback(async () => {
     if (!baseUrl) return;
     setResult(null);
@@ -115,9 +126,9 @@ export function PluginInstallDialog({
   }, [baseUrl, clientType, createSetup, platform, pluginIds]);
 
   useEffect(() => {
-    if (!open || organizationPending || !baseUrl) return;
+    if (!open || !platformDetected || organizationPending || !baseUrl) return;
     void generate();
-  }, [baseUrl, generate, open, organizationPending]);
+  }, [baseUrl, generate, open, organizationPending, platformDetected]);
 
   return (
     <StandardDialog

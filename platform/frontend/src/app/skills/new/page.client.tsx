@@ -12,8 +12,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
@@ -288,6 +290,45 @@ function NewSkillWizard() {
               {effectiveStep === "content" && (
                 <div className="flex flex-col gap-4">
                   <div className="rounded-lg border p-6">
+                    <div className="mb-6 grid gap-5 md:grid-cols-2">
+                      <label htmlFor="skill-name" className="space-y-2">
+                        <span className="text-sm font-medium">Skill name</span>
+                        <Input
+                          id="skill-name"
+                          value={parsed.name ?? ""}
+                          onChange={(event) =>
+                            patchDraft({
+                              manifest: updateManifestFrontmatterField({
+                                manifest: draft.manifest,
+                                field: "name",
+                                value: event.target.value,
+                              }),
+                            })
+                          }
+                          placeholder="release-checklist"
+                          required
+                        />
+                      </label>
+                      <label htmlFor="skill-description" className="space-y-2">
+                        <span className="text-sm font-medium">Description</span>
+                        <Textarea
+                          id="skill-description"
+                          value={parsed.description ?? ""}
+                          onChange={(event) =>
+                            patchDraft({
+                              manifest: updateManifestFrontmatterField({
+                                manifest: draft.manifest,
+                                field: "description",
+                                value: event.target.value,
+                              }),
+                            })
+                          }
+                          placeholder="What this skill teaches agents to do"
+                          rows={2}
+                          required
+                        />
+                      </label>
+                    </div>
                     <SkillContentEditor
                       manifest={draft.manifest}
                       files={draft.files}
@@ -435,4 +476,22 @@ function ActionCard({
       </div>
     </button>
   );
+}
+
+function updateManifestFrontmatterField(params: {
+  manifest: string;
+  field: "name" | "description";
+  value: string;
+}): string {
+  const line = `${params.field}: ${JSON.stringify(params.value)}`;
+  const fieldPattern = new RegExp(`^${params.field}:.*$`, "m");
+  if (fieldPattern.test(params.manifest)) {
+    return params.manifest.replace(fieldPattern, line);
+  }
+
+  const closingFence = params.manifest.indexOf("\n---", 4);
+  if (params.manifest.startsWith("---\n") && closingFence >= 0) {
+    return `${params.manifest.slice(0, closingFence)}\n${line}${params.manifest.slice(closingFence)}`;
+  }
+  return `---\n${line}\n---\n\n${params.manifest}`;
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { CLIENT_FILTER_OPTIONS } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Braces,
@@ -21,7 +20,6 @@ import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
-import { ClientIcon } from "@/components/provider-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
@@ -69,6 +67,7 @@ import {
   pluginAction,
   pluginActionHref,
 } from "./_parts/plugin-actions-model";
+import { PluginClientIcon } from "./_parts/plugin-client-icon";
 import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
@@ -935,11 +934,7 @@ function FacetSelect({
 }
 
 function clientFilterIcon(clientType: string): ReactNode {
-  const filterValue = clientType === "claude-code" ? "claude" : clientType;
-  const client = CLIENT_FILTER_OPTIONS.find(
-    (option) => option.value === filterValue,
-  );
-  return client ? <ClientIcon client={client} size={16} /> : null;
+  return <PluginClientIcon clientType={clientType} />;
 }
 
 function PluginSourceIcon({ plugin }: { plugin: PluginListItem }) {

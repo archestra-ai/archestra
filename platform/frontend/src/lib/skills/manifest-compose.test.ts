@@ -80,6 +80,7 @@ describe("parseManifestFields", () => {
       hasDescription: true,
       templated: true,
       name: "x",
+      description: "y",
     });
   });
 
@@ -98,6 +99,12 @@ describe("parseManifestFields", () => {
 
   it("returns a null name when the frontmatter has none", () => {
     expect(parseManifestFields("---\ndescription: y\n---").name).toBeNull();
+  });
+
+  it("treats quoted empty metadata as incomplete", () => {
+    expect(
+      parseManifestFields('---\nname: ""\ndescription: ""\n---'),
+    ).toMatchObject({ hasName: false, hasDescription: false });
   });
 
   it("accepts a quoted templated value, matching the backend parser", () => {

@@ -110,7 +110,10 @@ function NewPluginWizard() {
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [clientType, setClientType] = useState<PluginClientType>("claude-code");
-  const [platforms, setPlatforms] = useState<PluginPlatform[]>(["posix"]);
+  const [platforms, setPlatforms] = useState<PluginPlatform[]>([
+    "posix",
+    "windows",
+  ]);
   const [files, setFiles] = useState<PluginFileDraft[]>(INITIAL_FILES);
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);

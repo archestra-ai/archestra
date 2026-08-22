@@ -633,7 +633,7 @@ describe("ConnectCommandPanel", () => {
         screen.getByText(/No compatible plugins for Windows/),
       ).toBeVisible();
       expect(
-        screen.getByText(/Not marked compatible with Windows: OpenAPPA/),
+        screen.getByText(/Not compatible with Windows: OpenAPPA/),
       ).toBeVisible();
     } finally {
       platformSpy.mockRestore();

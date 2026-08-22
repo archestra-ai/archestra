@@ -1328,7 +1328,7 @@ function PluginsDetail({
       )}
       {incompatiblePlugins.length > 0 && (
         <p>
-          Not marked compatible with {platformLabels[platform]}:{" "}
+          Not compatible with {platformLabels[platform]}:{" "}
           {incompatiblePlugins.map((plugin) => plugin.displayName).join(", ")}.
         </p>
       )}

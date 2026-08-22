@@ -16,7 +16,9 @@ vi.mock("../_parts/plugin-scope-selector", () => ({
   PluginScopeSelector: () => <div data-testid="plugin-scope-selector" />,
 }));
 vi.mock("../_parts/plugin-platforms", () => ({
-  PluginPlatforms: () => <div data-testid="plugin-platforms" />,
+  PluginPlatforms: ({ value }: { value: string[] }) => (
+    <div data-testid="plugin-platforms">{value.join(",")}</div>
+  ),
 }));
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -468,7 +470,9 @@ describe("NewPluginPage", () => {
 
     const displayName = screen.getByLabelText("Display name");
     expect(displayName).toBeVisible();
-    expect(screen.getByTestId("plugin-platforms")).toBeVisible();
+    expect(screen.getByTestId("plugin-platforms")).toHaveTextContent(
+      "posix,windows",
+    );
     expect(screen.getByText("hooks/hooks.json")).toBeVisible();
     expect(screen.getByRole("button", { name: "New file" })).toBeVisible();
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();

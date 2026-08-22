@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +22,7 @@ export function ConnectionClientMultiSelect({
   ariaLabel = "Select clients",
   className,
   disabled,
+  renderIcon = (client) => <ClientIcon client={client} size={18} />,
 }: {
   value: ConnectClient[];
   onValueChange: (value: ConnectClient[]) => void;
@@ -29,6 +31,7 @@ export function ConnectionClientMultiSelect({
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
+  renderIcon?: (client: ConnectClient) => ReactNode;
 }) {
   const selected = options.filter((client) =>
     value.some((item) => item.id === client.id),
@@ -52,7 +55,7 @@ export function ConnectionClientMultiSelect({
           <span className="flex min-w-0 items-center gap-2 truncate">
             {selected.map((client) => (
               <span key={client.id} aria-hidden>
-                <ClientIcon client={client} size={18} />
+                {renderIcon(client)}
               </span>
             ))}
             <span className="truncate">
@@ -89,9 +92,7 @@ export function ConnectionClientMultiSelect({
               onSelect={(event) => event.preventDefault()}
             >
               <span className="flex items-center gap-2">
-                <span aria-hidden>
-                  <ClientIcon client={client} size={18} />
-                </span>
+                <span aria-hidden>{renderIcon(client)}</span>
                 {client.label}
               </span>
             </DropdownMenuCheckboxItem>

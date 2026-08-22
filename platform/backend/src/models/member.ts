@@ -37,6 +37,14 @@ class MemberModel {
     return result;
   }
 
+  static async findOrganizationIdsByUserId(userId: string): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ organizationId: schema.membersTable.organizationId })
+      .from(schema.membersTable)
+      .where(eq(schema.membersTable.userId, userId));
+    return rows.map((row) => row.organizationId);
+  }
+
   /**
    * Get a member by their member ID
    */

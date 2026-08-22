@@ -2,6 +2,7 @@ import {
   type AnyPgColumn,
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   text,
@@ -79,6 +80,10 @@ const internalMcpCatalogTable = softDeletablePgTable(
      */
     dynamicConnectionMcpServerId: uuid("dynamic_connection_mcp_server_id"),
     serverUrl: text("server_url"), // For remote servers
+    /** Monotonic token preventing stale concurrent skills/list snapshots. */
+    skillsRefreshGeneration: integer("skills_refresh_generation")
+      .notNull()
+      .default(0),
     docsUrl: text("docs_url"), // Documentation URL for remote servers
     clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {
       onDelete: "set null",

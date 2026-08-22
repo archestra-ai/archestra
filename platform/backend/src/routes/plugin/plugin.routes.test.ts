@@ -607,11 +607,12 @@ describe("plugin routes", () => {
 describe("plugin audit records", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
+  let actor: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
-    const actor = await makeUser();
+    actor = await makeUser();
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (
@@ -668,5 +669,159 @@ describe("plugin audit records", () => {
     });
     expect(data[1].after).toMatchObject({ displayName: "Renamed plugin" });
     expect(data[2].before).toMatchObject({ displayName: "Renamed plugin" });
+  });
+
+  test("previewing an update audits the pending candidate", async () => {
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: actor.id,
+      input: createPayload(),
+      source: {
+        repo: "audit-owner/plugin",
+        ref: "main",
+        sha: "approved-commit",
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+      },
+    });
+    if (!plugin) throw new Error("failed to create Plugin");
+    stubGithub([
+      {
+        owner: "audit-owner",
+        repo: "plugin",
+        files: { "hooks/hooks.json": '{"version":2}\n' },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/plugins/${plugin.id}/github/preview-update`,
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType: "plugin",
+      sortDirection: "asc",
+      limit: 20,
+      offset: 0,
+    });
+    expect(data).toHaveLength(1);
+    expect(data[0]).toMatchObject({
+      action: "plugin.updated",
+      resourceId: plugin.id,
+      before: { pendingSourceSha: null },
+      after: { pendingSourceSha: STUB_COMMIT_SHA },
+    });
+  });
+
+  test("previewing the already-approved commit does not emit an update audit", async () => {
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: actor.id,
+      input: createPayload(),
+      source: {
+        repo: "no-op-owner/plugin",
+        ref: "main",
+        sha: STUB_COMMIT_SHA,
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+      },
+    });
+    if (!plugin) throw new Error("failed to create Plugin");
+    stubGithub([
+      {
+        owner: "no-op-owner",
+        repo: "plugin",
+        files: { "hooks/hooks.json": HOOKS_BYTES },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/plugins/${plugin.id}/github/preview-update`,
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType: "plugin",
+      sortDirection: "asc",
+      limit: 20,
+      offset: 0,
+    });
+    expect(data).toHaveLength(0);
+  });
+
+  test("preview rejects a stale fetch instead of replacing a concurrent candidate", async () => {
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: actor.id,
+      input: createPayload(),
+      source: {
+        repo: "race-owner/plugin",
+        ref: "main",
+        sha: "approved-commit",
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+      },
+    });
+    if (!plugin) throw new Error("failed to create Plugin");
+    stubGithub([
+      {
+        owner: "race-owner",
+        repo: "plugin",
+        files: { "hooks/hooks.json": '{"version":2}\n' },
+      },
+    ]);
+    const githubFetch = globalThis.fetch;
+    let releaseFetch: (() => void) | undefined;
+    let markFetchStarted: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    vi.stubGlobal("fetch", async (...args: Parameters<typeof fetch>) => {
+      markFetchStarted?.();
+      await fetchGate;
+      return githubFetch(...args);
+    });
+
+    const preview = app.inject({
+      method: "POST",
+      url: `/api/plugins/${plugin.id}/github/preview-update`,
+      payload: {},
+    });
+    await fetchStarted;
+    const observed = await PluginModel.findByIdForSync(plugin.id);
+    if (!observed) throw new Error("failed to load Plugin sync state");
+    await PluginModel.markGithubSyncResult({
+      id: plugin.id,
+      expectedSyncGeneration: observed.syncGeneration,
+      expectedPendingSourceSha: observed.pendingSourceSha,
+      sourceSha: "concurrent-candidate",
+      files: plugin.files,
+      error: null,
+    });
+    releaseFetch?.();
+
+    expect((await preview).statusCode).toBe(409);
+    await expect(PluginModel.findByIdForSync(plugin.id)).resolves.toMatchObject(
+      {
+        pendingSourceSha: "concurrent-candidate",
+      },
+    );
   });
 });

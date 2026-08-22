@@ -12,6 +12,7 @@ import {
   SkillModel,
   SkillShareLinkModel,
 } from "@/models";
+import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
 import {
@@ -20,6 +21,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   deriveSkillShareLinkStatus,
+  PLUGIN_DELIVERY_MAX_COUNT,
   type PluginPlatform,
   PluginPlatformSchema,
   SelectSkillShareLinkSchema,
@@ -62,7 +64,10 @@ const SkillShareLinkBodySchema = z.object({
   // upper bound sized for the "share all org skills" UX at /connection,
   // which snapshots the full org skill set in one POST.
   skillIds: z.array(z.string().uuid()).max(500).optional(),
-  pluginIds: z.array(z.string().uuid()).max(50).optional(),
+  pluginIds: z
+    .array(z.string().uuid())
+    .max(PLUGIN_DELIVERY_MAX_COUNT)
+    .optional(),
   pluginPlatform: PluginPlatformSchema.optional(),
   name: z.string().trim().min(1).max(200).optional(),
   expiresAt: z.iso.datetime().nullable().optional(),
@@ -455,6 +460,13 @@ async function validatePluginsForLink(params: {
       "Only users with plugin:read and plugin:admin can publish plugins",
     );
   }
+  const deliveryError = pluginDeliveryBudgetError(
+    await PluginModel.getApprovedDeliveryStats({
+      ids: params.pluginIds,
+      organizationId: params.organizationId,
+    }),
+  );
+  if (deliveryError) throw new ApiError(400, deliveryError);
   const plugins = await PluginModel.findApprovedByIds({
     ids: params.pluginIds,
     organizationId: params.organizationId,

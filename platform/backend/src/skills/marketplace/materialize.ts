@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { SkillShareLinkRevisionModel } from "@/models";
+import {
+  computePluginDeliveryStats,
+  pluginDeliveryBudgetError,
+} from "@/plugins/delivery-budget";
 import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import { isUniqueConstraintError } from "@/utils/db";
 import { computeLayout, type MaterializeRequest } from "./layout";
@@ -146,6 +150,10 @@ export class MarketplaceMaterializer {
   private async doMaterialize(
     req: MaterializeRequest,
   ): Promise<MaterializeResult> {
+    const deliveryError = pluginDeliveryBudgetError(
+      computePluginDeliveryStats(req.plugins ?? []),
+    );
+    if (deliveryError) throw new Error(deliveryError);
     const repoPath = this.repoPathFor(req.linkId);
 
     let latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);

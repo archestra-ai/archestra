@@ -53,7 +53,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
@@ -119,6 +119,9 @@ function PluginsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { data: canViewPluginDetails } = useHasPermissions({
+    plugin: ["read", "admin"],
+  });
 
   const search = (searchParams.get("search") ?? "").trim().toLowerCase();
   const client = searchParams.get("client") ?? "all";
@@ -728,7 +731,11 @@ function PluginsList() {
               hideSelectedCount
               sorting={sorting}
               onSortingChange={setSorting}
-              onRowClick={(row) => router.push(pluginDetailHref(row.id))}
+              onRowClick={
+                canViewPluginDetails
+                  ? (row) => router.push(pluginDetailHref(row.id))
+                  : undefined
+              }
               getRowClassName={(row) =>
                 isArchestraPlugin(row) ? "plugin-featured-row" : undefined
               }

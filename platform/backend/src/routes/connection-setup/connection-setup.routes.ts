@@ -27,6 +27,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
+import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -53,6 +54,7 @@ import {
   constructResponseSchema,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type Organization,
+  PLUGIN_DELIVERY_MAX_COUNT,
   type PluginPlatform,
 } from "@/types";
 import {
@@ -120,7 +122,10 @@ const CreateConnectionSetupBodySchema = z.object({
     })
     .optional(),
   /** Exact enabled/approved plugins reviewed by the connection page. */
-  pluginIds: z.array(z.string().uuid()).max(50).optional(),
+  pluginIds: z
+    .array(z.string().uuid())
+    .max(PLUGIN_DELIVERY_MAX_COUNT)
+    .optional(),
 });
 
 /**
@@ -431,6 +436,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need plugin:read and plugin:admin permissions to install plugins",
             );
           }
+          await assertPluginDeliveryBudget({
+            ids: uniqueIds,
+            organizationId,
+          });
           plugins = await PluginModel.findApprovedByIds({
             ids: uniqueIds,
             organizationId,
@@ -463,14 +472,25 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         if (canDeliverPlugins) {
           const requiredPlatform = resolvePluginPlatform(platform);
-          plugins = (
-            await PluginModel.findDeliverableForClient({
+          assertPluginDeliveryStats(
+            await PluginModel.getDeliverableStatsForClient({
               organizationId,
               clientType: clientId,
-            })
-          ).filter((plugin) =>
-            plugin.supportedPlatforms.includes(requiredPlatform),
+              platform: requiredPlatform,
+            }),
           );
+          const deliverable =
+            await PluginModel.findDeliverableMetadataForClient({
+              organizationId,
+              clientType: clientId,
+              platform: requiredPlatform,
+            });
+          const ids = deliverable.map((plugin) => plugin.id);
+          await assertPluginDeliveryBudget({ ids, organizationId });
+          plugins = await PluginModel.findApprovedByIds({
+            ids,
+            organizationId,
+          });
         }
       }
       const pluginIds = plugins.map((plugin) => plugin.id);
@@ -907,6 +927,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       organizationId: setup.organizationId,
     });
     if (!canDeliverPlugins) throw GONE();
+    await assertPluginDeliveryBudget({
+      ids: pluginIds,
+      organizationId: setup.organizationId,
+    });
     const plugins = await PluginModel.findApprovedByIds({
       ids: pluginIds,
       organizationId: setup.organizationId,
@@ -964,6 +988,24 @@ function resolvePluginPlatform(
   platform: z.infer<typeof ConnectionSetupPlatformSchema>,
 ): PluginPlatform {
   return platform === "windows" ? "windows" : "posix";
+}
+
+async function assertPluginDeliveryBudget(params: {
+  ids: string[];
+  organizationId: string;
+}): Promise<void> {
+  const error = pluginDeliveryBudgetError(
+    await PluginModel.getApprovedDeliveryStats(params),
+  );
+  if (error) throw new ApiError(400, error);
+}
+
+function assertPluginDeliveryStats(params: {
+  pluginCount: number;
+  totalBytes: number;
+}): void {
+  const error = pluginDeliveryBudgetError(params);
+  if (error) throw new ApiError(400, error);
 }
 
 async function userCanDeliverPlugins(params: {

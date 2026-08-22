@@ -51,6 +51,7 @@ export async function handlePluginGithubSync(
     await PluginModel.markGithubSyncResult({
       id: due.id,
       expectedSyncGeneration: due.syncGeneration,
+      expectedPendingSourceSha: due.pendingSourceSha,
       sourceSha: imported.commitSha,
       files: imported.files,
       error: null,
@@ -64,6 +65,7 @@ export async function handlePluginGithubSync(
     await PluginModel.markGithubSyncResult({
       id: due.id,
       expectedSyncGeneration: due.syncGeneration,
+      expectedPendingSourceSha: due.pendingSourceSha,
       error: message,
     });
   }

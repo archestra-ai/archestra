@@ -12,6 +12,7 @@ import {
   SkillModel,
   SkillShareLinkModel,
 } from "@/models";
+import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { serveGitHttpRequest } from "@/skills/marketplace/git-http-backend";
 import type {
@@ -262,6 +263,13 @@ async function loadPluginsForLink(params: {
   }
   const clientType = params.clientType;
   const pluginPlatform = params.pluginPlatform;
+  const deliveryError = pluginDeliveryBudgetError(
+    await PluginModel.getApprovedDeliveryStats({
+      ids: params.ids,
+      organizationId: params.organizationId,
+    }),
+  );
+  if (deliveryError) throw new Error(deliveryError);
   const plugins = await PluginModel.findApprovedByIds({
     ids: params.ids,
     organizationId: params.organizationId,

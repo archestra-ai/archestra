@@ -642,6 +642,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "plugin.updated",
     fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
   },
+  "/api/plugins/:id/github/preview-update": {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
   "/api/plugins/:id/github/sync": {
     resourceType: "plugin",
     action: "plugin.updated",

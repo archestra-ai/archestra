@@ -99,9 +99,9 @@ describe("DataTable column widths", () => {
 
     const name = container.querySelector('th[data-column-id="name"]');
     const files = container.querySelector('th[data-column-id="files"]');
-    // Flexible size = 700 + 150 = 850; actions keep their fixed 150px.
-    expect(name).toHaveStyle({ width: "82.3529%" });
-    expect(files).toHaveStyle({ width: "17.6471%" });
+    // Flexible shares split the width left after the fixed 150px actions.
+    expect(name).toHaveStyle({ width: "calc(82.3529% - 123.53px)" });
+    expect(files).toHaveStyle({ width: "calc(17.6471% - 26.47px)" });
   });
 
   it("keeps a pixel width on the actions column", () => {
@@ -148,7 +148,7 @@ describe("DataTable column widths", () => {
 
     expect(container.querySelector("table")).toHaveClass("w-full");
     expect(container.querySelector("table")).toHaveStyle({
-      minWidth: "1176px",
+      minWidth: "1196px",
     });
     expect(
       (container.querySelector('th[data-column-id="name"]') as HTMLElement)

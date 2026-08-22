@@ -4,7 +4,7 @@ import { ConnectionSetupModel, PluginModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { PLUGIN_DELIVERY_MAX_COUNT, type User } from "@/types";
 
 vi.mock("@/auth");
 vi.mock("@/cache-manager");
@@ -171,6 +171,27 @@ describe("POST /api/connection-setups with plugins", () => {
     });
     if (!foreign) throw new Error("failed to seed foreign plugin");
     expect((await postPluginSetup([foreign.id])).statusCode).toBe(404);
+  });
+
+  test("rejects an implicit all-Plugin setup before loading an oversized set", async () => {
+    for (let index = 0; index <= PLUGIN_DELIVERY_MAX_COUNT; index++) {
+      await seedPlugin("claude-code");
+    }
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain(
+      `Plugin delivery is limited to ${PLUGIN_DELIVERY_MAX_COUNT} plugins`,
+    );
   });
 
   function postPluginSetup(pluginIds: string[]) {

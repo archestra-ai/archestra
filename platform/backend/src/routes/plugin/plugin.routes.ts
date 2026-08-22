@@ -465,32 +465,35 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(GithubPluginPreviewSchema),
       },
     },
-    async ({ organizationId, user, params, body }, reply) => {
+    async (request, reply) => {
+      const { organizationId, user, params, body } = request;
       await requirePluginAdmin({ organizationId, userId: user.id });
       const githubToken = await resolveGithubToken({
         ...(body ?? {}),
         organizationId,
         userId: user.id,
       });
-      const { imported } = await importExistingGithubPlugin({
-        id: params.id,
-        organizationId,
-        userId: user.id,
-        githubToken,
-      });
-      const internal = await PluginModel.findByIdForSync(params.id);
-      if (
-        internal &&
-        internal.organizationId === organizationId &&
-        imported.commitSha !== internal.sourceSha
-      ) {
-        await PluginModel.markGithubSyncResult({
-          id: internal.id,
-          expectedSyncGeneration: internal.syncGeneration,
+      const { syncState: observed, imported } =
+        await importExistingGithubPlugin({
+          id: params.id,
+          organizationId,
+          userId: user.id,
+          githubToken,
+        });
+      if (imported.commitSha !== observed.sourceSha) {
+        const written = await PluginModel.markGithubSyncResult({
+          id: observed.id,
+          expectedSyncGeneration: observed.syncGeneration,
+          expectedPendingSourceSha: observed.pendingSourceSha,
           sourceSha: imported.commitSha,
           files: imported.files,
           error: null,
         });
+        if (!written) {
+          throw new ApiError(409, "Plugin sync state changed; preview again");
+        }
+      } else {
+        request.auditSkip = true;
       }
       return reply.send(imported);
     },
@@ -882,8 +885,17 @@ async function importExistingGithubPlugin(params: {
   approvedCommitSha?: string;
   githubToken?: string;
 }) {
-  const plugin = await PluginModel.findById(params);
-  if (!plugin) throw new ApiError(404, "Plugin not found");
+  const [plugin, syncState] = await Promise.all([
+    PluginModel.findById(params),
+    PluginModel.findByIdForSync(params.id),
+  ]);
+  if (
+    !plugin ||
+    !syncState ||
+    syncState.organizationId !== params.organizationId
+  ) {
+    throw new ApiError(404, "Plugin not found");
+  }
   if (plugin.sourceKind !== "github" || !plugin.sourceRepo) {
     throw new ApiError(409, "Plugin is not linked to a GitHub source");
   }
@@ -924,7 +936,7 @@ async function importExistingGithubPlugin(params: {
   if (params.approvedCommitSha) {
     assertApprovedCommit(imported.commitSha, params.approvedCommitSha);
   }
-  return { plugin, imported };
+  return { plugin, syncState, imported };
 }
 
 function hasSingleGithubAuth(value: {

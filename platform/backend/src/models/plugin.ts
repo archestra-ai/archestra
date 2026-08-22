@@ -12,15 +12,16 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import type {
-  ClientType,
-  CreatePlugin,
-  Plugin,
-  PluginFile,
-  PluginFileInput,
-  PluginListItem,
-  PluginWithFiles,
-  UpdatePlugin,
+import {
+  type ClientType,
+  type CreatePlugin,
+  PLUGIN_DELIVERY_MAX_COUNT,
+  type Plugin,
+  type PluginFile,
+  type PluginFileInput,
+  type PluginListItem,
+  type PluginWithFiles,
+  type UpdatePlugin,
 } from "@/types";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
@@ -122,12 +123,115 @@ class PluginModel {
           notDeleted(schema.pluginsTable),
         ),
       )
-      .orderBy(asc(schema.pluginsTable.pluginSlug));
+      .orderBy(asc(schema.pluginsTable.pluginSlug))
+      .limit(PLUGIN_DELIVERY_MAX_COUNT + 1);
 
     return attachFilesAndVisibilityInIdOrder(
       plugins,
       plugins.map((plugin) => plugin.id),
     );
+  }
+
+  static async findDeliverableMetadataForClient(params: {
+    organizationId: string;
+    clientType: ClientType;
+    platform: "posix" | "windows";
+  }): Promise<Pick<Plugin, "id" | "supportedPlatforms">[]> {
+    return db
+      .select({
+        id: schema.pluginsTable.id,
+        supportedPlatforms: schema.pluginsTable.supportedPlatforms,
+      })
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          eq(schema.pluginsTable.clientType, params.clientType),
+          sql`${params.platform} = any(${schema.pluginsTable.supportedPlatforms})`,
+          eq(schema.pluginsTable.enabled, true),
+          eq(
+            schema.pluginsTable.approvedContentHash,
+            schema.pluginsTable.contentHash,
+          ),
+          notDeleted(schema.pluginsTable),
+        ),
+      )
+      .orderBy(asc(schema.pluginsTable.pluginSlug));
+  }
+
+  static async getDeliverableStatsForClient(params: {
+    organizationId: string;
+    clientType: ClientType;
+    platform: "posix" | "windows";
+  }): Promise<{ pluginCount: number; totalBytes: number }> {
+    const [stats] = await db
+      .select({
+        pluginCount: sql<number>`count(distinct ${schema.pluginsTable.id})::int`,
+        totalBytes: sql<number>`coalesce(sum(case
+          when ${schema.pluginFilesTable.encoding} = 'base64'
+            then octet_length(decode(${schema.pluginFilesTable.content}, 'base64'))
+          else octet_length(${schema.pluginFilesTable.content})
+        end), 0)::int`,
+      })
+      .from(schema.pluginsTable)
+      .leftJoin(
+        schema.pluginFilesTable,
+        eq(schema.pluginFilesTable.pluginId, schema.pluginsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          eq(schema.pluginsTable.clientType, params.clientType),
+          sql`${params.platform} = any(${schema.pluginsTable.supportedPlatforms})`,
+          eq(schema.pluginsTable.enabled, true),
+          eq(
+            schema.pluginsTable.approvedContentHash,
+            schema.pluginsTable.contentHash,
+          ),
+          notDeleted(schema.pluginsTable),
+        ),
+      );
+    return {
+      pluginCount: stats?.pluginCount ?? 0,
+      totalBytes: stats?.totalBytes ?? 0,
+    };
+  }
+
+  static async getApprovedDeliveryStats(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<{ pluginCount: number; totalBytes: number }> {
+    if (params.ids.length === 0) return { pluginCount: 0, totalBytes: 0 };
+    const [stats] = await db
+      .select({
+        pluginCount: sql<number>`count(distinct ${schema.pluginsTable.id})::int`,
+        totalBytes: sql<number>`coalesce(sum(case
+          when ${schema.pluginFilesTable.encoding} = 'base64'
+            then octet_length(decode(${schema.pluginFilesTable.content}, 'base64'))
+          else octet_length(${schema.pluginFilesTable.content})
+        end), 0)::int`,
+      })
+      .from(schema.pluginsTable)
+      .leftJoin(
+        schema.pluginFilesTable,
+        eq(schema.pluginFilesTable.pluginId, schema.pluginsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          inArray(schema.pluginsTable.id, params.ids),
+          eq(schema.pluginsTable.enabled, true),
+          eq(
+            schema.pluginsTable.approvedContentHash,
+            schema.pluginsTable.contentHash,
+          ),
+          notDeleted(schema.pluginsTable),
+        ),
+      );
+    return {
+      pluginCount: stats?.pluginCount ?? 0,
+      totalBytes: stats?.totalBytes ?? 0,
+    };
   }
 
   static async findBySourceId(params: {
@@ -503,51 +607,33 @@ class PluginModel {
   static async markGithubSyncResult(params: {
     id: string;
     expectedSyncGeneration: number;
+    expectedPendingSourceSha: string | null;
     sourceSha?: string;
     files?: PluginFileInput[];
     error: string | null;
   }): Promise<boolean> {
-    const [plugin] = await db
-      .select({
-        sourceSha: schema.pluginsTable.sourceSha,
-        syncGeneration: schema.pluginsTable.syncGeneration,
-      })
-      .from(schema.pluginsTable)
-      .where(
-        and(
-          eq(schema.pluginsTable.id, params.id),
-          eq(schema.pluginsTable.syncGeneration, params.expectedSyncGeneration),
-        ),
-      )
-      .limit(1);
-    if (!plugin) return false;
-    const changed =
-      params.error === null &&
-      params.sourceSha !== undefined &&
-      params.sourceSha !== plugin.sourceSha;
+    const candidateHash =
+      params.sourceSha === undefined
+        ? null
+        : computeContentHash(params.files ?? []);
     const [updated] = await db
       .update(schema.pluginsTable)
       .set({
         lastSyncedAt: new Date(),
         lastSyncError: params.error,
-        ...(changed
+        ...(params.error === null && params.sourceSha !== undefined
           ? {
-              pendingSourceSha: params.sourceSha,
-              pendingContentHash: computeContentHash(params.files ?? []),
-              pendingDetectedAt: new Date(),
+              pendingSourceSha: sql`case when ${params.sourceSha} is distinct from ${schema.pluginsTable.sourceSha} then ${params.sourceSha} else null end`,
+              pendingContentHash: sql`case when ${params.sourceSha} is distinct from ${schema.pluginsTable.sourceSha} then ${candidateHash} else null end`,
+              pendingDetectedAt: sql`case when ${params.sourceSha} is distinct from ${schema.pluginsTable.sourceSha} then now() else null end`,
             }
-          : params.error === null
-            ? {
-                pendingSourceSha: null,
-                pendingContentHash: null,
-                pendingDetectedAt: null,
-              }
-            : {}),
+          : {}),
       })
       .where(
         and(
           eq(schema.pluginsTable.id, params.id),
           eq(schema.pluginsTable.syncGeneration, params.expectedSyncGeneration),
+          sql`${schema.pluginsTable.pendingSourceSha} is not distinct from ${params.expectedPendingSourceSha}`,
         ),
       )
       .returning({ id: schema.pluginsTable.id });

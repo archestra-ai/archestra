@@ -6,6 +6,8 @@ import { schema } from "@/database";
 export const PLUGIN_MAX_FILES = 100;
 export const PLUGIN_MAX_FILE_BYTES = 750 * 1024;
 export const PLUGIN_MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+export const PLUGIN_DELIVERY_MAX_COUNT = 50;
+export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
 
 export const ClientTypeSchema = z.enum([
   "claude-code",

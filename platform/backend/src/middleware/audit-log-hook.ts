@@ -83,6 +83,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   });
 
   fastify.addHook("onResponse", async (request, reply) => {
+    if (request.auditSkip) return;
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
     if (shouldSkip(request.method, request.url, routePattern, request.user))

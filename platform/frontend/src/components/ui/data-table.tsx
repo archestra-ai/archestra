@@ -242,17 +242,30 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
-  const fixedColumnsSize = table
-    .getAllLeafColumns()
+  const visibleColumns = table.getVisibleLeafColumns();
+  const selectColumn = visibleColumns.find(
+    (column) => column.id === SELECT_COLUMN_ID,
+  );
+  const configuredTableSize =
+    table.getTotalSize() +
+    (selectColumn ? DATA_TABLE_SELECT_COLUMN_SIZE - selectColumn.getSize() : 0);
+  const fixedColumnsSize = visibleColumns
     .filter(
       (column) =>
         column.id === SELECT_COLUMN_ID ||
         column.id === ACTIONS_COLUMN_ID ||
         fixedWidthColumnIds.includes(column.id),
     )
-    .reduce((total, column) => total + column.getSize(), 0);
+    .reduce(
+      (total, column) =>
+        total +
+        (column.id === SELECT_COLUMN_ID
+          ? DATA_TABLE_SELECT_COLUMN_SIZE
+          : column.getSize()),
+      0,
+    );
   const flexibleColumnsSize = Math.max(
-    table.getTotalSize() - fixedColumnsSize,
+    configuredTableSize - fixedColumnsSize,
     1,
   );
 
@@ -265,7 +278,7 @@ export function DataTable<TData, TValue>({
             headers stack letter-by-letter and cell contents overlap. */}
         <Table
           className={tableClassName}
-          style={{ minWidth: table.getTotalSize() }}
+          style={{ minWidth: configuredTableSize }}
         >
           {!hideHeader && (
             <TableHeader>
@@ -298,6 +311,7 @@ export function DataTable<TData, TValue>({
                           flexibleWidth: flexibleColumnIds.includes(
                             header.column.id,
                           ),
+                          fixedColumnsSize,
                           flexibleColumnsSize,
                         })}
                       >
@@ -347,6 +361,7 @@ export function DataTable<TData, TValue>({
                           flexibleWidth: flexibleColumnIds.includes(
                             cell.column.id,
                           ),
+                          fixedColumnsSize,
                           flexibleColumnsSize,
                         })}
                       >
@@ -455,6 +470,7 @@ function getColumnStyle(params: {
   renderedSize: number;
   fixedWidth?: boolean;
   flexibleWidth?: boolean;
+  fixedColumnsSize: number;
   flexibleColumnsSize: number;
 }): React.CSSProperties | undefined {
   if (params.columnId === SELECT_COLUMN_ID) {
@@ -480,8 +496,10 @@ function getColumnStyle(params: {
     ) {
       style.width = params.renderedSize;
     } else {
-      const share = (params.renderedSize / params.flexibleColumnsSize) * 100;
-      style.width = `${share.toFixed(4)}%`;
+      const share = params.renderedSize / params.flexibleColumnsSize;
+      const percent = (share * 100).toFixed(4);
+      const fixedOffset = (params.fixedColumnsSize * share).toFixed(2);
+      style.width = `calc(${percent}% - ${fixedOffset}px)`;
     }
   }
   if (params.minSize) {

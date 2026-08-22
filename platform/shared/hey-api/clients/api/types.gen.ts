@@ -89513,6 +89513,118 @@ export type GetMyStatisticsResponses = {
 
 export type GetMyStatisticsResponse = GetMyStatisticsResponses[keyof GetMyStatisticsResponses];
 
+export type GetMyUsageBreakdownData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/me/breakdown';
+};
+
+export type GetMyUsageBreakdownErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyUsageBreakdownError = GetMyUsageBreakdownErrors[keyof GetMyUsageBreakdownErrors];
+
+export type GetMyUsageBreakdownResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tokenMix: {
+            freshInputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            outputTokens: number;
+            cacheCost: number;
+            cacheSavings: number;
+        };
+        contextBuckets: Array<{
+            bucket: 'under32k' | 'under128k' | 'under256k' | 'over256k';
+            requests: number;
+            tokens: number;
+            cost: number;
+        }>;
+        topSessions: Array<{
+            sessionId: string;
+            requests: number;
+            tokens: number;
+            cost: number;
+            billedCost: number;
+            startedAt: string;
+            lastActiveAt: string;
+            durationMinutes: number;
+            model: string | null;
+            client: string | null;
+        }>;
+        totalCost: number;
+        unsessionedRequests: number;
+    };
+};
+
+export type GetMyUsageBreakdownResponse = GetMyUsageBreakdownResponses[keyof GetMyUsageBreakdownResponses];
+
 export type GetAppStatisticsData = {
     body?: never;
     path?: never;

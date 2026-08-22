@@ -1587,6 +1587,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // keeps the Costs page useful to someone without `llmCost:read`, who sees the
   // personal summary and none of the organization-wide charts.
   [RouteId.GetMyStatistics]: {},
+  // Open for the same reason as GetMyStatistics: it explains the caller's own
+  // usage and names no one else's activity, no agent they cannot see, and no
+  // organization total.
+  [RouteId.GetMyUsageBreakdown]: {},
   // Per-app and per-skill cost additionally narrow to what the caller can see:
   // the routes resolve the same visibility the Apps page and the skills list use,
   // so cost reporting never lists an app or skill the caller has no access to.

@@ -1,4 +1,5 @@
 import {
+  ChartColumn,
   KeyRound,
   ListChecks,
   MonitorSmartphone,
@@ -16,6 +17,7 @@ import {
  */
 export const accountSections = [
   { id: "profile", label: "Profile", href: "/account", Icon: User },
+  { id: "usage", label: "Usage", href: "/account/usage", Icon: ChartColumn },
   {
     id: "permissions",
     label: "Permissions",

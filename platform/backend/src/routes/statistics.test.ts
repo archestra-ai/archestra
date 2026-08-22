@@ -606,3 +606,252 @@ describe("GET /api/statistics/me", () => {
     });
   });
 });
+
+describe("GET /api/statistics/me/breakdown", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization }) => {
+    currentUser = await makeUser({ email: "breakdown-me@test.com" });
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+
+    // Same deliberate absence of permissions as the sibling endpoint: this cut
+    // reports only the caller's own activity, so it must work with none.
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
+    vi.mocked(hasPermission).mockResolvedValue({
+      success: false,
+    } as Awaited<ReturnType<typeof hasPermission>>);
+    vi.mocked(userHasPermission).mockResolvedValue(false);
+    vi.mocked(getPermissionsForUserContext).mockResolvedValue({});
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("splits tokens by the rate they were charged at, and reports caching as a net loss when writes outweigh reads", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+
+    // A cache that is rewritten every turn and barely read back: the shape a
+    // session takes when something near the start of each request keeps
+    // changing. `cacheSavings` is stored negative for exactly this case.
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      inputTokens: 1_000,
+      outputTokens: 200,
+      cacheReadTokens: 50,
+      cacheWriteTokens: 4_000,
+      cacheCost: "0.5000000000",
+      cacheSavings: "-0.2500000000",
+      cost: "2.0000000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { tokenMix } = response.json();
+    expect(tokenMix).toMatchObject({
+      freshInputTokens: 1_000,
+      cacheReadTokens: 50,
+      cacheWriteTokens: 4_000,
+      outputTokens: 200,
+    });
+    expect(tokenMix.cacheCost).toBeCloseTo(0.5, 10);
+    // The finding this endpoint exists to surface: caching cost more than it
+    // saved, so the sign must survive the round trip rather than clamp at zero.
+    expect(tokenMix.cacheSavings).toBeCloseTo(-0.25, 10);
+  });
+
+  test("buckets requests by context size, counting cached tokens as context", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+
+    // Small.
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      inputTokens: 1_000,
+      outputTokens: 10,
+      cost: "0.1000000000",
+    });
+    // Fresh input alone is small, but the replayed cache puts the turn well
+    // over 128K: context is what the model had to read, cached or not.
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      inputTokens: 1_000,
+      cacheReadTokens: 200_000,
+      outputTokens: 10,
+      cost: "5.0000000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { contextBuckets } = response.json();
+    // Ascending, and bands with no activity are omitted rather than zero-filled.
+    expect(
+      contextBuckets.map((bucket: { bucket: string }) => bucket.bucket),
+    ).toEqual(["under32k", "under256k"]);
+    expect(contextBuckets[0]).toMatchObject({ requests: 1 });
+    expect(contextBuckets[1]).toMatchObject({ requests: 1 });
+    expect(contextBuckets[1].cost).toBeCloseTo(5, 10);
+  });
+
+  test("ranks sessions by cost, labels them, and counts requests belonging to none", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const start = new Date(Date.now() - 60 * 60 * 1000);
+
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      sessionId: "cheap-session",
+      inputTokens: 10,
+      outputTokens: 10,
+      cost: "0.5000000000",
+      model: "gpt-4o",
+      externalAgentId: "anthropic_claude",
+      createdAt: start,
+    });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      sessionId: "expensive-session",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "4.0000000000",
+      model: "claude-opus-4",
+      externalAgentId: "anthropic_claude",
+      createdAt: start,
+    });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      sessionId: "expensive-session",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "4.0000000000",
+      model: "claude-opus-4",
+      externalAgentId: "anthropic_claude",
+      createdAt: new Date(start.getTime() + 30 * 60 * 1000),
+    });
+    // No session id: real traffic, attributable to no session.
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      inputTokens: 10,
+      outputTokens: 10,
+      cost: "1.0000000000",
+      model: "gpt-4o",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(
+      body.topSessions.map(
+        (session: { sessionId: string }) => session.sessionId,
+      ),
+    ).toEqual(["expensive-session", "cheap-session"]);
+
+    const [top] = body.topSessions;
+    expect(top).toMatchObject({
+      requests: 2,
+      model: "claude-opus-4",
+      client: "anthropic_claude",
+      durationMinutes: 30,
+    });
+    expect(top.cost).toBeCloseTo(8, 10);
+
+    // The denominator covers everything in the timeframe, including the
+    // unsessioned request, so "these sessions were N% of your usage" is honest.
+    expect(body.totalCost).toBeCloseTo(9.5, 10);
+    expect(body.unsessionedRequests).toBe(1);
+  });
+
+  test("never reports anyone else's usage", async ({
+    makeAgent,
+    makeInteraction,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const someoneElse = await makeUser({ email: "not-me@test.com" });
+
+    await makeInteraction(agent.id, {
+      userId: someoneElse.id,
+      sessionId: "their-session",
+      inputTokens: 5_000,
+      outputTokens: 5_000,
+      cost: "50.0000000000",
+    });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      sessionId: "my-session",
+      inputTokens: 10,
+      outputTokens: 10,
+      cost: "1.0000000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(
+      body.topSessions.map(
+        (session: { sessionId: string }) => session.sessionId,
+      ),
+    ).toEqual(["my-session"]);
+    expect(body.totalCost).toBeCloseTo(1, 10);
+    expect(body.tokenMix.freshInputTokens).toBe(10);
+  });
+
+  test("returns zeros for a timeframe with no activity", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      tokenMix: {
+        freshInputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+        cacheCost: 0,
+        cacheSavings: 0,
+      },
+      contextBuckets: [],
+      topSessions: [],
+      totalCost: 0,
+      unsessionedRequests: 0,
+    });
+  });
+});

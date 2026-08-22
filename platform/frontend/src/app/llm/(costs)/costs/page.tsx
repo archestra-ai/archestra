@@ -11,9 +11,9 @@ import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { MyUsageSummary } from "@/app/llm/(costs)/costs/_parts/my-usage-summary";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { BilledCost } from "@/components/billed-cost";
+import { MyUsageSummary } from "@/components/my-usage-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

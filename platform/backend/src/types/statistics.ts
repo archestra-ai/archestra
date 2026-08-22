@@ -122,6 +122,108 @@ export const MyStatisticsSchema = z.object({
 });
 
 /**
+ * Where the caller's tokens actually went, by the price band each kind is
+ * charged at.
+ *
+ * This is the cut that explains a surprising bill, which the headline totals
+ * cannot: the four kinds are charged at wildly different rates — a cache read
+ * is a tenth of fresh input, a cache write is a *premium* over it — so two
+ * users with identical token counts can differ several-fold in cost purely by
+ * how well their context is being reused.
+ *
+ * `cacheSavings` is the platform's stored net figure (read savings minus write
+ * surcharge) and is deliberately allowed to go negative: a session that keeps
+ * re-writing a cache it never reads back costs more than not caching at all,
+ * and reporting that as zero would hide the single most actionable problem a
+ * heavy agentic user can have.
+ */
+export const MyTokenMixSchema = z.object({
+  /** Uncached prompt tokens, charged at the full input rate. */
+  freshInputTokens: z.number(),
+  /** Tokens served from cache, charged at roughly a tenth of the input rate. */
+  cacheReadTokens: z.number(),
+  /** Tokens written into the cache, charged at a premium over the input rate. */
+  cacheWriteTokens: z.number(),
+  outputTokens: z.number(),
+  /** List-price cost of the cache read+write tokens alone. */
+  cacheCost: z.number(),
+  /**
+   * Net list-price effect of caching versus paying full input price for the
+   * same tokens. Negative means caching cost more than it saved.
+   */
+  cacheSavings: z.number(),
+});
+
+/**
+ * One context-size band and the share of usage that happened inside it.
+ *
+ * Context size is `input_tokens + cache_read_tokens` — what the model was
+ * actually asked to read on that turn, cached or not. Long agentic sessions
+ * spend most of their money at the top band without it being visible anywhere
+ * in a per-request view, because no single request looks unusual; only the
+ * distribution does.
+ */
+export const MyContextBucketSchema = z.object({
+  /** Stable identifier for the band, ascending. */
+  bucket: z.enum(["under32k", "under128k", "under256k", "over256k"]),
+  requests: z.number(),
+  tokens: z.number(),
+  /** List-price cost of the requests in this band, both billing modes. */
+  cost: z.number(),
+});
+
+/**
+ * One of the caller's sessions, costed.
+ *
+ * A session is the unit people actually recognise ("that refactor I ran on
+ * Tuesday"), and agentic spend concentrates in a handful of them, so naming the
+ * expensive ones is the most directly actionable thing this endpoint returns.
+ */
+export const MySessionCostSchema = z.object({
+  sessionId: z.string(),
+  requests: z.number(),
+  tokens: z.number(),
+  /** List-price cost, both billing modes — this is a consumption view. */
+  cost: z.number(),
+  /** Portion of `cost` that was actually billed (metered rows only). */
+  billedCost: z.number(),
+  startedAt: z.string(),
+  lastActiveAt: z.string(),
+  /** Wall-clock minutes from first to last request in the session. */
+  durationMinutes: z.number(),
+  /** Heaviest model in the session, by request count. */
+  model: z.string().nullable(),
+  /** Client attribution (`external_agent_id`), when the caller supplied one. */
+  client: z.string().nullable(),
+});
+
+/**
+ * The diagnostic cuts behind {@link MyStatisticsSchema}: not "how much did I
+ * spend" but "what shape of work produced it".
+ *
+ * Split from the headline summary into its own endpoint on purpose. These are
+ * three more aggregations over `interactions` — the platform's largest table —
+ * and the headline card is on a page many people load without ever scrolling to
+ * the detail, so it should not pay for them.
+ */
+export const MyUsageBreakdownSchema = z.object({
+  tokenMix: MyTokenMixSchema,
+  /** Ascending by band; bands with no activity are omitted. */
+  contextBuckets: z.array(MyContextBucketSchema),
+  /** The caller's costliest sessions in the timeframe, heaviest first. */
+  topSessions: z.array(MySessionCostSchema),
+  /**
+   * Total list-price cost of every request in the timeframe, including those in
+   * sessions that did not make `topSessions` and those with no session id at
+   * all. The denominator for "these sessions were N% of your usage" — computing
+   * it from the returned rows alone would silently overstate their share.
+   */
+  totalCost: z.number(),
+  /** Requests in the timeframe carrying no session id, so attributable to none. */
+  unsessionedRequests: z.number(),
+});
+
+/**
  * Sortable columns for the per-user view. Defaults to `totalTokens` because
  * adoption is measured in usage, not spend.
  */
@@ -359,6 +461,8 @@ export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type UserStatistics = z.infer<typeof UserStatisticsSchema>;
 export type UserModelUsage = z.infer<typeof UserModelUsageSchema>;
 export type MyStatistics = z.infer<typeof MyStatisticsSchema>;
+export type MyContextBucketId = z.infer<typeof MyContextBucketSchema>["bucket"];
+export type MyUsageBreakdown = z.infer<typeof MyUsageBreakdownSchema>;
 export type UserStatisticsSortBy = z.infer<typeof UserStatisticsSortBySchema>;
 export type AppStatistics = z.infer<typeof AppStatisticsSchema>;
 export type AppStatisticsSortBy = z.infer<typeof AppStatisticsSortBySchema>;

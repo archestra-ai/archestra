@@ -2,11 +2,13 @@
 
 import type { StatisticsTimeFrame } from "@archestra/shared";
 import { format } from "date-fns";
+import Link from "next/link";
 import { Area, AreaChart, XAxis, YAxis } from "recharts";
 import { BilledCost } from "@/components/billed-cost";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -72,6 +74,19 @@ export function MyUsageSummary({
           Your own activity over the selected timeframe. Only you and people who
           can read organization-wide costs see these figures.
         </CardDescription>
+        {/*
+          The headline answers "how much"; the question people ask next is
+          "what from", and that lives on its own page under Personal Settings
+          because it reports on a person rather than on the organization.
+        */}
+        <CardAction>
+          <Link
+            href="/account/usage"
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            What drove this
+          </Link>
+        </CardAction>
       </CardHeader>
       <CardContent>
         {isPending ? (

@@ -599,6 +599,7 @@ export const RouteId = {
   GetModelStatistics: "getModelStatistics",
   GetUserStatistics: "getUserStatistics",
   GetMyStatistics: "getMyStatistics",
+  GetMyUsageBreakdown: "getMyUsageBreakdown",
   GetAppStatistics: "getAppStatistics",
   GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",

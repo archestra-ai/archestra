@@ -32,7 +32,9 @@ import type {
   ChatCostBaseline,
   CostSavingsStatistics,
   ModelStatistics,
+  MyContextBucketId,
   MyStatistics,
+  MyUsageBreakdown,
   OverviewStatistics,
   SkillStatistics,
   SkillStatisticsSortBy,
@@ -877,6 +879,184 @@ class StatisticsModel {
         : null,
       models: modelsByUser.get(userId) ?? [],
       timeSeries: timeSeriesByUser.get(userId) ?? [],
+    };
+  }
+
+  /**
+   * The diagnostic cuts behind {@link getMyStatistics}: not how much the caller
+   * spent but what shape of work produced it — the price band their tokens fell
+   * into, the context sizes they ran at, and which sessions concentrated the
+   * spend.
+   *
+   * Scoped exactly like {@link getMyStatistics} (own rows, one organization,
+   * agent-deleted rows kept), and carries the same absence of any parameter
+   * that could widen it beyond the caller.
+   *
+   * Cost here is *list price across both billing modes*, not billed spend. The
+   * question this answers is "what consumed my tokens", and for anyone on a
+   * flat-rate plan — which is precisely the heavy agentic user most likely to
+   * ask it — billed spend is zero on every row and every share would be 0/0.
+   * `billedCost` is returned alongside per session so the money view is still
+   * available where it means something.
+   */
+  static async getMyUsageBreakdown(params: {
+    timeframe: StatisticsTimeFrame;
+    userId: string;
+    organizationId: string;
+    /** How many of the costliest sessions to name. */
+    sessionLimit: number;
+  }): Promise<MyUsageBreakdown> {
+    const { timeframe, userId, organizationId, sessionLimit } = params;
+    const interactions = schema.interactionsTable;
+
+    const whereClause = and(
+      ...StatisticsModel.timeframeConditions(timeframe),
+      eq(interactions.userId, userId),
+      ...StatisticsModel.organizationScopeSubqueryConditions(organizationId),
+    );
+
+    // Context size as the model saw it on that turn: fresh prompt tokens plus
+    // whatever was replayed from cache. Output is excluded — it is produced by
+    // the turn, not read by it.
+    const contextSizeExpr = sql<number>`(COALESCE(${interactions.inputTokens}, 0) + COALESCE(${interactions.cacheReadTokens}, 0))`;
+    // Bands are powers-of-two-ish around the sizes that actually change
+    // behaviour on today's models, not even decades.
+    const bucketExpr = sql<MyContextBucketId>`CASE
+      WHEN ${contextSizeExpr} < 32000 THEN 'under32k'
+      WHEN ${contextSizeExpr} < 128000 THEN 'under128k'
+      WHEN ${contextSizeExpr} < 256000 THEN 'under256k'
+      ELSE 'over256k'
+    END`;
+    // List price regardless of billing mode — see the doc comment.
+    const listCostExpr = sql<number>`CAST(COALESCE(SUM(${interactions.cost}), 0) AS DOUBLE PRECISION)`;
+    const tokensExpr = sql<number>`CAST(COALESCE(SUM(${interactions.inputTokens}), 0) + COALESCE(SUM(${interactions.outputTokens}), 0) AS DOUBLE PRECISION)`;
+
+    const [[mix], buckets, sessions] = await Promise.all([
+      db
+        .select({
+          freshInputTokens: tokenSum(interactions.inputTokens),
+          cacheReadTokens: tokenSum(interactions.cacheReadTokens),
+          cacheWriteTokens: tokenSum(interactions.cacheWriteTokens),
+          outputTokens: tokenSum(interactions.outputTokens),
+          cacheCost: sql<number>`CAST(COALESCE(SUM(${interactions.cacheCost}), 0) AS DOUBLE PRECISION)`,
+          cacheSavings: sql<number>`CAST(COALESCE(SUM(${interactions.cacheSavings}), 0) AS DOUBLE PRECISION)`,
+          totalCost: listCostExpr,
+          // Counted here rather than in a fourth query: the session cut groups
+          // these rows away, so this is the only pass that still sees them.
+          unsessionedRequests: sql<number>`CAST(COUNT(*) FILTER (WHERE ${interactions.sessionId} IS NULL) AS INTEGER)`,
+        })
+        .from(interactions)
+        .where(whereClause),
+      db
+        .select({
+          bucket: bucketExpr,
+          requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          tokens: tokensExpr,
+          cost: listCostExpr,
+        })
+        .from(interactions)
+        .where(whereClause)
+        .groupBy(bucketExpr),
+      db
+        .select({
+          sessionId: interactions.sessionId,
+          requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          tokens: tokensExpr,
+          cost: listCostExpr,
+          billedCost: billedSum(interactions.cost, "DOUBLE PRECISION"),
+          startedAt: sql<string>`MIN(${interactions.createdAt})`,
+          lastActiveAt: sql<string>`MAX(${interactions.createdAt})`,
+        })
+        .from(interactions)
+        .where(and(whereClause, isNotNull(interactions.sessionId)))
+        .groupBy(interactions.sessionId)
+        .orderBy(desc(listCostExpr))
+        .limit(sessionLimit),
+    ]);
+
+    const sessionIds = sessions
+      .map(({ sessionId }) => sessionId)
+      .filter((id): id is string => id !== null);
+
+    // Phase 2, over the returned page only: what a session "is" — its dominant
+    // model and client. Grouping on the pair and taking the most frequent one
+    // keeps them consistent with each other, so a session is never labelled
+    // with one client's name and another client's model.
+    const labels = sessionIds.length
+      ? await db
+          .selectDistinctOn([interactions.sessionId], {
+            sessionId: interactions.sessionId,
+            model: interactions.model,
+            client: interactions.externalAgentId,
+          })
+          .from(interactions)
+          .where(and(whereClause, inArray(interactions.sessionId, sessionIds)))
+          .groupBy(
+            interactions.sessionId,
+            interactions.model,
+            interactions.externalAgentId,
+          )
+          .orderBy(interactions.sessionId, desc(sql`COUNT(*)`))
+      : [];
+
+    const labelBySession = new Map(
+      labels.map(({ sessionId, model, client }) => [
+        sessionId,
+        { model, client },
+      ]),
+    );
+
+    return {
+      tokenMix: {
+        freshInputTokens: Number(mix?.freshInputTokens) || 0,
+        cacheReadTokens: Number(mix?.cacheReadTokens) || 0,
+        cacheWriteTokens: Number(mix?.cacheWriteTokens) || 0,
+        outputTokens: Number(mix?.outputTokens) || 0,
+        cacheCost: Number(mix?.cacheCost) || 0,
+        cacheSavings: Number(mix?.cacheSavings) || 0,
+      },
+      contextBuckets: CONTEXT_BUCKET_ORDER.flatMap((bucket) => {
+        const row = buckets.find((candidate) => candidate.bucket === bucket);
+        return row
+          ? [
+              {
+                bucket,
+                requests: Number(row.requests) || 0,
+                tokens: Number(row.tokens) || 0,
+                cost: Number(row.cost) || 0,
+              },
+            ]
+          : [];
+      }),
+      topSessions: sessions.flatMap((row) => {
+        // Never null in practice — the query filters them out — but narrowing
+        // here keeps the row and its id from drifting apart via a parallel array.
+        const { sessionId } = row;
+        if (sessionId === null) return [];
+        const startedAt = new Date(row.startedAt);
+        const lastActiveAt = new Date(row.lastActiveAt);
+        return [
+          {
+            sessionId,
+            requests: Number(row.requests) || 0,
+            tokens: Number(row.tokens) || 0,
+            cost: Number(row.cost) || 0,
+            billedCost: Number(row.billedCost) || 0,
+            startedAt: startedAt.toISOString(),
+            lastActiveAt: lastActiveAt.toISOString(),
+            durationMinutes: Math.max(
+              0,
+              Math.round(
+                (lastActiveAt.getTime() - startedAt.getTime()) / 60_000,
+              ),
+            ),
+            model: labelBySession.get(sessionId)?.model ?? null,
+            client: labelBySession.get(sessionId)?.client ?? null,
+          },
+        ];
+      }),
+      totalCost: Number(mix?.totalCost) || 0,
+      unsessionedRequests: Number(mix?.unsessionedRequests) || 0,
     };
   }
 
@@ -1985,6 +2165,18 @@ class StatisticsModel {
 function tokenSum(column: AnyColumn): SQL<number> {
   return sql<number>`CAST(COALESCE(SUM(${column}), 0) AS DOUBLE PRECISION)`;
 }
+
+/**
+ * Context bands, ascending. Kept here rather than derived from the Zod enum so
+ * the SQL CASE, this order and the schema are edited together — a band added to
+ * one and not the others would silently vanish from the response.
+ */
+const CONTEXT_BUCKET_ORDER: readonly MyContextBucketId[] = [
+  "under32k",
+  "under128k",
+  "under256k",
+  "over256k",
+];
 
 /** SUM of an interaction cost column restricted to metered rows (billed spend). */
 function billedSum(

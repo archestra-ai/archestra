@@ -5,6 +5,7 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import websocketService from "@/websocket";
 
 vi.mock("@/auth");
 
@@ -82,6 +83,10 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
 
     // A tool on the child catalog must be soft-deleted by the cascade.
     const tool = await makeTool({ catalogId: child.id });
+    const lifecycleBroadcast = vi.spyOn(
+      websocketService,
+      "broadcastMcpServersChanged",
+    );
 
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -89,6 +94,11 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
     });
 
     expect(deleteResponse.statusCode).toBe(200);
+    expect(lifecycleBroadcast).toHaveBeenCalledWith({
+      organizationId,
+      catalogIds: [parent.id, child.id],
+      serverIds: [installedServer.id],
+    });
 
     // Rows survive (soft-deleted), each carrying a deletedAt stamp.
     const [parentRow] = await db

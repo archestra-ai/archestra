@@ -717,6 +717,34 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
+  test("connectAndGetTools advertises the Skills client extension when enabled", async () => {
+    const originalEnabled = config.mcpGateway.skillsEnabled;
+    config.mcpGateway.skillsEnabled = true;
+    mockListTools.mockResolvedValueOnce({ tools: [] });
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    try {
+      await mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId,
+        secrets: { access_token: "skills-token" },
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = originalEnabled;
+    }
+
+    const { Client } = await import(
+      "@modelcontextprotocol/sdk/client/index.js"
+    );
+    const options = vi.mocked(Client).mock.calls.at(-1)?.[1] as
+      | { capabilities?: { extensions?: Record<string, unknown> } }
+      | undefined;
+    expect(options?.capabilities?.extensions).toHaveProperty(
+      "io.modelcontextprotocol/skills",
+    );
+  });
+
   test("connectAndGetTools treats JSON-RPC method-not-found code as resource-only discovery", async () => {
     mockListTools.mockRejectedValueOnce({ code: -32601 });
     mockListResources.mockResolvedValueOnce({

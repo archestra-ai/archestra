@@ -2037,16 +2037,13 @@ const config = {
       60000,
     ),
     /**
-     * Publish this deployment's Agent Skills over the gateway as `skill://`
-     * resources, per the MCP Skills extension (SEP-2640).
-     *
-     * Rides the ARCHESTRA_BETA master switch rather than a flag of its own: the
-     * SEP is still a draft with no shipped interoperating client, which is
-     * exactly what that switch already means. Deployment-global for v1 —
-     * enabling turns the capability on for every organization and gateway at
-     * once; per-tenant gating is a follow-up.
+     * Both directions of the draft MCP Skills extension: publishing local
+     * Skills through gateways and projecting external Skills from installed
+     * servers. Deployment-global; blank falls back to ARCHESTRA_BETA.
      */
-    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
+    skillsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_MCP_SKILLS_ENABLED,
+    ),
   },
   mcpServer: {
     /**

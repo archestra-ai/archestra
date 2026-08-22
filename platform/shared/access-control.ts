@@ -1773,6 +1773,18 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.GetExternalMcpSkills]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetExternalMcpSkill]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetExternalMcpSkillUsageStatistics]: {
+    skill: ["read"],
+    mcpServerInstallation: ["read"],
+  },
   [RouteId.CreateSkill]: { skill: ["create"] },
   [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
   // chat:read gates spending the agent's configured LLM key — the same gate

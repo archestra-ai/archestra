@@ -84,7 +84,10 @@ import {
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
-import { broadcastMcpInstallationStatus } from "@/websocket";
+import {
+  broadcastMcpInstallationStatus,
+  broadcastMcpServersChanged,
+} from "@/websocket";
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -1494,9 +1497,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      return reply.send({
-        success: await InternalMcpCatalogModel.delete(id),
-      });
+      const affectedSources =
+        await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
+      const success = await InternalMcpCatalogModel.delete(id);
+      if (success) {
+        broadcastMcpServersChanged({
+          organizationId: catalogItem.organizationId,
+          catalogIds: affectedSources.catalogIds,
+          serverIds:
+            catalogItem.organizationId === null
+              ? []
+              : affectedSources.serverIds,
+        });
+      }
+      return reply.send({ success });
     },
   );
 
@@ -1548,9 +1562,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      return reply.send({
-        success: await InternalMcpCatalogModel.delete(catalogItem.id),
-      });
+      const affectedSources =
+        await InternalMcpCatalogModel.findDeleteCascadeSourceIds(
+          catalogItem.id,
+        );
+      const success = await InternalMcpCatalogModel.delete(catalogItem.id);
+      if (success) {
+        broadcastMcpServersChanged({
+          organizationId: catalogItem.organizationId,
+          catalogIds: affectedSources.catalogIds,
+          serverIds:
+            catalogItem.organizationId === null
+              ? []
+              : affectedSources.serverIds,
+        });
+      }
+      return reply.send({ success });
     },
   );
 

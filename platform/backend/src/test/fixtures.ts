@@ -733,15 +733,15 @@ async function makeInternalMcpCatalog(
       | "deploymentSpecYaml"
     >
   > & {
-    organizationId?: string;
+    organizationId?: string | null;
     authorId?: string;
   } = {},
 ) {
   const { organizationId, authorId, ...catalogOverrides } = overrides;
 
-  // Auto-create organization if not provided
+  // Auto-create organization if omitted; explicit null creates a global item.
   let orgId = organizationId;
-  if (!orgId) {
+  if (orgId === undefined) {
     const org = await makeOrganization();
     orgId = org.id;
   }
@@ -754,10 +754,7 @@ async function makeInternalMcpCatalog(
       scope: "org",
       ...catalogOverrides,
     },
-    {
-      organizationId: orgId,
-      authorId,
-    },
+    orgId === null ? undefined : { organizationId: orgId, authorId },
   );
 }
 

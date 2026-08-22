@@ -1606,18 +1606,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         notFoundMessage: "MCP server not found",
         unexpectedMessage: "Could not uninstall this MCP server",
         // `mcp_server` has no organization column, so the fence is the
-        // inferred one `findByIdInOrg` applies — team-in-org, owner-is-member,
-        // or a legacy unowned system row. Resolving each id through it is what
-        // stops a foreign server being reachable from a request body.
+        // inferred from its catalog, team, or owner. Resolving each id through
+        // the organization fence stops a foreign server being reachable from
+        // a request body.
         load: async (ids) => {
           const found = new Map<
             string,
-            NonNullable<
-              Awaited<ReturnType<typeof McpServerModel.findByIdInOrg>>
-            >
+            NonNullable<Awaited<ReturnType<typeof findMcpServerInOrganization>>>
           >();
           for (const id of ids) {
-            const server = await McpServerModel.findByIdInOrg(
+            const server = await findMcpServerInOrganization(
               id,
               organizationId,
             );
@@ -1689,7 +1687,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // The server table has no organization id; resolve it through the same
       // owner/team organization fence used by bulk uninstall.
-      const mcpServer = await McpServerModel.findByIdInOrg(
+      const mcpServer = await findMcpServerInOrganization(
         mcpServerId,
         organizationId,
       );
@@ -1851,6 +1849,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: { issueFingerprint, reason },
         user,
         headers,
+        organizationId,
       } = request;
 
       // Visibility is the whole authorization rule here, deliberately weaker
@@ -1861,6 +1860,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServerId,
         userId: user.id,
         headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -1907,12 +1907,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: { issueFingerprint },
         user,
         headers,
+        organizationId,
       } = request;
 
       const mcpServer = await findAccessibleMcpServer({
         mcpServerId,
         userId: user.id,
         headers,
+        organizationId,
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
@@ -2668,8 +2670,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { id }, headers }, reply) => {
-      const mcpServer = await McpServerModel.findById(id);
+    async ({ params: { id }, organizationId, headers }, reply) => {
+      const mcpServer = await findMcpServerInOrganization(id, organizationId);
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
@@ -2988,17 +2990,39 @@ async function findAccessibleMcpServer(params: {
   mcpServerId: string;
   userId: string;
   headers: IncomingHttpHeaders;
+  organizationId?: string;
 }) {
   const { success: isMcpServerAdmin } = await hasPermission(
     { mcpServerInstallation: ["admin"] },
     params.headers,
   );
 
+  if (params.organizationId) {
+    const server = await findMcpServerInOrganization(
+      params.mcpServerId,
+      params.organizationId,
+    );
+    if (!server) return undefined;
+  }
+
   return McpServerModel.findById(
     params.mcpServerId,
     params.userId,
     isMcpServerAdmin,
   );
+}
+
+async function findMcpServerInOrganization(
+  id: string,
+  organizationId: string,
+): Promise<McpServer | null> {
+  const server = await McpServerModel.findByIdInOrg(id, organizationId);
+  if (!server) return null;
+  const catalog = await InternalMcpCatalogModel.findById(server.catalogId);
+  if (catalog?.organizationId && catalog.organizationId !== organizationId) {
+    return null;
+  }
+  return server;
 }
 
 function assertCurrentServerAlertFingerprint(params: {

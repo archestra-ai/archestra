@@ -824,7 +824,7 @@ Bedrock only caches for Claude and the Nova text models. Other families reject a
 
 A cached prefix lives five minutes by default. Archestra asks for the one-hour lifetime on Claude 4.5, the only generation Bedrock accepts it on. Any gap longer than the lifetime expires the prefix, and the next request pays to write all of it again.
 
-Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Costs & Limits](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
+Cache tokens are billed differently from ordinary input. Reads cost a tenth of the input price, five-minute writes 1.25x, and one-hour writes 2x. The longer lifetime therefore trades a higher write price for fewer rewrites, and pays off whenever it keeps a prefix alive across a gap that would otherwise have expired it. Archestra estimates with those ratios when a model has no cache prices of its own — see [Usage & Costs](/docs/platform-costs-and-limits#prompt-caching) for setting exact ones and reading cache spend back.
 
 ### Authentication Methods
 

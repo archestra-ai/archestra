@@ -1,5 +1,5 @@
 ---
-title: Costs & Limits
+title: Usage & Costs
 category: LLM Proxy
 order: 4
 lastUpdated: 2026-08-22
@@ -7,11 +7,11 @@ lastUpdated: 2026-08-22
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra tracks LLM usage costs, enforces usage limits, and records savings from tool-result compression and prompt caching. These controls work together: pricing defines cost, logs and statistics show what happened, and limits stop or shape usage.
+Archestra tracks personal and organization-wide LLM usage, enforces usage limits, and records savings from tool-result compression and prompt caching. Open **Usage & Costs** from the sidebar. The available tabs depend on your permissions.
 
 ## Statistics
 
-The **Costs** tab is the organization-wide rollup for LLM traffic. It starts with billed spend, subscription-covered usage, request, and token totals, then breaks the same timeframe down by team, agent, LLM proxy, model, person, app, and skill. Use it to answer questions like:
+The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffic. It starts with billed spend, subscription-covered usage, request, and token totals, then breaks the same timeframe down by team, agent, LLM proxy, model, person, app, and skill. Use it to answer questions like:
 
 - which teams are driving spend
 - which models are responsible for the largest share of cost
@@ -28,11 +28,11 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 Reading organization-wide costs requires the `llmCost:read` permission. The **My Usage** tab remains available without it.
 
-![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
+![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-usage-and-costs_costs.webp)
 
 ## My Usage
 
-The **My Usage** tab shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
+The **My Usage** tab at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
 
 The lower sections explain the shape of that usage:
 
@@ -40,9 +40,9 @@ The lower sections explain the shape of that usage:
 - **Context size** groups requests by how much context the model received.
 - **Top sessions** shows which sessions concentrated the most list-price usage, along with their dominant model and client.
 
-Everyone can open **My Usage**. A user who cannot read organization-wide costs still sees the **Costs & Limits** sidebar item and the **My Usage** tab, but the permission-gated **Costs** and **Limits** tabs are hidden.
+Everyone can open **My Usage**. When it is the only available view, the sidebar item is named **My Usage**. If the user can also read organization-wide costs or limits, it is named **Usage & Costs** and exposes the permitted **Costs** and **Limits** tabs. Limits remain available at `/llm/limits`.
 
-![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-costs-and-limits_my-usage.webp)
+![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-usage-and-costs_my-usage.webp)
 
 The same data is available from `GET /api/statistics/me` and `GET /api/statistics/me/breakdown`. Both endpoints report only the calling user's activity, so neither needs the organization-wide cost permission.
 

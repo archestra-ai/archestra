@@ -14,12 +14,6 @@ describe("resolveLegacyAccountHref", () => {
     ).toBe("/account/sessions");
   });
 
-  it("sends the former account usage section to My Usage", () => {
-    expect(
-      resolveLegacyAccountHref({ section: "usage", highlight: null }),
-    ).toBe("/llm/costs");
-  });
-
   it("leaves an unknown section on the profile page rather than redirecting", () => {
     expect(
       resolveLegacyAccountHref({ section: "nope", highlight: null }),

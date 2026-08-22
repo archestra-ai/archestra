@@ -40,6 +40,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
+import { getUsageNavigationLabel } from "@/app/_parts/usage-navigation";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -349,11 +350,13 @@ const contentNavGroups: NavGroup[] = [
         dotKey: "nav:model-providers",
       },
       {
-        title: "Costs & Limits",
-        url: "/llm/costs",
+        title: "Usage & Costs",
+        url: "/llm/usage",
         icon: CircleDollarSign,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
+          pathname === "/llm/usage" ||
+          pathname.startsWith("/llm/costs") ||
+          pathname === "/llm/limits",
       },
     ],
   },
@@ -718,9 +721,13 @@ export function AppSidebar() {
 
   const filteredNavGroups = contentNavGroups.map((group) => ({
     ...group,
-    items: group.items.filter(
-      (item) => item.url !== "/plugins" || pluginsEnabled,
-    ),
+    items: group.items
+      .filter((item) => item.url !== "/plugins" || pluginsEnabled)
+      .map((item) =>
+        item.url === "/llm/usage"
+          ? { ...item, title: getUsageNavigationLabel(permissionMap) }
+          : item,
+      ),
   }));
 
   return (

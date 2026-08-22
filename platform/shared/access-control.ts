@@ -2080,10 +2080,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies/new": { llmProxy: ["create"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
-  "/llm/limits": { llmLimit: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.
-  "/llm/costs": {},
-  "/llm/costs/organization": { llmCost: ["read"] },
+  "/llm/usage": {},
+  "/llm/costs": { llmCost: ["read"] },
+  "/llm/limits": { llmLimit: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

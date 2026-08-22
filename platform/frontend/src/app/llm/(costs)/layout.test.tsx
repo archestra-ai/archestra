@@ -41,7 +41,7 @@ const setPermissions = ({
   canReadLimits: boolean;
 }) => {
   vi.mocked(usePermissionMap).mockReturnValue({
-    "/llm/costs/organization": canReadCosts,
+    "/llm/costs": canReadCosts,
     "/llm/limits": canReadLimits,
   } as unknown as ReturnType<typeof usePermissionMap>);
 };
@@ -49,7 +49,7 @@ const setPermissions = ({
 describe("CostsLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(usePathname).mockReturnValue("/llm/costs");
+    vi.mocked(usePathname).mockReturnValue("/llm/usage");
   });
 
   it("offers only the tabs the reader can actually open", () => {
@@ -62,10 +62,8 @@ describe("CostsLayout", () => {
 
     // My Usage is ungated, so it stays; the siblings would only ever render a
     // forbidden page for this reader.
-    expect(screen.getByTestId("tabs")).toHaveTextContent("/llm/costs");
-    expect(screen.getByTestId("tabs")).not.toHaveTextContent(
-      "/llm/costs/organization",
-    );
+    expect(screen.getByTestId("tabs")).toHaveTextContent("/llm/usage");
+    expect(screen.getByTestId("tabs")).not.toHaveTextContent("/llm/costs");
     expect(screen.getByTestId("tabs")).not.toHaveTextContent("/llm/limits");
   });
 
@@ -78,8 +76,8 @@ describe("CostsLayout", () => {
     render(<CostsLayout>content</CostsLayout>);
 
     const tabs = screen.getByTestId("tabs");
+    expect(tabs).toHaveTextContent("/llm/usage");
     expect(tabs).toHaveTextContent("/llm/costs");
-    expect(tabs).toHaveTextContent("/llm/costs/organization");
     expect(tabs).toHaveTextContent("/llm/limits");
   });
 
@@ -101,7 +99,7 @@ describe("CostsLayout", () => {
   });
 
   it("describes the organization-wide view when the reader may see it", () => {
-    vi.mocked(usePathname).mockReturnValue("/llm/costs/organization");
+    vi.mocked(usePathname).mockReturnValue("/llm/costs");
     setPermissions({
       canReadCosts: true,
       canReadLimits: true,

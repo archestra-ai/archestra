@@ -70,7 +70,6 @@ export function resolveLegacyAccountHref({
   section: string | null;
   highlight: string | null;
 }): string | null {
-  if (section === "usage") return "/llm/costs";
   const match = accountSections.find(({ id }) => id === section);
   if (match) return match.href;
   if (highlight === "personal-token") return "/account/gateway-token";

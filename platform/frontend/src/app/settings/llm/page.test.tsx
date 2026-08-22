@@ -112,7 +112,7 @@ describe("LlmSettingsPage", () => {
 
     expect(link).toHaveAttribute(
       "href",
-      getDocsUrl(DocsPage.PlatformCostsAndLimits, "toon-compression"),
+      getDocsUrl(DocsPage.PlatformUsageAndCosts, "toon-compression"),
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");

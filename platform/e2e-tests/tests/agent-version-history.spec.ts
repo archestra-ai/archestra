@@ -1,7 +1,11 @@
 import { E2eTestId } from "@archestra/shared";
 import type { Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
-import { openAgentRowMenu, waitForElementWithReload } from "../utils";
+import {
+  openAgentRowMenu,
+  selectAgentTableView,
+  waitForElementWithReload,
+} from "../utils";
 import { expect, test } from "./api-fixtures";
 
 // One shared dialog (AgentVersionHistoryDialog) serves agents, MCP gateways,
@@ -61,6 +65,7 @@ test("browses, compares, and restores an agent version from the row menu", async
     });
 
     await goToPage(page, "/agents");
+    await selectAgentTableView(page);
 
     // Names are CSS-truncated, so the full string lives on the title
     // attribute, not in visible text.
@@ -141,6 +146,7 @@ test("opens an MCP gateway's version history from its row button", async ({
     });
 
     await goToPage(page, "/mcp/gateways");
+    await selectAgentTableView(page);
 
     // Version history sits in the row's "More actions" menu on every entity
     // list, so the row has to arrive before the menu can be opened.
@@ -188,6 +194,7 @@ test("opens an LLM proxy's version history from its row button", async ({
     });
 
     await goToPage(page, "/llm/proxies");
+    await selectAgentTableView(page);
 
     // Version history sits in the row's "More actions" menu on every entity
     // list, so the row has to arrive before the menu can be opened.

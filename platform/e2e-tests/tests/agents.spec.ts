@@ -4,6 +4,7 @@ import { expect, test } from "../fixtures";
 import {
   clickButton,
   openAgentRowMenu,
+  selectAgentTableView,
   waitForElementWithReload,
 } from "../utils";
 
@@ -105,6 +106,7 @@ async function deleteFromList(
   page: Page,
   { name, confirmLabel }: { name: string; confirmLabel: string },
 ) {
+  await selectAgentTableView(page);
   const rowLocator = page.getByTestId(E2eTestId.AgentsTable).getByTitle(name);
   await waitForElementWithReload(page, rowLocator, {
     timeout: 30_000,
@@ -157,6 +159,7 @@ test(
     });
 
     await goToPage(page, "/agents");
+    await selectAgentTableView(page);
     const agentLocator = page
       .getByTestId(E2eTestId.AgentsTable)
       .getByTitle(AGENT_NAME);
@@ -186,6 +189,7 @@ test(
 
     // Delete created agent from the table
     await goToPage(page, "/agents");
+    await selectAgentTableView(page);
     await waitForElementWithReload(page, agentLocator, {
       timeout: 30_000,
       intervals: [2000, 3000, 5000],

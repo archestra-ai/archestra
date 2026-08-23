@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChartNoAxesColumn,
   ChevronsUpDown,
   LogOut,
   Monitor,
@@ -23,8 +24,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * Sidebar footer user menu: avatar + name/email trigger. The theme switcher
- * sits at the top; below it the Personal Settings item opens the account page,
- * followed by Sign Out. Renders nothing until a session exists.
+ * sits at the top; below it are the personal destinations and Sign Out.
+ * Renders nothing until a session exists.
  *
  * The trigger markup (button > div > Avatar + text, chevron as direct svg
  * child) is load-bearing: the collapsed-sidebar styles in sidebar.tsx target
@@ -99,6 +100,12 @@ export function SidebarUserMenu() {
           <Link href="/account">
             <Settings className="size-4" />
             Personal Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/llm/usage">
+            <ChartNoAxesColumn className="size-4" />
+            My Usage
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

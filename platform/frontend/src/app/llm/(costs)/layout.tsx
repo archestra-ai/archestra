@@ -78,7 +78,7 @@ export default function CostsLayout({
   });
 
   const config = PAGE_CONFIG[pathname] ?? {
-    title: "Usage & Costs",
+    title: "Costs & Limits",
     description: "Monitor and manage AI model usage costs.",
   };
 

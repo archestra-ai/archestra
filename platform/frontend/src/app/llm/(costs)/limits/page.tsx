@@ -641,7 +641,7 @@ export default function LimitsPage() {
   const shouldShowDefaultUserLimitNotice =
     formState.entityType === "user" && defaultUserLimits.length > 0;
   const limitsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformUsageAndCosts,
+    DocsPage.PlatformCostsAndLimits,
     "usage-limits",
   );
 

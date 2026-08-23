@@ -146,10 +146,10 @@ const navigationItems = [
   },
   {
     icon: Home,
-    label: "Usage & Costs",
+    label: "Costs & Limits",
     value: "cost-limits",
     keywords: "usage cost dashboard limits budget",
-    href: "/llm/usage",
+    href: "/llm/costs",
   },
   {
     icon: Cable,

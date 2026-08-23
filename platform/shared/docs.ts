@@ -26,7 +26,7 @@ export const DocsPage = {
   PlatformClaudeCodeExample: "platform-claude-code-example",
   PlatformClaudeDesktopExample: "platform-claude-desktop-example",
   PlatformConnection: "platform-connection",
-  PlatformUsageAndCosts: "platform-costs-and-limits",
+  PlatformCostsAndLimits: "platform-costs-and-limits",
   PlatformDeployment: "platform-deployment",
   PlatformDeveloperQuickstart: "platform-developer-quickstart",
   PlatformAiToolGuardrails: "platform-ai-tool-guardrails",

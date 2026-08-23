@@ -1,5 +1,5 @@
 ---
-title: Usage & Costs
+title: Costs & Limits
 category: LLM Proxy
 order: 4
 lastUpdated: 2026-08-22
@@ -7,7 +7,7 @@ lastUpdated: 2026-08-22
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra tracks personal and organization-wide LLM usage, enforces usage limits, and records savings from tool-result compression and prompt caching. Open **Usage & Costs** from the sidebar. The available tabs depend on your permissions.
+Archestra tracks personal and organization-wide LLM usage, enforces usage limits, and records savings from tool-result compression and prompt caching. Organization controls remain under **Costs & Limits**. Open **My Usage** from your user menu.
 
 ## Statistics
 
@@ -28,7 +28,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 Reading organization-wide costs requires the `llmCost:read` permission. The **My Usage** tab remains available without it.
 
-![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-usage-and-costs_costs.webp)
+![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
 
 ## My Usage
 
@@ -40,9 +40,9 @@ The lower sections explain the shape of that usage:
 - **Context size** groups requests by how much context the model received.
 - **Top sessions** shows which sessions concentrated the most list-price usage, along with their dominant model and client.
 
-Everyone can open **My Usage**. When it is the only available view, the sidebar item is named **My Usage**. If the user can also read organization-wide costs or limits, it is named **Usage & Costs** and exposes the permitted **Costs** and **Limits** tabs. Limits remain available at `/llm/limits`.
+Everyone can open **My Usage** from the user menu, between **Personal Settings** and **Sign Out**. Users with organization cost or limit permissions also see it beside the permitted **Costs** and **Limits** tabs. Limits remain available at `/llm/limits`.
 
-![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-usage-and-costs_my-usage.webp)
+![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-costs-and-limits_my-usage.webp)
 
 The same data is available from `GET /api/statistics/me` and `GET /api/statistics/me/breakdown`. Both endpoints report only the calling user's activity, so neither needs the organization-wide cost permission.
 

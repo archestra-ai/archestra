@@ -190,7 +190,7 @@ yarnpkg.com
 
 ## Cost limits
 
-Cost limits and per-user default limits can be scoped to an environment. A limit on **Production** only counts usage attributed to Production (an interaction's environment is snapshotted from its agent at request time). See [Usage & Costs](/docs/platform-costs-and-limits).
+Cost limits and per-user default limits can be scoped to an environment. A limit on **Production** only counts usage attributed to Production (an interaction's environment is snapshotted from its agent at request time). See [Costs and Limits](/docs/platform-costs-and-limits).
 
 ## Where environments apply
 

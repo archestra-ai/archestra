@@ -39,8 +39,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
-import { getUsageNavigationLabel } from "@/app/_parts/usage-navigation";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -350,13 +350,14 @@ const contentNavGroups: NavGroup[] = [
         dotKey: "nav:model-providers",
       },
       {
-        title: "Usage & Costs",
-        url: "/llm/usage",
+        title: "Costs & Limits",
+        url: "/llm/costs",
         icon: CircleDollarSign,
         customIsActive: (pathname: string) =>
           pathname === "/llm/usage" ||
           pathname.startsWith("/llm/costs") ||
           pathname === "/llm/limits",
+        permissionUrls: ["/llm/costs", "/llm/limits"],
       },
     ],
   },
@@ -724,8 +725,8 @@ export function AppSidebar() {
     items: group.items
       .filter((item) => item.url !== "/plugins" || pluginsEnabled)
       .map((item) =>
-        item.url === "/llm/usage"
-          ? { ...item, title: getUsageNavigationLabel(permissionMap) }
+        item.url === "/llm/costs"
+          ? { ...item, url: getCostsNavigationUrl(permissionMap) }
           : item,
       ),
   }));

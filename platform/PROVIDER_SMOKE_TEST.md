@@ -59,22 +59,18 @@ Before starting, verify the development environment is running:
 
 ---
 
-## Test 3: Disable Optimization Rules (Clean Baseline)
+## Test 3: Disable Tool Result Compression (Clean Baseline)
 
-**Objective**: Ensure no cost optimization rules or tool result compression interfere with testing.
+**Objective**: Ensure tool result compression does not interfere with testing.
 
 ### Steps
 
-1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/llm/cost/optimization-rules`)
-2. Disable or delete any existing optimization rules
-3. Navigate to Organization Settings
-4. Ensure "Tool Result Compression (TOON)" is DISABLED at the organization level
-5. If there are no existing optimization rules - try to refresh the page completely. Try this at most once.
+1. Navigate to Organization Settings
+2. Ensure "Tool Result Compression (TOON)" is DISABLED at the organization level
 
 ### Expected Result
 
 - TOON compression shows as "Disabled" in the UI
-- No active optimization rules (or all are disabled)
 
 ---
 
@@ -180,36 +176,7 @@ If `list_issues` is blocked in untrusted context due to Test 5:
 
 ---
 
-## Test 7: Model Optimization Rules
-
-**Objective**: Verify cost optimization rules correctly swap models and display savings.
-
-### Steps
-
-1. Navigate to Cost Settings → Optimization Rules (`http://localhost:3000/llm/cost/optimization-rules`)
-2. Create a new optimization rule:
-   - Provider: Based on the user prompt.
-   - Condition: `maxLength < 10000`
-   - Enabled: true
-3. Navigate to Chat and start a NEW conversation
-4. Send a short message that matches the rule condition:
-   "Give a short overview of the open issues in https://github.com/archestra-ai/archestra"
-
-### Expected Result
-
-- Response includes cost optimization percentage indicator
-- In LLM Proxy Logs, the interaction shows "optimized model" was used
-- Cost savings are displayed in the UI or logs
-
-### Verification
-
-1. Check LLM Proxy Logs for the request
-2. Look for `optimizedModel` field in the interaction data
-3. Verify the model in the request differs from the original model specified
-
----
-
-## Test 8: LLM Proxy Tool Discovery (External MCP Server)
+## Test 7: LLM Proxy Tool Discovery (External MCP Server)
 
 **Objective**: Verify tools can be discovered via LLM Proxy when MCP server runs externally (not in Archestra's K8s).
 

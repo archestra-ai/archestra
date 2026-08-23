@@ -6,7 +6,7 @@ export type ClientOptions = {
 
 export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
-export type EmbeddingDimensionsInput = 3072 | 1536 | 1024 | 768 | 384;
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -6280,7 +6280,7 @@ export type UserConfigFieldInput = {
 
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
-export type EmbeddingDimensions = 3072 | 1536 | 1024 | 768 | 384;
+export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -16155,6 +16155,215 @@ export type UpdateAgentSkillExclusionsResponses = {
 
 export type UpdateAgentSkillExclusionsResponse = UpdateAgentSkillExclusionsResponses[keyof UpdateAgentSkillExclusionsResponses];
 
+export type BulkDeleteAgentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/bulk';
+};
+
+export type BulkDeleteAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentsError = BulkDeleteAgentsErrors[keyof BulkDeleteAgentsErrors];
+
+export type BulkDeleteAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentsResponse = BulkDeleteAgentsResponses[keyof BulkDeleteAgentsResponses];
+
+export type BulkUpdateAgentsData = {
+    /**
+     * Ids plus the fields to change. Shaped so further bulk-editable fields can be added here rather than as another endpoint.
+     */
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The visibility every agent in the batch moves to.
+         */
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teams?: Array<string>;
+        /**
+         * People to share with. Only meaningful for `scope = personal`; ignored otherwise. Unlike the single-agent update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-agent grant list would survive as a difference the request just asked to remove.
+         */
+        users?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/bulk';
+};
+
+export type BulkUpdateAgentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateAgentsError = BulkUpdateAgentsErrors[keyof BulkUpdateAgentsErrors];
+
+export type BulkUpdateAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateAgentsResponse = BulkUpdateAgentsResponses[keyof BulkUpdateAgentsResponses];
+
 export type RestoreAgentData = {
     body?: never;
     path: {
@@ -18890,6 +19099,103 @@ export type GetApiKeyResponses = {
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
 
+export type BulkDeleteApiKeysData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/api-keys/bulk';
+};
+
+export type BulkDeleteApiKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteApiKeysError = BulkDeleteApiKeysErrors[keyof BulkDeleteApiKeysErrors];
+
+export type BulkDeleteApiKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteApiKeysResponse = BulkDeleteApiKeysResponses[keyof BulkDeleteApiKeysResponses];
+
 export type AppGalleryDeviceAuthStartData = {
     body?: never;
     path?: never;
@@ -21081,6 +21387,212 @@ export type UpdateAppResponses = {
 
 export type UpdateAppResponse = UpdateAppResponses[keyof UpdateAppResponses];
 
+export type BulkDeleteAppsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/apps/bulk';
+};
+
+export type BulkDeleteAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAppsError = BulkDeleteAppsErrors[keyof BulkDeleteAppsErrors];
+
+export type BulkDeleteAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAppsResponse = BulkDeleteAppsResponses[keyof BulkDeleteAppsResponses];
+
+export type BulkUpdateAppsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The visibility every app in the batch moves to.
+         */
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teamIds?: Array<string>;
+        /**
+         * People to share with. Only meaningful for `scope = personal`; omitting it revokes existing grants rather than keeping them, since this sets one visibility across the selection.
+         */
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/apps/bulk';
+};
+
+export type BulkUpdateAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateAppsError = BulkUpdateAppsErrors[keyof BulkUpdateAppsErrors];
+
+export type BulkUpdateAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateAppsResponse = BulkUpdateAppsResponses[keyof BulkUpdateAppsResponses];
+
 export type EnableAppData = {
     body?: never;
     path: {
@@ -22564,7 +23076,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -22673,7 +23185,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -22795,7 +23307,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -25523,6 +26035,8 @@ export type BedrockConverseWithDefaultAgentData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -25717,6 +26231,19 @@ export type BedrockConverseWithDefaultAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -25859,6 +26386,8 @@ export type BedrockConverseWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26056,6 +26585,19 @@ export type BedrockConverseWithAgentResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26198,6 +26740,8 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26406,6 +26950,8 @@ export type BedrockConverseStreamWithAgentData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -26617,6 +27163,8 @@ export type BedrockConverseWithAgentAndModelData = {
                         signature?: string;
                     };
                 } | {
+                    redactedContent: string;
+                } | {
                     redactedReasoning: {
                         data: string;
                     };
@@ -26814,6 +27362,19 @@ export type BedrockConverseWithAgentAndModelResponses = {
                             [key: string]: unknown;
                         };
                     };
+                } | {
+                    reasoningContent: {
+                        reasoningText: {
+                            text: string;
+                            signature?: string;
+                        };
+                    } | {
+                        redactedContent: string;
+                    } | {
+                        redactedReasoning: {
+                            data: string;
+                        };
+                    };
                 }>;
             };
         };
@@ -26956,6 +27517,8 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                         text: string;
                         signature?: string;
                     };
+                } | {
+                    redactedContent: string;
                 } | {
                     redactedReasoning: {
                         data: string;
@@ -34009,7 +34572,9 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             mcpIdleHibernationBetaEnabled: boolean;
+            mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
+            plugins: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
             apiBodyLimitBytes: number;
@@ -34165,6 +34730,7 @@ export type CreateConnectionSetupData = {
             skillIds: Array<string>;
             ttlDays: number | null;
         };
+        pluginIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -34249,6 +34815,12 @@ export type CreateConnectionSetupResponses = {
             kind: 'insufficient_balance' | 'unverified';
             keyName: string;
         };
+        plugins: Array<{
+            id: string;
+            pluginSlug: string;
+            displayName: string;
+            clientType: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        }>;
     };
 };
 
@@ -35512,6 +36084,410 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type BulkDeleteEnvironmentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments/bulk';
+};
+
+export type BulkDeleteEnvironmentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteEnvironmentsError = BulkDeleteEnvironmentsErrors[keyof BulkDeleteEnvironmentsErrors];
+
+export type BulkDeleteEnvironmentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
+
+export type GetExternalMcpSkillsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        environmentId?: string;
+    };
+    url: '/api/skills/external';
+};
+
+export type GetExternalMcpSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillsError = GetExternalMcpSkillsErrors[keyof GetExternalMcpSkillsErrors];
+
+export type GetExternalMcpSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetExternalMcpSkillsResponse = GetExternalMcpSkillsResponses[keyof GetExternalMcpSkillsResponses];
+
+export type GetExternalMcpSkillUsageStatisticsData = {
+    body?: never;
+    path?: never;
+    query: {
+        mcpServerId: string;
+        uri: string;
+    };
+    url: '/api/skills/external/usage-statistics';
+};
+
+export type GetExternalMcpSkillUsageStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsError = GetExternalMcpSkillUsageStatisticsErrors[keyof GetExternalMcpSkillUsageStatisticsErrors];
+
+export type GetExternalMcpSkillUsageStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        users: Array<{
+            userId: string | null;
+            name: string | null;
+            total: number;
+        }>;
+        daily: Array<{
+            date: string;
+            userId: string | null;
+            count: number;
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillUsageStatisticsResponse = GetExternalMcpSkillUsageStatisticsResponses[keyof GetExternalMcpSkillUsageStatisticsResponses];
+
+export type GetExternalMcpSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        mcpServerId: string;
+    };
+    url: '/api/skills/external/{id}';
+};
+
+export type GetExternalMcpSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalMcpSkillError = GetExternalMcpSkillErrors[keyof GetExternalMcpSkillErrors];
+
+export type GetExternalMcpSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'external_mcp';
+        id: string;
+        catalogId: string;
+        mcpServerId: string;
+        scope: 'personal' | 'team' | 'org';
+        serverName: string;
+        icon: string | null;
+        name: string;
+        description: string;
+        uri: string;
+        resources: Array<{
+            uri: string;
+            digest: string;
+        }> | null;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
+        content: string;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'script' | 'reference' | 'asset';
+        }>;
+    };
+};
+
+export type GetExternalMcpSkillResponse = GetExternalMcpSkillResponses[keyof GetExternalMcpSkillResponses];
 
 export type GeminiEmbeddingsWithDefaultAgentData = {
     body: {
@@ -39847,6 +40823,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -40049,6 +41029,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:responses';
             model: string | null;
             baselineModel: string | null;
@@ -40167,6 +41151,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openai:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -40282,6 +41270,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'gemini:embeddings';
             model: string | null;
@@ -40399,6 +41391,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'bedrock:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -40515,6 +41511,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'cohere:embeddings';
             model: string | null;
             baselineModel: string | null;
@@ -40607,6 +41607,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'gemini:generateContent';
             model: string | null;
@@ -40702,6 +41706,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'anthropic:messages';
             model: string | null;
@@ -40863,6 +41871,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41047,6 +42057,8 @@ export type GetInteractionsResponses = {
                                 signature?: string;
                             };
                         } | {
+                            redactedContent: string;
+                        } | {
                             redactedReasoning: {
                                 data: string;
                             };
@@ -41156,6 +42168,19 @@ export type GetInteractionsResponses = {
                                     [key: string]: unknown;
                                 };
                             };
+                        } | {
+                            reasoningContent: {
+                                reasoningText: {
+                                    text: string;
+                                    signature?: string;
+                                };
+                            } | {
+                                redactedContent: string;
+                            } | {
+                                redactedReasoning: {
+                                    data: string;
+                                };
+                            };
                         }>;
                     };
                 };
@@ -41221,6 +42246,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'bedrock:converse';
             model: string | null;
@@ -41791,6 +42820,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'bedrock:invoke';
             model: string | null;
             baselineModel: string | null;
@@ -41885,6 +42918,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'cerebras:chatCompletions';
             model: string | null;
@@ -41981,6 +43018,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42075,6 +43116,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'perplexity:chatCompletions';
             model: string | null;
@@ -42171,6 +43216,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42265,6 +43314,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'xai:chatCompletions';
             model: string | null;
@@ -42361,6 +43414,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42456,6 +43513,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42548,6 +43609,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'ollama:chatCompletions';
             model: string | null;
@@ -42642,6 +43707,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'ollama-native:chat';
             model: string | null;
             baselineModel: string | null;
@@ -42734,6 +43803,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'cohere:chat';
             model: string | null;
@@ -42830,6 +43903,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -42924,6 +44001,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'deepseek:chatCompletions';
             model: string | null;
@@ -43734,6 +44815,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'kimi:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -44542,6 +45627,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'github-copilot:chatCompletions';
             model: string | null;
@@ -45352,6 +46441,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'microsoft-365-copilot:chatCompletions';
             model: string | null;
             baselineModel: string | null;
@@ -45446,6 +46539,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'minimax:chatCompletions';
             model: string | null;
@@ -45609,6 +46706,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'azure:chatCompletions';
             model: string | null;
@@ -45812,6 +46913,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'azure:responses';
             model: string | null;
             baselineModel: string | null;
@@ -46014,6 +47119,10 @@ export type GetInteractionsResponses = {
                 toolCallId: string;
                 toolName: string;
             } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
             type: 'perplexity:responses';
             model: string | null;
             baselineModel: string | null;
@@ -46215,6 +47324,10 @@ export type GetInteractionsResponses = {
                 reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
                 toolCallId: string;
                 toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
             } | null;
             type: 'github-copilot:responses';
             model: string | null;
@@ -46735,6 +47848,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -46937,6 +48054,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:responses';
         model: string | null;
         baselineModel: string | null;
@@ -47055,6 +48176,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openai:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -47170,6 +48295,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'gemini:embeddings';
         model: string | null;
@@ -47287,6 +48416,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'bedrock:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -47403,6 +48536,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'cohere:embeddings';
         model: string | null;
         baselineModel: string | null;
@@ -47495,6 +48632,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'gemini:generateContent';
         model: string | null;
@@ -47590,6 +48731,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'anthropic:messages';
         model: string | null;
@@ -47751,6 +48896,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -47935,6 +49082,8 @@ export type GetInteractionResponses = {
                             signature?: string;
                         };
                     } | {
+                        redactedContent: string;
+                    } | {
                         redactedReasoning: {
                             data: string;
                         };
@@ -48044,6 +49193,19 @@ export type GetInteractionResponses = {
                                 [key: string]: unknown;
                             };
                         };
+                    } | {
+                        reasoningContent: {
+                            reasoningText: {
+                                text: string;
+                                signature?: string;
+                            };
+                        } | {
+                            redactedContent: string;
+                        } | {
+                            redactedReasoning: {
+                                data: string;
+                            };
+                        };
                     }>;
                 };
             };
@@ -48109,6 +49271,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'bedrock:converse';
         model: string | null;
@@ -48679,6 +49845,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'bedrock:invoke';
         model: string | null;
         baselineModel: string | null;
@@ -48773,6 +49943,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'cerebras:chatCompletions';
         model: string | null;
@@ -48869,6 +50043,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -48963,6 +50141,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'perplexity:chatCompletions';
         model: string | null;
@@ -49059,6 +50241,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49153,6 +50339,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'xai:chatCompletions';
         model: string | null;
@@ -49249,6 +50439,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49344,6 +50538,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49436,6 +50634,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'ollama:chatCompletions';
         model: string | null;
@@ -49530,6 +50732,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'ollama-native:chat';
         model: string | null;
         baselineModel: string | null;
@@ -49622,6 +50828,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'cohere:chat';
         model: string | null;
@@ -49718,6 +50928,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -49812,6 +51026,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'deepseek:chatCompletions';
         model: string | null;
@@ -50622,6 +51840,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'kimi:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -51430,6 +52652,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'github-copilot:chatCompletions';
         model: string | null;
@@ -52240,6 +53466,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'microsoft-365-copilot:chatCompletions';
         model: string | null;
         baselineModel: string | null;
@@ -52334,6 +53564,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'minimax:chatCompletions';
         model: string | null;
@@ -52497,6 +53731,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'azure:chatCompletions';
         model: string | null;
@@ -52700,6 +53938,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'azure:responses';
         model: string | null;
         baselineModel: string | null;
@@ -52902,6 +54144,10 @@ export type GetInteractionResponses = {
             toolCallId: string;
             toolName: string;
         } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
         type: 'perplexity:responses';
         model: string | null;
         baselineModel: string | null;
@@ -53103,6 +54349,10 @@ export type GetInteractionResponses = {
             reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
             toolCallId: string;
             toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
         } | null;
         type: 'github-copilot:responses';
         model: string | null;
@@ -53372,8 +54622,18 @@ export type GetInternalMcpCatalogResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        alertMutes?: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
         toolCount: number;
         providesUi?: boolean;
+        skillCount: number;
+        providesSkills?: boolean;
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
@@ -53722,6 +54982,188 @@ export type CreateInternalMcpCatalogItemResponses = {
 };
 
 export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
+
+export type UnmuteMcpCatalogAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpCatalogAlertError = UnmuteMcpCatalogAlertErrors[keyof UnmuteMcpCatalogAlertErrors];
+
+export type UnmuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpCatalogAlertResponse = UnmuteMcpCatalogAlertResponses[keyof UnmuteMcpCatalogAlertResponses];
+
+export type MuteMcpCatalogAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpCatalogAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpCatalogAlertError = MuteMcpCatalogAlertErrors[keyof MuteMcpCatalogAlertErrors];
+
+export type MuteMcpCatalogAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpCatalogAlertResponse = MuteMcpCatalogAlertResponses[keyof MuteMcpCatalogAlertResponses];
 
 export type DeleteInternalMcpCatalogItemData = {
     body?: never;
@@ -57381,6 +58823,103 @@ export type UpdateKnowledgeBaseResponses = {
 
 export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
 
+export type BulkDeleteKnowledgeBasesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-bases/bulk';
+};
+
+export type BulkDeleteKnowledgeBasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeBasesError = BulkDeleteKnowledgeBasesErrors[keyof BulkDeleteKnowledgeBasesErrors];
+
+export type BulkDeleteKnowledgeBasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeBasesResponse = BulkDeleteKnowledgeBasesResponses[keyof BulkDeleteKnowledgeBasesResponses];
+
 export type RestoreKnowledgeBaseData = {
     body?: never;
     path: {
@@ -59512,6 +61051,320 @@ export type GetConnectorDocumentResponses = {
 
 export type GetConnectorDocumentResponse = GetConnectorDocumentResponses[keyof GetConnectorDocumentResponses];
 
+export type BulkDeleteConnectorDocumentsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    } | {
+        /**
+         * Delete everything matching the filters below rather than an id list.
+         */
+        all: true;
+        /**
+         * Same title search the listing applies.
+         */
+        search?: string;
+        /**
+         * Same group filter the listing applies.
+         */
+        group?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/bulk';
+};
+
+export type BulkDeleteConnectorDocumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteConnectorDocumentsError = BulkDeleteConnectorDocumentsErrors[keyof BulkDeleteConnectorDocumentsErrors];
+
+export type BulkDeleteConnectorDocumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteConnectorDocumentsResponse = BulkDeleteConnectorDocumentsResponses[keyof BulkDeleteConnectorDocumentsResponses];
+
+export type BulkDeleteConnectorsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connectors/bulk';
+};
+
+export type BulkDeleteConnectorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteConnectorsError = BulkDeleteConnectorsErrors[keyof BulkDeleteConnectorsErrors];
+
+export type BulkDeleteConnectorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteConnectorsResponse = BulkDeleteConnectorsResponses[keyof BulkDeleteConnectorsResponses];
+
+export type BulkUpdateConnectorsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every connector in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connectors/bulk';
+};
+
+export type BulkUpdateConnectorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateConnectorsError = BulkUpdateConnectorsErrors[keyof BulkUpdateConnectorsErrors];
+
+export type BulkUpdateConnectorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateConnectorsResponse = BulkUpdateConnectorsResponses[keyof BulkUpdateConnectorsResponses];
+
 export type RestoreConnectorData = {
     body?: never;
     path: {
@@ -61557,6 +63410,208 @@ export type UpdateKnowledgeFileResponses = {
 
 export type UpdateKnowledgeFileResponse = UpdateKnowledgeFileResponses[keyof UpdateKnowledgeFileResponses];
 
+export type BulkDeleteKnowledgeFilesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/bulk';
+};
+
+export type BulkDeleteKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeFilesError = BulkDeleteKnowledgeFilesErrors[keyof BulkDeleteKnowledgeFilesErrors];
+
+export type BulkDeleteKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeFilesResponse = BulkDeleteKnowledgeFilesResponses[keyof BulkDeleteKnowledgeFilesResponses];
+
+export type BulkUpdateKnowledgeFilesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every document in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped' | 'private';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/bulk';
+};
+
+export type BulkUpdateKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateKnowledgeFilesError = BulkUpdateKnowledgeFilesErrors[keyof BulkUpdateKnowledgeFilesErrors];
+
+export type BulkUpdateKnowledgeFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateKnowledgeFilesResponse = BulkUpdateKnowledgeFilesResponses[keyof BulkUpdateKnowledgeFilesResponses];
+
 export type IndexKnowledgeFilesData = {
     body: {
         fileIds?: Array<string>;
@@ -62017,6 +64072,208 @@ export type UpdateKnowledgeDirectoryResponses = {
 };
 
 export type UpdateKnowledgeDirectoryResponse = UpdateKnowledgeDirectoryResponses[keyof UpdateKnowledgeDirectoryResponses];
+
+export type BulkDeleteKnowledgeDirectoriesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories/bulk';
+};
+
+export type BulkDeleteKnowledgeDirectoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteKnowledgeDirectoriesError = BulkDeleteKnowledgeDirectoriesErrors[keyof BulkDeleteKnowledgeDirectoriesErrors];
+
+export type BulkDeleteKnowledgeDirectoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirectoriesResponses[keyof BulkDeleteKnowledgeDirectoriesResponses];
+
+export type BulkUpdateKnowledgeDirectoriesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * The audience every directory in the batch moves to.
+         */
+        visibility: 'org-wide' | 'team-scoped' | 'private';
+        /**
+         * Only meaningful for `team-scoped`; required there.
+         */
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-directories/bulk';
+};
+
+export type BulkUpdateKnowledgeDirectoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateKnowledgeDirectoriesError = BulkUpdateKnowledgeDirectoriesErrors[keyof BulkUpdateKnowledgeDirectoriesErrors];
+
+export type BulkUpdateKnowledgeDirectoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateKnowledgeDirectoriesResponse = BulkUpdateKnowledgeDirectoriesResponses[keyof BulkUpdateKnowledgeDirectoriesResponses];
 
 export type GetLimitsData = {
     body?: never;
@@ -62863,6 +65120,107 @@ export type GetModelsWithApiKeysResponses = {
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type BulkUpdateModelsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        /**
+         * Whether every model in the batch is hidden.
+         */
+        ignored: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/bulk';
+};
+
+export type BulkUpdateModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateModelsError = BulkUpdateModelsErrors[keyof BulkUpdateModelsErrors];
+
+export type BulkUpdateModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateModelsResponse = BulkUpdateModelsResponses[keyof BulkUpdateModelsResponses];
 
 export type UpdateModelData = {
     body: {
@@ -65137,6 +67495,14 @@ export type GetMcpServersResponses = {
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        alertMutes: Array<{
+            catalogId: string;
+            mcpServerId: string | null;
+            issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+            issueFingerprint: string;
+            reason: string;
+            mutedAt: string;
+        }>;
     }>;
 };
 
@@ -65646,6 +68012,103 @@ export type ReauthenticateMcpServerResponses = {
 
 export type ReauthenticateMcpServerResponse = ReauthenticateMcpServerResponses[keyof ReauthenticateMcpServerResponses];
 
+export type BulkDeleteMcpServersData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server/bulk';
+};
+
+export type BulkDeleteMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteMcpServersError = BulkDeleteMcpServersErrors[keyof BulkDeleteMcpServersErrors];
+
+export type BulkDeleteMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteMcpServersResponse = BulkDeleteMcpServersResponses[keyof BulkDeleteMcpServersResponses];
+
 export type RestoreMcpServerData = {
     body?: never;
     path: {
@@ -65775,6 +68238,188 @@ export type RestoreMcpServerResponses = {
 };
 
 export type RestoreMcpServerResponse = RestoreMcpServerResponses[keyof RestoreMcpServerResponses];
+
+export type UnmuteMcpServerAlertData = {
+    body?: never;
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query: {
+        issueFingerprint: string;
+    };
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type UnmuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnmuteMcpServerAlertError = UnmuteMcpServerAlertErrors[keyof UnmuteMcpServerAlertErrors];
+
+export type UnmuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnmuteMcpServerAlertResponse = UnmuteMcpServerAlertResponses[keyof UnmuteMcpServerAlertResponses];
+
+export type MuteMcpServerAlertData = {
+    body: {
+        issueFingerprint: string;
+        reason?: string;
+    };
+    path: {
+        id: string;
+        kind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/alert-mutes/{kind}';
+};
+
+export type MuteMcpServerAlertErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MuteMcpServerAlertError = MuteMcpServerAlertErrors[keyof MuteMcpServerAlertErrors];
+
+export type MuteMcpServerAlertResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogId: string;
+        mcpServerId: string | null;
+        issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+        issueFingerprint: string;
+        reason: string;
+        mutedAt: string;
+    };
+};
+
+export type MuteMcpServerAlertResponse = MuteMcpServerAlertResponses[keyof MuteMcpServerAlertResponses];
 
 export type GetMcpServerInstallationStatusData = {
     body?: never;
@@ -72219,503 +74864,6 @@ export type OpenrouterChatCompletionsWithAgentResponses = {
 
 export type OpenrouterChatCompletionsWithAgentResponse = OpenrouterChatCompletionsWithAgentResponses[keyof OpenrouterChatCompletionsWithAgentResponses];
 
-export type GetOptimizationRulesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/optimization-rules';
-};
-
-export type GetOptimizationRulesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOptimizationRulesError = GetOptimizationRulesErrors[keyof GetOptimizationRulesErrors];
-
-export type GetOptimizationRulesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        conditions: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel: string;
-        enabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof GetOptimizationRulesResponses];
-
-export type CreateOptimizationRuleData = {
-    body: {
-        id?: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        conditions: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel: string;
-        enabled?: boolean;
-        createdAt?: unknown;
-        updatedAt?: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/optimization-rules';
-};
-
-export type CreateOptimizationRuleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateOptimizationRuleError = CreateOptimizationRuleErrors[keyof CreateOptimizationRuleErrors];
-
-export type CreateOptimizationRuleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        conditions: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel: string;
-        enabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateOptimizationRuleResponse = CreateOptimizationRuleResponses[keyof CreateOptimizationRuleResponses];
-
-export type DeleteOptimizationRuleData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/optimization-rules/{id}';
-};
-
-export type DeleteOptimizationRuleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteOptimizationRuleError = DeleteOptimizationRuleErrors[keyof DeleteOptimizationRuleErrors];
-
-export type DeleteOptimizationRuleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
-
-export type GetOptimizationRuleData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/optimization-rules/{id}';
-};
-
-export type GetOptimizationRuleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOptimizationRuleError = GetOptimizationRuleErrors[keyof GetOptimizationRuleErrors];
-
-export type GetOptimizationRuleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        conditions: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel: string;
-        enabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetOptimizationRuleResponse = GetOptimizationRuleResponses[keyof GetOptimizationRuleResponses];
-
-export type UpdateOptimizationRuleData = {
-    body: {
-        id?: string;
-        entityType?: 'organization' | 'team' | 'agent';
-        entityId?: string;
-        conditions?: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel?: string;
-        enabled?: boolean;
-        createdAt?: unknown;
-        updatedAt?: unknown;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/optimization-rules/{id}';
-};
-
-export type UpdateOptimizationRuleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateOptimizationRuleError = UpdateOptimizationRuleErrors[keyof UpdateOptimizationRuleErrors];
-
-export type UpdateOptimizationRuleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        entityType: 'organization' | 'team' | 'agent';
-        entityId: string;
-        conditions: Array<{
-            maxLength: number;
-        } | {
-            hasTools: boolean;
-        }>;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
-        targetModel: string;
-        enabled: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
-
 export type GetRolesData = {
     body?: never;
     path?: never;
@@ -77400,6 +79548,1656 @@ export type PerplexityResponsesWithAgentResponses = {
 
 export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
 
+export type GetPluginsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/plugins';
+};
+
+export type GetPluginsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginsError = GetPluginsErrors[keyof GetPluginsErrors];
+
+export type GetPluginsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        lastSyncedAt: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        fileCount: number;
+    }>;
+};
+
+export type GetPluginsResponse = GetPluginsResponses[keyof GetPluginsResponses];
+
+export type CreatePluginData = {
+    body: {
+        displayName: string;
+        description?: string;
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms?: Array<'posix' | 'windows'>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding?: 'utf8' | 'base64';
+            mode?: '100644' | '100755';
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/plugins';
+};
+
+export type CreatePluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreatePluginError = CreatePluginErrors[keyof CreatePluginErrors];
+
+export type CreatePluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type CreatePluginResponse = CreatePluginResponses[keyof CreatePluginResponses];
+
+export type DiscoverGithubPluginMarketplaceData = {
+    body: {
+        repoUrl: string;
+        ref?: string | null;
+        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/plugins/github/marketplace/discover';
+};
+
+export type DiscoverGithubPluginMarketplaceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DiscoverGithubPluginMarketplaceError = DiscoverGithubPluginMarketplaceErrors[keyof DiscoverGithubPluginMarketplaceErrors];
+
+export type DiscoverGithubPluginMarketplaceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repoUrl: string;
+        ref: string | null;
+        commitSha: string;
+        marketplacePath: string | null;
+        entries: Array<{
+            marketplacePath: string;
+            name: string;
+            description: string;
+            version: string;
+            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            sourceRepoUrl: string | null;
+            sourceRef: string | null;
+            sourceSubdir: string;
+            sourceCommitSha: string | null;
+            fileCount: number;
+            supported: boolean;
+            reason: string | null;
+        }>;
+        reason: string | null;
+    };
+};
+
+export type DiscoverGithubPluginMarketplaceResponse = DiscoverGithubPluginMarketplaceResponses[keyof DiscoverGithubPluginMarketplaceResponses];
+
+export type ImportGithubPluginMarketplaceData = {
+    body: {
+        repoUrl: string;
+        ref?: string | null;
+        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    } & {
+        marketplacePath: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        approvedCommitSha: string;
+        trackingRef: string | null;
+        selected: Array<{
+            name: string;
+            displayName: string;
+            description?: string;
+            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            supportedPlatforms: Array<'posix' | 'windows'>;
+            sourceRepoUrl: string;
+            sourceRef: string | null;
+            sourceSubdir: string;
+            approvedSourceSha: string;
+            exclude?: Array<string>;
+        }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+        syncInterval?: '15m' | '1h' | '1d' | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/plugins/github/marketplace/import';
+};
+
+export type ImportGithubPluginMarketplaceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ImportGithubPluginMarketplaceError = ImportGithubPluginMarketplaceErrors[keyof ImportGithubPluginMarketplaceErrors];
+
+export type ImportGithubPluginMarketplaceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: Array<{
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            supportedPlatforms: Array<'posix' | 'windows'>;
+            pluginSlug: string;
+            displayName: string;
+            description: string;
+            contentHash: string;
+            sourceKind: 'manual' | 'github';
+            sourceRepo: string | null;
+            sourceRef: string | null;
+            sourceSha: string | null;
+            sourceSubdir: string | null;
+            sourceExclude: Array<string>;
+            sourceMarketplaceRepo: string | null;
+            sourceMarketplacePath: string | null;
+            sourceMarketplacePluginName: string | null;
+            githubSyncInterval: '15m' | '1h' | '1d' | null;
+            githubSyncRef: string | null;
+            githubAppConfigId: string | null;
+            githubPatId: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+            pendingSourceSha: string | null;
+            pendingContentHash: string | null;
+            pendingDetectedAt: string | null;
+            sourceId: string | null;
+            approvedContentHash: string | null;
+            approvedAt: string | null;
+            approvedBy: string | null;
+            enabled: boolean;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            users: Array<{
+                id: string;
+                name: string;
+                email: string;
+            }>;
+            files: Array<{
+                id: string;
+                pluginId: string;
+                path: string;
+                content: string;
+                encoding: 'utf8' | 'base64';
+                mode: '100644' | '100755';
+                digest: string;
+            }>;
+        }>;
+        failed: Array<{
+            name: string;
+            error: string;
+        }>;
+    };
+};
+
+export type ImportGithubPluginMarketplaceResponse = ImportGithubPluginMarketplaceResponses[keyof ImportGithubPluginMarketplaceResponses];
+
+export type PreviewGithubPluginData = {
+    body: {
+        repoUrl: string;
+        ref?: string | null;
+        subdir?: string;
+        exclude?: Array<string>;
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/plugins/github/preview';
+};
+
+export type PreviewGithubPluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewGithubPluginError = PreviewGithubPluginErrors[keyof PreviewGithubPluginErrors];
+
+export type PreviewGithubPluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repo: string;
+        requestedRef: string | null;
+        commitSha: string;
+        subdir: string;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+        }>;
+        skippedFiles: Array<string>;
+    };
+};
+
+export type PreviewGithubPluginResponse = PreviewGithubPluginResponses[keyof PreviewGithubPluginResponses];
+
+export type ImportGithubPluginData = {
+    body: {
+        repoUrl: string;
+        ref?: string | null;
+        subdir?: string;
+        exclude?: Array<string>;
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    } & {
+        displayName: string;
+        description?: string;
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms?: Array<'posix' | 'windows'>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+        approvedCommitSha: string;
+        trackingRef?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/plugins/github/import';
+};
+
+export type ImportGithubPluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ImportGithubPluginError = ImportGithubPluginErrors[keyof ImportGithubPluginErrors];
+
+export type ImportGithubPluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type ImportGithubPluginResponse = ImportGithubPluginResponses[keyof ImportGithubPluginResponses];
+
+export type PreviewGithubPluginUpdateData = {
+    body: {
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/github/preview-update';
+};
+
+export type PreviewGithubPluginUpdateErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewGithubPluginUpdateError = PreviewGithubPluginUpdateErrors[keyof PreviewGithubPluginUpdateErrors];
+
+export type PreviewGithubPluginUpdateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repo: string;
+        requestedRef: string | null;
+        commitSha: string;
+        subdir: string;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+        }>;
+        skippedFiles: Array<string>;
+    };
+};
+
+export type PreviewGithubPluginUpdateResponse = PreviewGithubPluginUpdateResponses[keyof PreviewGithubPluginUpdateResponses];
+
+export type ApplyGithubPluginUpdateData = {
+    body: {
+        githubToken?: string;
+        githubAppConfigId?: string;
+        githubPatId?: string;
+    } & {
+        approvedCommitSha: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/github/apply-update';
+};
+
+export type ApplyGithubPluginUpdateErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApplyGithubPluginUpdateError = ApplyGithubPluginUpdateErrors[keyof ApplyGithubPluginUpdateErrors];
+
+export type ApplyGithubPluginUpdateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type ApplyGithubPluginUpdateResponse = ApplyGithubPluginUpdateResponses[keyof ApplyGithubPluginUpdateResponses];
+
+export type UpdatePluginGithubSyncData = {
+    body: {
+        interval: '15m' | '1h' | '1d' | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/github/sync';
+};
+
+export type UpdatePluginGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdatePluginGithubSyncError = UpdatePluginGithubSyncErrors[keyof UpdatePluginGithubSyncErrors];
+
+export type UpdatePluginGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type UpdatePluginGithubSyncResponse = UpdatePluginGithubSyncResponses[keyof UpdatePluginGithubSyncResponses];
+
+export type TriggerPluginGithubSyncData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}/github/check';
+};
+
+export type TriggerPluginGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TriggerPluginGithubSyncError = TriggerPluginGithubSyncErrors[keyof TriggerPluginGithubSyncErrors];
+
+export type TriggerPluginGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        queued: boolean;
+    };
+};
+
+export type TriggerPluginGithubSyncResponse = TriggerPluginGithubSyncResponses[keyof TriggerPluginGithubSyncResponses];
+
+export type DeletePluginData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}';
+};
+
+export type DeletePluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeletePluginError = DeletePluginErrors[keyof DeletePluginErrors];
+
+export type DeletePluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeletePluginResponse = DeletePluginResponses[keyof DeletePluginResponses];
+
+export type GetPluginData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}';
+};
+
+export type GetPluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginError = GetPluginErrors[keyof GetPluginErrors];
+
+export type GetPluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type GetPluginResponse = GetPluginResponses[keyof GetPluginResponses];
+
+export type UpdatePluginData = {
+    body: {
+        displayName?: string;
+        description?: string;
+        enabled?: boolean;
+        supportedPlatforms?: Array<'posix' | 'windows'>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+        files?: Array<{
+            path: string;
+            content: string;
+            encoding?: 'utf8' | 'base64';
+            mode?: '100644' | '100755';
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{id}';
+};
+
+export type UpdatePluginErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdatePluginError = UpdatePluginErrors[keyof UpdatePluginErrors];
+
+export type UpdatePluginResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        pluginSlug: string;
+        displayName: string;
+        description: string;
+        contentHash: string;
+        sourceKind: 'manual' | 'github';
+        sourceRepo: string | null;
+        sourceRef: string | null;
+        sourceSha: string | null;
+        sourceSubdir: string | null;
+        sourceExclude: Array<string>;
+        sourceMarketplaceRepo: string | null;
+        sourceMarketplacePath: string | null;
+        sourceMarketplacePluginName: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        pendingSourceSha: string | null;
+        pendingContentHash: string | null;
+        pendingDetectedAt: string | null;
+        sourceId: string | null;
+        approvedContentHash: string | null;
+        approvedAt: string | null;
+        approvedBy: string | null;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        files: Array<{
+            id: string;
+            pluginId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            mode: '100644' | '100755';
+            digest: string;
+        }>;
+    };
+};
+
+export type UpdatePluginResponse = UpdatePluginResponses[keyof UpdatePluginResponses];
+
 export type GetProjectsData = {
     body?: never;
     path?: never;
@@ -78080,6 +81878,203 @@ export type SetProjectShareResponses = {
 };
 
 export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
+
+export type BulkDeleteProjectsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects/bulk';
+};
+
+export type BulkDeleteProjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteProjectsError = BulkDeleteProjectsErrors[keyof BulkDeleteProjectsErrors];
+
+export type BulkDeleteProjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteProjectsResponse = BulkDeleteProjectsResponses[keyof BulkDeleteProjectsResponses];
+
+export type BulkUpdateProjectsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        visibility: 'organization' | 'team' | 'user' | 'none';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects/bulk';
+};
+
+export type BulkUpdateProjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateProjectsError = BulkUpdateProjectsErrors[keyof BulkUpdateProjectsErrors];
+
+export type BulkUpdateProjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateProjectsResponse = BulkUpdateProjectsResponses[keyof BulkUpdateProjectsResponses];
 
 export type RestoreProjectData = {
     body: {
@@ -80860,6 +84855,103 @@ export type UpdateServiceAccountResponses = {
 
 export type UpdateServiceAccountResponse = UpdateServiceAccountResponses[keyof UpdateServiceAccountResponses];
 
+export type BulkDeleteServiceAccountsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/service-accounts/bulk';
+};
+
+export type BulkDeleteServiceAccountsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteServiceAccountsError = BulkDeleteServiceAccountsErrors[keyof BulkDeleteServiceAccountsErrors];
+
+export type BulkDeleteServiceAccountsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteServiceAccountsResponse = BulkDeleteServiceAccountsResponses[keyof BulkDeleteServiceAccountsResponses];
+
 export type CreateServiceAccountTokenData = {
     body: {
         name: string;
@@ -82846,6 +86938,111 @@ export type GetSkillVersionResponses = {
 
 export type GetSkillVersionResponse = GetSkillVersionResponses[keyof GetSkillVersionResponses];
 
+export type BulkUpdateSkillsVisibilityData = {
+    body: {
+        /**
+         * Skills to act on. Duplicates are collapsed.
+         */
+        skillIds: Array<string>;
+        scope: 'personal' | 'team' | 'org';
+        /**
+         * Only meaningful for `scope = team`; required there.
+         */
+        teamIds?: Array<string>;
+        /**
+         * People to share with by name. Only meaningful for `scope = personal`; ignored for team/org skills. Unlike the single-skill update, omitting it revokes existing grants rather than keeping them: this sets one visibility across the whole selection, so a per-skill grant list would survive as a difference the request just asked to remove.
+         */
+        userIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skills/bulk-visibility';
+};
+
+export type BulkUpdateSkillsVisibilityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkUpdateSkillsVisibilityError = BulkUpdateSkillsVisibilityErrors[keyof BulkUpdateSkillsVisibilityErrors];
+
+export type BulkUpdateSkillsVisibilityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkUpdateSkillsVisibilityResponse = BulkUpdateSkillsVisibilityResponses[keyof BulkUpdateSkillsVisibilityResponses];
+
 export type GetSkillSourceReposData = {
     body?: never;
     path?: never;
@@ -82928,6 +87125,102 @@ export type GetSkillSourceReposResponses = {
 };
 
 export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
+
+export type BulkDeleteSkillsData = {
+    body: {
+        /**
+         * Skills to act on. Duplicates are collapsed.
+         */
+        skillIds: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skills/bulk-delete';
+};
+
+export type BulkDeleteSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteSkillsError = BulkDeleteSkillsErrors[keyof BulkDeleteSkillsErrors];
+
+export type BulkDeleteSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteSkillsResponse = BulkDeleteSkillsResponses[keyof BulkDeleteSkillsResponses];
 
 export type RestoreSkillData = {
     body?: never;
@@ -84341,6 +88634,8 @@ export type GetSkillShareLinksResponses = {
             tokenStart: string;
             name: string | null;
             marketplaceName: string;
+            pluginClientType: string | null;
+            pluginPlatform: string | null;
             expiresAt: string | null;
             revokedAt: string | null;
             lastUsedAt: string | null;
@@ -84352,6 +88647,14 @@ export type GetSkillShareLinksResponses = {
                 name: string;
                 description: string;
             }>;
+            plugins: Array<{
+                id: string;
+                pluginSlug: string;
+                displayName: string;
+                description: string;
+                clientType: string;
+                contentHash: string;
+            }>;
         }>;
     };
 };
@@ -84360,7 +88663,9 @@ export type GetSkillShareLinksResponse = GetSkillShareLinksResponses[keyof GetSk
 
 export type CreateSkillShareLinkData = {
     body: {
-        skillIds: Array<string>;
+        skillIds?: Array<string>;
+        pluginIds?: Array<string>;
+        pluginPlatform?: 'posix' | 'windows';
         name?: string;
         expiresAt?: string | null;
     };
@@ -84446,6 +88751,8 @@ export type CreateSkillShareLinkResponses = {
             tokenStart: string;
             name: string | null;
             marketplaceName: string;
+            pluginClientType: string | null;
+            pluginPlatform: string | null;
             expiresAt: string | null;
             revokedAt: string | null;
             lastUsedAt: string | null;
@@ -84456,6 +88763,14 @@ export type CreateSkillShareLinkResponses = {
                 id: string;
                 name: string;
                 description: string;
+            }>;
+            plugins: Array<{
+                id: string;
+                pluginSlug: string;
+                displayName: string;
+                description: string;
+                clientType: string;
+                contentHash: string;
             }>;
         };
         rawToken: string;
@@ -84468,7 +88783,9 @@ export type CreateSkillShareLinkResponse = CreateSkillShareLinkResponses[keyof C
 
 export type RotateSkillShareLinkData = {
     body: {
-        skillIds: Array<string>;
+        skillIds?: Array<string>;
+        pluginIds?: Array<string>;
+        pluginPlatform?: 'posix' | 'windows';
         name?: string;
         expiresAt?: string | null;
     };
@@ -84556,6 +88873,8 @@ export type RotateSkillShareLinkResponses = {
             tokenStart: string;
             name: string | null;
             marketplaceName: string;
+            pluginClientType: string | null;
+            pluginPlatform: string | null;
             expiresAt: string | null;
             revokedAt: string | null;
             lastUsedAt: string | null;
@@ -84566,6 +88885,14 @@ export type RotateSkillShareLinkResponses = {
                 id: string;
                 name: string;
                 description: string;
+            }>;
+            plugins: Array<{
+                id: string;
+                pluginSlug: string;
+                displayName: string;
+                description: string;
+                clientType: string;
+                contentHash: string;
             }>;
         };
         rawToken: string;
@@ -85481,14 +89808,12 @@ export type GetCostSavingsStatisticsResponses = {
         totalActualCost: number;
         totalSavings: number;
         totalSubscriptionCost: number;
-        totalOptimizationSavings: number;
         totalToonSavings: number;
         totalCacheSavings: number;
         timeSeries: Array<{
             timestamp: string;
             baselineCost: number;
             actualCost: number;
-            optimizationSavings: number;
             toonSavings: number;
             cacheSavings: number;
             subscriptionCost: number;
@@ -86042,6 +90367,103 @@ export type UpdateTeamResponses = {
 };
 
 export type UpdateTeamResponse = UpdateTeamResponses[keyof UpdateTeamResponses];
+
+export type BulkDeleteTeamsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/teams/bulk';
+};
+
+export type BulkDeleteTeamsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteTeamsError = BulkDeleteTeamsErrors[keyof BulkDeleteTeamsErrors];
+
+export type BulkDeleteTeamsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteTeamsResponse = BulkDeleteTeamsResponses[keyof BulkDeleteTeamsResponses];
 
 export type GetTeamMembersData = {
     body?: never;
@@ -89906,6 +94328,103 @@ export type ZhipuaiChatCompletionsWithAgentResponses = {
 };
 
 export type ZhipuaiChatCompletionsWithAgentResponse = ZhipuaiChatCompletionsWithAgentResponses[keyof ZhipuaiChatCompletionsWithAgentResponses];
+
+export type BulkDeleteRolesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles/bulk';
+};
+
+export type BulkDeleteRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteRolesError = BulkDeleteRolesErrors[keyof BulkDeleteRolesErrors];
+
+export type BulkDeleteRolesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteRolesResponse = BulkDeleteRolesResponses[keyof BulkDeleteRolesResponses];
 
 export type GetPublicIdentityProvidersData = {
     body?: never;

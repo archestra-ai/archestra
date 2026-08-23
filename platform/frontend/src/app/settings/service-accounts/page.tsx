@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -14,6 +15,8 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -26,9 +29,12 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type ServiceAccount,
+  useBulkDeleteServiceAccounts,
   useCreateServiceAccount,
   useDeleteServiceAccount,
   useServiceAccounts,
@@ -66,6 +72,8 @@ export default function ServiceAccountsSettingsPage() {
   } = useServiceAccounts();
   const createMutation = useCreateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteServiceAccounts();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
@@ -103,8 +111,26 @@ export default function ServiceAccountsSettingsPage() {
     );
   }, [serviceAccounts, search]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedAccounts,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredServiceAccounts,
+    getId: (account) => account.id,
+    filterSignature: search,
+    matchDescription: search ? "match this search" : "exist",
+  });
+
   const columns: ColumnDef<ServiceAccount>[] = useMemo(() => {
     const baseColumns: ColumnDef<ServiceAccount>[] = [
+      createSelectColumn<ServiceAccount>({
+        rowLabel: (account) => `Select ${account.name}`,
+        allLabel: "Select all service accounts on this page",
+      }),
       {
         accessorKey: "name",
         header: "Account",
@@ -225,34 +251,99 @@ export default function ServiceAccountsSettingsPage() {
           loadingFallback={<LoadingSpinner />}
         >
           <div className="space-y-4">
-            <SearchInput
-              objectNamePlural="service accounts"
-              searchFields={["name"]}
-            />
+            <FilterBar
+              className="mb-0"
+              onClearFilters={
+                search
+                  ? () => updateQueryParams({ search: null, page: "1" })
+                  : undefined
+              }
+            >
+              <SearchInput
+                objectNamePlural="service accounts"
+                searchFields={["name"]}
+                className={filterSearchClass}
+              />
+            </FilterBar>
             {isServiceAccountsLoadError ? (
               <QueryLoadError
                 title="Couldn't load your service accounts"
                 onRetry={() => refetchServiceAccounts()}
               />
             ) : (
-              <DataTable
-                columns={columns}
-                data={filteredServiceAccounts}
-                onRowClick={(account, event) => {
-                  const target = event.target as HTMLElement;
-                  if (target.closest("a,button")) return;
-                  router.push(`/settings/service-accounts/${account.id}`);
-                }}
-                emptyMessage="No service accounts yet"
-                hasActiveFilters={search.trim().length > 0}
-                filteredEmptyMessage="No service accounts match your search. Try adjusting your search."
-                onClearFilters={() =>
-                  updateQueryParams({ search: null, page: "1" })
-                }
-              />
+              <>
+                <BulkActionsBar
+                  count={selectedAccounts.length}
+                  noun="service account"
+                  onClear={clearSelection}
+                  busy={bulkDelete.isPending}
+                  selectAllMatching={selectAllMatching}
+                  className="mb-3"
+                >
+                  <PermissionButton
+                    permissions={{ serviceAccount: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActionsBar>
+                <DataTable
+                  columns={columns}
+                  data={filteredServiceAccounts}
+                  getRowId={(row) => row.id}
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
+                  hideSelectedCount
+                  onRowClick={(account, event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    router.push(`/settings/service-accounts/${account.id}`);
+                  }}
+                  emptyMessage="No service accounts yet"
+                  hasActiveFilters={search.trim().length > 0}
+                  filteredEmptyMessage="No service accounts match your search. Try adjusting your search."
+                  onClearFilters={() =>
+                    updateQueryParams({ search: null, page: "1" })
+                  }
+                />
+              </>
             )}
           </div>
         </LoadingWrapper>
+      )}
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete service accounts"
+          description={`Delete ${selectedAccounts.length} ${
+            selectedAccounts.length === 1
+              ? "service account"
+              : "service accounts"
+          }? Their tokens stop working immediately.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectedAccounts, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "service account",
+                });
+                setBulkDeleteOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete service accounts"
+          pendingLabel="Deleting..."
+        />
       )}
 
       <FormDialog

@@ -1,6 +1,12 @@
 [toolchain]
 channel = "1.93.0"
-components = ["rustfmt"]
+# rustfmt is used by CI (`cargo fmt --check`). rust-analyzer is IDE-only, but it
+# has to be declared here: the VS Code extension resolves its server by running
+# `rustup which rust-analyzer` in the workspace folder, and falls back to its own
+# bundled server when that command fails. Recent bundled servers reject a channel
+# this old ("is using an outdated toolchain version"), so without this component
+# opening platform/ pops a modal and leaves Rust files with no IDE support.
+components = ["rustfmt", "rust-analyzer"]
 profile = "minimal"
 targets = [
   "aarch64-unknown-linux-musl",

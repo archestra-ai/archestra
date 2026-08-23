@@ -42,9 +42,12 @@ test.describe("Skill version history", () => {
       await goToPage(page, `/skills?search=${skillName}`);
       await page.waitForLoadState("domcontentloaded");
 
+      // Version history sits in the row's "More actions" menu, the same place
+      // it sits on the agent, gateway and proxy lists.
       await page
-        .getByRole("button", { name: `Version history ${skillName}` })
+        .getByRole("button", { name: `More actions ${skillName}` })
         .click();
+      await page.getByRole("menuitem", { name: "Version history" }).click();
 
       // Named, because the restore confirmation below is a dialog too and an
       // unnamed lookup matches both while it animates out.

@@ -21,7 +21,18 @@ import {
   isBlankReasoningPart,
   mcpToolLabel,
   openedAppMetadataFromApps,
+  stripAssistantProtocolMarkers,
 } from "./chat-messages.utils";
+
+describe("stripAssistantProtocolMarkers", () => {
+  it("removes persisted full-width and ASCII DSML tool sentinels", () => {
+    expect(
+      stripAssistantProtocolMarkers(
+        "Before\n\n<｜DSML｜function_callsAfter\n< | DSML | function_calls >Done",
+      ),
+    ).toBe("BeforeAfterDone");
+  });
+});
 
 function panelApp(overrides: Partial<PanelApp>): PanelApp {
   return {

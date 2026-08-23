@@ -188,7 +188,10 @@ import {
 } from "./errors";
 import { buildGeminiProviderOptions } from "./gemini-provider-options";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
-import { injectSkillActivation } from "./inject-skill-activation";
+import {
+  injectExternalMcpSkillActivation,
+  injectSkillActivation,
+} from "./inject-skill-activation";
 import {
   LOCKED_CHAT_STATIC_TITLE,
   requireLockedChatKey,
@@ -872,6 +875,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        // Resolve once and share the same row between tool-output media gating
+        // and the LLM call. The promise runs beside the other turn setup reads.
+        const conversationModelPromise = resolveConversationModel(
+          conversation.modelId,
+        );
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -883,47 +892,48 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           slimChatErrorUi,
           organization,
+          { model: selectedModel, provider },
         ] = await Promise.all([
           Promise.all([
             projectInstructionsPromise,
             openedAppPromise,
             projectFileNamesPromise,
-          ]).then(([projectInstructions, openedApp, projectFileNames]) =>
-            buildChatContext({
-              conversationId,
-              agentId,
-              // The conversation came from findById, which selects the agent's
-              // prompt (only list reads omit it) — pin the optional field to
-              // the concrete `string | null` contract the builder declares.
-              agent: { ...agent, systemPrompt: agent.systemPrompt ?? null },
-              user: { id: user.id, email: user.email, name: user.name },
-              organizationId,
-              hookSessionContext,
-              projectInstructions,
-              openedApp,
-              projectFileNames,
-              hookRunCollector,
-              kbChunksCollector,
-              elicitation: chatMcpElicitation,
-              subagentToolStream,
-              taskBridge: chatTaskBridge,
-              abortSignal: chatAbortController.signal,
-              // LockedChat: span content is suppressed and long calls never
-              // detach into durable tasks; tool-call logs and claim results
-              // are encrypted under the conversation key when it can be
-              // recovered from escrow, redacted otherwise.
-              suppressContentLogging: conversation.lockedChat,
-              lockedChatAudit,
-            }),
+            conversationModelPromise,
+          ]).then(
+            ([projectInstructions, openedApp, projectFileNames, selected]) =>
+              buildChatContext({
+                conversationId,
+                agentId,
+                // The conversation came from findById, which selects the agent's
+                // prompt (only list reads omit it) — pin the optional field to
+                // the concrete `string | null` contract the builder declares.
+                agent: { ...agent, systemPrompt: agent.systemPrompt ?? null },
+                user: { id: user.id, email: user.email, name: user.name },
+                organizationId,
+                modelAcceptsImageToolResults:
+                  selected.inputModalities?.includes("image") === true,
+                hookSessionContext,
+                projectInstructions,
+                openedApp,
+                projectFileNames,
+                hookRunCollector,
+                kbChunksCollector,
+                elicitation: chatMcpElicitation,
+                subagentToolStream,
+                taskBridge: chatTaskBridge,
+                abortSignal: chatAbortController.signal,
+                // LockedChat: span content is suppressed and long calls never
+                // detach into durable tasks; tool-call logs and claim results
+                // are encrypted under the conversation key when it can be
+                // recovered from escrow, redacted otherwise.
+                suppressContentLogging: conversation.lockedChat,
+                lockedChatAudit,
+              }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
+          conversationModelPromise,
         ]);
-
-        // The conversation stores a model_id FK; dereference it to the
-        // proxy-facing model string + provider (env/config fallback if unset).
-        const { model: selectedModel, provider } =
-          await resolveConversationModel(conversation.modelId);
 
         logger.info(
           {
@@ -973,13 +983,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   model: selectedModel,
                 })
               : (messages as ChatMessage[]);
+            const messagesWithExternalSkill =
+              await injectExternalMcpSkillActivation({
+                messages: messagesWithSkill,
+                organizationId,
+                userId: user.id,
+                agentId: conversation.agentId ?? undefined,
+                conversationId,
+                provider,
+                model: selectedModel,
+              });
 
             // Render-loop diagnostics from owned MCP App renders ride the last
             // user message's metadata; inject them (delimited, framed as
             // untrusted) so the model can fix the app via edit_app. No-op
             // when absent or when the apps feature is off.
-            const messagesForLLM =
-              await injectAppDiagnostics(messagesWithSkill);
+            const messagesForLLM = await injectAppDiagnostics(
+              messagesWithExternalSkill,
+            );
 
             // Normalize chat history before replaying it to the model.
             // This dedupes repeated tool parts, drops dangling interrupted tool calls,

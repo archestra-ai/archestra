@@ -85,17 +85,22 @@ export interface CostSavingsInput {
 }
 
 export interface CostSavingsResult {
-  /** Savings from model optimization (baselineCost - cost) */
-  costOptimizationSavings: number;
+  /**
+   * Savings from the request running on a different model than it asked for
+   * (baselineCost - cost). Only historical interactions can carry one: the
+   * optimization rules that swapped models have been removed, and new rows
+   * record the baseline as the model actually used, so this is 0 for them.
+   */
+  modelSwapSavings: number;
   /** Savings from TOON compression */
   toonSavings: number;
   /** Number of tokens saved by TOON compression */
   toonTokensSaved: number | null;
-  /** Total savings (costOptimization + toon) */
+  /** Total savings (model swap + toon) */
   totalSavings: number;
   /**
-   * Estimated cost: what the request would have cost without the optimizations
-   * we attribute (original model + uncompressed tool results). Equals
+   * Estimated cost: what the request would have cost without the savings we
+   * attribute (requested model + uncompressed tool results). Equals
    * `actualCost + totalSavings`.
    */
   estimatedCost: number;
@@ -137,12 +142,12 @@ export function calculateCostSavings(
   // produce a negative cost and a >100% savings percentage.
   const actualCost = costNum;
 
-  // Savings from model selection: identical token usage priced at the original
-  // model vs. the model actually used.
-  const costOptimizationSavings = baselineCostNum - costNum;
+  // Savings from model selection: identical token usage priced at the
+  // requested model vs. the model actually used.
+  const modelSwapSavings = baselineCostNum - costNum;
 
-  // Total savings (model optimization + TOON compression).
-  const totalSavings = costOptimizationSavings + toonCostSavingsNum;
+  // Total savings (model swap + TOON compression).
+  const totalSavings = modelSwapSavings + toonCostSavingsNum;
 
   // The estimated (non-optimized) cost sits exactly `totalSavings` above the
   // real spend, so the breakdown always reconciles and the percentage stays
@@ -153,7 +158,7 @@ export function calculateCostSavings(
     estimatedCost > 0 ? (totalSavings / estimatedCost) * 100 : 0;
 
   return {
-    costOptimizationSavings,
+    modelSwapSavings,
     toonSavings: toonCostSavingsNum,
     toonTokensSaved,
     totalSavings,

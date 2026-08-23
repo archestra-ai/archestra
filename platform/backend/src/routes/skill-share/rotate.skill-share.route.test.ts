@@ -1,8 +1,15 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { SkillShareLinkModel } from "@/models";
+import { vi } from "vitest";
+import { PluginModel, SkillShareLinkModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillShareRoutes from "./skill-share.routes";
 import { seedSkill } from "./skill-share.test-helpers";
+
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    plugins: { enabled: true },
+  }),
+);
 
 describe("POST /api/skill-share-links/:id/rotate", () => {
   const ctx = useRouteTestApp(skillShareRoutes);
@@ -47,6 +54,60 @@ describe("POST /api/skill-share-links/:id/rotate", () => {
     expect(
       await SkillShareLinkModel.validate({ rawToken: body.rawToken }),
     ).not.toBeNull();
+  });
+
+  test("preserves attached plugins when rotation omits a new set", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const plugin = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      input: {
+        displayName: "Rotation hook",
+        description: "Kept across token rotation",
+        clientType: "claude-code",
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("failed to seed plugin");
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    const created = await SkillShareLinkModel.create({
+      organizationId: ctx.organizationId,
+      createdByUserId: ctx.user.id,
+      skillIds: [],
+      pluginIds: [plugin.id],
+      pluginClientType: "claude-code",
+      pluginPlatform: "posix",
+      marketplaceName: "rotation-hook-marketplace",
+      expiresAt,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/skill-share-links/${created.link.id}/rotate`,
+      payload: { expiresAt: expiresAt.toISOString() },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().link.plugins).toEqual([
+      expect.objectContaining({ id: plugin.id }),
+    ]);
+    const validated = await SkillShareLinkModel.validate({
+      rawToken: response.json().rawToken,
+    });
+    expect(validated?.plugins).toEqual([
+      expect.objectContaining({ id: plugin.id }),
+    ]);
   });
 
   test("keeps the marketplace name frozen at create time", async ({
@@ -107,6 +168,66 @@ describe("POST /api/skill-share-links/:id/rotate", () => {
     expect(new Date(response.json().link.expiresAt).toISOString()).toBe(
       expiresAt,
     );
+  });
+
+  test("preserves the existing expiry when rotation omits it", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "ttl-preserved",
+    });
+    const expiresAt = new Date(Date.now() + 3_600_000);
+    const created = await SkillShareLinkModel.create({
+      organizationId: ctx.organizationId,
+      createdByUserId: ctx.user.id,
+      skillIds: [skill.id],
+      marketplaceName: "ttl-preserved-marketplace",
+      expiresAt,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/skill-share-links/${created.link.id}/rotate`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(new Date(response.json().link.expiresAt).toISOString()).toBe(
+      expiresAt.toISOString(),
+    );
+  });
+
+  test("rejects an explicit empty replacement before revoking the old token", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "keep-live",
+    });
+    const created = await SkillShareLinkModel.create({
+      organizationId: ctx.organizationId,
+      createdByUserId: ctx.user.id,
+      skillIds: [skill.id],
+      marketplaceName: "keep-live-marketplace",
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/skill-share-links/${created.link.id}/rotate`,
+      payload: { skillIds: [], pluginIds: [] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(
+      await SkillShareLinkModel.validate({ rawToken: created.rawToken }),
+    ).not.toBeNull();
   });
 
   test("rotating a nonexistent link returns 404 and creates nothing", async ({

@@ -83,6 +83,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   });
 
   fastify.addHook("onResponse", async (request, reply) => {
+    if (request.auditSkip) return;
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
     if (shouldSkip(request.method, request.url, routePattern, request.user))
@@ -256,6 +257,11 @@ function extractCreatedResourceId(parsed: unknown): string | null {
   }
   const obj = parsed as Record<string, unknown>;
   if (typeof obj.id === "string") return obj.id;
+  const link = obj.link;
+  if (link && typeof link === "object" && !Array.isArray(link)) {
+    const nested = (link as Record<string, unknown>).id;
+    if (typeof nested === "string") return nested;
+  }
   const data = obj.data;
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const nested = (data as Record<string, unknown>).id;
@@ -322,6 +328,11 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/onboarding" },
   { kind: "route", value: "/api/apps/:appId/pin" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/pin" },
+  { kind: "route", value: "/api/mcp_server/:id/alert-mutes/:kind" },
+  {
+    kind: "route",
+    value: "/api/internal_mcp_catalog/:id/alert-mutes/:kind",
+  },
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets, incoming-email subscription
   // config, oauth grant runtime (tokens are runtime state).

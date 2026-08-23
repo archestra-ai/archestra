@@ -403,10 +403,21 @@ function producesBedrockContentBlock(part: ChatMessagePart): boolean {
     const providerMetadata =
       (part.providerMetadata as { bedrock?: unknown } | undefined) ??
       (part.providerOptions as { bedrock?: unknown } | undefined);
+    // Two spellings for the redacted blob: @ai-sdk/amazon-bedrock reports it as
+    // `redactedData` up to 4.0.157 and as `redactedContent` — the Converse
+    // API's own name — from 4.0.158. Both are accepted so the block still
+    // counts as content across that upgrade; missing the newer one would judge
+    // a wholly redacted reasoning part empty and pad it away.
     const bedrock = providerMetadata?.bedrock as
-      | { signature?: unknown; redactedData?: unknown }
+      | {
+          signature?: unknown;
+          redactedData?: unknown;
+          redactedContent?: unknown;
+        }
       | undefined;
-    return Boolean(bedrock?.signature || bedrock?.redactedData);
+    return Boolean(
+      bedrock?.signature || bedrock?.redactedData || bedrock?.redactedContent,
+    );
   }
   // `dynamic-tool` is the shape MCP tools (and the seeded `render_app` app
   // render) deserialize to; it is a real content-producing tool part, exactly

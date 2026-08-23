@@ -1,7 +1,10 @@
 import {
+  classifyMcpRuntimeAlert,
+  createMcpServerAlertFingerprint,
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   isPlaywrightCatalogItem,
+  mcpRuntimeAlertSource,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -27,6 +30,7 @@ import {
   enterpriseTier,
   MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
 } from "@/enterprise-tier";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-SnippetEnd
 import {
   generateDeploymentYamlTemplate,
@@ -40,6 +44,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
+  McpServerAlertMuteModel,
   McpServerModel,
   TeamModel,
   ToolModel,
@@ -79,12 +84,22 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  type McpServer,
+  type McpServerAlertMute,
+  McpServerAlertMuteSchema,
+  type McpServerDismissibleAlertKind,
+  McpServerDismissibleAlertKindSchema,
+  MuteMcpServerAlertBodySchema,
   normalizeCatalogTeamInput,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
+  UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
-import { broadcastMcpInstallationStatus } from "@/websocket";
+import {
+  broadcastMcpInstallationStatus,
+  broadcastMcpServersChanged,
+} from "@/websocket";
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -152,6 +167,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(
           deleted.map((item) => ({
             ...item,
+            alertMutes: [],
             imageApprovalRequired: false,
           })),
         );
@@ -175,13 +191,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (await hasPermission({ app: ["read"] }, request.headers)).success;
       if (!includeApps) {
         const list = await InternalMcpCatalogModel.findAll(opts);
-        const approvalRequired = await flagImageApprovalRequired(
-          list,
-          request.organizationId,
-        );
+        const [approvalRequired, alertMutes] = await Promise.all([
+          flagImageApprovalRequired(list, request.organizationId),
+          config.mcpServer.alertingEnabled
+            ? McpServerAlertMuteModel.findForViewer({
+                userId: request.user.id,
+                catalogIds: list.map((item) => item.id),
+              })
+            : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+        ]);
         return reply.send(
           list.map((item) => ({
             ...item,
+            alertMutes: (alertMutes.get(item.id) ?? []).filter(
+              (mute) => mute.mcpServerId === null,
+            ),
             imageApprovalRequired: approvalRequired.has(item.id),
           })),
         );
@@ -193,10 +217,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const appCatalogIds = items
         .filter((item) => item.serverType === "app")
         .map((item) => item.id);
-      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
-        AppModel.getAppIdsByCatalogIds(appCatalogIds),
-        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
-      ]);
+      const [appIdByCatalog, appEnabledByCatalog, alertMutes] =
+        await Promise.all([
+          AppModel.getAppIdsByCatalogIds(appCatalogIds),
+          AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+          config.mcpServer.alertingEnabled
+            ? McpServerAlertMuteModel.findForViewer({
+                userId: request.user.id,
+                catalogIds: items.map((item) => item.id),
+              })
+            : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+        ]);
       const approvalRequired = await flagImageApprovalRequired(
         items,
         request.organizationId,
@@ -204,6 +235,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         items.map((item) => ({
           ...item,
+          alertMutes: (alertMutes.get(item.id) ?? []).filter(
+            (mute) => mute.mcpServerId === null,
+          ),
           imageApprovalRequired: approvalRequired.has(item.id),
           ...(item.serverType === "app"
             ? {
@@ -213,6 +247,89 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : {}),
         })),
       );
+    },
+  );
+
+  fastify.put(
+    "/api/internal_mcp_catalog/:id/alert-mutes/:kind",
+    {
+      schema: {
+        operationId: RouteId.MuteMcpCatalogAlert,
+        description:
+          "Dismiss one catalog-level MCP alert for the calling user only. The fingerprint pins it to one failure episode.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+          kind: McpServerDismissibleAlertKindSchema,
+        }),
+        body: MuteMcpServerAlertBodySchema,
+        response: constructResponseSchema(McpServerAlertMuteSchema),
+      },
+    },
+    async (request, reply) => {
+      assertMcpServerAlertingEnabled();
+      const {
+        params: { id: catalogId, kind },
+        body: { issueFingerprint, reason },
+      } = request;
+      const catalogItem = await findVisibleCatalogItem({
+        catalogId,
+        request,
+      });
+      await assertCurrentCatalogAlertFingerprint({
+        catalogItem,
+        kind,
+        issueFingerprint,
+      });
+      const muted = await McpServerAlertMuteModel.dismiss({
+        userId: request.user.id,
+        catalogId,
+        mcpServerId: null,
+        issueKind: kind,
+        issueFingerprint,
+        reason,
+      });
+      return reply.send(muted);
+    },
+  );
+
+  fastify.delete(
+    "/api/internal_mcp_catalog/:id/alert-mutes/:kind",
+    {
+      schema: {
+        operationId: RouteId.UnmuteMcpCatalogAlert,
+        description:
+          "Restore one dismissed catalog-level MCP alert to the calling user's view.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+          kind: McpServerDismissibleAlertKindSchema,
+        }),
+        querystring: UnmuteMcpServerAlertQuerySchema,
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      assertMcpServerAlertingEnabled();
+      const {
+        params: { id: catalogId, kind },
+        query: { issueFingerprint },
+      } = request;
+      await findVisibleCatalogItem({
+        catalogId,
+        request,
+      });
+      const removed = await McpServerAlertMuteModel.restore({
+        userId: request.user.id,
+        catalogId,
+        mcpServerId: null,
+        issueKind: kind,
+        issueFingerprint,
+      });
+      if (!removed) {
+        throw new ApiError(404, "You have not dismissed this alert.");
+      }
+      return reply.send({ success: true });
     },
   );
 
@@ -1494,9 +1611,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      return reply.send({
-        success: await InternalMcpCatalogModel.delete(id),
-      });
+      const affectedSources =
+        await InternalMcpCatalogModel.findDeleteCascadeSourceIds(id);
+      const success = await InternalMcpCatalogModel.delete(id);
+      if (success) {
+        broadcastMcpServersChanged({
+          organizationId: catalogItem.organizationId,
+          catalogIds: affectedSources.catalogIds,
+          serverIds:
+            catalogItem.organizationId === null
+              ? []
+              : affectedSources.serverIds,
+        });
+      }
+      return reply.send({ success });
     },
   );
 
@@ -1548,9 +1676,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      return reply.send({
-        success: await InternalMcpCatalogModel.delete(catalogItem.id),
-      });
+      const affectedSources =
+        await InternalMcpCatalogModel.findDeleteCascadeSourceIds(
+          catalogItem.id,
+        );
+      const success = await InternalMcpCatalogModel.delete(catalogItem.id);
+      if (success) {
+        broadcastMcpServersChanged({
+          organizationId: catalogItem.organizationId,
+          catalogIds: affectedSources.catalogIds,
+          serverIds:
+            catalogItem.organizationId === null
+              ? []
+              : affectedSources.serverIds,
+        });
+      }
+      return reply.send({ success });
     },
   );
 
@@ -2332,6 +2473,114 @@ async function assertImageApprovable(
     );
   }
   return catalogItem;
+}
+
+async function findVisibleCatalogItem(params: {
+  catalogId: string;
+  request: FastifyRequest;
+}): Promise<InternalMcpCatalog> {
+  const { success: isAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    params.request.headers,
+  );
+  const item = await InternalMcpCatalogModel.findById(params.catalogId, {
+    userId: params.request.user.id,
+    isAdmin,
+    organizationId: params.request.organizationId,
+    expandSecrets: false,
+  });
+  if (!item) throw new ApiError(404, "Catalog item not found");
+  return item;
+}
+
+async function assertCurrentCatalogAlertFingerprint(params: {
+  catalogItem: InternalMcpCatalog;
+  kind: McpServerDismissibleAlertKind;
+  issueFingerprint: string;
+}): Promise<void> {
+  const fingerprints = await currentCatalogAlertFingerprints(params);
+  if (!fingerprints.includes(params.issueFingerprint)) {
+    throw new ApiError(
+      409,
+      "This alert changed or cleared. Refresh the registry and try again.",
+    );
+  }
+}
+
+async function currentCatalogAlertFingerprints(params: {
+  catalogItem: InternalMcpCatalog;
+  kind: McpServerDismissibleAlertKind;
+}): Promise<string[]> {
+  const { catalogItem, kind } = params;
+  const sources: unknown[] = [];
+  if (
+    catalogItem.multitenant &&
+    (kind === "failed-to-start" || kind === "not-running")
+  ) {
+    const servers = await McpServerModel.findByCatalogId(catalogItem.id);
+    if (kind === "failed-to-start") {
+      const installErrors = servers
+        .filter((server) => server.localInstallationStatus === "error")
+        .map((server) => server.localInstallationError ?? "")
+        .sort();
+      if (installErrors.length > 0) {
+        sources.push(
+          mcpRuntimeAlertSource({
+            serverId: `catalog:${catalogItem.id}`,
+            deploymentName: catalogItem.id,
+            state: "failed",
+            error: JSON.stringify(installErrors),
+          }),
+        );
+      }
+    }
+    for (const server of servers) {
+      const runtime = currentCatalogRuntimeAlert({ server, catalogItem });
+      if (runtime?.kind === kind) sources.push(runtime.source);
+    }
+  }
+  return sources.map((source) =>
+    createMcpServerAlertFingerprint({
+      kind,
+      catalogId: catalogItem.id,
+      source,
+    }),
+  );
+}
+
+function currentCatalogRuntimeAlert(params: {
+  server: McpServer;
+  catalogItem: InternalMcpCatalog;
+}): {
+  kind: "failed-to-start" | "not-running";
+  source: string;
+} | null {
+  const { server, catalogItem } = params;
+  const runtime = McpServerRuntimeManager.statusSummary.mcpServers[server.id];
+  if (!runtime) return null;
+  const kind = classifyMcpRuntimeAlert({
+    runtimeState: runtime.state,
+    runtimeError: runtime.error,
+    installationStatus: server.localInstallationStatus,
+  });
+  if (!kind) return null;
+  return {
+    kind,
+    source: mcpRuntimeAlertSource({
+      serverId: `catalog:${catalogItem.id}`,
+      deploymentName: runtime.deploymentName ?? undefined,
+      podName: runtime.podName,
+      state: runtime.state,
+      error: runtime.error,
+      restartCount: runtime.restartCount,
+    }),
+  };
+}
+
+function assertMcpServerAlertingEnabled(): void {
+  if (!config.mcpServer.alertingEnabled) {
+    throw new ApiError(404, "Not found");
+  }
 }
 
 export default internalMcpCatalogRoutes;

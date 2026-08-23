@@ -81,6 +81,7 @@ export { default as chatopsChannelBindingsTable } from "./chatops-channel-bindin
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export {
+  connectionSetupPluginsTable,
   connectionSetupSkillsTable,
   default as connectionSetupsTable,
 } from "./connection-setup";
@@ -101,6 +102,7 @@ export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
+export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as githubPatsTable } from "./github-pat";
@@ -139,6 +141,7 @@ export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
+export { default as mcpCatalogSkillsTable } from "./mcp-catalog-skill";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpCatalogUsersTable } from "./mcp-catalog-user";
 export { default as mcpDeploymentLeasesTable } from "./mcp-deployment-lease";
@@ -146,6 +149,7 @@ export { default as mcpGatewayTasksTable } from "./mcp-gateway-task";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";
+export { default as mcpServerAlertMutesTable } from "./mcp-server-alert-mute";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
@@ -158,9 +162,12 @@ export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
-export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
+export { default as pluginsTable } from "./plugin";
+export { default as pluginFilesTable } from "./plugin-file";
+export { default as pluginTeamsTable } from "./plugin-team";
+export { default as pluginUsersTable } from "./plugin-user";
 export { default as processedEmailsTable } from "./processed-email";
 export {
   default as projectsTable,
@@ -186,6 +193,7 @@ export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay
 export { default as skillSandboxSkillMountsTable } from "./skill-sandbox-skill-mount";
 export {
   default as skillShareLinksTable,
+  skillShareLinkPluginsTable,
   skillShareLinkSkillsTable,
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";

@@ -1,7 +1,7 @@
 ---
 title: Built-in Subagents
 category: Agents
-order: 10
+order: 11
 description: The system subagents Archestra seeds into every organization, and what each one does
 lastUpdated: 2026-08-20
 ---
@@ -20,9 +20,9 @@ The Advisor is in beta.
 
 The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
 
-Turn it on per agent or MCP gateway with the **Advisor Subagent** switch, under **Subagents**. It works the same in Auto and Custom mode. **Advisor settings** on that row opens **Settings → LLM**, where the Advisor's model is picked — a stronger model than the callers use is the point.
+Turn it on per agent with the **Advisor Subagent** switch, under **Subagents**. It works the same in Auto and Custom mode. **Advisor settings** on that row opens **Settings → LLM**, where the Advisor's model is picked — a stronger model than the callers use is the point.
 
-Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
+Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor.
 
 The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
 

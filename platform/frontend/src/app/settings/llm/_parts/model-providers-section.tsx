@@ -8,10 +8,11 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
-import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SearchInput } from "@/components/search-input";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -106,16 +107,18 @@ export function ModelProvidersSection() {
             const locked = updateMutation.isPending || !hasPermission;
             return (
               <div className="flex flex-col gap-4">
-                <div className="relative max-w-sm">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
+                <FilterBar
+                  className="mb-0"
+                  onClearFilters={search ? () => setSearch("") : undefined}
+                >
+                  <SearchInput
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onSearchChange={setSearch}
+                    syncQueryParams={false}
                     placeholder="Search providers…"
-                    aria-label="Search providers"
-                    className="pl-8 text-sm"
+                    className={filterSearchClass}
                   />
-                </div>
+                </FilterBar>
 
                 {visible.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">

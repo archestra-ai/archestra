@@ -6,6 +6,7 @@ import {
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "./archestra-mark";
+import { describeMarketplaceContents } from "./marketplace-copy";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -72,7 +73,7 @@ export function renderStartupGuardPowerShell(
 # blocks the launch: the profile wrapper runs the real ${client.binary} no matter how
 # this script exits. Disable with ${client.disableEnvVar}=0.
 
-if ($env:${client.disableEnvVar} -eq '0') { exit 0 }
+if ($env:${client.disableEnvVar} -eq '0') { return }
 $ErrorActionPreference = 'Continue'
 # Invoke-WebRequest paints its progress banner across the TOP console rows —
 # straight over the logo — on every request unless progress is silenced.
@@ -94,7 +95,8 @@ $McpServerName = ${psq(ctx.mcp.serverName)}`
   }${
     ctx.skills
       ? `
-$SkillsMarketplaceName = ${psq(ctx.skills.marketplaceName)}`
+$SkillsMarketplaceName = ${psq(ctx.skills.marketplaceName)}
+$PluginNames = @(${(ctx.skills.pluginNames ?? []).map(psq).join(", ")})`
       : ""
   }
 
@@ -135,7 +137,7 @@ function Remove-ArchGuard {
   }
 }
 
-if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; exit 0 }
+if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; return }
 
 # Retry budget for the single health request when the platform is
 # unreachable: capped exponential backoff (1,2,4,4...s) + 0-1s jitter, 15s
@@ -228,7 +230,7 @@ if (-not $Interactive) {
       [Console]::Error.WriteLine('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')
     }
   }
-  exit 0
+  return
 }
 
 function Clear-ArchLine {
@@ -731,7 +733,6 @@ $Script:Dwell = $false
 function Exit-ArchGuard {
   if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
   if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049l") }
-  exit 0
 }
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
 else { try { Clear-Host } catch { } }
@@ -751,12 +752,13 @@ if ($HealthUrl) {
 }
 # Space means "get out of the way": end the pre-loader at once, disconnect and
 # remember nothing — the alternate screen closes over the half-drawn rows.
-if ($Script:SkipNow) { Exit-ArchGuard }
+if ($Script:SkipNow) { Exit-ArchGuard; return }
 if ($Script:OpenMenu) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
   Clear-ArchReconfigureHint
   Invoke-ArchReconfigureMenu
   Exit-ArchGuard
+  return
 }
 if ($Script:DiscAll) {
   Clear-ArchLine
@@ -764,6 +766,7 @@ if ($Script:DiscAll) {
   Disconnect-ArchRemotes $ActiveRemotes
   if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
   Exit-ArchGuard
+  return
 }
 if ($Script:SkipAll) {
   Clear-ArchLine
@@ -771,6 +774,7 @@ if ($Script:SkipAll) {
   Write-Arch (' Skipped — remotes stay configured; ${client.promptName} may fail to reach them this session') DarkGray
   if ($UseVt) { Write-Host -NoNewline ("$Esc" + '[J') }
   Exit-ArchGuard
+  return
 }
 $DownRemotes = @()
 foreach ($r in $ActiveRemotes) {
@@ -794,7 +798,7 @@ foreach ($r in $ActiveRemotes) {
   if (Test-ArchResourceDown $r) { Show-ArchDown $r; $DownRemotes += $r }
   else { Show-ArchOk $r.Label }
 }
-if ($Script:SkipNow) { Exit-ArchGuard }
+if ($Script:SkipNow) { Exit-ArchGuard; return }
 if ($DownRemotes.Count -gt 0) {
   if ($UseVt) { Clear-ArchReconfigureHint }
   Show-ArchDownSummaryPrompt $DownRemotes
@@ -807,6 +811,7 @@ if ($DownRemotes.Count -gt 0) {
   Show-ArchReconfigureOffer
 }
 Exit-ArchGuard
+return
 `;
 }
 
@@ -821,6 +826,12 @@ export function buildWindowsStartupGuardInstallSection(
   ctx: StartupGuardContext,
   client: StartupGuardClient,
 ): string {
+  const refreshBlock = renderWindowsMarketplaceRefreshProfileBlock(ctx, client);
+  const refreshCall = refreshBlock
+    ? `$archClientExit = $LASTEXITCODE
+  try { Invoke-Archestra${client.binary}MarketplaceRefresh -ClientArgs $args | Out-Null } catch { }
+  $global:LASTEXITCODE = $archClientExit`
+    : "";
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
@@ -840,11 +851,20 @@ $archGuardBlock = @'
 ${client.markerStart}
 # Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
 # Remove this block and ~/${client.psScriptRelpath} to uninstall.
+${refreshBlock}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
   if (Test-Path $archGuard) { try { & $archGuard @args } catch { } }
   $archReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($archReal) { & $archReal.Source @args }
+  if (-not $archReal) {
+    $archReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
+      Select-Object -First 1
+  }
+  if ($archReal) {
+    & $archReal.Source @args
+    ${refreshCall}
+  }
   else { Write-Error "${client.binary} executable not found on PATH" }
 }
 ${client.markerEnd}
@@ -878,6 +898,50 @@ foreach ($archProfilePath in $archProfiles) {
 # ${client.binary}; this re-arms it now that connect is done.)
 Invoke-Expression $archGuardBlock
 Ok ${psq(`Startup guard installed — active in this PowerShell session now, and in every new session.`)}`;
+}
+
+function renderWindowsMarketplaceRefreshProfileBlock(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  if (!ctx.skills || !client.windows.skillsRefreshCommands) return "";
+  const pluginNames = [
+    ...(ctx.skills.hasSkills !== false && client.clientId === "claude-code"
+      ? [ctx.skills.marketplaceName]
+      : []),
+    ...(ctx.skills.pluginNames ?? []),
+  ];
+  const nonInteractiveArgs = client.nonInteractiveArgPatterns
+    .map(psq)
+    .join(", ");
+  // white-label-ok: PowerShell function and cache names are stable wire identifiers.
+  return `function Invoke-Archestra${client.binary}MarketplaceRefresh {
+  param([object[]]$ClientArgs)
+  foreach ($archArg in $ClientArgs) {
+    if (@(${nonInteractiveArgs}) -contains [string]$archArg) { return $true } # white-label-ok: generated PowerShell uses stable wire identifiers
+  }
+  $archRefreshDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Archestra'
+  $archRefreshStamp = Join-Path $archRefreshDir ${psq(`${client.binary}-${ctx.skills.marketplaceName}.refresh`)}
+  $archRefreshNow = [int64](([DateTime]::UtcNow - [DateTime]'1970-01-01').TotalSeconds)
+  if (Test-Path $archRefreshStamp) {
+    [int64]$archRefreshLast = 0
+    [void][int64]::TryParse((Get-Content -Raw $archRefreshStamp).Trim(), [ref]$archRefreshLast)
+    if (($archRefreshNow - $archRefreshLast) -lt 86400) { return $true }
+  }
+  $ArchRefreshMarketplace = ${psq(ctx.skills.marketplaceName)}
+  $ArchRefreshPluginNames = @(${pluginNames.map(psq).join(", ")})
+  $archRefreshReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $archRefreshReal) {
+    $archRefreshReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
+      Select-Object -First 1
+  }
+  if (-not $archRefreshReal) { return $false }
+${client.windows.skillsRefreshCommands}
+  New-Item -ItemType Directory -Force -Path $archRefreshDir | Out-Null
+  Set-Content -Path $archRefreshStamp -Value $archRefreshNow -Encoding ascii
+  return $true
+}`;
 }
 
 /**
@@ -989,11 +1053,12 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   if (ctx.skills) {
+    const label = `${describeMarketplaceContents(ctx.skills).label} (${ctx.skills.marketplaceName})`;
     resources.push({
-      label: `Skills marketplace (${ctx.skills.marketplaceName})`,
+      label,
       url: ctx.skills.cloneUrl,
       kind: "skills",
-      failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
+      failName: label,
       downMarker: null,
     });
   }

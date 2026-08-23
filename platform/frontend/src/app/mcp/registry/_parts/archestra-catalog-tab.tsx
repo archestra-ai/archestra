@@ -12,11 +12,15 @@ import {
   Github,
   Loader2,
   Plus,
-  Search,
   Server as ServerIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { DebouncedInput } from "@/components/debounced-input";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import { SearchInput } from "@/components/search-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,60 +147,71 @@ export function ArchestraCatalogTab({
 
   return (
     <div className="w-full space-y-2">
-      <div className="ml-1 grid grid-cols-1 items-end gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.5fr)_minmax(0,0.5fr)]">
-        <div className="min-w-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <DebouncedInput
-              placeholder="Search servers by name..."
-              initialValue={searchQuery}
-              onChange={setSearchQuery}
-              className="pl-9"
-              autoFocus
-            />
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <Select
-            value={filters.type}
-            onValueChange={(value) =>
-              setFilters({ ...filters, type: value as ServerType })
-            }
+      <FilterBar
+        className="mb-0 ml-1"
+        onClearFilters={
+          searchQuery || filters.type !== "all" || filters.category !== "all"
+            ? () => {
+                setSearchQuery("");
+                setFilters({ type: "all", category: "all" });
+              }
+            : undefined
+        }
+      >
+        <SearchInput
+          placeholder="Search servers by name..."
+          value={searchQuery}
+          onSearchChange={setSearchQuery}
+          syncQueryParams={false}
+          className={filterSearchClass}
+        />
+        <Select
+          value={filters.type}
+          onValueChange={(value) =>
+            setFilters({ ...filters, type: value as ServerType })
+          }
+        >
+          <SelectTrigger
+            size="sm"
+            aria-label="Filter by server type"
+            className={filterControlClass({
+              active: filters.type !== "all",
+            })}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="remote">Remote</SelectItem>
-              <SelectItem value="local">Local</SelectItem>
-              <SelectItem value="mcp-apps-demo">MCP Apps Demo</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="min-w-0">
-          <Select
-            value={filters.category}
-            onValueChange={(value) =>
-              setFilters({ ...filters, category: value as SelectedCategory })
-            }
+            <SelectValue placeholder="All types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="remote">Remote</SelectItem>
+            <SelectItem value="local">Local</SelectItem>
+            <SelectItem value="mcp-apps-demo">MCP Apps Demo</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={filters.category}
+          onValueChange={(value) =>
+            setFilters({ ...filters, category: value as SelectedCategory })
+          }
+        >
+          <SelectTrigger
+            size="sm"
+            aria-label="Filter by category"
+            className={filterControlClass({
+              active: filters.category !== "all",
+            })}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {visibleCategories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+            <SelectValue placeholder="All categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {visibleCategories.map((category) => (
+              <SelectItem key={category} value={category}>
+                {category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FilterBar>
 
       {isLoading && (
         <div className="grid gap-4 md:grid-cols-3">

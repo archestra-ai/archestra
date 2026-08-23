@@ -42,9 +42,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -52,9 +55,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
+  useBulkUpdateModelVisibility,
   useModelsWithApiKeys,
   useSyncLlmModels,
   useUpdateModel,
@@ -114,6 +120,8 @@ export default function ModelsPage() {
     }
   }, [canFilterFreeModels, freeOnly]);
 
+  const bulkVisibility = useBulkUpdateModelVisibility();
+
   const filteredModels = useMemo(
     () =>
       filterModelsForPage({
@@ -144,6 +152,43 @@ export default function ModelsPage() {
     }
   }, [syncModelsMutation, refetch]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedModels,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredModels,
+    getId: (model) => model.id,
+    filterSignature: JSON.stringify({
+      search,
+      apiKeyFilter,
+      modelTypeFilter,
+    }),
+    matchDescription: "match the current filters",
+  });
+
+  // Hiding keeps a model out of the pickers without deleting anything, so the
+  // bar offers both directions rather than a single toggle whose meaning would
+  // depend on a mixed selection.
+  const applyVisibility = (ignored: boolean) =>
+    bulkVisibility.mutate(
+      { models: selectedModels, ignored },
+      {
+        onSuccess: (outcome) => {
+          reportBulkOutcome({
+            outcome,
+            verb: ignored ? "Hid" : "Showed",
+            failureVerb: ignored ? "hide" : "show",
+            noun: "model",
+          });
+          if (outcome.failed.length === 0) clearSelection();
+        },
+      },
+    );
+
   const refreshModelsButton = (
     <Button
       variant="outline"
@@ -160,6 +205,10 @@ export default function ModelsPage() {
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
+      createSelectColumn<ModelWithApiKeys>({
+        rowLabel: (model) => `Select ${model.modelId}`,
+        allLabel: "Select all models on this page",
+      }),
       {
         id: "providerIcon",
         size: 40,
@@ -576,10 +625,41 @@ export default function ModelsPage() {
             )}
           </FilterBar>
         )}
+        <BulkActionsBar
+          count={selectedModels.length}
+          noun="model"
+          onClear={clearSelection}
+          selectAllMatching={selectAllMatching}
+          busy={bulkVisibility.isPending}
+          className="mb-3"
+        >
+          <PermissionButton
+            permissions={{ llmModel: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => applyVisibility(false)}
+          >
+            <Eye className="h-4 w-4" />
+            <span>Show</span>
+          </PermissionButton>
+          <PermissionButton
+            permissions={{ llmModel: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => applyVisibility(true)}
+          >
+            <EyeOff className="h-4 w-4" />
+            <span>Hide</span>
+          </PermissionButton>
+        </BulkActionsBar>
+
         <DataTable
           columns={columns}
           data={filteredModels}
           getRowId={(row) => row.id}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          onPageRowIdsChange={onPageRowIdsChange}
           getRowClassName={(row) =>
             row.ignored ? "opacity-60 [&_td]:text-muted-foreground" : undefined
           }

@@ -1249,6 +1249,9 @@ function ChatSessionHook({
       metadata: {
         createdAt: new Date().toISOString(),
         ...(next.skill ? { skill: next.skill } : {}),
+        ...(next.externalMcpSkill
+          ? { externalMcpSkill: next.externalMcpSkill }
+          : {}),
         ...(next.sandboxCommand ? { sandboxCommand: true as const } : {}),
       },
     });

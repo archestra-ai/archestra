@@ -79,4 +79,42 @@ describe("bedrock-credentials", () => {
       expect(getBedrockRegion()).toBe("us-east-1");
     });
   });
+
+  describe("getBedrockBaseUrl", () => {
+    it("uses a per-key custom endpoint", async () => {
+      vi.doMock("@/config", () => ({
+        default: {
+          llm: { bedrock: { region: "eu-west-1", baseUrl: "" } },
+        },
+      }));
+      const { getBedrockBaseUrl } = await import("./bedrock-credentials");
+      expect(getBedrockBaseUrl("https://bedrock.internal.example/v1")).toBe(
+        "https://bedrock.internal.example/v1",
+      );
+    });
+
+    it("derives the runtime endpoint from the configured region", async () => {
+      vi.doMock("@/config", () => ({
+        default: {
+          llm: { bedrock: { region: "eu-west-1", baseUrl: "" } },
+        },
+      }));
+      const { getBedrockBaseUrl } = await import("./bedrock-credentials");
+      expect(getBedrockBaseUrl()).toBe(
+        "https://bedrock-runtime.eu-west-1.amazonaws.com",
+      );
+    });
+
+    it("derives the default us-east-1 endpoint when no override exists", async () => {
+      vi.doMock("@/config", () => ({
+        default: {
+          llm: { bedrock: { region: "", baseUrl: "" } },
+        },
+      }));
+      const { getBedrockBaseUrl } = await import("./bedrock-credentials");
+      expect(getBedrockBaseUrl()).toBe(
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+      );
+    });
+  });
 });

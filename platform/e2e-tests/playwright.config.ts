@@ -67,6 +67,7 @@ const uiTestMatch = [
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",
   "**/skill-version-history.spec.ts",
+  "**/skills-bulk-actions.spec.ts",
   "**/static-credentials-management.spec.ts",
   "**/tool-guardrails.spec.ts",
   "**/users-role-filter.spec.ts",
@@ -77,6 +78,7 @@ const uiTestMatch = [
 // quickstart entrypoint provisions an embedded Kind cluster for the
 // orchestrator.
 const apiTestMatch = [
+  "**/a2a-public-origin.spec.ts",
   "**/built-in-agents.spec.ts",
   "**/chat-api.spec.ts",
   "**/knowledge-permission-sync.spec.ts",

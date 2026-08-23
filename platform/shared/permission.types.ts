@@ -31,6 +31,7 @@ export const actions = [
 export const resources = [
   "agent",
   "skill",
+  "plugin",
   "app",
   "sandbox",
   "mcpGateway",
@@ -51,7 +52,6 @@ export const resources = [
   "file",
   "llmCost",
   "llmLimit",
-  "optimizationRule",
   "llmProviderApiKey",
   "llmVirtualKey",
   "llmOauthClient",
@@ -96,6 +96,7 @@ export const resources = [
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
   skill: "Skills",
+  plugin: "Plugins",
   app: "Apps",
   sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
@@ -121,7 +122,6 @@ export const resourceLabels: Record<Resource, string> = {
   file: "Files",
   llmCost: "LLM Costs",
   llmLimit: "LLM Limits",
-  optimizationRule: "Optimization Rules",
   llmProviderApiKey: "LLM Provider API Keys",
   llmVirtualKey: "LLM Virtual Keys",
   llmOauthClient: "LLM OAuth Clients",
@@ -146,7 +146,8 @@ export const resourceLabels: Record<Resource, string> = {
 
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
-  skill: "Agent skills — reusable SKILL.md instruction bundles",
+  skill: "Agent skills — reusable SKILL.md instruction plugins",
+  plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   sandbox:
     "Code execution sandboxes — run commands, upload/download files, run activated skills",
@@ -177,7 +178,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
     "GitHub credentials (App configs and stored personal access tokens) for authenticating skill imports, skill sync, and knowledge connectors",
-  optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",
   team: "Teams for organizing users and access control",
@@ -220,6 +220,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Agents: [
     "agent",
     "skill",
+    "plugin",
     "skillsSettings",
     "app",
     "sandbox",
@@ -243,7 +244,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmOauthClient",
     "llmModel",
     "llmLimit",
-    "optimizationRule",
     "llmSettings",
     "llmCost",
   ],

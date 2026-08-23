@@ -8,6 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import { ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import {
   constructResponseSchema,
@@ -19,6 +20,12 @@ import {
   ProjectShareVisibilitySchema,
   SandboxFileListItemSchema,
 } from "@/types";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "../bulk-route";
 
 /** A comma-separated query param parsed into a string[] (mirrors the agents list). */
 const CommaSeparatedIds = z.preprocess(
@@ -289,6 +296,125 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userIds: body.userIds,
       });
       return { ok: true as const };
+    },
+  );
+
+  fastify.patch(
+    "/api/projects/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateProjects,
+        description:
+          "Update several projects in one request. Today the only " +
+          "bulk-editable surface is who can see them — the whole " +
+          'organization, named teams, named people, or nobody ("none" ' +
+          "unshares) — and every project in the batch is moved to the same " +
+          "one. Per-project problems, such as an id the caller neither owns " +
+          "nor administers, are reported in `failed` and leave the rest of " +
+          "the batch applied.",
+        tags: ["Projects"],
+        body: z.object({
+          ids: BulkIdsSchema,
+          // "none" unshares — a value rather than null, because the generated
+          // client cannot represent a nullable enum.
+          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
+          teamIds: z.array(z.string()).default([]),
+          userIds: z.array(z.string()).default([]),
+        }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const visibility = body.visibility === "none" ? null : body.visibility;
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "projects bulk update",
+        notFoundMessage: "Project not found",
+        unexpectedMessage: "Could not update this project",
+        load: async (ids) =>
+          new Map(
+            (await ProjectModel.findForBulk({ ids, organizationId })).map(
+              (project) => [project.id, project],
+            ),
+          ),
+        describe: (project) => project.name,
+        // The service owns the authorization (owner or project admin) and
+        // throws exactly as the single-project route would, so a batch refuses
+        // what one request refuses — per project, not for the whole batch.
+        applyEach: async (_project, id) => {
+          await projectService.setShare({
+            id,
+            organizationId,
+            userId: user.id,
+            visibility,
+            teamIds: body.teamIds,
+            userIds: body.userIds,
+          });
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            projects: await ProjectModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteProjects,
+        description:
+          "Soft-delete several projects in one request (owner or project " +
+          "admin per project). As with the single-project delete, their chats " +
+          "detach and survive as ordinary conversations, and their files and " +
+          "scheduled tasks are retained but hidden. Nothing is purged, and a " +
+          "project the caller may not delete is reported in `failed` while " +
+          "the rest of the batch still applies.",
+        tags: ["Projects"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user } = request;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "projects bulk delete",
+        notFoundMessage: "Project not found",
+        unexpectedMessage: "Could not delete this project",
+        load: async (ids) =>
+          new Map(
+            (await ProjectModel.findForBulk({ ids, organizationId })).map(
+              (project) => [project.id, project],
+            ),
+          ),
+        describe: (project) => project.name,
+        applyEach: async (_project, id) => {
+          await projectService.delete({ id, organizationId, userId: user.id });
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            projects: await ProjectModel.findVisibilityForBulkAudit({
+              ids,
+              organizationId,
+            }),
+          }),
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

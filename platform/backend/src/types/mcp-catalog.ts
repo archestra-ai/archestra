@@ -21,6 +21,7 @@ import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-cr
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { McpServerHibernationModeSchema } from "./mcp-hibernation";
+import { McpServerAlertMuteSchema } from "./mcp-server-alert-mute";
 // SPDX-SnippetEnd
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
@@ -141,11 +142,14 @@ const CATALOG_ITEM_APPROVAL_COLUMNS_OMIT = {
   catalogItemApprovalReviewedBy: true,
   catalogItemApprovalReviewedAt: true,
 } as const;
+const INTERNAL_DISCOVERY_COLUMNS_OMIT = {
+  skillsRefreshGeneration: true,
+} as const;
 
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
 )
-  .omit(PRESET_COLUMNS_OMIT)
+  .omit({ ...PRESET_COLUMNS_OMIT, ...INTERNAL_DISCOVERY_COLUMNS_OMIT })
   .extend({
     serverType: InternalMcpCatalogServerTypeSchema,
     authFields: z.array(AuthFieldSchema).nullable(),
@@ -176,6 +180,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
 
 export const ListInternalMcpCatalogSchema =
   SelectInternalMcpCatalogSchema.extend({
+    /** The calling viewer's own alert dismissals for this catalog. */
+    alertMutes: z.array(McpServerAlertMuteSchema).optional(),
     toolCount: z.number().int().default(0),
     // True when the catalog exposes a tool with a `ui://` MCP App resource —
     // an external UI-providing server or an owned-app backing. Derived from the
@@ -183,6 +189,8 @@ export const ListInternalMcpCatalogSchema =
     // callers constructing catalog items (e.g. the legacy registry) need not set
     // it; the model always populates it on list reads.
     providesUi: z.boolean().optional(),
+    skillCount: z.number().int().default(0),
+    providesSkills: z.boolean().optional(),
     // For `serverType:"app"` backings only, the id of the app they back, so the
     // registry can link to / manage the app. Populated only on the includeApps
     // path; null for everything else.
@@ -235,6 +243,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     deploymentName: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
+    ...INTERNAL_DISCOVERY_COLUMNS_OMIT,
   });
 
 export const InsertInternalMcpCatalogSchema =
@@ -286,6 +295,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     clonedFrom: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
+    ...INTERNAL_DISCOVERY_COLUMNS_OMIT,
   });
 
 export const UpdateInternalMcpCatalogSchema =

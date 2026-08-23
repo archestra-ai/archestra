@@ -118,15 +118,13 @@ export function agentNewHref(kind: AgentPageKind): string {
   return `${AGENT_PAGE_CONFIGS[kind].basePath}/new`;
 }
 
-export type AgentDetailTab = "overview" | "connect";
-
 export function agentDetailHref(
   kind: AgentPageKind,
   id: string,
-  tab: AgentDetailTab = "overview",
+  section?: "connect",
 ): string {
   const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
-  return tab === "overview" ? base : `${base}?tab=${tab}`;
+  return section === "connect" ? `${base}#connect` : base;
 }
 
 export type AgentSetupStepId = "configuration" | "tools" | "advanced";
@@ -155,8 +153,8 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
  * holds everything the agent reaches, which LLM proxies do not have; Advanced
  * the settings a record rarely needs. A built-in agent is a single-step edit,
  * so its host renders no stepper. Connecting is not a step: it is the detail
- * page's Connect tab, where a record lands once created and which the list's
- * Connect action opens.
+ * page's Connect section, where a record lands once created and which the
+ * list's Connect action opens.
  */
 export function getAgentSetupSteps({
   agentType,

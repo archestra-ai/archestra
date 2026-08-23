@@ -154,7 +154,7 @@ export function useTestConnectionTarget(item: CatalogItem) {
  * item prompts for them) and reports the connection status live.
  */
 export function TestConnectionStep({ item }: { item: CatalogItem }) {
-  const deploymentStatuses = useMcpDeploymentStatuses();
+  const { statuses: deploymentStatuses } = useMcpDeploymentStatuses();
   useMcpInstallationStatusCacheSync();
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
@@ -572,6 +572,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       )}
       <ToolPolicyBulkActionsBar
         selectedToolIds={selectedTools.map((tool) => tool.id)}
+        onClear={() => setSelectedToolIds(new Set())}
       />
       {/* 1px card border + p-4, so the checkbox column lines up with the cards */}
       <div className="flex items-center gap-2 text-sm pl-[calc(1rem+1px)]">

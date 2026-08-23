@@ -10,6 +10,8 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  BulkUpdateAgents: "bulkUpdateAgents",
+  BulkDeleteAgents: "bulkDeleteAgents",
   RestoreAgent: "restoreAgent",
   PermanentlyDeleteAgent: "permanentlyDeleteAgent",
   GetAgentVersions: "getAgentVersions",
@@ -97,12 +99,17 @@ export const RouteId = {
   InspectMcpServer: "inspectMcpServer",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  BulkDeleteMcpServers: "bulkDeleteMcpServers",
   RestoreMcpServer: "restoreMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   HardResetMcpServer: "hardResetMcpServer",
   ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
+  MuteMcpServerAlert: "muteMcpServerAlert",
+  UnmuteMcpServerAlert: "unmuteMcpServerAlert",
+  MuteMcpCatalogAlert: "muteMcpCatalogAlert",
+  UnmuteMcpCatalogAlert: "unmuteMcpCatalogAlert",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
@@ -122,6 +129,7 @@ export const RouteId = {
   GetTeam: "getTeam",
   UpdateTeam: "updateTeam",
   DeleteTeam: "deleteTeam",
+  BulkDeleteTeams: "bulkDeleteTeams",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
@@ -148,6 +156,7 @@ export const RouteId = {
   GetRole: "getRole",
   UpdateRole: "updateRole",
   DeleteRole: "deleteRole",
+  BulkDeleteRoles: "bulkDeleteRoles",
 
   // Tool Routes
   GetTool: "getTool",
@@ -423,6 +432,7 @@ export const RouteId = {
   GetApiKey: "getApiKey",
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
+  BulkDeleteApiKeys: "bulkDeleteApiKeys",
 
   // Service Account Routes
   GetServiceAccounts: "getServiceAccounts",
@@ -430,6 +440,7 @@ export const RouteId = {
   CreateServiceAccount: "createServiceAccount",
   UpdateServiceAccount: "updateServiceAccount",
   DeleteServiceAccount: "deleteServiceAccount",
+  BulkDeleteServiceAccounts: "bulkDeleteServiceAccounts",
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
@@ -459,6 +470,7 @@ export const RouteId = {
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
+  BulkUpdateModels: "bulkUpdateModels",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -522,6 +534,7 @@ export const RouteId = {
   CreateEnvironment: "createEnvironment",
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
+  BulkDeleteEnvironments: "bulkDeleteEnvironments",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
   UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
   GetK8sCapabilities: "getK8sCapabilities",
@@ -590,13 +603,6 @@ export const RouteId = {
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 
-  // Optimization Rule Routes
-  GetOptimizationRules: "getOptimizationRules",
-  GetOptimizationRule: "getOptimizationRule",
-  CreateOptimizationRule: "createOptimizationRule",
-  UpdateOptimizationRule: "updateOptimizationRule",
-  DeleteOptimizationRule: "deleteOptimizationRule",
-
   // Secrets Routes
   GetSecretsType: "getSecretsType",
   GetSecret: "getSecret",
@@ -632,6 +638,7 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  BulkDeleteKnowledgeBases: "bulkDeleteKnowledgeBases",
   RestoreKnowledgeBase: "restoreKnowledgeBase",
   PermanentlyDeleteKnowledgeBase: "permanentlyDeleteKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
@@ -644,9 +651,12 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  BulkUpdateConnectors: "bulkUpdateConnectors",
+  BulkDeleteConnectors: "bulkDeleteConnectors",
   RestoreConnector: "restoreConnector",
   PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
+  BulkDeleteConnectorDocuments: "bulkDeleteConnectorDocuments",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",
   GetPermissionSyncCoverage: "getPermissionSyncCoverage",
@@ -673,11 +683,15 @@ export const RouteId = {
   GetKnowledgeFileContent: "getKnowledgeFileContent",
   DeleteKnowledgeFile: "deleteKnowledgeFile",
   UpdateKnowledgeFile: "updateKnowledgeFile",
+  BulkUpdateKnowledgeFiles: "bulkUpdateKnowledgeFiles",
+  BulkDeleteKnowledgeFiles: "bulkDeleteKnowledgeFiles",
   IndexKnowledgeFiles: "indexKnowledgeFiles",
   GetKnowledgeDirectories: "getKnowledgeDirectories",
   CreateKnowledgeDirectory: "createKnowledgeDirectory",
   UpdateKnowledgeDirectory: "updateKnowledgeDirectory",
   DeleteKnowledgeDirectory: "deleteKnowledgeDirectory",
+  BulkUpdateKnowledgeDirectories: "bulkUpdateKnowledgeDirectories",
+  BulkDeleteKnowledgeDirectories: "bulkDeleteKnowledgeDirectories",
   PromoteAttachmentToKnowledgeFile: "promoteAttachmentToKnowledgeFile",
 
   // Invitation Routes
@@ -692,12 +706,17 @@ export const RouteId = {
 
   // Agent Skill Routes
   GetSkills: "getSkills",
+  GetExternalMcpSkills: "getExternalMcpSkills",
+  GetExternalMcpSkill: "getExternalMcpSkill",
+  GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
   CreateSkill: "createSkill",
   ConvertAgentToSkill: "convertAgentToSkill",
   SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
+  BulkUpdateSkillsVisibility: "bulkUpdateSkillsVisibility",
   DeleteSkill: "deleteSkill",
+  BulkDeleteSkills: "bulkDeleteSkills",
   RestoreSkill: "restoreSkill",
   PermanentlyDeleteSkill: "permanentlyDeleteSkill",
   ResetSkill: "resetSkill",
@@ -707,6 +726,21 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+
+  // Plugin Routes
+  GetPlugins: "getPlugins",
+  CreatePlugin: "createPlugin",
+  GetPlugin: "getPlugin",
+  UpdatePlugin: "updatePlugin",
+  DeletePlugin: "deletePlugin",
+  PreviewGithubPlugin: "previewGithubPlugin",
+  ImportGithubPlugin: "importGithubPlugin",
+  PreviewGithubPluginUpdate: "previewGithubPluginUpdate",
+  ApplyGithubPluginUpdate: "applyGithubPluginUpdate",
+  DiscoverGithubPluginMarketplace: "discoverGithubPluginMarketplace",
+  ImportGithubPluginMarketplace: "importGithubPluginMarketplace",
+  UpdatePluginGithubSync: "updatePluginGithubSync",
+  TriggerPluginGithubSync: "triggerPluginGithubSync",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
   GetSkillVersions: "getSkillVersions",
   GetSkillVersion: "getSkillVersion",
@@ -720,6 +754,8 @@ export const RouteId = {
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
+  BulkUpdateProjects: "bulkUpdateProjects",
+  BulkDeleteProjects: "bulkDeleteProjects",
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
@@ -769,6 +805,8 @@ export const RouteId = {
   LockApp: "lockApp",
   UnlockApp: "unlockApp",
   DeleteApp: "deleteApp",
+  BulkUpdateApps: "bulkUpdateApps",
+  BulkDeleteApps: "bulkDeleteApps",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",
   GetAppTools: "getAppTools",
@@ -786,13 +824,13 @@ export const RouteId = {
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // App session recordings live client-side (IndexedDB); the only server
-  // endpoint forwards a shared recording bundle to the public demo catalog.
+  // endpoint forwards a shared recording plugin to the public demo catalog.
   EnhanceAppRecording: "enhanceAppRecording",
   RenderAppRecordingVideo: "renderAppRecordingVideo",
   GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
   DownloadAppRecordingVideo: "downloadAppRecordingVideo",
   CancelAppRecordingRender: "cancelAppRecordingRender",
-  // Reviewer-facing: fetch a hackathon submission's recording bundle from
+  // Reviewer-facing: fetch a hackathon submission's recording plugin from
   // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
   // read-only review player.
   ReviewAppRecording: "reviewAppRecording",

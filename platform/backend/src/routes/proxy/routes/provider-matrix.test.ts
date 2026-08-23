@@ -129,7 +129,6 @@ type ProviderTestConfig = {
   headers: () => Record<string, string>;
   requestBuilder: RequestBuilder;
   model: string;
-  optimizedModel: string;
   supportsDeclaredTools?: boolean;
   supportsStreamingToolCalls?: boolean;
   supportsCompression?: boolean;
@@ -1613,7 +1612,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
     model: "gpt-4o",
-    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1635,7 +1633,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeGeminiBuilder("gemini-2.5-pro"),
     model: "gemini-2.5-pro",
-    optimizedModel: "gemini-2.5-flash",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1655,7 +1652,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeAnthropicBuilder("claude-3-5-sonnet-20241022"),
     model: "claude-3-5-sonnet-20241022",
-    optimizedModel: "claude-3-5-haiku-20241022",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1677,7 +1673,6 @@ const providerConfigsByProvider = {
       "anthropic.claude-3-sonnet-20240229-v1:0",
     ),
     model: "anthropic.claude-3-sonnet-20240229-v1:0",
-    optimizedModel: "amazon.nova-lite-v1:0",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1700,7 +1695,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeCohereBuilder("command-r-plus-08-2024"),
     model: "command-r-plus-08-2024",
-    optimizedModel: "command-r-08-2024",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: false,
     supportsCompression: true,
@@ -1721,7 +1715,6 @@ const providerConfigsByProvider = {
       "llama-4-scout-17b-16e-instruct",
     ),
     model: "llama-4-scout-17b-16e-instruct",
-    optimizedModel: "llama-3.3-70b",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1740,7 +1733,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("mistral-large-latest"),
     model: "mistral-large-latest",
-    optimizedModel: "ministral-8b-latest",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1759,7 +1751,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("sonar-pro"),
     model: "sonar-pro",
-    optimizedModel: "sonar",
     supportsDeclaredTools: false,
     supportsStreamingToolCalls: false,
     supportsCompression: false,
@@ -1778,7 +1769,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("llama-3.3-70b-versatile"),
     model: "llama-3.3-70b-versatile",
-    optimizedModel: "llama-3.1-8b-instant",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1797,7 +1787,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("grok-2-1212"),
     model: "grok-2-1212",
-    optimizedModel: "grok-2-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1816,7 +1805,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-4o"),
     model: "openai/gpt-4o",
-    optimizedModel: "openai/gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1837,7 +1825,6 @@ const providerConfigsByProvider = {
       "meta-llama/Llama-3.1-8B-Instruct",
     ),
     model: "meta-llama/Llama-3.1-8B-Instruct",
-    optimizedModel: "meta-llama/Llama-3.1-70B-Instruct",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1856,7 +1843,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
     model: "llama3.2",
-    optimizedModel: "llama3.2:1b",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1881,7 +1867,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
     model: "llama3.2",
-    optimizedModel: "llama3.2:1b",
   }),
   zhipuai: makeConfig({
     providerName: "Zhipu AI",
@@ -1897,7 +1882,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("glm-4.5-flash"),
     model: "glm-4.5-flash",
-    optimizedModel: "glm-4-flash",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1916,7 +1900,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
     model: "deepseek-chat",
-    optimizedModel: "deepseek-reasoner",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1935,7 +1918,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
     model: "gpt-4o",
-    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1954,7 +1936,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("kimi-k2-0711-preview"),
     model: "kimi-k2-0711-preview",
-    optimizedModel: "moonshot-v1-8k",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1973,7 +1954,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("MiniMax-M2.1"),
     model: "MiniMax-M2.1",
-    optimizedModel: "MiniMax-M1",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1992,7 +1972,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
     model: "gpt-4o",
-    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -2011,7 +1990,6 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
     model: "gpt-4o",
-    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -2036,7 +2014,6 @@ const providerConfigsByProvider = {
       MICROSOFT_365_COPILOT_MODELS[0].id,
     ),
     model: MICROSOFT_365_COPILOT_MODELS[0].id,
-    optimizedModel: MICROSOFT_365_COPILOT_MODELS[0].id,
     supportsDeclaredTools: false,
     supportsStreamingToolCalls: false,
     supportsCompression: true,
@@ -2057,7 +2034,6 @@ const perplexityResponsesConfig = makeConfig({
   }),
   requestBuilder: makeAzureResponsesBuilder("anthropic/claude-opus-5"),
   model: "anthropic/claude-opus-5",
-  optimizedModel: "perplexity/glm-5.2",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
   // TOON compression rewrites tool-result message content, which the
@@ -2085,7 +2061,6 @@ const githubCopilotResponsesConfig = makeConfig({
   // Copilot's Responses-only family — the models this surface exists to reach.
   requestBuilder: makeAzureResponsesBuilder("gpt-5.3-codex"),
   model: "gpt-5.3-codex",
-  optimizedModel: "gpt-5.1-codex-mini",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
   // Same reason as the other Responses surfaces: TOON compression rewrites
@@ -2112,7 +2087,6 @@ const azureResponsesConfig = makeConfig({
   }),
   requestBuilder: makeAzureResponsesBuilder("gpt-4.1"),
   model: "gpt-4.1",
-  optimizedModel: "gpt-4.1-mini",
   supportsDeclaredTools: true,
   supportsStreamingToolCalls: true,
   supportsCompression: false,
@@ -2504,35 +2478,6 @@ describe("LLM proxy provider matrix", () => {
           config.assertStreamingToolCall(response.body);
         },
       );
-
-      test("applies optimized models before provider execution", async ({
-        makeAgent,
-      }) => {
-        const agent = await makeAgent({
-          name: `${config.providerName} optimization`,
-        });
-        const optimizedModelSpy = vi
-          .spyOn(proxyUtils.costOptimization, "getOptimizedModel")
-          .mockResolvedValue(config.optimizedModel);
-
-        const harness = await setupRoute(agent);
-
-        const response = await app.inject({
-          method: "POST",
-          url: config.endpoint(agent.id),
-          headers: config.headers(),
-          payload: config.requestBuilder.buildTextRequest({
-            model: config.model,
-            content: "x".repeat(1100),
-          }),
-        });
-
-        expect(response.statusCode).toBe(200);
-        expect(optimizedModelSpy).toHaveBeenCalled();
-        expect(JSON.stringify(harness.requests.at(-1))).toContain(
-          config.optimizedModel,
-        );
-      });
 
       test.skipIf(config.supportsCompression === false)(
         "toggles TOON compression before provider execution",

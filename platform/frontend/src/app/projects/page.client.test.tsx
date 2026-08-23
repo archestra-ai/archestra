@@ -248,6 +248,13 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
+  // The table view's bulk bar reaches for this; the tests below only drive the
+  // view toggle, so an inert mutation is enough.
+  useBulkDeleteProjects: () => ({ mutate: vi.fn(), isPending: false }),
+  useBulkUpdateProjectVisibility: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useUpdateProject: () => ({
     mutateAsync: mockUpdateMutateAsync,
     isPending: false,
@@ -577,6 +584,14 @@ describe("ProjectsPageClient", () => {
     // ?status=deleted is the trash. A deleted project has no card view and no
     // route to navigate to, so it renders as a table of Restore + Delete
     // permanently and nothing else.
+    // Restore is gated on `project:admin`, the same bar that serves this slice
+    // at all, so the viewer has to hold it for the row to be operable.
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.project?.includes("admin") === true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=deleted") as unknown as ReturnType<
         typeof useSearchParams

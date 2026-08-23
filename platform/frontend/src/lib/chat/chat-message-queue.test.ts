@@ -103,6 +103,32 @@ describe("chatMessageQueue", () => {
     expect(queue[0].skill).toEqual({ id: "skill-1", name: "my-skill" });
   });
 
+  it("persists external MCP Skill attachment identity", () => {
+    const conversationId = freshConversationId();
+    const externalMcpSkill = {
+      id: "11111111-1111-4111-8111-111111111111",
+      mcpServerId: "33333333-3333-4333-8333-333333333333",
+      uri: "skill://example/release/SKILL.md",
+      name: "release-checklist",
+      serverName: "Operations server",
+      commandValue: "/operations-server-release-checklist",
+      displayName: "Operations server [team:33333333] / release-checklist",
+    };
+
+    chatMessageQueue.enqueue(conversationId, {
+      text: "Prepare the release",
+      externalMcpSkill,
+    });
+
+    expect(chatMessageQueue.get(conversationId)[0].externalMcpSkill).toEqual(
+      externalMcpSkill,
+    );
+    expect(
+      JSON.parse(localStorage.getItem(storageKey(conversationId)) ?? "[]")[0]
+        .externalMcpSkill,
+    ).toEqual(externalMcpSkill);
+  });
+
   it("drops malformed persisted entries instead of trusting them", () => {
     const malformedJson = freshConversationId();
     localStorage.setItem(storageKey(malformedJson), "not json {");

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ChatExternalMcpSkillMetadata,
   type ChatSkillMetadata,
   type ContextWindowBreakdown,
   chatUploadRejectionReason,
@@ -73,6 +74,7 @@ import {
   buildSkillCommands,
   DEBUG_COMMAND_VALUE,
   isDebugCommand,
+  parseExternalMcpSkillCommand,
   parseSkillCommand,
   type SkillCommand,
 } from "./skill-commands";
@@ -136,6 +138,7 @@ function attachmentPayloadBytes(files: readonly { url?: string }[]): number {
  */
 export type ChatSubmitOptions = {
   skill?: ChatSkillMetadata;
+  externalMcpSkill?: ChatExternalMcpSkillMetadata;
   sandboxCommand?: true;
 };
 
@@ -195,6 +198,11 @@ export interface ArchestraPromptInputProps
    */
   prefillText?: string | null;
   onPrefillApplied?: () => void;
+  externalMcpSkillAttachment?: ChatExternalMcpSkillMetadata | null;
+  onRemoveExternalMcpSkillAttachment?: () => void;
+  onRestoreExternalMcpSkillAttachment?: (
+    skill: ChatExternalMcpSkillMetadata,
+  ) => void;
 }
 
 type SlashCommand = {
@@ -255,6 +263,9 @@ const PromptInputContent = ({
   onLockedChatChange,
   prefillText,
   onPrefillApplied,
+  externalMcpSkillAttachment,
+  onRemoveExternalMcpSkillAttachment,
+  onRestoreExternalMcpSkillAttachment,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -329,8 +340,13 @@ const PromptInputContent = ({
     if (!skillSlashCommandsEnabled || !skillsData?.data) {
       return [];
     }
-    return buildSkillCommands(skillsData.data);
-  }, [skillSlashCommandsEnabled, skillsData]);
+    return buildSkillCommands(
+      skillsData.data,
+      externalMcpSkillAttachment
+        ? [externalMcpSkillAttachment.commandValue]
+        : [],
+    );
+  }, [externalMcpSkillAttachment, skillSlashCommandsEnabled, skillsData]);
 
   // /debug toggles per-conversation hook debug chips; admin-only, existing
   // conversation only. Mirrors the server gate (agent-type admin) loosely — the
@@ -558,11 +574,13 @@ const PromptInputContent = ({
       if (result instanceof Promise) {
         return result.then(() => {
           localStorage.removeItem(storageKey);
+          onRemoveExternalMcpSkillAttachment?.();
         });
       }
       localStorage.removeItem(storageKey);
+      onRemoveExternalMcpSkillAttachment?.();
     },
-    [onSubmit, storageKey],
+    [onRemoveExternalMcpSkillAttachment, onSubmit, storageKey],
   );
 
   const handleWrappedSubmit = useCallback(
@@ -611,18 +629,32 @@ const PromptInputContent = ({
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
+      const parsedExternalSkill =
+        !isSandboxCommand && externalMcpSkillAttachment
+          ? parseExternalMcpSkillCommand({
+              text: trimmed,
+              skill: externalMcpSkillAttachment,
+            })
+          : null;
+      if (parsedExternalSkill) {
+        outgoing = { ...message, text: parsedExternalSkill.remaining };
+      }
       let skill: ChatSkillMetadata | undefined;
-      const parsed = parseSkillCommand(trimmed, skillCommands);
+      const parsed = parsedExternalSkill
+        ? null
+        : parseSkillCommand(trimmed, skillCommands);
       if (parsed) {
         skill = parsed.skill;
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      const options: ChatSubmitOptions | undefined = skill
-        ? { skill }
-        : isSandboxCommand
-          ? { sandboxCommand: true }
-          : undefined;
+      const options: ChatSubmitOptions | undefined = isSandboxCommand
+        ? { sandboxCommand: true }
+        : parsedExternalSkill
+          ? { externalMcpSkill: parsedExternalSkill.skill }
+          : skill
+            ? { skill }
+            : undefined;
 
       if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
         const findings = scanText(outgoing.text);
@@ -656,6 +688,7 @@ const PromptInputContent = ({
       skillCommands,
       subscriptionConnectRequired,
       turnAttachmentBudget,
+      externalMcpSkillAttachment,
     ],
   );
 
@@ -770,9 +803,18 @@ const PromptInputContent = ({
         const mostRecent = queuedMessages[queuedMessages.length - 1];
         if (mostRecent) {
           chatMessageQueue.remove(conversationId, mostRecent.id);
-          const restored = `${
-            mostRecent.skill ? `/${mostRecent.skill.name} ` : ""
-          }${mostRecent.text}`;
+          if (mostRecent.externalMcpSkill) {
+            onRestoreExternalMcpSkillAttachment?.(mostRecent.externalMcpSkill);
+          }
+          const restored = [
+            mostRecent.skill ? `/${mostRecent.skill.name}` : null,
+            mostRecent.externalMcpSkill
+              ? mostRecent.externalMcpSkill.commandValue
+              : null,
+            mostRecent.text,
+          ]
+            .filter(Boolean)
+            .join(" ");
           controller.textInput.setInput(restored);
           // Caret to the end so the user can append / edit immediately.
           requestAnimationFrame(() => {
@@ -826,6 +868,7 @@ const PromptInputContent = ({
       isResponseInFlight,
       isSlashCommandOpen,
       onStop,
+      onRestoreExternalMcpSkillAttachment,
       queuedMessages,
       selectSlashCommand,
       selectedCommandIndex,
@@ -849,6 +892,9 @@ const PromptInputContent = ({
             >
               <span className="min-w-0 grow truncate">
                 {queued.skill ? `/${queued.skill.name} ` : ""}
+                {queued.externalMcpSkill
+                  ? `${queued.externalMcpSkill.commandValue} `
+                  : ""}
                 {queued.text}
               </span>
               <Button
@@ -1128,6 +1174,9 @@ const ArchestraPromptInput = ({
   onLockedChatChange,
   prefillText,
   onPrefillApplied,
+  externalMcpSkillAttachment,
+  onRemoveExternalMcpSkillAttachment,
+  onRestoreExternalMcpSkillAttachment,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1239,6 +1288,13 @@ const ArchestraPromptInput = ({
           onLockedChatChange={onLockedChatChange}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
+          externalMcpSkillAttachment={externalMcpSkillAttachment}
+          onRemoveExternalMcpSkillAttachment={
+            onRemoveExternalMcpSkillAttachment
+          }
+          onRestoreExternalMcpSkillAttachment={
+            onRestoreExternalMcpSkillAttachment
+          }
         />
       </PromptInputProvider>
     </div>

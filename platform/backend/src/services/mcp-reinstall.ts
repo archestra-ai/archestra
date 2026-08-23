@@ -8,6 +8,7 @@ import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import type {
   InternalMcpCatalog,
   LocalConfig,
@@ -513,6 +514,10 @@ async function syncToolsForServer(
   }));
 
   const syncResult = await ToolModel.syncToolsForCatalog(toolsToSync);
+  await refreshMcpSkillMetadata({
+    catalogId: catalogItem.id,
+    mcpServerId: server.id,
+  });
 
   logger.info(
     {

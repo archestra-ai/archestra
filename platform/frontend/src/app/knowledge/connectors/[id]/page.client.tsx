@@ -38,6 +38,7 @@ import {
   type RosterNoun,
   WORKSPACE_ROSTER_NOUN,
 } from "@/app/knowledge/connectors/_parts/roster-noun";
+import { formatRunDuration } from "@/app/knowledge/connectors/_parts/run-duration";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -48,6 +49,8 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RelativeTime } from "@/components/relative-time";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -339,7 +342,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         id: "status",
         accessorKey: "status",
         header: "Status",
-        size: 130,
+        // Wide enough for the longest label ("Completed with errors"): the
+        // shared Table does not clip overflow, so a badge wider than its
+        // column paints over the next one instead of wrapping.
+        size: 190,
         // Badge only — in-flight progress lives in the Result column, where
         // there is room for it.
         cell: ({ row }) => (
@@ -351,25 +357,32 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         accessorKey: "startedAt",
         header: "Started",
         size: 150,
-        cell: ({ row }) => (
-          <div className="font-mono text-xs">
-            {row.original.startedAt
-              ? formatDate({ date: row.original.startedAt })
-              : "-"}
-          </div>
-        ),
+        // "8 minutes ago" rather than a second-precision stamp: at a glance
+        // the question is how recent the run was, and the exact instant stays
+        // one hover (and one dialog) away. The Duration column beside it
+        // carries what the old Completed column was really used for.
+        cell: ({ row }) => <RelativeTime date={row.original.startedAt} />,
       },
       {
-        id: "completedAt",
-        header: "Completed",
-        size: 150,
-        cell: ({ row }) => (
-          <div className="font-mono text-xs">
-            {row.original.completedAt
-              ? formatDate({ date: row.original.completedAt })
-              : "-"}
-          </div>
-        ),
+        id: "duration",
+        header: "Duration",
+        size: 110,
+        // A running row counts up: the runs query polls every 3s while any run
+        // is in flight, so each poll re-renders this against the new now.
+        cell: ({ row }) => {
+          if (row.original.status === "queued") {
+            return <span className="text-sm text-muted-foreground">-</span>;
+          }
+          const duration = formatRunDuration({
+            startedAt: row.original.startedAt,
+            completedAt: row.original.completedAt,
+          });
+          return (
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {duration ?? "-"}
+            </span>
+          );
+        },
       },
       {
         id: "results",
@@ -377,34 +390,39 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         // Deliberately the widest declared size: leftover table width lands
         // here (the one cell with real content) instead of stretching the
         // compact Status/Type columns.
-        size: 520,
+        size: 460,
         minSize: 220,
         cell: ({ row }) => (
           <RunResultsSummary run={row.original} noun={rosterNoun} />
         ),
       },
       {
-        id: "logs",
-        header: "Logs",
-        size: 60,
+        // Named and rendered like every other table's Actions column rather
+        // than a bare "Logs" header over a ghost icon.
+        id: "actions",
+        header: "Actions",
+        size: 90,
         cell: ({ row }) => {
           // A queued row has no run (and no logs) behind it yet.
           if (row.original.status === "queued") return null;
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onClick={() => openRunDetails(row.original)}
-                  aria-label="View run logs"
-                >
-                  <Logs className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>View logs</TooltipContent>
-            </Tooltip>
+            <TableRowActions
+              // Every row's button would otherwise be an identical "View
+              // logs" to a screen reader; the start time is what tells the
+              // rows apart.
+              itemName={
+                row.original.startedAt
+                  ? `for the run started ${formatDate({ date: row.original.startedAt })}`
+                  : undefined
+              }
+              actions={[
+                {
+                  icon: <Logs className="h-4 w-4" />,
+                  label: "View logs",
+                  onClick: () => openRunDetails(row.original),
+                },
+              ]}
+            />
           );
         },
       },
@@ -820,10 +838,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
  * runs read as outcomes: only what changed, or "No changes". A RUNNING
  * content run reads as its current step — "Ingesting documents 14/23", then
  * "Embedding batch 80/459" — one step at a time; failed runs and in-flight
- * permission passes keep the counter set, counting up from zero. A full
- * permission reconcile keeps the complete listing on success — that listing
- * is what visually identifies it; there is no mode label. Full numbers live
- * in the run details dialog.
+ * permission passes keep the counter set, counting up from zero, because a
+ * live counter that has not moved yet still has to be visible. A settled full
+ * permission reconcile is labelled as one and reports its scope plus whatever
+ * moved. Full numbers live in the run details dialog.
  */
 function RunResultsSummary({
   run,
@@ -897,23 +915,47 @@ function RunResultsSummary({
       warn: true,
     };
 
+    // What this pass actually changed. Zero-valued counters are dropped: a
+    // settled run is read for its outcome, and "0 permissions updated · 0
+    // access lists updated · 0 docs locked" is three ways of saying nothing
+    // happened — the noise that buried the one number that did move.
+    const changes = [
+      ...(stats.aclsChanged > 0 ? [permissionsItem] : []),
+      ...(accessListsUpdated > 0 ? [accessListsItem] : []),
+      ...memberItems,
+      ...(stats.failClosed > 0 ? [lockedItem] : []),
+      ...(unreadable > 0 ? [unreadableItem] : []),
+      ...(stats.groupSyncFailed ? [groupsItem] : []),
+    ];
+
     if (run.status === "success" && stats.mode === "delta") {
-      const changes = [
-        ...(stats.aclsChanged > 0 ? [permissionsItem] : []),
-        ...(accessListsUpdated > 0 ? [accessListsItem] : []),
-        ...memberItems,
-        ...(stats.failClosed > 0 ? [lockedItem] : []),
-        ...(unreadable > 0 ? [unreadableItem] : []),
-        ...(stats.groupSyncFailed ? [groupsItem] : []),
-      ];
       if (changes.length === 0) {
         return noChangesVerdict;
       }
       return <RunStatLine items={changes} />;
     }
 
+    // A settled FULL reconcile says so in words rather than by being the row
+    // with the long listing. What it changed comes first — the scope counters
+    // are the same every pass, so they are what should fall into the overflow
+    // when the line runs out of room.
+    if (run.status === "success") {
+      return (
+        <RunStatLine
+          items={[
+            { label: "Full reconcile" },
+            ...changes,
+            { value: stats.docsScanned, label: "docs checked" },
+            ...(stats.groupSyncFailed ? [] : [groupsItem]),
+          ]}
+        />
+      );
+    }
+
+    // Every settled success returned above, so this is a run still going or
+    // one that ended badly: show progress against the total when there is one.
     const checked =
-      run.status !== "success" && stats.totalDocs > 0
+      stats.totalDocs > 0
         ? `${stats.docsScanned.toLocaleString()} / ${stats.totalDocs.toLocaleString()}`
         : stats.docsScanned;
     return (
@@ -987,13 +1029,12 @@ function countedItem(
 
 /** One results line: `<value> <muted label>` items joined by muted dots. */
 function RunStatLine({ items }: { items: RunStatItem[] }) {
+  const { visible, overflow } = splitRunStatItems(items);
+
   return (
     <div className="text-sm">
-      {items.map((item, index) => {
-        const value =
-          typeof item.value === "number"
-            ? item.value.toLocaleString()
-            : item.value;
+      {visible.map((item, index) => {
+        const value = formatRunStatValue(item.value);
         return (
           <Fragment key={item.label}>
             {index > 0 && <span className="text-muted-foreground"> · </span>}
@@ -1011,8 +1052,58 @@ function RunStatLine({ items }: { items: RunStatItem[] }) {
           </Fragment>
         );
       })}
+      {overflow.length > 0 && (
+        <>
+          <span className="text-muted-foreground"> · </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-default text-muted-foreground underline decoration-dotted underline-offset-2">
+                +{overflow.length} more
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="space-y-0.5">
+                {overflow.map((item) => (
+                  <div key={item.label}>
+                    {formatRunStatValue(item.value)} {item.label}
+                  </div>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
     </div>
   );
+}
+
+/** Longest one-line result before the tail collapses behind "+N more". */
+const MAX_VISIBLE_RUN_STATS = 3;
+
+/**
+ * Keeps a result line to one row. Anything a run flagged (locked documents,
+ * an unreadable access list, a failed group refresh) stays on screen however
+ * long the line gets — those are the reason to look at the row at all; the
+ * unremarkable counters past the cap collapse into the overflow tooltip.
+ */
+function splitRunStatItems(items: RunStatItem[]): {
+  visible: RunStatItem[];
+  overflow: RunStatItem[];
+} {
+  const visible: RunStatItem[] = [];
+  const overflow: RunStatItem[] = [];
+  for (const item of items) {
+    if (item.warn || visible.length < MAX_VISIBLE_RUN_STATS) {
+      visible.push(item);
+    } else {
+      overflow.push(item);
+    }
+  }
+  return { visible, overflow };
+}
+
+function formatRunStatValue(value: RunStatItem["value"]) {
+  return typeof value === "number" ? value.toLocaleString() : value;
 }
 
 /** "Every 30 minutes" / "Every 6 hours" from an interval in seconds. */

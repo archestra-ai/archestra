@@ -17,6 +17,7 @@ import {
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
+import { describeMarketplaceContents } from "./marketplace-copy";
 import {
   buildStartupGuardContext,
   type StartupGuardClient,
@@ -171,7 +172,9 @@ function banner(ctx: SetupScriptContext): string {
       }`,
     );
   }
-  if (ctx.skills) configures.push("Skills marketplace");
+  if (ctx.skills) {
+    configures.push(describeMarketplaceContents(ctx.skills).label);
+  }
 
   const details = [
     `   Client:     ${label}`,
@@ -226,7 +229,7 @@ ${nextSteps.map((step, i) => `  ${i + 1}. ${step}`).join("\n")}
   }
   if (ctx.skills) {
     revocation.push(
-      `revoke the "${ctx.skills.marketplaceName}" share link on the Skills page`,
+      `revoke the "${ctx.skills.marketplaceName}" marketplace share link`,
     );
   }
   if (revocation.length > 0) {
@@ -246,9 +249,14 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.mcp) {
         steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
-      if (ctx.skills) {
+      if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
         steps.push(
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
+        );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push(
+          `${ctx.skills.pluginNames.length} plugin${ctx.skills.pluginNames.length === 1 ? " is" : "s are"} installed and will load automatically.`,
         );
       }
       if (ctx.mcp || ctx.proxy || ctx.skills) {
@@ -273,9 +281,14 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           `Start Codex through the proxy: codex -c model_provider=${ctx.proxy.proxyName}`,
         );
       }
-      if (ctx.skills) {
+      if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
         steps.push(
-          'Run /plugins inside Codex and pick "Install Plugin" to install the bundled skills.',
+          'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
+        );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push(
+          "Run `/hooks` inside Codex and approve each delivered hook before it can execute.",
         );
       }
       break;
@@ -297,10 +310,13 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
             : `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key (the other COPILOT_* variables were applied for you), then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
         );
       }
-      if (ctx.skills) {
+      if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
         steps.push(
           `Browse and install the shared skills: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
         );
+      }
+      if (ctx.skills?.pluginNames?.length) {
+        steps.push("The plugins are installed and enabled.");
       }
       break;
     case "cursor":
@@ -435,12 +451,25 @@ claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ct
   }
 
   if (ctx.skills) {
+    const hasSkills = ctx.skills.hasSkills ?? true;
+    const pluginInstalls = (ctx.skills.pluginNames ?? [])
+      .map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `claude plugin install ${psq(ref)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'claude plugin install ${ref}'.`)} }`;
+      })
+      .join("\n");
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
-    sections.push(`Say ${psq(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
+    sections.push(`Say ${psq(`Installing the "${ctx.skills.marketplaceName}" marketplace`)}
 claude plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — continuing.' }
-claude plugin install ${psq(pluginRef)}
-if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`);
+${
+  hasSkills
+    ? `claude plugin install ${psq(pluginRef)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`
+    : ""
+}
+${pluginInstalls}`);
   }
 
   windowsStartupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
@@ -631,9 +660,17 @@ Write-Host 'Codex keeps using your own OpenAI API key login.'`
   }
 
   if (ctx.skills) {
-    sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const pluginInstalls = (ctx.skills.pluginNames ?? [])
+      .map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `codex plugin add ${psq(ref)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)} }`;
+      })
+      .join("\n");
+    sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /plugins inside Codex to inspect.' }`);
+if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /plugins inside Codex to inspect.' }
+${pluginInstalls}`);
   }
 
   windowsStartupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
@@ -734,9 +771,17 @@ ${psCopilotModelApply({
   }
 
   if (ctx.skills) {
-    sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
+    const pluginInstalls = (ctx.skills.pluginNames ?? [])
+      .map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `copilot plugin install ${psq(ref)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'copilot plugin install ${ref}'.`)} }`;
+      })
+      .join("\n");
+    sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }`);
+if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }
+${pluginInstalls}`);
   }
 
   windowsStartupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
@@ -942,11 +987,19 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   }
 
   if (ctx.skills) {
-    sections.push(`Say ${psq(`Skills marketplace (manual step)`)}
+    const pluginNames = ctx.skills.pluginNames ?? [];
+    sections.push(`Say ${psq(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
 Write-Host @'
 
 In Cursor's command palette run /add-plugin and paste:
   ${ctx.skills.cloneUrl}
+${
+  pluginNames.length > 0
+    ? `
+Then install these plugins from Customize -> Plugins:
+  ${pluginNames.join("\n  ")}`
+    : ""
+}
 '@`);
   }
 

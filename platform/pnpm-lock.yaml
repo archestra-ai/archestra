@@ -43,8 +43,8 @@ overrides:
   botframework-streaming>ws: '>=8.21.0'
   websocket-driver: '>=0.7.5'
   next@<16.3.0: '>=16.2.11 <16.3.0'
-  form-data@>=4: 4.0.6
-  form-data@<4: 3.0.5
+  form-data@>=4: '>=4.0.6'
+  form-data@<4: '>=3.0.5 <4'
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
   dompurify: 3.4.13
@@ -55,7 +55,7 @@ overrides:
   express: 5.2.0
   express-rate-limit: 8.3.1
   jws: 4.0.1
-  js-yaml: 4.3.1
+  js-yaml: '>=4.3.1 <5'
   qs: 6.15.2
   d3-path: 3.1.0
   hono: 4.12.25
@@ -64,7 +64,7 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  fast-uri: 3.1.5
+  fast-uri: '>=3.1.5'
   ajv: 8.18.0
   axios: '>=1.18.0'
   minimatch: '>=10.2.3'
@@ -77,12 +77,12 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  find-my-way: 9.7.0
+  find-my-way: '>=9.7.0'
   postcss: '>=8.5.18'
-  nanoid@<4: 3.3.18
+  nanoid@<4: '>=3.3.18 <4'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.3.1'
-  brace-expansion: 5.0.9
+  brace-expansion: '>=5.0.9'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -156,8 +156,8 @@ importers:
   backend:
     dependencies:
       '@ai-sdk/amazon-bedrock':
-        specifier: ^4.0.77
-        version: 4.0.77(zod@4.3.6)
+        specifier: 4.0.159
+        version: 4.0.159(zod@4.3.6)
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
         version: 3.0.58(zod@4.3.6)
@@ -431,6 +431,9 @@ importers:
       fastify-type-provider-zod:
         specifier: ^6.0.0
         version: 6.1.0(@fastify/swagger@9.7.0)(fastify@5.8.5)(openapi-types@12.1.3)(zod@4.3.6)
+      google-auth-library:
+        specifier: ^10.5.0
+        version: 10.5.0
       googleapis:
         specifier: ^171.4.0
         version: 171.4.0
@@ -447,7 +450,7 @@ importers:
         specifier: ^6.2.0
         version: 6.2.1
       js-yaml:
-        specifier: 4.3.1
+        specifier: '>=4.3.1 <5'
         version: 4.3.1
       jsdom:
         specifier: ^29.0.0
@@ -974,8 +977,14 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@ai-sdk/amazon-bedrock@4.0.77':
-    resolution: {integrity: sha512-PKLqycbq4NHCasZ0454HZh58thDGsqEKnpkXYr+Ym4Y4YFL3vhLUwhvvZeuOfawVdmMijQfRiKeAZhd2XtTkOg==}
+  '@ai-sdk/amazon-bedrock@4.0.159':
+    resolution: {integrity: sha512-6AlBRv9ygywAVebieJrg6OAblYODmzQ3PI0MHhyX7JHjqiPZkatXWM+6j6QJRepsbNE1eNLG9dyO6Ba7Yd+FoQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/anthropic@3.0.111':
+    resolution: {integrity: sha512-atgBW8jZPr/KuaKX5FvDIHuXBI8VCol6kVeoD4P0657+VXR73QsLogXQVN/Zt5FHtq9WzpdIZseCJiXPqkgwwA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1040,6 +1049,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/openai@3.0.99':
+    resolution: {integrity: sha512-0Y6E5bvR+3eugt5rq2iy39EAAFi4nijXf1kdvcfoMm4erEGMe/6egIpvdvv5ePBU2YsnsxFuLRmMJ76Kv/babQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@4.0.19':
     resolution: {integrity: sha512-3eG55CrSWCu2SXlqq2QCsFjo3+E7+Gmg7i/oRVoSZzIodTuDSfLb3MRje67xE9RFea73Zao7Lm4mADIfUETKGg==}
     engines: {node: '>=18'}
@@ -1052,8 +1067,18 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/provider-utils@4.0.46':
+    resolution: {integrity: sha512-tEtld97plCFiYevsJuOkGkeuhQndeMWFBVrJS4AjnbD5AqrNSXRCe0p+BZ3Cju/sxDeeZ9ym3q9YUV8fASA7aQ==}
+    engines: {node: '>=18.17'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider@3.0.10':
     resolution: {integrity: sha512-Q3BZ27qfpYqnCYGvE3vt+Qi6LGOF9R5Nmzn+9JoM1lCRsD9mYaIhfJLkSunN48nfGXJ6n+XNV0J/XVpqGQl7Dw==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@3.0.15':
+    resolution: {integrity: sha512-XeZW1CcDF2GMbH4wejW6xBRI2QCOgnkVYUnxoeDadB1mf85riL2bMUeDoh+6gJ/r4mjNfzUPW8OjLjvwTP0u1Q==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@3.0.8':
@@ -10848,14 +10873,21 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@ai-sdk/amazon-bedrock@4.0.77(zod@4.3.6)':
+  '@ai-sdk/amazon-bedrock@4.0.159(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/anthropic': 3.0.58(zod@4.3.6)
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
+      '@ai-sdk/anthropic': 3.0.111(zod@4.3.6)
+      '@ai-sdk/openai': 3.0.99(zod@4.3.6)
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.46(zod@4.3.6)
       '@smithy/eventstream-codec': 4.2.12
       '@smithy/util-utf8': 4.2.2
       aws4fetch: 1.0.20
+      zod: 4.3.6
+
+  '@ai-sdk/anthropic@3.0.111(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.46(zod@4.3.6)
       zod: 4.3.6
 
   '@ai-sdk/anthropic@3.0.58(zod@4.3.6)':
@@ -10925,6 +10957,12 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
       zod: 4.3.6
 
+  '@ai-sdk/openai@3.0.99(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.46(zod@4.3.6)
+      zod: 4.3.6
+
   '@ai-sdk/provider-utils@4.0.19(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -10939,7 +10977,19 @@ snapshots:
       eventsource-parser: 3.1.0
       zod: 4.3.6
 
+  '@ai-sdk/provider-utils@4.0.46(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      undici: 7.29.0
+      zod: 4.3.6
+
   '@ai-sdk/provider@3.0.10':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@3.0.15':
     dependencies:
       json-schema: 0.4.0
 

@@ -234,6 +234,104 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     expect(JSON.stringify(interactions[0].request)).toContain("UNTRUSTED_DATA");
   });
 
+  // A refusal otherwise persists as an ordinary assistant turn — normal finish
+  // reason, no error — so nothing on the row separates it from a healthy one.
+  // That is invisible exactly where it costs most: an unattended agent whose
+  // correct output is sometimes nothing looks identical whether it did the work
+  // or was cut off. The marker is plain metadata, so it stays readable without
+  // decrypting the row.
+  test("marks a refused turn on the interaction row", async ({
+    makeOrganization,
+    makeAgent,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Tool Call Block Marker Agent",
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+      considerContextUntrusted: true,
+    });
+
+    const tool = await makeTool({ name: "read_file", agentId: agent.id });
+    await makeToolPolicy(tool.id, {
+      conditions: [{ key: "file_path", operator: "contains", value: "/etc/" }],
+      action: "block_always",
+      reason: "Reading /etc/ files is not allowed for security reasons",
+    });
+
+    stubToolCalls = [
+      { name: "read_file", arguments: '{"file_path":"/etc/passwd"}' },
+    ];
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "read /etc/passwd" }],
+        tools: [READ_FILE_TOOL],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+
+    const [interaction] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, agent.id));
+
+    expect(interaction.toolCallBlock).not.toBeNull();
+    expect(interaction.toolCallBlock?.blockedToolCallCount).toBe(1);
+    expect(interaction.toolCallBlock?.reason).toContain(
+      "tool call policy violated",
+    );
+  });
+
+  // The column has to stay NULL on the overwhelming majority of rows, or the
+  // marker means nothing.
+  test("leaves the marker null on a turn nothing blocked", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "Unblocked Marker Agent",
+      agentType: "llm_proxy",
+    });
+
+    stubToolCalls = [];
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "hello" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+
+    const [interaction] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, agent.id));
+
+    expect(interaction.toolCallBlock).toBeNull();
+  });
+
   test("passes regular and Archestra tool calls through when no policy blocks", async ({
     makeAgent,
   }) => {
@@ -341,9 +439,12 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     );
   });
 
-  // `full` exposure: a tool missing from the list really is disabled there, so
-  // the pre-existing refusal must survive untouched.
-  test("still refuses a disabled tool when the list has no dispatch pair", async ({
+  // `full` exposure, no dispatch pair: the name is absent from the caller's own
+  // tool list, so no caller would execute it anyway. Refusing dropped the tool
+  // call and ended the turn, which an agent loop reads as "the assistant is
+  // finished" — fatal for an unattended run. The call is handed back instead,
+  // and the caller rejects it the way it rejects any unknown tool.
+  test("hands an undeclared tool call back instead of ending the turn", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -372,9 +473,18 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    const message = response.json().choices[0].message;
-    expect(message.tool_calls).toBeUndefined();
-    expect(message.content).toContain("not enabled for this conversation");
+    const choice = response.json().choices[0];
+
+    // The turn still ends on the tool call. `stop` here is the bug: it is what
+    // makes an agent loop hand control back to a human who may not be there.
+    expect(choice.finish_reason).toBe("tool_calls");
+    expect(choice.message.tool_calls).toHaveLength(1);
+    expect(choice.message.tool_calls[0].function.name).toBe(
+      "gh-developer-agent__pull_request_read",
+    );
+    expect(choice.message.content ?? "").not.toContain(
+      "not enabled for this conversation",
+    );
   });
 
   // The repaired call faces the same gate a run_tool dispatch the model wrote

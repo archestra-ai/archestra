@@ -1,0 +1,1 @@
+export const DATA_TABLE_SELECT_COLUMN_SIZE = 56;

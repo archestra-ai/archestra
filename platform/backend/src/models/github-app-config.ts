@@ -83,6 +83,13 @@ class GithubAppConfigModel {
 
     return rows.length > 0;
   }
+
+  static async restore(data: GithubAppConfig): Promise<void> {
+    await db
+      .insert(schema.githubAppConfigsTable)
+      .values(data)
+      .onConflictDoNothing();
+  }
 }
 
 export default GithubAppConfigModel;

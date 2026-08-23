@@ -227,6 +227,38 @@ describe("stream adapter", () => {
     expect(adapter.state.text).toBe("Hello");
   });
 
+  // A refusal appends one more message chunk, whose content Ollama clients
+  // concatenate onto the message they are building — so the client holds the
+  // model's text AND the refusal. Recording the refusal alone deleted the
+  // model's own answer from the turn.
+  test("a refusal keeps the streamed text and drops the withheld call", () => {
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({ message: { role: "assistant", content: "let me check" } }),
+    );
+    adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "c1",
+              function: { name: "read_file", arguments: { path: "x" } },
+            },
+          ],
+        },
+      }),
+    );
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.message.content).toBe("let me checkblocked message");
+    expect(response.message.tool_calls).toBeUndefined();
+    expect(response.done_reason).toBe("stop");
+  });
+
   test("buffers tool-call chunks and replays them via getRawToolCallEvents", () => {
     const adapter = factory.createStreamAdapter();
     const toolChunk = chunk({

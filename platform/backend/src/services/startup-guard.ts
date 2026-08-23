@@ -12,6 +12,7 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "./archestra-mark";
 import type { SetupScriptContext } from "./connection-setup-script";
+import { describeMarketplaceContents } from "./marketplace-copy";
 
 /**
  * Client-agnostic renderer for the CLI startup guard ("pre-loader"): a
@@ -93,6 +94,8 @@ interface StartupGuardProxySection {
 interface StartupGuardSkillsSection {
   marketplaceName: string;
   cloneUrl: string;
+  hasSkills?: boolean;
+  pluginNames?: string[];
 }
 
 /** @public — named by the unit tests that build guard fixtures. */
@@ -160,6 +163,13 @@ export interface StartupGuardClient {
    */
   skillsDisconnectCommands: string;
   /**
+   * Non-interactive shell commands that refresh the configured marketplace
+   * after an interactive client session exits. May reference
+   * `$arch_refresh_marketplace` and newline-delimited
+   * `$arch_refresh_plugin_names`; return non-zero to retry next launch.
+   */
+  skillsRefreshCommands?: string;
+  /**
    * Optional proof that the `mcp)` removal actually took effect, run in the
    * foreground after the silenced commands above.
    *
@@ -202,6 +212,12 @@ export interface StartupGuardWindowsClient {
    * and `$SkillsMarketplaceName`.
    */
   skillsDisconnect: string;
+  /**
+   * PowerShell refresh body run after an interactive client exits. May use
+   * `$archRefreshReal`, `$ArchRefreshMarketplace`, and
+   * `$ArchRefreshPluginNames`; return `$false` on failure.
+   */
+  skillsRefreshCommands?: string;
   /**
    * PowerShell body proving the `'mcp'` removal landed, for
    * `Test-ArchDisconnected`. Must `return $false` (after setting
@@ -606,7 +622,8 @@ MCP_SERVER_NAME=${sh(ctx.mcp.serverName)}`
   }${
     ctx.skills
       ? `
-SKILLS_MARKETPLACE_NAME=${sh(ctx.skills.marketplaceName)}`
+SKILLS_MARKETPLACE_NAME=${sh(ctx.skills.marketplaceName)}
+PLUGIN_NAMES=${sh((ctx.skills.pluginNames ?? []).join("\n"))}`
       : ""
   }${
     ctx.proxy
@@ -1006,6 +1023,12 @@ export function buildStartupGuardInstallSection(
   client: StartupGuardClient,
 ): string {
   const guardPath = `$HOME/${client.scriptRelpath}`;
+  const refreshFunctionName = `archestra_refresh_${client.binary}_marketplace`;
+  const refreshBlock = renderMarketplaceRefreshProfileBlock({
+    ctx,
+    client,
+    functionName: refreshFunctionName,
+  });
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
@@ -1029,16 +1052,21 @@ archestra_install_guard_block() {
 ${client.markerStart}
 # Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
 # Remove this block and ~/${client.scriptRelpath} to uninstall.
+${refreshBlock}
 ${client.binary}() {
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
   fi
   command ${client.binary} "$@"
+  archestra_client_status=$?
+  ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
+  return "$archestra_client_status"
 }
 ${client.markerEnd}
 ${GUARD_PROFILE_EOF}
   echo "Updated $1"
 }
+
 # Hook the CURRENT shell's rc first — creating it if needed — so the activation
 # hint below always resolves to a profile that carries the wrapper, then hook the
 # other rc too when it exists (covers users who switch shells). This script runs
@@ -1054,6 +1082,41 @@ if [ -f "$HOME/.bashrc" ] && [ "$archestra_guard_profile" != "$HOME/.bashrc" ]; 
 ok "Startup guard installed for ${client.binary}."
 printf '   It runs automatically in new terminals. To arm it in THIS terminal now,\n'
 printf '   reload your shell:  %ssource %s%s   (or just open a new terminal).\n' "$ARCH_C_OK" "$archestra_guard_profile" "$ARCH_C_RESET"`;
+}
+
+function renderMarketplaceRefreshProfileBlock(params: {
+  ctx: StartupGuardContext;
+  client: StartupGuardClient;
+  functionName: string;
+}): string {
+  const { ctx, client, functionName } = params;
+  if (!ctx.skills || !client.skillsRefreshCommands) return "";
+  const pluginNames = [
+    ...(ctx.skills.hasSkills !== false && client.clientId === "claude-code"
+      ? [ctx.skills.marketplaceName]
+      : []),
+    ...(ctx.skills.pluginNames ?? []),
+  ];
+  const nonInteractivePatterns = client.nonInteractiveArgPatterns.join("|");
+  return `${functionName}() {
+  for archestra_arg in "$@"; do
+    case "$archestra_arg" in ${nonInteractivePatterns}) return 0 ;; esac
+  done
+  arch_refresh_dir="\${XDG_STATE_HOME:-$HOME/.local/state}/archestra"
+  arch_refresh_stamp="$arch_refresh_dir/${client.binary}-${ctx.skills.marketplaceName}.refresh"
+  arch_refresh_now=$(date +%s)
+  if [ -f "$arch_refresh_stamp" ]; then
+    IFS= read -r arch_refresh_last < "$arch_refresh_stamp" || arch_refresh_last=0
+    case "$arch_refresh_last" in *[!0-9]*|'') arch_refresh_last=0 ;; esac
+    [ "$((arch_refresh_now - arch_refresh_last))" -lt 86400 ] && return 0
+  fi
+  arch_refresh_marketplace=${sh(ctx.skills.marketplaceName)}
+  arch_refresh_plugin_names=${sh(pluginNames.join("\n"))}
+${client.skillsRefreshCommands}
+  mkdir -p "$arch_refresh_dir"
+  printf '%s\n' "$arch_refresh_now" > "$arch_refresh_stamp.tmp"
+  mv "$arch_refresh_stamp.tmp" "$arch_refresh_stamp"
+}`;
 }
 
 /**
@@ -1185,11 +1248,12 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   if (ctx.skills) {
+    const label = `${describeMarketplaceContents(ctx.skills).label} (${ctx.skills.marketplaceName})`;
     resources.push({
-      label: `Skills marketplace (${ctx.skills.marketplaceName})`,
+      label,
       url: ctx.skills.cloneUrl,
       kind: "skills",
-      failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
+      failName: label,
       downMarker: null,
     });
   }

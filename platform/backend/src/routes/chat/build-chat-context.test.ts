@@ -40,6 +40,7 @@ describe("buildChatContext enabled-tool selection", () => {
       },
       user: params.user,
       organizationId: params.organizationId,
+      modelAcceptsImageToolResults: false,
       hookSessionContext: undefined,
       projectInstructions: undefined,
       openedApp: undefined,
@@ -82,6 +83,9 @@ describe("buildChatContext enabled-tool selection", () => {
     expect(
       mockGetChatMcpTools.mock.calls[0]?.[0].enabledToolIds,
     ).toBeUndefined();
+    expect(
+      mockGetChatMcpTools.mock.calls[0]?.[0].modelAcceptsImageToolResults,
+    ).toBe(false);
     expect(result.toolSelection).toEqual({
       hasCustomSelection: false,
       enabledToolCount: 0,

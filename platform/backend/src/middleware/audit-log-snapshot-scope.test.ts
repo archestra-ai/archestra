@@ -6,7 +6,6 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import MemberModel from "@/models/member";
-import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationRoleModel from "@/models/organization-role";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -126,26 +125,6 @@ const CASES: ScopeCase[] = [
     },
     fetch: (id, orgId) =>
       ChatOpsChannelBindingModel.findByIdForAudit(id, orgId),
-  },
-  {
-    name: "OptimizationRuleModel.findByIdForAudit",
-    setup: async ({ makeOrganization }) => {
-      const orgA = await makeOrganization();
-      const orgB = await makeOrganization();
-      const [rule] = await db
-        .insert(schema.optimizationRulesTable)
-        .values({
-          entityType: "organization",
-          entityId: orgB.id,
-          conditions: [{ maxLength: 1000 }],
-          provider: "openai",
-          targetModel: "gpt-4o",
-          enabled: true,
-        })
-        .returning();
-      return { id: rule.id, orgA: orgA.id };
-    },
-    fetch: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
   },
   {
     name: "LlmOauthClientModel.findByIdForAudit",
@@ -446,31 +425,6 @@ describe("audit snapshot scope invariant — deleted agent targets return null",
 
     await expect(
       LimitModel.findByIdForAudit(limit.id, org.id),
-    ).resolves.toBeNull();
-  });
-
-  test("OptimizationRuleModel.findByIdForAudit returns null for a rule targeting a deleted agent", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    const [rule] = await db
-      .insert(schema.optimizationRulesTable)
-      .values({
-        entityType: "agent",
-        entityId: agent.id,
-        conditions: [{ maxLength: 1000 }],
-        provider: "openai",
-        targetModel: "gpt-4o",
-        enabled: true,
-      })
-      .returning();
-
-    await AgentModel.delete(agent.id);
-
-    await expect(
-      OptimizationRuleModel.findByIdForAudit(rule.id, org.id),
     ).resolves.toBeNull();
   });
 

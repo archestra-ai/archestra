@@ -21,6 +21,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.created": "Agent created",
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
+  "agent.bulk_updated": "Agents bulk updated",
+  "agent.bulk_deleted": "Agents bulk deleted",
   "agent.restored": "Agent restored",
   "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
@@ -38,6 +40,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "app.created": "App created",
   "app.updated": "App updated",
   "app.deleted": "App deleted",
+  "app.bulk_updated": "Apps bulk updated",
+  "app.bulk_deleted": "Apps bulk deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -45,6 +49,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "chatOpsBinding.refreshed": "ChatOps binding refreshed",
   // ChatOps config
   "chatOpsConfig.updated": "ChatOps config updated",
+  // Plugin
+  "plugin.created": "Plugin created",
+  "plugin.updated": "Plugin updated",
+  "plugin.deleted": "Plugin deleted",
+  "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
@@ -130,6 +139,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "member.role_updated": "Member role changed",
   "member.deleted": "Member removed",
   // Optimization rule
+  // Retired with the LLM optimization rules feature; retained so audit rows
+  // written before its removal still render with a readable label.
   "optimizationRule.created": "Optimization rule created",
   "optimizationRule.updated": "Optimization rule updated",
   "optimizationRule.deleted": "Optimization rule deleted",
@@ -139,6 +150,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "project.created": "Project created",
   "project.updated": "Project updated",
   "project.deleted": "Project deleted",
+  "project.bulk_updated": "Projects bulk updated",
+  "project.bulk_deleted": "Projects bulk deleted",
   "project.restored": "Project restored",
   "project.purged": "Project permanently deleted",
   // Role
@@ -157,10 +170,15 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Skill
   "skill.created": "Skill created",
   "skill.updated": "Skill updated",
+  "skill.bulk_updated": "Skills bulk updated",
   "skill.deleted": "Skill deleted",
+  "skill.bulk_deleted": "Skills bulk deleted",
   "skill.restored": "Skill restored",
   "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
+  "skillShareLink.created": "Marketplace link created",
+  "skillShareLink.rotated": "Marketplace link rotated",
+  "skillShareLink.revoked": "Marketplace link revoked",
   // Team
   "team.created": "Team created",
   "team.updated": "Team updated",
@@ -197,6 +215,20 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Catch-all fallbacks
   "unknown.created": "Unknown create",
   "unknown.updated": "Unknown update",
+  "apiKey.bulk_deleted": "API keys bulk deleted",
+  "connector.bulk_updated": "Connectors bulk updated",
+  "connector.bulk_deleted": "Connectors bulk deleted",
+  "environment.bulk_deleted": "Environments bulk deleted",
+  "knowledgeBase.bulk_deleted": "Knowledge bases bulk deleted",
+  "knowledgeDirectory.bulk_updated": "Knowledge directories bulk updated",
+  "knowledgeDirectory.bulk_deleted": "Knowledge directories bulk deleted",
+  "knowledgeFile.bulk_updated": "Knowledge documents bulk updated",
+  "knowledgeFile.bulk_deleted": "Knowledge documents bulk deleted",
+  "llmModel.bulk_updated": "LLM models bulk updated",
+  "mcpServer.bulk_deleted": "MCP servers bulk deleted",
+  "role.bulk_deleted": "Roles bulk deleted",
+  "serviceAccount.bulk_deleted": "Service accounts bulk deleted",
+  "team.bulk_deleted": "Teams bulk deleted",
   "unknown.deleted": "Unknown delete",
 };
 
@@ -293,6 +325,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "auth",
   "chatOpsBinding",
   "chatOpsConfig",
+  "plugin",
   "connector",
   "defaultUserLimit",
   "environment",
@@ -318,6 +351,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "scheduleTrigger",
   "serviceAccount",
   "skill",
+  "skillShareLink",
   "team",
   "teamToken",
   "tool",
@@ -334,6 +368,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   auth: "Auth",
   chatOpsBinding: "ChatOps channel binding",
   chatOpsConfig: "ChatOps configuration",
+  plugin: "Plugin",
   githubAppConfig: "GitHub App configuration",
   githubPat: "GitHub PAT",
   internalMcpCatalog: "Internal MCP catalog",
@@ -352,6 +387,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   organization: "Organization",
   scheduleTrigger: "Scheduled task",
   skill: "Agent skill",
+  skillShareLink: "Marketplace link",
   teamToken: "Team / org token",
   tool: "Discovered tool",
   toolInvocationPolicy: "Tool invocation policy",

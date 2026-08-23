@@ -77,6 +77,8 @@ export const activeShareLinkSeed: ShareLink = {
   tokenStart: "archestra_skl_AAAAAAAA",
   name: null,
   marketplaceName: "archestra-test-org-skills",
+  pluginClientType: null,
+  pluginPlatform: null,
   expiresAt: "2026-09-01T00:00:00.000Z",
   revokedAt: null,
   lastUsedAt: null,
@@ -88,6 +90,7 @@ export const activeShareLinkSeed: ShareLink = {
     name,
     description,
   })),
+  plugins: [],
 };
 
 /** Same link but covering only one of the two seeded skills. */

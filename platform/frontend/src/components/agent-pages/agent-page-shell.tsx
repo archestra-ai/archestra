@@ -81,12 +81,3 @@ export function BackLink({
     </Button>
   );
 }
-
-/** Sticky submit row pinned under a wizard step's form. */
-export function AgentWizardFooter({ children }: { children: ReactNode }) {
-  return (
-    <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t bg-background py-4">
-      {children}
-    </div>
-  );
-}

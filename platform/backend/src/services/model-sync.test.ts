@@ -485,6 +485,23 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
+  test("normalizes Vertex multimodalembedding@001 as a multimodal embedding model with its native dimension", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "gemini",
+      modelId: "multimodalembedding@001",
+    });
+    expect(capabilities.inputModalities).toEqual(["text", "image"]);
+    expect(capabilities.outputModalities).toEqual([]);
+    expect(capabilities.supportsToolCalling).toBe(false);
+
+    const [model] = buildModelsToUpsert({
+      provider: "gemini",
+      models: [{ id: "multimodalembedding@001" }],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBe(1408);
+  });
+
   test("normalizes KB-supported Cohere embedding models to the KB client's modality support", () => {
     const base = {
       description: null,

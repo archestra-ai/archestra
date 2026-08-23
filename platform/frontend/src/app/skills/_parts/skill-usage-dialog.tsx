@@ -10,7 +10,10 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { useSkillUsageStatistics } from "@/lib/skills/skill.query";
+import {
+  type SkillUsageReference,
+  useSkillUsageStatistics,
+} from "@/lib/skills/skill.query";
 
 const WINDOW_DAYS = 30;
 const CHART_COLOR_COUNT = 5;
@@ -21,18 +24,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * over the last month, plus per-user totals.
  */
 export function SkillUsageDialog({
-  skillId,
+  skillRef,
   skillName,
   open,
   onOpenChange,
 }: {
-  skillId: string;
+  skillRef: SkillUsageReference;
   skillName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const { data: stats, isPending } = useSkillUsageStatistics(
-    open ? skillId : null,
+    open ? skillRef : null,
   );
 
   // Users become chart series. Series keys are synthetic (`u0`, `u1`, ...)

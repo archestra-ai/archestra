@@ -4,13 +4,15 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
+  MAX_BULK_IDS,
 } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
+import { BulkConnectorVisibilityDialog } from "@/app/knowledge/connectors/_parts/bulk-connector-visibility-dialog";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -31,7 +33,10 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -40,10 +45,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
+  useAllMatchingConnectors,
+  useBulkDeleteConnectors,
+  useBulkUpdateConnectorVisibility,
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
@@ -156,6 +165,46 @@ function ConnectorsList() {
 
   const items = connectors?.data ?? [];
   const pagination = connectors?.pagination;
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectAllMatchingFor, setSelectAllMatchingFor] = useState<
+    string | null
+  >(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkDelete = useBulkDeleteConnectors();
+  const bulkVisibility = useBulkUpdateConnectorVisibility();
+
+  // Changing a filter invalidates an escalation rather than silently
+  // re-pointing "all N" at a different N.
+  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}`;
+  const allMatchingActive = selectAllMatchingFor === filterSignature;
+  const { data: allMatching } = useAllMatchingConnectors(
+    {
+      search: search || undefined,
+      connectorType:
+        connectorTypeFilter === "all"
+          ? undefined
+          : (connectorTypeFilter as NonNullable<
+              archestraApiTypes.GetConnectorsData["query"]
+            >["connectorType"]),
+      status: isDeletedView ? "deleted" : undefined,
+    },
+    { enabled: allMatchingActive },
+  );
+
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setSelectAllMatchingFor(null);
+  }, []);
+
+  // The deleted view has its own lifecycle actions (restore, purge), so bulk
+  // editing is offered only over live connectors.
+  const selectedConnectors = isDeletedView
+    ? []
+    : allMatchingActive
+      ? (allMatching ?? [])
+      : items.filter((connector) => rowSelection[connector.id]);
   const hasActiveFilters =
     !!search || connectorTypeFilter !== "all" || isDeletedView;
 
@@ -193,6 +242,10 @@ function ConnectorsList() {
   }, [searchParams, router, pathname]);
 
   const columns: ColumnDef<ConnectorItem>[] = [
+    createSelectColumn<ConnectorItem>({
+      rowLabel: (connector) => `Select ${connector.name}`,
+      allLabel: "Select all connectors on this page",
+    }),
     {
       id: "icon",
       size: 40,
@@ -394,34 +447,129 @@ function ConnectorsList() {
             onRetry={() => refetchConnectors()}
           />
         ) : (
-          <DataTable
-            columns={isDeletedView ? deletedColumns : columns}
-            data={items}
-            getRowId={(row) => row.id}
-            // The deleted view always counts as filtered (see
-            // hasActiveFilters), so its empty state is the filtered one below.
-            emptyMessage="No connectors found"
-            hasActiveFilters={hasActiveFilters}
-            onClearFilters={clearFilters}
-            filteredEmptyMessage={
-              isDeletedView
-                ? "No deleted connectors found."
-                : "No connectors match your filters. Try adjusting your search."
-            }
-            hideSelectedCount
-            manualPagination
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: pagination?.total ?? 0,
+          <>
+            {!isDeletedView && (
+              <BulkActionsBar
+                count={selectedConnectors.length}
+                noun="connector"
+                onClear={clearSelection}
+                busy={bulkDelete.isPending || bulkVisibility.isPending}
+                selectAllMatching={{
+                  total: pagination?.total ?? items.length,
+                  pageFullySelected:
+                    items.length > 0 &&
+                    items.every((connector) => rowSelection[connector.id]),
+                  active: allMatchingActive,
+                  onSelectAll: () => setSelectAllMatchingFor(filterSignature),
+                  matchDescription: "match this search",
+                  max: MAX_BULK_IDS,
+                }}
+                className="mb-3"
+              >
+                <PermissionButton
+                  permissions={{ knowledgeSource: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ knowledgeSource: ["delete"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
+            )}
+
+            <DataTable
+              columns={isDeletedView ? deletedColumns : columns}
+              data={items}
+              getRowId={(row) => row.id}
+              rowSelection={isDeletedView ? undefined : rowSelection}
+              onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
+              // The deleted view always counts as filtered (see
+              // hasActiveFilters), so its empty state is the filtered one below.
+              emptyMessage="No connectors found"
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+              filteredEmptyMessage={
+                isDeletedView
+                  ? "No deleted connectors found."
+                  : "No connectors match your filters. Try adjusting your search."
+              }
+              hideSelectedCount
+              manualPagination
+              pagination={{
+                pageIndex,
+                pageSize,
+                total: pagination?.total ?? 0,
+              }}
+              onPaginationChange={handlePaginationChange}
+              isLoading={isFetching || isPending}
+              onRowClick={
+                isDeletedView
+                  ? undefined
+                  : (row) => router.push(`/knowledge/connectors/${row.id}`)
+              }
+            />
+          </>
+        )}
+
+        {bulkDeleteOpen && (
+          <DeleteConfirmDialog
+            open={bulkDeleteOpen}
+            onOpenChange={setBulkDeleteOpen}
+            title="Delete connectors"
+            description={`Delete ${selectedConnectors.length} ${
+              selectedConnectors.length === 1 ? "connector" : "connectors"
+            }? Their synced documents stop being searchable, and each one's stored credential is destroyed — a restored connector comes back disabled and re-authenticates.`}
+            isPending={bulkDelete.isPending}
+            onConfirm={() => {
+              bulkDelete.mutate(selectedConnectors, {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "connector",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              });
             }}
-            onPaginationChange={handlePaginationChange}
-            isLoading={isFetching || isPending}
-            onRowClick={
-              isDeletedView
-                ? undefined
-                : (row) => router.push(`/knowledge/connectors/${row.id}`)
-            }
+            confirmLabel="Delete connectors"
+            pendingLabel="Deleting..."
+          />
+        )}
+
+        {bulkVisibilityOpen && (
+          <BulkConnectorVisibilityDialog
+            open={bulkVisibilityOpen}
+            onOpenChange={setBulkVisibilityOpen}
+            count={selectedConnectors.length}
+            isPending={bulkVisibility.isPending}
+            onApply={async (change) => {
+              const outcome = await bulkVisibility.mutateAsync({
+                connectors: selectedConnectors,
+                visibility: change.visibility,
+                teamIds: change.teamIds,
+              });
+              reportBulkOutcome({
+                outcome,
+                verb: "Updated",
+                failureVerb: "update",
+                noun: "connector",
+              });
+              if (outcome.succeeded.length === 0) return false;
+              if (outcome.failed.length === 0) clearSelection();
+              return true;
+            }}
           />
         )}
 

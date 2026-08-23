@@ -153,6 +153,96 @@ describe("restoreRenderableAssistantParts", () => {
     ).toEqual(nextMessages);
   });
 
+  test("preserves a completed assistant's rendered tool image while a later turn streams", () => {
+    const imagePart = {
+      type: "tool-archestra__query_knowledge_sources",
+      toolCallId: "tool-1",
+      state: "output-available",
+      input: { query: "lobsters" },
+      output: {
+        content: "[image: result.webp (image/webp)]",
+        rawContent: [
+          {
+            type: "image",
+            data: "UklGRg==",
+            mimeType: "image/webp",
+          },
+        ],
+      },
+    };
+    const previousAssistant = {
+      id: "assistant-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "I found an image." }, imagePart],
+    } as UIMessage;
+    const previousMessages = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "find" }] },
+      previousAssistant,
+    ] as UIMessage[];
+    const nextMessages = [
+      previousMessages[0],
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "I found an image." },
+          {
+            ...imagePart,
+            output: { content: "[image: result.webp (image/webp)]" },
+          },
+        ],
+      },
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "more" }] },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Working..." }],
+      },
+    ] as UIMessage[];
+
+    const restored = restoreRenderableAssistantParts({
+      previousMessages,
+      nextMessages,
+    });
+
+    expect(restored[1].parts).toBe(previousAssistant.parts);
+    expect(restored.at(-1)).toBe(nextMessages.at(-1));
+  });
+
+  test("does not replace a historical tool image that remains present", () => {
+    const imagePart = {
+      type: "tool-archestra__query_knowledge_sources",
+      toolCallId: "tool-1",
+      state: "output-available",
+      input: {},
+      output: {
+        content: "[image]",
+        rawContent: [
+          { type: "image", data: "UklGRg==", mimeType: "image/webp" },
+        ],
+      },
+    };
+    const previousMessages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [imagePart],
+      },
+    ] as UIMessage[];
+    const nextMessages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ ...imagePart }],
+      },
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "more" }] },
+    ] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toBe(nextMessages);
+  });
+
   test("returns the original nextMessages array when no restoration is needed", () => {
     const previousMessages = [
       {

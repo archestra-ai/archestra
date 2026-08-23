@@ -38,6 +38,7 @@ import type {
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
+  ToolCallBlock,
   ToolCompressionStats,
   ToonSkipReason,
   UnsafeContextBoundary,
@@ -282,15 +283,13 @@ export function canonicalizeCommonMessageToolNames(
 }
 
 /**
- * Calculate both baseline and actual costs for an interaction.
+ * Calculate the costs recorded on an interaction.
  */
 export async function calculateInteractionCosts(params: {
-  baselineModel: string;
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
 }): Promise<{
-  baselineCost: number | undefined;
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
@@ -301,13 +300,6 @@ export async function calculateInteractionCosts(params: {
     writeTokens: params.usage.cacheWriteTokens ?? 0,
     write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
   };
-  const baselineCost = await utils.costOptimization.calculateCost(
-    params.baselineModel,
-    params.usage.inputTokens,
-    params.usage.outputTokens,
-    params.providerName,
-    cacheTokens,
-  );
   const actualCost = await utils.costOptimization.calculateCost(
     params.actualModel,
     params.usage.inputTokens,
@@ -323,7 +315,6 @@ export async function calculateInteractionCosts(params: {
     params.usage.cacheWrite1hTokens ?? 0,
   );
   return {
-    baselineCost,
     actualCost,
     cacheCost: cacheBreakdown?.cacheCost,
     cacheSavings: cacheBreakdown?.cacheSavings,
@@ -425,10 +416,8 @@ export function buildInteractionRecord(params: {
   processedRequest: unknown;
   response: unknown;
   actualModel: string;
-  baselineModel: string;
   usage: UsageView;
   costs: {
-    baselineCost: number | undefined;
     actualCost: number | undefined;
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
@@ -437,6 +426,7 @@ export function buildInteractionRecord(params: {
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
+  toolCallBlock?: ToolCallBlock;
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
@@ -459,8 +449,16 @@ export function buildInteractionRecord(params: {
     response: params.response as InteractionResponse,
     dualLlmAnalyses: params.dualLlmAnalyses,
     unsafeContextBoundary: params.unsafeContextBoundary,
+    toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
-    baselineModel: params.baselineModel,
+    // `baseline_model` / `baseline_cost` predate the removal of optimization
+    // rules, which were the only thing that could swap the requested model for
+    // a cheaper one. Nothing rewrites the model any more, so the baseline is
+    // the model actually used. They stay populated (rather than null) so the
+    // savings statistics, which read `baseline_cost - cost`, report no
+    // optimization saving instead of a negative one, and so historical rows
+    // written while rules existed keep their meaning.
+    baselineModel: params.actualModel,
     inputTokens: params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
     outputTokens: params.usage.outputTokens,
@@ -468,7 +466,7 @@ export function buildInteractionRecord(params: {
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
-    baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
+    baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
     toonTokensBefore: params.toonStats.tokensBefore,
@@ -483,6 +481,32 @@ export function buildInteractionRecord(params: {
  * Used by both streaming and non-streaming paths when tool invocation
  * policies refuse tool calls.
  */
+/**
+ * The row-level marker for a turn whose tool calls a guardrail refused.
+ *
+ * A refusal is otherwise persisted as an ordinary assistant turn — normal
+ * finish reason, no error field — so nothing on the row separates it from a
+ * healthy one. That is invisible exactly where it costs most: an unattended
+ * agent whose correct output is sometimes nothing looks identical whether it
+ * did the work or was cut off mid-turn. Spans and the blocked-tool counter
+ * already carry the event, but neither can be joined to a session's rows after
+ * the fact, which is what triaging one of these actually requires.
+ *
+ * Returns undefined when nothing was blocked, so the column stays NULL on the
+ * overwhelming majority of rows.
+ */
+export function toToolCallBlock(
+  refusal: utils.toolInvocation.PolicyBlockResult | null,
+): ToolCallBlock | undefined {
+  if (!refusal) {
+    return undefined;
+  }
+  return {
+    reason: refusal.reason,
+    blockedToolCallCount: refusal.allToolCallNames.length,
+  };
+}
+
 export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;

@@ -5,10 +5,14 @@ import {
   type SupportedProvider,
   slugify,
 } from "@archestra/shared";
+import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  ExternalMcpSkillUsageEventModel,
   SkillEnvironmentModel,
   SkillModel,
   SkillTeamModel,
@@ -16,6 +20,8 @@ import {
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import { getExternalMcpSkill } from "@/services/external-mcp-skills";
+import { formatExternalSkillActivation } from "@/skills/external-skill-activation";
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
@@ -25,6 +31,7 @@ import {
 import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
+import { agentOwner } from "@/types";
 import { spliceText } from "./augment-last-user-message";
 
 /**
@@ -226,4 +233,100 @@ export async function injectSkillActivation({
   const next = [...messages];
   next[lastUserIndex] = spliceText(userMessage, activationBlock, "prepend");
   return next;
+}
+
+export async function injectExternalMcpSkillActivation({
+  messages,
+  organizationId,
+  userId,
+  agentId,
+  conversationId,
+  provider,
+  model,
+}: {
+  messages: ChatMessage[];
+  organizationId: string;
+  userId: string;
+  agentId: string | undefined;
+  conversationId: string | undefined;
+  provider: SupportedProvider;
+  model: string;
+}): Promise<ChatMessage[]> {
+  if (!config.mcpGateway.skillsEnabled || agentId === undefined)
+    return messages;
+  const lastUserIndex = messages.findLastIndex(
+    (message) => message.role === "user",
+  );
+  if (lastUserIndex === -1) return messages;
+
+  const userMessage = messages[lastUserIndex];
+  const metadata = ChatMessageMetadataSchema.safeParse(
+    userMessage.metadata,
+  ).data;
+  const skillRef = metadata?.externalMcpSkill;
+  if (!skillRef || metadata.skill) return messages;
+
+  const skillChecker = await getSkillPermissionChecker({
+    userId,
+    organizationId,
+  });
+  if (!skillChecker.canRead) return messages;
+
+  const [{ isAdmin: isMcpServerAdmin }, environmentId, gatewayToken] =
+    await Promise.all([
+      getMcpCatalogPermissionChecker({ userId, organizationId }),
+      AgentModel.findEnvironmentId(agentId),
+      selectMCPGatewayToken(agentId, userId, organizationId),
+    ]);
+
+  try {
+    const live = await getExternalMcpSkill({
+      id: skillRef.id,
+      mcpServerId: skillRef.mcpServerId,
+      userId,
+      organizationId,
+      isMcpServerAdmin,
+      environmentId,
+      owner: agentOwner(agentId),
+      tokenAuth: gatewayToken
+        ? {
+            tokenId: gatewayToken.tokenId,
+            teamId: gatewayToken.teamId,
+            isOrganizationToken: gatewayToken.isOrganizationToken,
+            organizationId,
+            isUserToken: gatewayToken.isUserToken,
+            userId,
+          }
+        : undefined,
+    });
+    if (!live || live.uri !== skillRef.uri) return messages;
+
+    const activationBlock = formatExternalSkillActivation(live);
+    const contextTokens = measureSkillContextTokens({
+      block: activationBlock,
+      provider,
+      model,
+    });
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: live.mcpServerId,
+      uri: live.uri,
+      userId,
+      sessionId: conversationId ?? null,
+      contextTokens,
+    });
+    reportSkillActivation({
+      activationType: "chat_attachment",
+      contextTokens,
+    });
+
+    const next = [...messages];
+    next[lastUserIndex] = spliceText(userMessage, activationBlock, "prepend");
+    return next;
+  } catch (error) {
+    logger.warn(
+      { error, organizationId, mcpServerId: skillRef.mcpServerId },
+      "[Skills] External MCP Skill attachment could not be activated",
+    );
+    return messages;
+  }
 }

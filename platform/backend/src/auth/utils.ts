@@ -2,6 +2,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   type Action,
   ADMIN_ROLE_NAME,
+  isPermissionActionGranted,
   type Permissions,
   PLATFORM_ADMIN_ROLE_NAME,
   type Resource,
@@ -139,7 +140,11 @@ export const userHasPermission = async (
     organizationId,
   });
 
-  return permissions[resource]?.includes(action) ?? false;
+  return isPermissionActionGranted({
+    resource,
+    grantedActions: permissions[resource] ?? [],
+    requiredAction: action,
+  });
 };
 
 /**
@@ -290,9 +295,14 @@ function getMissingPermissions(
 ): Permissions {
   const missing: Permissions = {};
   for (const [resource, actions] of Object.entries(requiredPermissions)) {
+    const grantedActions = grantedPermissions[resource as Resource] ?? [];
     for (const action of actions) {
       if (
-        !grantedPermissions[resource as Resource]?.includes(action as Action)
+        !isPermissionActionGranted({
+          resource: resource as Resource,
+          grantedActions,
+          requiredAction: action as Action,
+        })
       ) {
         const missingActions = missing[resource as Resource] ?? [];
         missingActions.push(action as Action);

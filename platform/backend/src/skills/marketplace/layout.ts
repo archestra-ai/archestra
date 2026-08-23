@@ -3,20 +3,32 @@ import { dump as dumpYaml } from "js-yaml";
 import logger from "@/logging";
 import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillFile } from "@/types";
+import type {
+  ClientType,
+  PluginFileEncoding,
+  PluginFileMode,
+} from "@/types/plugin";
 import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import {
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
+  buildCodexPluginMarketplaceEntry,
+  buildCodexPluginPayloadManifest,
+  buildPluginMarketplaceEntry,
+  buildPluginPayloadManifest,
   buildSimpleMarketplaceManifest,
   buildSimplePluginManifest,
   type MarketplaceSkillInput,
+  pluginManifestPath,
   resolveMarketplaceSkills,
+  resolvePluginName,
+  resolvePluginVersion,
 } from "./manifest";
 
 /**
  * Pure layout builder: turns a `MaterializeRequest` into the flat list of
  * files that make up the marketplace git tree (`.claude-plugin/`, `.agents/`,
- * the single bundle plugin, and one `skills/<slug>/` directory per shared
+ * the single plugin plugin, and one `skills/<slug>/` directory per shared
  * skill with its SKILL.md + resource files).
  *
  * Output is consumed both by the content-hash dedupe and the on-disk commit
@@ -45,9 +57,26 @@ export interface MaterializeRequest {
   ownerName: string;
   displayName: string;
   skills: MaterializeSkillInput[];
+  plugins?: MaterializePluginInput[];
 }
 
-export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
+export interface MaterializePluginInput {
+  pluginSlug: string;
+  displayName: string;
+  description: string;
+  clientType: ClientType;
+  files: Array<{
+    path: string;
+    content: string;
+    encoding: PluginFileEncoding;
+    mode: PluginFileMode;
+  }>;
+}
+
+export function computeLayout(
+  req: MaterializeRequest,
+  revisionSequence: number,
+): RevisionPayloadFile[] {
   const manifestSkills = req.skills.map<MarketplaceSkillInput>((skill) => ({
     id: skill.id,
     name: skill.name,
@@ -55,34 +84,95 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
     updatedAt: skill.updatedAt,
   }));
   const resolved = resolveMarketplaceSkills(manifestSkills);
+  const version = resolvePluginVersion(revisionSequence);
+  const plugins = [...(req.plugins ?? [])].sort((a, b) =>
+    a.pluginSlug.localeCompare(b.pluginSlug),
+  );
 
   const files: RevisionPayloadFile[] = [];
 
   // Claude Code and Cursor read byte-identical marketplace manifests; only
   // the path differs.
-  const simpleMarketplaceJson = jsonStringify(
-    buildSimpleMarketplaceManifest({
-      marketplaceName: req.marketplaceName,
-      ownerName: req.ownerName,
-      skills: manifestSkills,
-    }),
+  const simpleMarketplace = buildSimpleMarketplaceManifest({
+    marketplaceName: req.marketplaceName,
+    ownerName: req.ownerName,
+    skills: manifestSkills,
+    version,
+  });
+  const claudeMarketplace = {
+    ...simpleMarketplace,
+    plugins: [...simpleMarketplace.plugins],
+  };
+  const cursorMarketplace = {
+    ...simpleMarketplace,
+    plugins: [...simpleMarketplace.plugins],
+  };
+  const codexMarketplace = buildCodexMarketplaceManifest({
+    marketplaceName: req.marketplaceName,
+    displayName: req.displayName,
+    skills: manifestSkills,
+    version,
+  });
+
+  for (const plugin of plugins) {
+    const pluginName = resolvePluginName(plugin.pluginSlug);
+    const simpleEntry = buildPluginMarketplaceEntry({
+      pluginName,
+      description: plugin.description,
+      version,
+    });
+    if (plugin.clientType === "claude-code") {
+      claudeMarketplace.plugins.push(simpleEntry);
+    } else if (plugin.clientType === "cursor") {
+      cursorMarketplace.plugins.push(simpleEntry);
+    } else if (plugin.clientType === "codex") {
+      codexMarketplace.plugins.push(
+        buildCodexPluginMarketplaceEntry({
+          pluginName,
+          description: plugin.description,
+          version,
+        }),
+      );
+    }
+  }
+
+  files.push(
+    textFile(
+      ".claude-plugin/marketplace.json",
+      jsonStringify(claudeMarketplace),
+    ),
   );
   files.push(
-    textFile(".claude-plugin/marketplace.json", simpleMarketplaceJson),
-  );
-  files.push(
-    textFile(".cursor-plugin/marketplace.json", simpleMarketplaceJson),
+    textFile(
+      ".cursor-plugin/marketplace.json",
+      jsonStringify(cursorMarketplace),
+    ),
   );
   files.push(
     textFile(
       ".agents/plugins/marketplace.json",
-      jsonStringify(
-        buildCodexMarketplaceManifest({
-          marketplaceName: req.marketplaceName,
-          displayName: req.displayName,
-          skills: manifestSkills,
-        }),
-      ),
+      jsonStringify(codexMarketplace),
+    ),
+  );
+  const copilotPlugins = plugins.filter(
+    (plugin) => plugin.clientType === "copilot-cli",
+  );
+  files.push(
+    textFile(
+      ".github/plugin/marketplace.json",
+      jsonStringify({
+        ...simpleMarketplace,
+        plugins: [
+          ...simpleMarketplace.plugins,
+          ...copilotPlugins.map((plugin) =>
+            buildPluginMarketplaceEntry({
+              pluginName: resolvePluginName(plugin.pluginSlug),
+              description: plugin.description,
+              version,
+            }),
+          ),
+        ],
+      }),
     ),
   );
   const pluginRoot = `plugins/${req.marketplaceName}`;
@@ -91,11 +181,61 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       marketplaceName: req.marketplaceName,
       ownerName: req.ownerName,
       skills: manifestSkills,
+      version,
     }),
   );
   files.push(
     textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson),
   );
+  files.push(textFile(`${pluginRoot}/plugin.json`, simplePluginJson));
+
+  for (const plugin of plugins) {
+    const pluginName = resolvePluginName(plugin.pluginSlug);
+    const pluginRoot = `plugins/${pluginName}`;
+    const manifestPath = pluginManifestPath(plugin.clientType);
+    const manifest =
+      plugin.clientType === "codex"
+        ? buildCodexPluginPayloadManifest({
+            pluginName,
+            displayName: plugin.displayName,
+            description: plugin.description,
+            version,
+          })
+        : buildPluginPayloadManifest({
+            pluginName,
+            description: plugin.description,
+            version,
+          });
+    const sourceProvidesManifest = plugin.files.some(
+      (file) => file.path.toLowerCase() === manifestPath.toLowerCase(),
+    );
+    if (!sourceProvidesManifest) {
+      files.push(
+        textFile(`${pluginRoot}/${manifestPath}`, jsonStringify(manifest)),
+      );
+    }
+
+    const seenPluginPaths = new Set<string>();
+    if (!sourceProvidesManifest) {
+      seenPluginPaths.add(manifestPath.toLowerCase());
+    }
+    for (const file of plugin.files) {
+      const resolvedFile = resolvePluginFile({ file, pluginRoot });
+      if (!resolvedFile) continue;
+      const relativeLower = resolvedFile.path
+        .slice(pluginRoot.length + 1)
+        .toLowerCase();
+      if (seenPluginPaths.has(relativeLower)) {
+        logger.warn(
+          { path: resolvedFile.path },
+          "materialize: skipping plugin file with path collision",
+        );
+        continue;
+      }
+      seenPluginPaths.add(relativeLower);
+      files.push(resolvedFile);
+    }
+  }
   files.push(
     textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson),
   );
@@ -107,6 +247,7 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
           marketplaceName: req.marketplaceName,
           displayName: req.displayName,
           skills: manifestSkills,
+          version,
         }),
       ),
     ),
@@ -233,6 +374,38 @@ function resolveResourceFile(params: {
     path: `${skillRoot}/${relPath}`,
     mode: "100644",
     encoding: file.encoding === "base64" ? "base64" : "utf8",
+    content: file.content,
+  };
+}
+
+function resolvePluginFile(params: {
+  file: MaterializePluginInput["files"][number];
+  pluginRoot: string;
+}): RevisionPayloadFile | null {
+  const { file, pluginRoot } = params;
+  if (file.path.includes("\0") || file.path.includes("\\")) {
+    logger.warn(
+      { path: file.path },
+      "materialize: skipping plugin file with unsafe path",
+    );
+    return null;
+  }
+  const relPath = path.posix.normalize(file.path.replace(/^\.\//, ""));
+  if (
+    path.posix.isAbsolute(relPath) ||
+    relPath === "." ||
+    relPath.split("/").some((segment) => segment === "..")
+  ) {
+    logger.warn(
+      { path: file.path },
+      "materialize: skipping plugin file with traversal path",
+    );
+    return null;
+  }
+  return {
+    path: `${pluginRoot}/${relPath}`,
+    mode: file.mode,
+    encoding: file.encoding,
     content: file.content,
   };
 }

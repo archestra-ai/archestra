@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
@@ -13,7 +20,9 @@ import {
   useMissingPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpCatalogItemPage } from "./page.client";
 
 // The overview is a small part of a page that pulls in install dialogs,
@@ -25,7 +34,13 @@ import { McpCatalogItemPage } from "./page.client";
 // stubbed — the overview is one part of a page whose install dialogs, logs
 // and inspectors reach for the rest — and the handful this test depends on
 // are given real answers.
-const { useInternalMcpCatalog, stubs } = vi.hoisted(() => {
+const {
+  useInternalMcpCatalog,
+  useMcpServers,
+  useMcpDeploymentStatuses,
+  reauthenticateMutateAsync,
+  stubs,
+} = vi.hoisted(() => {
   const quiet = () => ({
     data: undefined,
     isPending: false,
@@ -36,7 +51,13 @@ const { useInternalMcpCatalog, stubs } = vi.hoisted(() => {
     Object.fromEntries(
       names.map((name) => [name, overrides[name] ?? quiet]),
     ) as Record<string, unknown>;
-  return { useInternalMcpCatalog: vi.fn(), stubs: stubbed };
+  return {
+    useInternalMcpCatalog: vi.fn(),
+    useMcpServers: vi.fn(),
+    useMcpDeploymentStatuses: vi.fn(),
+    reauthenticateMutateAsync: vi.fn(),
+    stubs: stubbed,
+  };
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -83,18 +104,24 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useReauthenticateMcpServer",
       "useReinstallMcpServer",
       "useMcpDeploymentStatuses",
+      "useDismissMcpServerAlerts",
+      "useRestoreMcpServerAlerts",
     ],
     {
-      useMcpServers: () => ({ data: [] }),
+      useMcpServers: () => useMcpServers(),
       useAutoModeAgents: () => ({ data: [] }),
-      useMcpDeploymentStatuses: () => ({ data: {} }),
+      useMcpDeploymentStatuses: () => useMcpDeploymentStatuses(),
       useMcpInstallationStatusCacheSync: () => {},
+      useReauthenticateMcpServer: () => ({
+        mutateAsync: reauthenticateMutateAsync,
+        isPending: false,
+      }),
     },
   ),
 );
 
 vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
-  useMcpServerIssues: () => ({ issuesByCatalog: new Map() }),
+  useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
 vi.mock("@/lib/organization.query", () => ({
@@ -151,20 +178,29 @@ const localItem = {
   },
 };
 
-function renderPage(overrides: Record<string, unknown> = {}) {
+function renderPage(
+  overrides: Record<string, unknown> = {},
+  options: { openOverview?: boolean } = {},
+) {
   useInternalMcpCatalog.mockReturnValue({
     data: [{ ...localItem, ...overrides }],
     isPending: false,
   });
   // Some of the page's children query directly; the page's own reads are
   // mocked above, so this client never fetches.
-  return render(
+  const result = render(
     <QueryClientProvider client={new QueryClient()}>
       <McpCatalogItemPage id="cat-1" />
     </QueryClientProvider>,
   );
+  if (options.openOverview !== false) {
+    const overview = screen.queryByRole("button", { name: "Overview" });
+    if (overview) fireEvent.click(overview);
+  }
+  return result;
 }
 
+/** The card whose heading names it. Every card title is one rank. */
 function section(name: string) {
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
@@ -191,41 +227,70 @@ describe("McpCatalogItemDetailPage overview", () => {
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
     vi.mocked(useMissingPermissions).mockReturnValue({});
+    // Nothing wrong with the server unless a test says so — `clearAllMocks`
+    // keeps implementations, so a per-test issue would otherwise leak into
+    // every test after it.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map(),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    // Nothing installed and a live Kubernetes feed, unless a test says so.
+    useMcpServers.mockReturnValue({ data: [] });
+    useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
+    reauthenticateMutateAsync.mockResolvedValue({ id: "srv-1" });
   });
 
-  it("reads the command as one runnable line, from the API's argument array", () => {
+  /** One installed connection for this catalog entry, with no pod reported. */
+  function installedWithNoDeploymentEntry() {
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-1",
+          catalogId: "cat-1",
+          serverType: "local",
+          ownerId: "u1",
+          teamId: null,
+          createdAt: "2026-08-02T10:00:00.000Z",
+        },
+      ],
+    });
+  }
+
+  it("collapses Overview by default and keeps installations visible", () => {
+    renderPage({}, { openOverview: false });
+
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("heading", { name: "Runtime" })).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Installations" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Installations" })).toHaveAttribute(
+      "href",
+      "/mcp/registry/cat-1?tab=credentials",
+    );
+  });
+
+  it("keeps editor-only command and installation prompts out of Overview", () => {
     renderPage();
 
-    const connection = section("Connection");
-    // Joined with spaces — reading the wizard's textarea shape here would
-    // spread the string into one character per argument.
+    expect(screen.queryByText("sh -c node server.js --port 8080")).toBeNull();
     expect(
-      connection.getByText("sh -c node server.js --port 8080"),
-    ).toBeInTheDocument();
-    expect(
-      connection.getByRole("button", { name: /copy/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Environment variables" }),
+    ).toBeNull();
+    expect(screen.queryByText("API_TOKEN")).toBeNull();
+    expect(screen.getByText("Default")).toBeVisible();
   });
 
   it("shows the deployment facts the wizard asks for", () => {
     renderPage();
 
-    const connection = section("Connection");
-    expect(connection.getByText(/Single-tenant/)).toBeInTheDocument();
-    expect(connection.getByText("stdio")).toBeInTheDocument();
-    expect(connection.getByText("Generated")).toBeInTheDocument();
-  });
-
-  it("names the environment variables, split by when they are supplied", () => {
-    renderPage();
-
-    const environment = section("Environment");
-    expect(environment.getByText("Asked at installation")).toBeInTheDocument();
-    expect(environment.getByText("API_TOKEN")).toBeInTheDocument();
-    expect(environment.getByText("Set on the server")).toBeInTheDocument();
-    expect(environment.getByText("LOG_LEVEL")).toBeInTheDocument();
-    expect(environment.getByText("From Kubernetes")).toBeInTheDocument();
-    expect(environment.getByText("shared-creds")).toBeInTheDocument();
+    const runtime = section("Runtime");
+    expect(runtime.getByText(/Single-tenant/)).toBeInTheDocument();
+    expect(runtime.getByText("stdio")).toBeInTheDocument();
+    expect(runtime.queryByText("Generated")).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -249,7 +314,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(auth.queryByText("shhh")).toBeNull();
   });
 
-  it("shows each team's access level, which the visibility badge cannot", () => {
+  it("leaves record metadata and exact tool inventory to their dedicated surfaces", () => {
     renderPage({
       scope: "team",
       teams: [
@@ -258,18 +323,331 @@ describe("McpCatalogItemDetailPage overview", () => {
       ],
     });
 
-    const teams = screen.getByText("Teams").parentElement as HTMLElement;
-    expect(within(teams).getByText("Platform")).toBeInTheDocument();
-    expect(within(teams).getByText("Manage")).toBeInTheDocument();
-    expect(within(teams).getByText("Support")).toBeInTheDocument();
-    expect(within(teams).getByText("Use")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Platform")).toBeNull();
+    expect(screen.queryByText("Support")).toBeNull();
   });
 
-  it("credits the author and the last change", () => {
+  it("keeps one Edit in the header and none on the overview cards", () => {
     renderPage();
-    // The author and date are separate spans inside the one field.
-    const created = screen.getByText("Created").parentElement as HTMLElement;
-    expect(created).toHaveTextContent(/by Admin on/);
-    expect(screen.getByText("Last updated")).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/mcp/registry/cat-1/edit?step=configuration",
+    );
+    expect(
+      section("Runtime").queryByRole("link", { name: /^Edit\b/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Authentication" }),
+    ).toBeNull();
+  });
+
+  it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {
+    // A remote connection whose token was rejected: a row exists, and it is
+    // not working. Deriving the status from the row alone read "Connected"
+    // with a green dot directly above the notice saying otherwise.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "invalid_grant",
+              since: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const pageTitle = screen.getByRole("heading", { level: 1 });
+    expect(within(pageTitle).queryByText("Needs re-authentication")).toBeNull();
+    expect(
+      within(pageTitle.parentElement as HTMLElement).queryByText(
+        "Needs re-authentication",
+      ),
+    ).toBeNull();
+    const issue = within(
+      screen.getByTestId("mcp-registry-attention-row-internal-tools"),
+    );
+    expect(issue.getByText("Needs re-authentication")).toBeVisible();
+    expect(
+      issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
+    ).toBeVisible();
+    expect(issue.queryByRole("button", { name: "Re-authenticate" })).toBeNull();
+    expect(
+      issue.queryByRole("button", { name: "Edit configuration" }),
+    ).toBeNull();
+    expect(issue.queryByRole("button", { name: /More actions/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
+  });
+
+  it("keeps dismissed alerts off the server details page", () => {
+    installedWithNoDeploymentEntry();
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "invalid_grant",
+              since: null,
+              fingerprint: "v1:needs-reauth:test",
+              muted: true,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(
+      screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
+    ).toBeNull();
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+  });
+
+  it("repairs the selected connection inline without opening a dialog", async () => {
+    const user = userEvent.setup();
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-1") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useFeature).mockImplementation(
+      (feature) =>
+        (feature === "mcpServerAlertingEnabled") as ReturnType<
+          typeof useFeature
+        >,
+    );
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-1",
+          catalogId: "cat-1",
+          name: "internal-tools",
+          serverType: "local",
+          ownerId: "u1",
+          ownerEmail: "admin@example.com",
+          teamId: null,
+          scope: "org",
+          secretStorageType: "none",
+          createdAt: "2026-08-02T10:00:00.000Z",
+          assignedAgents: [],
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshErrorDescription:
+            "The refresh token has expired or been revoked.",
+          oauthRefreshFailedAt: null,
+        },
+      ],
+    });
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: "The refresh token has expired or been revoked.",
+              since: null,
+              fingerprint: "v1:needs-reauth:test",
+              muted: false,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+
+    // This catalog intentionally has no oauthConfig: the server error payload,
+    // not catalog metadata, is the source of truth for the required action.
+    renderPage({ oauthConfig: null });
+
+    const form = screen.getByTestId("inline-mcp-reauthentication-form");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(form).getByText("Connection owner")).toBeInTheDocument();
+    expect(within(form).getByText("Organization")).toBeInTheDocument();
+    expect(
+      within(form).getByText(/Use Manage credentials to add or remove/),
+    ).toBeInTheDocument();
+    const installationRow = screen.getByRole("row", { name: /Organization/ });
+    expect(
+      within(installationRow).getByText("admin@example.com"),
+    ).toBeVisible();
+    expect(within(installationRow).queryByText(/Created by:/)).toBeNull();
+    expect(
+      within(installationRow).queryByText(
+        "The refresh token is invalid, expired, or has been revoked",
+      ),
+    ).toBeNull();
+    expect(
+      within(installationRow).getByRole("button", { name: "Revoke" }),
+    ).toBeInTheDocument();
+    await user.type(within(form).getByLabelText(/API_TOKEN/), "new-token");
+    await user.click(
+      within(form).getByRole("button", { name: "Update Credentials" }),
+    );
+    await waitFor(() =>
+      expect(reauthenticateMutateAsync).toHaveBeenCalledWith({
+        id: "srv-1",
+        name: "internal-tools",
+        environmentValues: { API_TOKEN: "new-token" },
+        userConfigValues: {},
+        isByosVault: false,
+      }),
+    );
+    expect(replace).toHaveBeenCalledWith(
+      "/mcp/registry/cat-1?tab=credentials",
+      { scroll: false },
+    );
+  });
+
+  it("keeps the OAuth reconnect form flat inside the credentials card", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-1") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-1",
+          catalogId: "cat-1",
+          name: "Linear Test",
+          serverType: "remote",
+          ownerId: "u1",
+          ownerEmail: "admin@example.com",
+          teamId: null,
+          scope: "org",
+          secretStorageType: "none",
+          createdAt: "2026-08-02T10:00:00.000Z",
+          assignedAgents: [],
+          oauthRefreshError: "refresh_failed",
+        },
+      ],
+    });
+    renderPage({
+      serverType: "remote",
+      localConfig: null,
+      oauthConfig: {
+        grantType: "authorization_code",
+        client_id: "abc123",
+        tokenEndpoint: "https://auth.example.com/token",
+        scopes: ["read"],
+      },
+    });
+
+    const form = screen.getByTestId("inline-mcp-reauthentication-form");
+    expect(form.parentElement).toHaveClass(
+      "rounded-lg",
+      "border",
+      "bg-card",
+      "p-4",
+    );
+    expect(form).not.toHaveClass("rounded-lg", "border", "bg-muted/20");
+    expect(
+      within(form).getByRole("button", { name: "Cancel" }).parentElement,
+    ).not.toHaveClass("border-t", "bg-background/60");
+  });
+
+  it("reports the live fault, not the one the reader silenced", () => {
+    // Issues are kind-ordered, and muting cuts across that order. Taking the
+    // first issue made this page say "Failed to start" with a bell-off icon
+    // while the registry list said "Needs re-authentication" for the same row.
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map([
+        [
+          "cat-1",
+          [
+            {
+              kind: "failed-to-start",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-1",
+              detail: null,
+              since: null,
+              muted: true,
+              mutedReason: null,
+            },
+            {
+              kind: "needs-reauth",
+              audience: "you",
+              catalogId: "cat-1",
+              serverId: "srv-2",
+              detail: null,
+              since: null,
+              muted: false,
+              mutedReason: null,
+            },
+          ],
+        ],
+      ]),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    renderPage();
+
+    const pageTitle = screen.getByRole("heading", { level: 1 });
+    expect(within(pageTitle).queryByText("Needs re-authentication")).toBeNull();
+    const issue = within(
+      screen.getByTestId("mcp-registry-attention-row-internal-tools"),
+    );
+    expect(issue.getByText("Needs re-authentication")).toBeInTheDocument();
+    expect(issue.queryByText("Failed to start")).toBeNull();
+  });
+
+  it("does not claim a pod is running when no pod status has been reported", () => {
+    installedWithNoDeploymentEntry();
+    renderPage();
+
+    // A green dot is a claim about a pod. With Kubernetes reachable and no
+    // entry for this install, the honest answer is that the state is unknown.
+    expect(screen.getByText("Status unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Installed")).toBeNull();
+  });
+
+  it("says a remote server is installed, since it has no pod to be running", () => {
+    installedWithNoDeploymentEntry();
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+  });
+
+  it("says it is still checking while the deployment feed is loading", () => {
+    installedWithNoDeploymentEntry();
+    useMcpDeploymentStatuses.mockReturnValue({
+      statuses: {},
+      state: "loading",
+    });
+    renderPage();
+
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+  });
+
+  it("says a built-in server is built in, rather than not installed", () => {
+    renderPage({ serverType: "builtin", localConfig: null });
+
+    expect(screen.getByText("Built-in")).toBeInTheDocument();
+    expect(screen.queryByText("Not installed")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
   });
 });

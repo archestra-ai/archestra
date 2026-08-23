@@ -16,6 +16,7 @@ import {
   constructResponseSchema,
   DeleteApiKeyResponseSchema,
 } from "@/types";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -83,6 +84,65 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fallbackMessage: "Failed to create API key",
         });
       }
+    },
+  );
+
+  fastify.delete(
+    "/api/api-keys/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteApiKeys,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
+        description:
+          "Delete several of the authenticated user's Archestra API keys in " +
+          "one request. Keys are personal, so an id belonging to anyone else " +
+          "is reported in `failed` as not found and the rest of the batch " +
+          "still applies.",
+        tags: ["API Keys"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const userId = request.user.id;
+      const snapshot = async (ids: string[]) => {
+        const wanted = new Set(ids);
+        const keys = await ApiKeyModel.listByUserId(userId);
+        return {
+          apiKeys: keys
+            .filter((key) => wanted.has(key.id))
+            .map(({ id, name }) => ({ id, name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "api keys bulk delete",
+        notFoundMessage: "API key not found",
+        unexpectedMessage: "Could not delete this API key",
+        // Keys are addressed by their owner, not by organization, so listing
+        // the caller's own is the fence: another user's id simply is not here.
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const keys = await ApiKeyModel.listByUserId(userId);
+          return new Map(
+            keys
+              .filter((key) => wanted.has(key.id))
+              .map((key) => [key.id, key] as const),
+          );
+        },
+        describe: (key) => key.name ?? "Unnamed key",
+        applyEach: async (key) => {
+          await betterAuth.api.deleteApiKey({
+            headers: new Headers(request.headers as HeadersInit),
+            body: { keyId: key.id },
+          });
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

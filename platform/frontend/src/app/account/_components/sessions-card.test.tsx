@@ -70,17 +70,15 @@ describe("SessionsCard", () => {
     } as Awaited<ReturnType<typeof authClient.revokeSession>>);
   });
 
-  it("shows loading skeletons while sessions are still being fetched", () => {
+  it("shows the table's loading state while sessions are still being fetched", () => {
     vi.mocked(authClient.listSessions).mockReturnValue(
       new Promise(() => {}) as ReturnType<typeof authClient.listSessions>,
     );
 
-    const { container } = renderCard();
+    renderCard();
 
-    expect(
-      container.querySelectorAll('[data-slot="skeleton"]').length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull();
   });
 
   it("asks the user to sign in again when the session is too old to list sessions", async () => {
@@ -100,7 +98,7 @@ describe("SessionsCard", () => {
       screen.getByText(/first 24\s+hours after you sign in/i),
     ).toBeInTheDocument();
     // The failure must not be presented as "you have no other sessions".
-    expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull();
 
     // The panel tells the user to sign out, so it has to offer the way there.
     await userEvent
@@ -119,7 +117,7 @@ describe("SessionsCard", () => {
     renderCard();
 
     const retry = await screen.findByRole("button", { name: /retry/i });
-    expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull();
 
     // Retrying must re-hit the API, and a recovered request must render rows.
     vi.mocked(authClient.listSessions).mockResolvedValue({
@@ -137,7 +135,7 @@ describe("SessionsCard", () => {
     await user.click(retry);
 
     expect(
-      await screen.findByRole("button", { name: "Revoke" }),
+      await screen.findByRole("button", { name: /^Revoke/ }),
     ).toBeInTheDocument();
   });
 
@@ -164,7 +162,7 @@ describe("SessionsCard", () => {
   it("removes a revoked session even if the follow-up refetch fails", async () => {
     const user = userEvent.setup();
     renderCard();
-    const revoke = await screen.findByRole("button", { name: "Revoke" });
+    const revoke = await screen.findByRole("button", { name: /^Revoke/ });
 
     // The invalidation refetch that follows the revoke fails.
     vi.mocked(authClient.listSessions).mockResolvedValue({
@@ -192,7 +190,7 @@ describe("SessionsCard", () => {
     const user = userEvent.setup();
     renderCard();
 
-    await user.click(await screen.findByRole("button", { name: "Revoke" }));
+    await user.click(await screen.findByRole("button", { name: /^Revoke/ }));
 
     await waitFor(() => {
       expect(authClient.revokeSession).toHaveBeenCalledWith({
@@ -206,7 +204,7 @@ describe("SessionsCard", () => {
     const user = userEvent.setup();
     renderCard();
 
-    await user.click(await screen.findByRole("button", { name: "Sign Out" }));
+    await user.click(await screen.findByRole("button", { name: /^Sign out/ }));
 
     expect(mockRouterPush).toHaveBeenCalledWith("/auth/sign-out");
     expect(authClient.revokeSession).not.toHaveBeenCalled();

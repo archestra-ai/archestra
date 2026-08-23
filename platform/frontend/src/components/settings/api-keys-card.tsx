@@ -10,6 +10,7 @@ import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -18,6 +19,8 @@ import { SearchInput } from "@/components/search-input";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -28,11 +31,14 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import {
   type UserApiKey,
   useApiKeys,
+  useBulkDeleteApiKeys,
   useCreateApiKey,
   useDeleteApiKey,
 } from "@/lib/api-key.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { formatDate } from "@/lib/utils";
 import {
@@ -77,6 +83,7 @@ function ApiKeysCardContent() {
   const { data: canDeleteApiKeys } = useHasPermissions({ apiKey: ["delete"] });
   const createApiKeyMutation = useCreateApiKey();
   const deleteApiKeyMutation = useDeleteApiKey();
+  const bulkDelete = useBulkDeleteApiKeys();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [apiKeyToDelete, setApiKeyToDelete] = useState<UserApiKey | null>(null);
@@ -101,8 +108,33 @@ function ApiKeysCardContent() {
     );
   }, [apiKeys, search]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredApiKeys,
+    getId: (key) => key.id,
+    filterSignature: search,
+    matchDescription: search ? "match this search" : "you have",
+  });
+
+  // A key's name is nullable, so the failure toast falls back to the visible
+  // prefix rather than naming nothing.
+  const selectedApiKeys = selected.map((key) => ({
+    id: key.id,
+    name: key.name ?? key.start ?? "Unnamed key",
+  }));
+
   const columns: ColumnDef<UserApiKey>[] = useMemo(() => {
     const baseColumns: ColumnDef<UserApiKey>[] = [
+      createSelectColumn<UserApiKey>({
+        rowLabel: (key) => `Select ${key.name ?? key.start ?? "API key"}`,
+        allLabel: "Select all API keys on this page",
+      }),
       {
         accessorKey: "name",
         header: "Name",
@@ -271,26 +303,74 @@ function ApiKeysCardContent() {
             loadingFallback={<LoadingSpinner />}
           >
             <div className="space-y-4">
-              <SearchInput
-                objectNamePlural="API keys"
-                searchFields={["key name"]}
-              />
+              <FilterBar
+                className="mb-0"
+                onClearFilters={
+                  search
+                    ? () => updateQueryParams({ search: null, page: "1" })
+                    : undefined
+                }
+              >
+                <SearchInput
+                  objectNamePlural="API keys"
+                  searchFields={["key name"]}
+                  className={filterSearchClass}
+                />
+              </FilterBar>
               {isApiKeysLoadError ? (
                 <QueryLoadError
                   title="Couldn't load your API keys"
                   onRetry={() => refetchApiKeys()}
                 />
               ) : (
-                <DataTable
-                  columns={columns}
-                  data={filteredApiKeys}
-                  emptyMessage="No API keys yet"
-                  hasActiveFilters={search.trim().length > 0}
-                  filteredEmptyMessage="No API keys match your search. Try adjusting your search."
-                  onClearFilters={() =>
-                    updateQueryParams({ search: null, page: "1" })
-                  }
-                />
+                <>
+                  <BulkActionsBar
+                    count={selectedApiKeys.length}
+                    noun="API key"
+                    onClear={clearSelection}
+                    busy={bulkDelete.isPending}
+                    selectAllMatching={selectAllMatching}
+                    className="mb-3"
+                  >
+                    <PermissionButton
+                      permissions={{ apiKey: ["delete"] }}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        bulkDelete.mutate(selectedApiKeys, {
+                          onSuccess: (outcome) => {
+                            reportBulkOutcome({
+                              outcome,
+                              verb: "Deleted",
+                              failureVerb: "delete",
+                              noun: "API key",
+                            });
+                            if (outcome.failed.length === 0) clearSelection();
+                          },
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </PermissionButton>
+                  </BulkActionsBar>
+
+                  <DataTable
+                    columns={columns}
+                    data={filteredApiKeys}
+                    getRowId={(row) => row.id}
+                    rowSelection={rowSelection}
+                    onRowSelectionChange={setRowSelection}
+                    onPageRowIdsChange={onPageRowIdsChange}
+                    hideSelectedCount
+                    emptyMessage="No API keys yet"
+                    hasActiveFilters={search.trim().length > 0}
+                    filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+                    onClearFilters={() =>
+                      updateQueryParams({ search: null, page: "1" })
+                    }
+                  />
+                </>
               )}
             </div>
           </LoadingWrapper>

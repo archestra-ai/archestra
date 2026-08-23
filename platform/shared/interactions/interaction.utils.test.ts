@@ -274,7 +274,7 @@ describe("calculateCostSavings", () => {
     // Actual cost is exactly the stored spend — never negative.
     expect(result.actualCost).toBeCloseTo(0.05, 10);
     // Model optimization savings = baselineCost - cost.
-    expect(result.costOptimizationSavings).toBeCloseTo(0.3426, 10);
+    expect(result.modelSwapSavings).toBeCloseTo(0.3426, 10);
     // Total savings = model optimization + TOON compression.
     expect(result.totalSavings).toBeCloseTo(0.3426 + 1.8, 10);
     // Estimated cost sits exactly totalSavings above the actual spend.
@@ -313,7 +313,7 @@ describe("calculateCostSavings", () => {
     });
 
     expect(result.actualCost).toBeCloseTo(0.1, 10);
-    expect(result.costOptimizationSavings).toBeCloseTo(0.3, 10);
+    expect(result.modelSwapSavings).toBeCloseTo(0.3, 10);
     expect(result.totalSavings).toBeCloseTo(0.3, 10);
     expect(result.estimatedCost).toBeCloseTo(0.4, 10);
     // 0.3 / 0.4 = 75%

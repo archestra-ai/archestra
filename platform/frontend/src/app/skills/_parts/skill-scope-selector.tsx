@@ -35,6 +35,7 @@ export function SkillScopeSelector({
   onTeamIdsChange,
   userIds = [],
   onUserIdsChange,
+  subject = "this skill",
 }: {
   scope: ResourceVisibilityScope;
   onScopeChange: (scope: ResourceVisibilityScope) => void;
@@ -43,6 +44,12 @@ export function SkillScopeSelector({
   /** People the skill is shared with by name; omit to hide the Users option. */
   userIds?: string[];
   onUserIdsChange?: (ids: string[]) => void;
+  /**
+   * What the copy calls what is being scoped. Overridden by the bulk editor,
+   * which applies one choice to a whole selection — "Only you can use this
+   * skill" would misdescribe five of them.
+   */
+  subject?: string;
 }) {
   const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
   const { data: isSkillTeamAdmin } = useHasPermissions({
@@ -72,14 +79,14 @@ export function SkillScopeSelector({
     {
       value: "personal",
       label: "Personal",
-      description: "Only you can use this skill",
+      description: `Only you can use ${subject}`,
       icon: User,
     },
     ...(supportsUserSharing ? [userOption] : []),
     {
       value: "team",
       label: "Teams",
-      description: "Share this skill with selected teams",
+      description: `Share ${subject} with selected teams`,
       icon: Users,
       disabled: scope !== "team" && (!canShareTeams || hasNoTeams),
       disabledLabel: !canShareTeams
@@ -96,7 +103,7 @@ export function SkillScopeSelector({
     {
       value: "org",
       label: "Organization",
-      description: "Anyone in your org can use this skill",
+      description: `Anyone in your org can use ${subject}`,
       icon: Globe,
       disabled: scope !== "org" && !isSkillAdmin,
       disabledLabel: !isSkillAdmin ? "Requires permission" : undefined,
@@ -108,7 +115,7 @@ export function SkillScopeSelector({
 
   return (
     <VisibilitySelector
-      heading="Who can use this skill"
+      heading={`Who can use ${subject}`}
       value={choice}
       options={options}
       onValueChange={selectChoice}

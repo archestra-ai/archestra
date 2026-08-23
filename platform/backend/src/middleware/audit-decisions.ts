@@ -21,13 +21,14 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
-import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
+import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -90,6 +91,7 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ChatOpsChannelBindingModel,
   },
+  pluginsTable: { audited: true, model: PluginModel },
   environmentsTable: { audited: true, model: EnvironmentModel },
   environmentDefaultUserLimitsTable: {
     audited: true,
@@ -102,6 +104,11 @@ export const AUDIT_DECISIONS = {
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
+  mcpCatalogSkillsTable: {
+    audited: false,
+    reason:
+      "derived MCP discovery metadata refreshed with the parent catalog's tools; not directly admin-mutable",
+  },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
     audited: true,
@@ -116,7 +123,6 @@ export const AUDIT_DECISIONS = {
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
-  optimizationRulesTable: { audited: true, model: OptimizationRuleModel },
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },
@@ -454,6 +460,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: mcp server × user; parent (mcp server) audited",
   },
+  mcpServerAlertMutesTable: {
+    audited: false,
+    reason: "per-viewer UI state; intentionally excluded from audit logs",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",
@@ -504,10 +514,27 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skill; parent (skill) audited",
   },
+  pluginFilesTable: {
+    audited: false,
+    reason: "child of plugin; parent (plugin) audited",
+  },
+  pluginTeamsTable: {
+    audited: false,
+    reason: "join: plugin × team; parent (plugin) audited",
+  },
+  pluginUsersTable: {
+    audited: false,
+    reason: "join: plugin × user; parent (plugin) audited",
+  },
   skillUsageEventsTable: {
     audited: false,
     reason:
       "append-only usage metric written by the system on every activation; not a user-driven state change",
+  },
+  externalMcpSkillUsageEventsTable: {
+    audited: false,
+    reason:
+      "append-only usage metric written by the system on every external MCP Skill activation; not a user-driven state change",
   },
   connectionSetupsTable: {
     audited: false,
@@ -519,14 +546,23 @@ export const AUDIT_DECISIONS = {
     reason:
       "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
-  skillShareLinksTable: {
+  connectionSetupPluginsTable: {
     audited: false,
     reason:
-      "skill share links; admin share/revoke not yet wired for audit (follow-up)",
+      "join: connection setup × plugin; parent (connectionSetups) ephemeral",
+  },
+  skillShareLinksTable: {
+    audited: true,
+    model: SkillShareLinkModel,
   },
   skillShareLinkSkillsTable: {
     audited: false,
     reason: "join: share link × skill; parent (skillShareLinks) carries signal",
+  },
+  skillShareLinkPluginsTable: {
+    audited: false,
+    reason:
+      "join: share link × plugin; parent (skillShareLinks) carries signal",
   },
   skillShareLinkRevisionsTable: {
     audited: false,

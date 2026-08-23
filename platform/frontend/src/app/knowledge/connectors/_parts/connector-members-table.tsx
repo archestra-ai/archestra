@@ -15,7 +15,6 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -32,6 +31,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -68,8 +72,12 @@ type MemberFilter = "all" | "automatic" | "manual" | "unassigned";
  * join access control uses), and the manual-assignment editor for accounts
  * the source hides the email of. An assignment takes precedence over the
  * email join. The page-level unassigned-users alert explains resolution
- * gaps; the table mirrors the Settings → Users anatomy: avatar, stacked
+ * gaps; the table mirrors the Settings → Users anatomy: stacked
  * name-over-email identity cells, badge lists, and a standard Actions column.
+ *
+ * There is no avatar column: the sources this reads never hand over a picture
+ * (the user-groups payload carries an id, a display name and an email), so the
+ * circles here were locally-generated initials of the text in the next column.
  */
 export function ConnectorMembersTable({
   connectorId,
@@ -142,57 +150,41 @@ export function ConnectorMembersTable({
   }, [members, search, filter, groupFilter]);
 
   // Reading order follows the admin's question: which upstream account
-  // (avatar, id, identity) is assigned to which org user, across which
-  // groups. Unassigned rows render a plain muted dash; the alert, the
+  // is assigned to which org user, across which groups. Unassigned rows render a plain muted dash; the alert, the
   // Assigned column, its filter, and the Actions column carry the fix.
   const columns = useMemo<ColumnDef<ConnectorMember>[]>(
     () => [
       {
-        id: "avatar",
-        header: "",
-        size: 40,
-        cell: ({ row }) => {
-          const member = row.original;
-          // An assigned account renders as the org user it resolves to;
-          // an unassigned one falls back to its upstream identity.
-          const name =
-            member.user?.name ?? member.displayName ?? member.accountId;
-          return (
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">
-                {getInitials(name)}
-              </AvatarFallback>
-            </Avatar>
-          );
-        },
-      },
-      {
         id: "member",
         header: "External User",
-        // One identity cell, progressively quieter: name, email, then the
-        // upstream account id as a dimmer mono line (full value on hover).
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div
-              className="truncate text-sm font-medium"
-              title={row.original.displayName ?? row.original.accountId}
-            >
-              {row.original.displayName ?? row.original.accountId}
-            </div>
-            <div
-              className="truncate text-xs text-muted-foreground"
-              title={row.original.email ?? undefined}
-            >
-              {row.original.email ?? "email hidden"}
-            </div>
-            <div
-              className="truncate font-mono text-xs text-muted-foreground/70"
-              title={row.original.accountId}
-            >
-              {row.original.accountId}
-            </div>
-          </div>
-        ),
+        // Name over email, and nothing else: the upstream account id is an
+        // opaque string nobody reads down a column, so it moves to the hover
+        // (and stays searchable, and is spelled out in the assign dialog).
+        cell: ({ row }) => {
+          const member = row.original;
+          const name = member.displayName ?? member.accountId;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="min-w-0 cursor-default">
+                  <div className="truncate text-sm font-medium" title={name}>
+                    {name}
+                  </div>
+                  <div
+                    className="truncate text-xs text-muted-foreground"
+                    title={member.email ?? undefined}
+                  >
+                    {member.email ?? "email hidden"}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <div className="text-muted-foreground">External ID</div>
+                <div className="font-mono">{member.accountId}</div>
+              </TooltipContent>
+            </Tooltip>
+          );
+        },
       },
       {
         id: "resolvesTo",
@@ -447,15 +439,6 @@ function compareMembers(a: ConnectorMember, b: ConnectorMember): number {
 function assignmentRank(member: ConnectorMember): number {
   if (!member.user) return 2;
   return member.resolvedVia === "override" ? 1 : 0;
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "U";
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function MemberGroupBadges({

@@ -25,6 +25,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useAllMatchingKnowledgeBases: () => ({ data: [] }),
+  useBulkDeleteKnowledgeBases: () => ({ mutate: vi.fn(), isPending: false }),
   useRestoreKnowledgeBase: () => ({
     mutate: mockRestoreMutate,
     isPending: false,
@@ -90,6 +92,9 @@ vi.mock("@/app/knowledge/_parts/knowledge-page-layout", () => ({
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   Tooltip: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -150,8 +155,16 @@ beforeEach(() => {
           id: "kb-1",
           name: "Handbook",
           description: null,
-          connectors: [],
+          connectors: [
+            { id: "conn-1", name: "Org Connector", connectorType: "jira" },
+            {
+              id: "conn-2",
+              name: "Synced Connector",
+              connectorType: "confluence",
+            },
+          ],
           totalDocsIndexed: 12,
+          assignedAgents: [{ id: "agent-1", name: "Support", agentType: "a" }],
         },
       ],
       pagination: { total: 1 },
@@ -163,10 +176,11 @@ beforeEach(() => {
   });
   mockUseConnectors.mockReturnValue({
     data: [
-      makeConnector({ name: "Org Connector", visibility: "org-wide" }),
+      makeConnector({ id: "conn-1", name: "Org Connector" }),
       makeConnector({
+        id: "conn-2",
         name: "Synced Connector",
-        visibility: "auto-sync-permissions",
+        lastSyncStatus: "failed",
       }),
     ],
     isPending: false,
@@ -174,19 +188,52 @@ beforeEach(() => {
 });
 
 describe("KnowledgeBasesPage", () => {
-  it("shows the expanded connectors with access scope and schedule, like the connectors page", async () => {
+  it("names each knowledge base's connectors on its card, with no row to expand", () => {
     render(<KnowledgeBasesPage />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Toggle row" }));
+    // The connectors used to be one expand-click and a nested table away; the
+    // outer row could only say how many there were.
+    expect(
+      screen.queryByRole("button", { name: "Toggle row" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Org Connector/ })).toHaveAttribute(
+      "href",
+      "/knowledge/connectors/conn-1?from=knowledge-bases",
+    );
+    expect(
+      screen.getByRole("link", { name: /Synced Connector/ }),
+    ).toBeVisible();
+    // …alongside what the knowledge base holds and who uses it.
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("documents")).toBeInTheDocument();
+    expect(screen.getByText("agent")).toBeInTheDocument();
+  });
 
-    // The sub-table carries the connectors-page columns, including who can
-    // retrieve each connector's documents. The badge language itself is the
-    // connectors page's contract — pinned there, not re-asserted here.
-    expect(screen.getByText("Accessible to")).toBeInTheDocument();
-    expect(screen.getByText("Schedule")).toBeInTheDocument();
-    expect(screen.getByText("Org Connector")).toBeInTheDocument();
-    expect(screen.getByText("Organization")).toBeInTheDocument();
-    expect(screen.getAllByText(/Every 6 hours/i).length).toBeGreaterThan(0);
+  it("keeps the per-connector actions the expandable sub-table used to own", async () => {
+    render(<KnowledgeBasesPage />);
+
+    await userEvent.click(screen.getByLabelText("Actions for Org Connector"));
+
+    expect(
+      screen.getByRole("menuitem", { name: /Edit connector/ }),
+    ).toBeEnabled();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: /Remove from knowledge base/ }),
+    );
+    expect(screen.getByText("Remove Connector")).toBeInTheDocument();
+  });
+
+  it("ticking a knowledge base offers the bulk actions for it", async () => {
+    render(<KnowledgeBasesPage />);
+
+    await userEvent.click(screen.getByLabelText("Select Handbook"));
+
+    // Regression: selection state was keyed by row index while the page read
+    // it by knowledge base id, so the bar never appeared and bulk delete was
+    // unreachable.
+    expect(
+      screen.getAllByText(/1 knowledge base selected/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {
@@ -207,6 +254,7 @@ describe("KnowledgeBasesPage", () => {
             description: null,
             connectors: [],
             totalDocsIndexed: 0,
+            assignedAgents: [],
             deletedAt,
           },
         ],

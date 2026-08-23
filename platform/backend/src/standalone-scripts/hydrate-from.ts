@@ -4,7 +4,7 @@
  * Invoked via `pnpm dev:stack:hydrate`. The "hydrate" verb is deliberately
  * generic: today this copies the LLM-provider tables (secret, models,
  * chat_api_keys/llm_provider_api_keys, api_key_models), but future categories
- * (policies, agents, optimization rules) can be added here without renaming
+ * (policies, agents, limits) can be added here without renaming
  * the command.
  *
  * Source connection: SOURCE_DATABASE_URL env var.

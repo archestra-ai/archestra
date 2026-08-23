@@ -260,11 +260,10 @@ export const CostSavingsStatisticsSchema = z.object({
   totalSavings: z.number(),
   /**
    * Would-be list-price cost of subscription-covered traffic (Claude Code on a
-   * Max/Pro plan, etc.) — not billed. Reported separately from optimization
-   * savings so it is never conflated with money actually saved.
+   * Max/Pro plan, etc.) — not billed. Reported separately from realized savings
+   * so it is never conflated with money actually saved.
    */
   totalSubscriptionCost: z.number(),
-  totalOptimizationSavings: z.number(),
   totalToonSavings: z.number(),
   totalCacheSavings: z.number(),
   timeSeries: z.array(
@@ -272,7 +271,6 @@ export const CostSavingsStatisticsSchema = z.object({
       timestamp: z.string(),
       baselineCost: z.number(),
       actualCost: z.number(),
-      optimizationSavings: z.number(),
       toonSavings: z.number(),
       cacheSavings: z.number(),
       subscriptionCost: z.number(),

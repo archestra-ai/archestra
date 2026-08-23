@@ -4,7 +4,10 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -13,13 +16,22 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   canDeleteProject,
   canManageProject,
 } from "@/lib/projects/project-permissions";
+import {
+  useBulkDeleteProjects,
+  useBulkUpdateProjectVisibility,
+} from "@/lib/projects/projects.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
@@ -41,8 +53,29 @@ export function ProjectsTable({
   const router = useRouter();
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkShareOpen, setBulkShareOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProjects();
+  const bulkShare = useBulkUpdateProjectVisibility();
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedProjects,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: projects,
+    getId: (project) => project.id,
+    filterSignature: `projects:${projects.length}`,
+    matchDescription: "are listed here",
+  });
 
   const columns: ColumnDef<ProjectListItem>[] = [
+    createSelectColumn<ProjectListItem>({
+      rowLabel: (project) => `Select ${project.name}`,
+      allLabel: "Select all projects on this page",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -157,14 +190,123 @@ export function ProjectsTable({
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={projects}
-      getRowId={(row) => row.id}
-      onRowClick={(row) => router.push(`/projects/${row.id}`)}
-      emptyMessage="No projects yet"
-      hidePaginationWhenSinglePage
-    />
+    <>
+      <BulkActionsBar
+        count={selectedProjects.length}
+        noun="project"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending}
+        selectAllMatching={selectAllMatching}
+        className="mb-3"
+      >
+        <PermissionButton
+          permissions={{ project: ["update"] }}
+          variant="outline"
+          size="sm"
+          onClick={() => setBulkShareOpen(true)}
+        >
+          <span>Edit sharing</span>
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ project: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
+      <DataTable
+        columns={columns}
+        data={projects}
+        getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        hideSelectedCount
+        onRowClick={(row) => router.push(`/projects/${row.id}`)}
+        emptyMessage="No projects yet"
+        hidePaginationWhenSinglePage
+      />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete projects"
+          description={`Delete ${selectedProjects.length} ${
+            selectedProjects.length === 1 ? "project" : "projects"
+          }? Their chats and files go with them.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(
+              selectedProjects.map((project) => ({
+                id: project.id,
+                name: project.name,
+              })),
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "project",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              },
+            );
+          }}
+          confirmLabel="Delete projects"
+          pendingLabel="Deleting..."
+        />
+      )}
+
+      {bulkShareOpen && (
+        <BulkVisibilityDialog
+          open={bulkShareOpen}
+          onOpenChange={setBulkShareOpen}
+          noun="project"
+          isPending={bulkShare.isPending}
+          items={selectedProjects.map((project) => ({
+            id: project.id,
+            // A project's list row carries the names it is shared with, not
+            // the ids, so the dialog cannot seed the current audience — it
+            // opens on the scope the selection agrees on and asks for the
+            // rest. `visibility` is null for an unshared project, which is
+            // `personal` in the dialog's vocabulary.
+            scope:
+              project.visibility === "organization"
+                ? "org"
+                : project.visibility === "team"
+                  ? "team"
+                  : "personal",
+            teams: [],
+            users: [],
+          }))}
+          onApply={async (change) => {
+            const outcome = await bulkShare.mutateAsync({
+              projects: selectedProjects,
+              scope: change.scope,
+              teamIds: change.teamIds,
+              userIds: change.userIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated sharing for",
+              failureVerb: "update",
+              noun: "project",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
+        />
+      )}
+    </>
   );
 }
 

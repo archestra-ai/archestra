@@ -284,7 +284,7 @@ export async function addSharedLocalConnection(params: {
   expectDialog?: boolean;
   timeoutMs?: number;
 }): Promise<void> {
-  // Opens the item detail page's Credentials tab, where team/org connections
+  // Opens the item detail page's Credentials section, where team/org connections
   // are added through the "Add service account" dialog.
   await openManageCredentialsDialog(params.page, params.catalogItemName);
   await params.page
@@ -316,7 +316,7 @@ export async function addSharedLocalConnection(params: {
     }
 
     // Direct install (no credential prompt): the new team credential shows up
-    // as a row on the Credentials tab.
+    // as a row in the Credentials section.
     await expect(
       params.page
         .getByTestId(E2eTestId.CredentialOwner)

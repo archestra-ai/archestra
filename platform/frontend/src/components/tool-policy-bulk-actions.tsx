@@ -1,10 +1,13 @@
 "use client";
 
 import { Loader2, Wand2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
-import { LoadingSpinner } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import {
+  BulkActionsBar,
+  type SelectAllMatching,
+} from "@/components/ui/bulk-actions-bar";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -37,14 +40,21 @@ import {
  * conditioned policies), or let a subagent configure sensible defaults.
  *
  * Shared between the full guardrails table and the MCP server setup wizard's
- * Tools & Guardrails step. Renders its own desktop and mobile layouts and
- * owns the mutation/in-flight state; callers only supply the selected tool
- * ids.
+ * Tools & Guardrails step. Owns the mutation/in-flight state and supplies the
+ * policy controls; the surrounding bar — count, Clear, hide-when-empty — comes
+ * from `BulkActionsBar`, so this matches every other table's bulk affordance.
  */
 export function ToolPolicyBulkActionsBar({
   selectedToolIds,
+  onClear,
+  selectAllMatching,
+  busy,
 }: {
   selectedToolIds: readonly string[];
+  onClear: () => void;
+  selectAllMatching?: SelectAllMatching;
+  /** Set while the caller is resolving a "select all matching" escalation. */
+  busy?: boolean;
 }) {
   const bulkCallPolicyMutation = useBulkCallPolicyMutation();
   const bulkResultPolicyMutation = useBulkResultPolicyMutation();
@@ -56,8 +66,6 @@ export function ToolPolicyBulkActionsBar({
   const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
   const [bulkResultPolicyValue, setBulkResultPolicyValue] =
     useState<string>("");
-
-  const hasSelection = selectedToolIds.length > 0;
 
   const handleBulkAction = useCallback(
     async (
@@ -152,18 +160,15 @@ export function ToolPolicyBulkActionsBar({
     }
   }, [selectedToolIds, autoConfigureMutation]);
 
-  const configureWithSubagentButton = (className?: string) => (
+  const configureWithSubagentButton = (
     <Tooltip>
       <TooltipTrigger asChild>
         <PermissionButton
           permissions={{ agent: ["update"], toolPolicy: ["update"] }}
           size="sm"
           variant="outline"
-          className={className}
           onClick={handleAutoConfigurePolicies}
-          disabled={
-            !hasSelection || isBulkUpdating || autoConfigureMutation.isPending
-          }
+          disabled={isBulkUpdating || autoConfigureMutation.isPending}
         >
           {autoConfigureMutation.isPending ? (
             <>
@@ -184,84 +189,45 @@ export function ToolPolicyBulkActionsBar({
     </Tooltip>
   );
 
-  const callPolicySelect = (triggerClassName: string) => (
+  const policySelect = ({
+    label,
+    ariaLabel,
+    value,
+    onChange,
+    triggerClassName,
+    children,
+  }: {
+    label: string;
+    ariaLabel: string;
+    value: string;
+    onChange: (value: string) => void;
+    triggerClassName: string;
+    children: ReactNode;
+  }) => (
     <WithPermissions
       permissions={{ toolPolicy: ["update"] }}
       noPermissionHandle="tooltip"
     >
       {({ hasPermission }) => (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            Call Policy:
+        <div className="flex items-center gap-2">
+          {/* The two selects share the "Select action" placeholder, so the
+              label is what tells them apart once they sit side by side. */}
+          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+            {label}
           </span>
           <Select
-            disabled={!hasSelection || isBulkUpdating || !hasPermission}
-            value={bulkCallPolicyValue}
-            onValueChange={(value: CallPolicyAction) => {
-              setBulkCallPolicyValue(value);
-              handleBulkAction("callPolicy", value);
-            }}
+            disabled={isBulkUpdating || !hasPermission}
+            value={value}
+            onValueChange={onChange}
           >
             <SelectTrigger
-              aria-label="Bulk call policy action"
+              aria-label={ariaLabel}
               className={triggerClassName}
               size="sm"
             >
               <SelectValue placeholder="Select action" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="allow_when_context_is_untrusted">
-                Allow always
-              </SelectItem>
-              <SelectItem value="block_when_context_is_untrusted">
-                Block in sensitive context
-              </SelectItem>
-              <SelectItem
-                value="require_approval"
-                description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
-              >
-                Require approval
-              </SelectItem>
-              <SelectItem value="block_always">Block always</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </WithPermissions>
-  );
-
-  const resultPolicySelect = (triggerClassName: string) => (
-    <WithPermissions
-      permissions={{ toolPolicy: ["update"] }}
-      noPermissionHandle="tooltip"
-    >
-      {({ hasPermission }) => (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            Results are:
-          </span>
-          <Select
-            disabled={!hasSelection || isBulkUpdating || !hasPermission}
-            value={bulkResultPolicyValue}
-            onValueChange={(value: ResultPolicyAction) => {
-              setBulkResultPolicyValue(value);
-              handleBulkAction("resultPolicyAction", value);
-            }}
-          >
-            <SelectTrigger
-              aria-label="Bulk result policy action"
-              className={triggerClassName}
-              size="sm"
-            >
-              <SelectValue placeholder="Select action" />
-            </SelectTrigger>
-            <SelectContent>
-              {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
+            <SelectContent>{children}</SelectContent>
           </Select>
         </div>
       )}
@@ -269,74 +235,56 @@ export function ToolPolicyBulkActionsBar({
   );
 
   return (
-    <>
-      {/* Bulk actions - Desktop */}
-      <div className="hidden lg:flex flex-wrap items-center gap-4 p-4 bg-muted/50 border border-border rounded-lg">
-        <div className="flex items-center gap-3">
-          {hasSelection ? (
-            <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-semibold text-primary">
-                  {selectedToolIds.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium whitespace-nowrap">
-                {selectedToolIds.length === 1
-                  ? "tool selected"
-                  : "tools selected"}
-              </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
-              )}
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-        <div className="ml-auto flex flex-wrap items-end gap-4">
-          {callPolicySelect("h-8 w-[168px] text-sm")}
-          {resultPolicySelect("h-8 w-[150px] text-sm")}
-          {configureWithSubagentButton()}
-        </div>
-      </div>
-
-      {/* Bulk actions - Mobile */}
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 p-3 lg:hidden">
-        <div className="flex items-center gap-2">
-          {hasSelection ? (
-            <>
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-xs font-semibold text-primary">
-                  {selectedToolIds.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium">
-                {selectedToolIds.length === 1
-                  ? "tool selected"
-                  : "tools selected"}
-              </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {callPolicySelect("h-9 w-full text-sm")}
-          {resultPolicySelect("h-9 w-full text-sm")}
-        </div>
-
-        <div className="flex flex-col gap-2 pt-1">
-          {configureWithSubagentButton("w-full justify-center")}
-        </div>
-      </div>
-    </>
+    <BulkActionsBar
+      count={selectedToolIds.length}
+      noun="tool"
+      busy={isBulkUpdating || busy}
+      onClear={onClear}
+      selectAllMatching={selectAllMatching}
+    >
+      {policySelect({
+        label: "Call policy:",
+        ariaLabel: "Bulk call policy action",
+        value: bulkCallPolicyValue,
+        onChange: (value) => {
+          setBulkCallPolicyValue(value);
+          handleBulkAction("callPolicy", value as CallPolicyAction);
+        },
+        triggerClassName: "h-8 w-[168px] text-sm",
+        children: (
+          <>
+            <SelectItem value="allow_when_context_is_untrusted">
+              Allow always
+            </SelectItem>
+            <SelectItem value="block_when_context_is_untrusted">
+              Block in sensitive context
+            </SelectItem>
+            <SelectItem
+              value="require_approval"
+              description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
+            >
+              Require approval
+            </SelectItem>
+            <SelectItem value="block_always">Block always</SelectItem>
+          </>
+        ),
+      })}
+      {policySelect({
+        label: "Results are:",
+        ariaLabel: "Bulk result policy action",
+        value: bulkResultPolicyValue,
+        onChange: (value) => {
+          setBulkResultPolicyValue(value);
+          handleBulkAction("resultPolicyAction", value as ResultPolicyAction);
+        },
+        triggerClassName: "h-8 w-[150px] text-sm",
+        children: RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
+          <SelectItem key={value} value={value}>
+            {label}
+          </SelectItem>
+        )),
+      })}
+      {configureWithSubagentButton}
+    </BulkActionsBar>
   );
 }

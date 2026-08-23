@@ -19,10 +19,8 @@ import {
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
-  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
-  type SupportedProvider,
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -32,6 +30,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -53,7 +52,6 @@ import {
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
   TeamModel,
@@ -89,6 +87,7 @@ import {
   type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
+  type ToolCallBlock,
   type ToolCompressionStats,
   type ToonSkipReason,
   UNSAFE_CONTEXT_BOUNDARY_REASON,
@@ -118,6 +117,7 @@ import {
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
+  toToolCallBlock,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
@@ -142,7 +142,6 @@ const {
 export interface LLMProxyContext<TRequest> {
   agent: GatewayAgent;
   originalRequest: TRequest;
-  baselineModel: string;
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
@@ -819,75 +818,17 @@ export async function handleLLMProxy<
       }
     }
 
-    // Cost optimization - potentially switch to cheaper model
     // A client may mark a Claude id with a context variant (`…[1m]`). It names
     // the same model at the same price, so it is dropped for bookkeeping —
     // otherwise the request records a model no catalog lists, which can never be
     // priced. The request itself is forwarded with the id the client sent.
-    const baselineModel = stripClaudeContextVariantSuffix(
-      requestAdapter.getModel(),
-    );
-    const hasTools = requestAdapter.hasTools();
-    const tools = requestAdapter.getTools();
-    // Cast messages since getOptimizedModel expects specific provider types
-    // but our generic adapter provides the correct type at runtime
-    const optimizedModel = await utils.costOptimization.getOptimizedModel(
-      resolvedAgent,
-      requestAdapter.getProviderMessages() as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[1],
-      providerName as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[2],
-      hasTools,
-      tools,
-    );
-
-    // A cost-optimization rule names a model, not an endpoint. On providers
-    // whose keys are servers, the credential and base URL were already resolved
-    // for the model the client asked for, so substituting one this endpoint
-    // does not host would send the request somewhere it cannot be answered.
-    // Keeping the baseline model costs an optimization; taking it would cost
-    // the whole call.
-    const optimizedModelServedHere =
-      optimizedModel &&
-      perKeyChatApiKeyId &&
-      providerHasEndpointLocalModels(providerName)
-        ? await endpointServesModel({
-            apiKeyId: perKeyChatApiKeyId,
-            provider: providerName,
-            modelId: optimizedModel,
-          })
-        : true;
-
-    if (optimizedModel && optimizedModelServedHere) {
-      requestAdapter.setModel(optimizedModel);
-      logger.info(
-        { resolvedAgentId, optimizedModel },
-        "Optimized model selected",
-      );
-    } else if (optimizedModel) {
-      logger.info(
-        { resolvedAgentId, optimizedModel, baselineModel },
-        "Optimized model is not served by the resolved endpoint, keeping the baseline model",
-      );
-    } else {
-      logger.info(
-        { resolvedAgentId, baselineModel },
-        "No matching optimized model found, proceeding with baseline model",
-      );
-    }
-
     const actualModel = stripClaudeContextVariantSuffix(
       requestAdapter.getModel(),
     );
 
-    // Ensure model entries exist for cost tracking
+    // Ensure a model entry exists for cost tracking
     const discovered = [
-      await ModelModel.ensureModelExists(baselineModel, providerName),
-      actualModel !== baselineModel
-        ? await ModelModel.ensureModelExists(actualModel, providerName)
-        : null,
+      await ModelModel.ensureModelExists(actualModel, providerName),
     ].filter((model) => model !== null);
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
@@ -1007,10 +948,18 @@ export async function handleLLMProxy<
     // before any guardrail evaluation — trusted-data and tool-invocation
     // lookups otherwise miss the real tool behind the decoration and the
     // dispatch wrapper.
+    // The request's own tool list is passed in so the canonicalizer can learn
+    // the client's label for the gateway when it is not a name this
+    // organization knows — the label is free text typed at `claude mcp add`
+    // time, and a label nothing matches used to leave every decorated name
+    // untouched.
     const canonicalizeToolName =
-      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer(
-        resolvedAgent.organizationId,
-      );
+      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer({
+        organizationId: resolvedAgent.organizationId,
+        declaredToolNames: utils.collectDeclaredToolNames(
+          requestAdapter.getOriginalRequest(),
+        ),
+      });
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       canonicalizeToolName,
@@ -1258,6 +1207,29 @@ export async function handleLLMProxy<
         .map(canonicalizeToolName),
     );
 
+    // A gateway tool name the client decorated with an alias the platform does
+    // not recognize survives canonicalization untouched, and every guardrail
+    // downstream then reasons about the decoration rather than the tool. That
+    // degradation is otherwise completely silent, which is why it can sit in a
+    // deployment indefinitely — so say so once per request, naming the tool, so
+    // it is greppable and the gateway can be re-registered under the name the
+    // connection-setup script derives (`toMcpClientServerName`).
+    const unrecognizedGatewayToolNames = [...enabledToolNames].filter(
+      (toolName) =>
+        archestraMcpBranding.isLikelyToolName(toolName) &&
+        !archestraMcpBranding.isToolName(toolName),
+    );
+    if (unrecognizedGatewayToolNames.length > 0) {
+      logger.warn(
+        {
+          agentId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          toolNames: unrecognizedGatewayToolNames,
+        },
+        `[${providerName}Proxy] Gateway tool names carry a client alias this organization does not know; guardrails cannot resolve the tools behind them`,
+      );
+    }
+
     // Convert headers to Record<string, string> for policy evaluation context
     const headersRecord: Record<string, string> = {};
     const rawHeaders = headers as Record<string, unknown>;
@@ -1281,7 +1253,6 @@ export async function handleLLMProxy<
     const ctx: LLMProxyContext<TRequest> = {
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
-      baselineModel,
       actualModel,
       contextIsTrusted,
       enabledToolNames,
@@ -1361,6 +1332,8 @@ export async function handleLLMProxy<
         processedRequest: null,
         response: { error: errorMessage },
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        // Mirrors `model`, as every write path does now that nothing rewrites
+        // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
@@ -1412,7 +1385,6 @@ async function handleStreaming<
   const {
     agent,
     originalRequest,
-    baselineModel,
     actualModel,
     contextIsTrusted,
     enabledToolNames,
@@ -1483,7 +1455,6 @@ async function handleStreaming<
         processedRequest: request as InteractionRequest,
         response: response as InteractionResponse,
         model: actualModel,
-        baselineModel,
         inputTokens: 0,
         outputTokens: 0,
       };
@@ -1504,6 +1475,11 @@ async function handleStreaming<
     { model: actualModel },
     `[${providerName}Proxy] Starting streaming request`,
   );
+
+  // Hoisted out of the try: the refusal is decided inside it, but the
+  // interaction is written in the finally, and a row that does not say it was
+  // refused is indistinguishable from a healthy one.
+  let toolCallBlock: ToolCallBlock | undefined;
 
   try {
     // Execute streaming request with tracing — the span covers the full streaming
@@ -1738,6 +1714,8 @@ async function handleStreaming<
         { refused: !!toolInvocationRefusal },
         "Tool invocation policy result",
       );
+
+      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
     }
 
     if (toolInvocationRefusal) {
@@ -1882,7 +1860,6 @@ async function handleStreaming<
       });
 
       const costs = await calculateInteractionCosts({
-        baselineModel,
         actualModel,
         usage,
         providerName,
@@ -1929,13 +1906,13 @@ async function handleStreaming<
           processedRequest: request,
           response: streamAdapter.toProviderResponse(),
           actualModel,
-          baselineModel,
           usage,
           costs,
           toonStats,
           toonSkipReason,
           dualLlmAnalyses,
           unsafeContextBoundary,
+          toolCallBlock,
         });
         await persistProxyInteraction(
           record,
@@ -1978,7 +1955,6 @@ async function handleNonStreaming<
   const {
     agent,
     originalRequest,
-    baselineModel,
     actualModel,
     contextIsTrusted,
     enabledToolNames,
@@ -2229,7 +2205,6 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
-        baselineModel,
         actualModel,
         usage,
         providerName,
@@ -2275,13 +2250,13 @@ async function handleNonStreaming<
         processedRequest: request,
         response: refusalResponse,
         actualModel,
-        baselineModel,
         usage,
         costs,
         toonStats,
         toonSkipReason,
         dualLlmAnalyses,
         unsafeContextBoundary,
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
       });
       await persistProxyInteraction(
         refusalRecord,
@@ -2317,7 +2292,6 @@ async function handleNonStreaming<
   // );
 
   const costs = await calculateInteractionCosts({
-    baselineModel,
     actualModel,
     usage,
     providerName,
@@ -2367,7 +2341,6 @@ async function handleNonStreaming<
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       response: responseAdapter.getLoggedResponse?.() ?? clientResponse,
       actualModel,
-      baselineModel,
       usage,
       costs,
       toonStats,
@@ -2491,29 +2464,6 @@ function createDownstreamAbortSignal(params: {
  */
 function providerSuppliesServerCredential(providerName: string): boolean {
   return providerName === "gemini" && isVertexAiEnabled();
-}
-
-/**
- * Whether a resolved endpoint can run a model, for providers whose keys are
- * servers. Conservative: only a model the catalog places on other endpoints and
- * not this one counts as unserved. A model nothing has synced — one an operator
- * has just deployed, say — is left to the endpoint to accept or reject.
- */
-async function endpointServesModel(params: {
-  apiKeyId: string;
-  provider: SupportedProvider;
-  modelId: string;
-}): Promise<boolean> {
-  const servingKeyIds =
-    await LlmProviderApiKeyModelLinkModel.findApiKeyIdsServingModelId({
-      provider: params.provider,
-      modelId: params.modelId,
-    });
-
-  if (servingKeyIds === null || servingKeyIds.length === 0) {
-    return true;
-  }
-  return servingKeyIds.includes(params.apiKeyId);
 }
 
 function shouldUseKeylessProviderApiKey(params: {

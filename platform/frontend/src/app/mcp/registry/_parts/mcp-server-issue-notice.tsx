@@ -1,92 +1,189 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
+import {
+  Bell,
+  BellOff,
+  FileSearch,
+  KeyRound,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { Button } from "@/components/ui/button";
-import { useAutoModeAgents } from "@/lib/mcp/mcp-server.query";
 import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { typeRole } from "@/lib/design/type-scale";
+import { useRestoreMcpServerAlerts } from "@/lib/mcp/mcp-server.query";
+import {
+  bucketOf,
+  canFixInstall,
   describeMcpServerIssue,
+  facetIssues,
+  type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { deriveAgentUsage } from "./mcp-server-agent-usage";
+import {
+  DismissAlertDialog,
+  type DismissAlertTarget,
+} from "./dismiss-alert-dialog";
+import { mcpServerAlertTarget } from "./mcp-server-alert-target";
+import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { humanizeOAuthErrorCode } from "./oauth-reauth-detail";
+import {
+  UninstallServerDialog,
+  type UninstallServerInstall,
+} from "./uninstall-server-dialog";
 
 /**
- * One server's outstanding issue, explained. Two densities:
+ * One server's outstanding issues, shared by three contexts:
  *
- * - `panel` (the server's Overview): status pill, what the status means and
- *   the concrete next step, who is affected, the raw runtime message behind a
- *   disclosure, and both verbs. The page has no other context, so the panel
- *   carries the whole diagnosis.
- * - `row` (the registry's Needs-attention list): the section header already
- *   says what kind of trouble this is and the button says what to do about
- *   it, so the row is just name, one line of cause, one muted line of facts
- *   (with a short raw message inline) and the single verb that clears it.
+ * - `panel` (the server's Overview): the page has no other context, so the
+ *   panel also discloses the primary raw runtime message.
+ * - `actions`: issue-specific remediation and queue actions for the registry
+ *   table's Actions cell.
+ * - `details`: the registry table's expanded sub-row diagnosis. It is strictly
+ *   informational; every action stays in the table's Actions cell.
  *
- * `onReinstall` is the registry page's confirm-dialog flow; where it isn't
- * available (the server page) the Reinstall verb points back to the registry.
+ * Every issue kind in the viewer's own bucket is explained, not just the worst
+ * one: a server whose pod crashed and whose token was rejected has two
+ * problems, and naming one of them sends the user back a second time for the
+ * other.
  */
-type Action = { label: string; onClick: () => void; testId?: string };
+type Action = {
+  actionId: string;
+  context?: string;
+  contextId?: string;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  testId?: string;
+  variant?: TableRowAction["variant"];
+};
+
+type ActionSet = {
+  primary?: Action;
+  secondary?: Action;
+};
 
 export function McpServerIssueNotice({
   item,
   issues,
   servers,
-  onReinstall,
+  facet = null,
   hideName = false,
   variant = "panel",
+  panelActions = "all",
   className,
+  onTargetsCompleted,
 }: {
   item: CatalogItem;
   issues: McpServerIssue[];
   servers: InstalledServer[];
+  /**
+   * The facet the list is narrowed to, when it is narrowed to one. The row
+   * explains that facet's issues, so a row reached under Dismissed shows what
+   * the viewer dismissed rather than a live issue from another facet.
+   */
+  facet?: McpServerAttentionFacet | null;
   /** On the server's own page the name is the page title already. */
   hideName?: boolean;
-  variant?: "panel" | "row";
+  variant?: "panel" | "actions" | "details";
+  /** Detail pages already expose remediation in their header and sections. */
+  panelActions?: "all" | "dismiss-only";
   className?: string;
-  onReinstall?: (
-    item: CatalogItem,
-    flaggedInstalls?: Array<{ id: string; name: string }>,
-    options?: { alsoReinstallCatalog?: boolean },
-  ) => void | Promise<void>;
+  onTargetsCompleted?: (targets: readonly DismissAlertTarget[]) => void;
 }) {
   const router = useRouter();
   const [showDetail, setShowDetail] = useState(false);
-  const primary = issues[0];
-  const { data: autoModeAgents } = useAutoModeAgents();
-  const usage = deriveAgentUsage({
-    serversForCatalog: servers,
-    autoModeAgents,
+  const detailId = useId();
+  const [dismissOpen, setDismissOpen] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const { data: session } = useSession();
+  const { data: canManageInstalls } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
   });
-  const affectedConnections = new Set(
-    issues.map((i) => i.serverId).filter(Boolean),
-  ).size;
-  const since = primary?.since
-    ? formatRelativeTimeFromNow(primary.since, { neverLabel: "" })
-    : "";
-  const guidance = primary ? describeMcpServerIssue(primary) : null;
-  const compact = variant === "row";
-  // The raw runtime / provider message, for people who want the exact text.
-  // OAuth codes get their human name; reinstall reasons already read as a
-  // sentence and are shown as the condition instead.
-  const rawDetail =
-    primary?.kind === "reinstall-required"
-      ? null
-      : primary?.kind === "needs-reauth" && primary.detail
-        ? humanizeOAuthErrorCode(primary.detail)
-        : (primary?.detail ?? null);
-  // A short one-line message reads fine as one more fact on the meta line;
-  // only a long or multi-line one (a stack trace) is worth a disclosure.
-  const inlineDetail =
-    compact && rawDetail && isShortOneLiner(rawDetail) ? rawDetail : null;
-  const disclosedDetail = inlineDetail ? null : rawDetail;
+  const { data: canEditCatalog } = useHasPermissions({
+    mcpRegistry: ["update"],
+  });
+  const restoreMutation = useRestoreMcpServerAlerts();
+
+  const liveIssues = issues.filter((i) => !i.muted);
+  const viewerBucket = bucketOf(liveIssues);
+  // What this row is about. Under a facet it is that facet's issues, so the
+  // row shows the state the reader narrowed the list to. Off a facet (the
+  // server's own page) it is the viewer's own bucket, falling back to the
+  // muted issues once every live one has been silenced.
+  const relevant = facet
+    ? facetIssues(issues, facet)
+    : liveIssues.length > 0
+      ? viewerBucket === "you"
+        ? facetIssues(issues, "you")
+        : liveIssues
+      : facetIssues(issues, "muted");
+  // One pill and one paragraph per kind: three connections failing OAuth are
+  // one thing to read, not three.
+  const explained = distinctByKind(relevant);
+  // Issues are kind-ordered, so the first one the viewer can act on is also
+  // the most severe one they can act on.
+  const primary = explained.find((i) => i.audience === "you") ?? explained[0];
+
+  // Every issue is tied to an affected installation when the backend can
+  // identify one. A catalog-scope issue can still target the only installation
+  // unambiguously; with several, send the reader to Manage connections.
+  const affectedServerIds = new Set(
+    relevant.flatMap((issue) => (issue.serverId ? [issue.serverId] : [])),
+  );
+  const directlyAffectedConnections = servers.filter((server) =>
+    affectedServerIds.has(server.id),
+  );
+  const removableConnections =
+    directlyAffectedConnections.length > 0
+      ? directlyAffectedConnections
+      : relevant.some((issue) => issue.audience === "you") &&
+          servers.length === 1
+        ? servers
+        : [];
+  const viewer = {
+    userId: session?.user?.id ?? null,
+    canManageInstalls: !!canManageInstalls,
+  };
+  const removableConnection =
+    removableConnections.length === 1 &&
+    canFixInstall({ server: removableConnections[0], viewer })
+      ? removableConnections[0]
+      : null;
+  const queueTargets = relevant.map(
+    (issue): { issue: McpServerIssue; target: DismissAlertTarget } => ({
+      issue,
+      target: mcpServerAlertTarget({ issue, item, servers }),
+    }),
+  );
+  const dismissTargets = queueTargets
+    .filter(({ issue }) => !issue.muted)
+    .map(({ target }) => target);
+  const restoreTargets = queueTargets
+    .filter(({ issue }) => issue.muted)
+    .map(({ target }) => target);
+
   const detailHref = (tab?: string, serverId?: string) => {
     const params = new URLSearchParams();
     if (tab) params.set("tab", tab);
@@ -96,66 +193,295 @@ export function McpServerIssueNotice({
   };
   const editHref = `/mcp/registry/${item.id}/edit?step=configuration`;
 
-  // Primary verb clears the issue; secondary is the evidence or the fallback.
-  // Both route to the same entry points the card and detail page use.
-  const actions = ((): {
-    primary?: Action;
-    secondary?: Action;
-  } => {
-    if (!primary || primary.audience !== "you") return {};
+  // The raw runtime / provider message, for people who want the exact text.
+  // OAuth codes get their human name.
+  const rawDetailFor = (issue: McpServerIssue) =>
+    issue.kind === "needs-reauth" && issue.detail
+      ? humanizeOAuthErrorCode(issue.detail)
+      : (issue.detail ?? null);
+  const disclosedDetail = primary ? rawDetailFor(primary) : null;
+
+  // Keep one remediation visible and preserve every other issue-specific
+  // action in overflow. Multi-status rows must not hide a valid fix merely
+  // because another status sorts first.
+  const actionsFor = (issue: McpServerIssue): ActionSet => {
+    if (issue.audience !== "you" || issue.muted) return {};
+    const connectionName = issue.serverId
+      ? servers.find((server) => server.id === issue.serverId)?.name
+      : undefined;
     const viewLogs: Action = {
+      actionId: `view-logs:${issue.serverId ?? "catalog"}`,
+      context: connectionName,
+      contextId: issue.serverId ?? undefined,
+      icon: <FileSearch className="h-4 w-4" />,
       label: "View logs",
-      onClick: () => router.push(detailHref("logs", primary.serverId)),
+      onClick: () => router.push(detailHref("logs", issue.serverId)),
       testId: `${E2eTestId.McpLogsViewButton}-${item.name}-issue`,
     };
     const editConfig: Action = {
+      actionId: "edit-configuration",
+      icon: <Pencil className="h-4 w-4" />,
       label: "Edit configuration",
       onClick: () => router.push(editHref),
       testId: `${E2eTestId.McpLogsEditConfigButton}-${item.name}-issue`,
     };
-    switch (primary.kind) {
+    switch (issue.kind) {
       case "needs-reauth":
         return {
           primary: {
+            actionId: `reauthenticate:${issue.serverId ?? "catalog"}`,
+            context: connectionName,
+            contextId: issue.serverId ?? undefined,
+            icon: <KeyRound className="h-4 w-4" />,
             label: "Re-authenticate",
-            onClick: () => router.push(detailHref("credentials")),
+            onClick: () =>
+              router.push(detailHref("credentials", issue.serverId)),
           },
-        };
-      case "reinstall-required":
-        return {
-          primary: onReinstall
-            ? {
-                label: "Reinstall",
-                onClick: () =>
-                  onReinstall(
-                    item,
-                    servers
-                      .filter((s) => s.reinstallRequired)
-                      .map((s) => ({ id: s.id, name: s.name })),
-                    { alsoReinstallCatalog: !primary.serverId },
-                  ),
-              }
-            : {
-                label: "Reinstall from registry",
-                onClick: () => router.push("/mcp/registry?tab=attention"),
-              },
-        };
-      case "awaiting-approval":
-        return {
-          primary: {
-            label: "Review image",
-            onClick: () => router.push(editHref),
-          },
+          secondary: canEditCatalog ? editConfig : undefined,
         };
       case "failed-to-start":
       case "not-running":
-        return { primary: viewLogs, secondary: editConfig };
-      case "stuck-starting":
-        return { primary: editConfig, secondary: viewLogs };
+        return {
+          primary: viewLogs,
+          secondary: canEditCatalog ? editConfig : undefined,
+        };
       default:
         return {};
     }
-  })();
+  };
+  const actionSets = explained.map(actionsFor);
+  const actions = actionSets.find((set) => set.primary || set.secondary) ?? {};
+  const firstActionSetIndex = actionSets.indexOf(actions);
+  const allRemediationActions = actionSets.flatMap((set) => [
+    set.primary,
+    set.secondary,
+  ]);
+  const repeatedRemediationLabels = repeatedActionLabels(allRemediationActions);
+  const additionalRemediationActions = uniqueActions(
+    actionSets
+      .slice(firstActionSetIndex + 1)
+      .flatMap((set) => [set.primary, set.secondary]),
+    new Set([actions.primary?.actionId, actions.secondary?.actionId]),
+  );
+
+  const overflow: Action[] = [];
+  if (removableConnection) {
+    overflow.push({
+      actionId: `remove-connection:${removableConnection.id}`,
+      icon: <Trash2 className="h-4 w-4" />,
+      label: "Remove this connection",
+      variant: "destructive",
+      onClick: () => setUninstallOpen(true),
+    });
+  } else if (removableConnections.length > 1) {
+    overflow.push({
+      actionId: "manage-connections",
+      icon: <Users className="h-4 w-4" />,
+      label: "Manage connections",
+      onClick: () => router.push(detailHref("credentials")),
+    });
+  }
+
+  const uninstallInstalls: UninstallServerInstall[] = removableConnection
+    ? [
+        {
+          server: {
+            id: removableConnection.id,
+            name: removableConnection.name,
+          },
+          assignedAgents: removableConnection.assignedAgents ?? [],
+        },
+      ]
+    : [];
+
+  const panelPrimaryAction = actions.primary ? (
+    <Button
+      size="sm"
+      data-testid={actions.primary.testId}
+      onClick={actions.primary.onClick}
+    >
+      {actions.primary.label}
+    </Button>
+  ) : facet === "others" ? null : (
+    <Button variant="outline" size="sm" asChild>
+      <Link href={detailHref()}>Open</Link>
+    </Button>
+  );
+
+  const queueActions = (
+    <>
+      {dismissTargets.length > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`Dismiss alert for ${item.name}`}
+          onClick={() => setDismissOpen(true)}
+        >
+          <BellOff className="h-4 w-4" />
+          Dismiss
+        </Button>
+      )}
+      {restoreTargets.length > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`Restore alert for ${item.name}`}
+          disabled={restoreMutation.isPending}
+          onClick={() =>
+            restoreMutation.mutate(
+              {
+                alerts: restoreTargets,
+              },
+              {
+                onSuccess: (result) => onTargetsCompleted?.(result.succeeded),
+              },
+            )
+          }
+        >
+          <Bell className="h-4 w-4" />
+          Restore
+        </Button>
+      )}
+    </>
+  );
+  const dismissOnlyAction = dismissTargets.length > 0 && (
+    <Button
+      variant="outline"
+      size="sm"
+      aria-label={`Dismiss alert for ${item.name}`}
+      onClick={() => setDismissOpen(true)}
+    >
+      <BellOff className="h-4 w-4" />
+      Dismiss
+    </Button>
+  );
+
+  // Compact icon buttons fit the complete row action set. Keep applicable
+  // remediation visible instead of forcing discovery through a kebab menu.
+  const rowActions: TableRowAction[] = contextualizeRepeatedActions(
+    uniqueActions(
+      [actions.primary, actions.secondary, ...additionalRemediationActions],
+      new Set(),
+    ),
+    repeatedRemediationLabels,
+  );
+  if (dismissTargets.length > 0) {
+    rowActions.push({
+      icon: <BellOff className="h-4 w-4" />,
+      label: dismissTargets.length === 1 ? "Dismiss alert" : "Dismiss alerts",
+      onClick: () => setDismissOpen(true),
+    });
+  }
+  if (restoreTargets.length > 0) {
+    rowActions.push({
+      icon: <Bell className="h-4 w-4" />,
+      label: restoreTargets.length === 1 ? "Restore alert" : "Restore alerts",
+      disabled: restoreMutation.isPending,
+      onClick: () =>
+        restoreMutation.mutate(
+          { alerts: restoreTargets },
+          {
+            onSuccess: (result) => onTargetsCompleted?.(result.succeeded),
+          },
+        ),
+    });
+  }
+  rowActions.push(...overflow);
+
+  const panelOverflowActions = contextualizeRepeatedActions(
+    uniqueActions(
+      [actions.secondary, ...additionalRemediationActions, ...overflow],
+      new Set(),
+    ),
+    repeatedRemediationLabels,
+  );
+  const overflowMenu =
+    panelOverflowActions.length > 0 ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`More actions for ${item.name}`}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {panelOverflowActions.map((action) => (
+            <DropdownMenuItem
+              key={action.label}
+              onClick={action.onClick}
+              variant={action.variant}
+            >
+              {action.icon}
+              {action.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
+
+  const completedTargets = onTargetsCompleted;
+
+  if (variant === "actions") {
+    return (
+      <>
+        <div className="flex justify-end">
+          <TableRowActions itemName={item.name} actions={rowActions} />
+        </div>
+        <DismissAlertDialog
+          open={dismissOpen}
+          onClose={() => setDismissOpen(false)}
+          targets={dismissTargets}
+          onDismissed={completedTargets}
+        />
+        <UninstallServerDialog
+          open={uninstallOpen}
+          onClose={() => setUninstallOpen(false)}
+          installs={uninstallInstalls}
+        />
+      </>
+    );
+  }
+
+  if (variant === "details") {
+    return (
+      <div className="space-y-3 bg-muted/20 px-4 py-3">
+        {explained.map((issue) => {
+          const guidance = describeMcpServerIssue(issue);
+          const actionOwner = describeMcpIssueActionOwners({
+            issues: relevant.filter(
+              (candidate) => candidate.kind === issue.kind,
+            ),
+            servers,
+          });
+          const rawDetail = rawDetailFor(issue);
+          return (
+            <div key={issue.kind} className="space-y-2">
+              <p className={cn(typeRole({ role: "body" }), "max-w-prose")}>
+                <span>{guidance.what}</span>{" "}
+                {issue.audience === "you" && !issue.muted ? (
+                  <span className="text-muted-foreground">{guidance.fix}</span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {issue.muted
+                      ? dismissedSentence(issue.mutedReason)
+                      : actionOwner.sentence}
+                  </span>
+                )}
+              </p>
+              {rawDetail && (
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                  {rawDetail}
+                </pre>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -174,114 +500,119 @@ export function McpServerIssueNotice({
                 />
                 <Link
                   href={detailHref()}
-                  className="truncate font-medium hover:underline"
+                  className={cn(
+                    typeRole({ role: "section-title" }),
+                    "truncate hover:underline",
+                  )}
                 >
                   {item.name}
                 </Link>
               </>
             )}
-            {!compact &&
-              distinctByKind(issues).map((issue) => (
-                <McpServerIssueBadge key={issue.kind} issue={issue} />
-              ))}
+            {explained.map((issue) => (
+              <McpServerIssueBadge
+                key={issue.kind}
+                issue={issue}
+                showDetail={false}
+              />
+            ))}
           </div>
-          {guidance && (
-            <p className="mt-1.5 max-w-prose text-sm">
-              <span>{guidance.what}</span>
-              {!compact && guidance.fix && (
-                <span className="text-muted-foreground"> {guidance.fix}</span>
-              )}
-            </p>
-          )}
-          <p
-            className={cn(
-              "mt-1.5 flex flex-wrap items-center text-xs text-muted-foreground",
-              compact ? "gap-x-1.5" : "gap-x-3",
-            )}
-          >
-            {joinFacts(
-              [
-                usage.total > 0
-                  ? `Affects ${usage.total} ${usage.total === 1 ? "agent" : "agents"}`
-                  : null,
-                affectedConnections > 1
-                  ? `${affectedConnections} of ${servers.length} connections`
-                  : null,
-                since ? `Since ${since}` : null,
-                inlineDetail,
-              ],
-              compact,
-            )}
-            {disclosedDetail && (
+          {explained.map((issue) => {
+            const guidance = describeMcpServerIssue(issue);
+            const actionOwner = describeMcpIssueActionOwners({
+              issues: relevant.filter(
+                (candidate) => candidate.kind === issue.kind,
+              ),
+              servers,
+            });
+            const since = issue.since
+              ? formatRelativeTimeFromNow(issue.since, { neverLabel: "" })
+              : "";
+            return (
+              <p
+                key={issue.kind}
+                className={cn(typeRole({ role: "body" }), "mt-1.5 max-w-prose")}
+              >
+                <span>{guidance.what}</span>
+                {since && <span> Failing since {since}.</span>}{" "}
+                {issue.audience === "you" && !issue.muted ? (
+                  <span className="text-muted-foreground">{guidance.fix}</span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {issue.muted
+                      ? dismissedSentence(issue.mutedReason)
+                      : actionOwner.sentence}
+                  </span>
+                )}
+              </p>
+            );
+          })}
+          {disclosedDetail && (
+            <p className={cn(typeRole({ role: "meta" }), "mt-1.5")}>
               <button
                 type="button"
                 className="underline-offset-2 hover:underline"
                 aria-expanded={showDetail}
-                onClick={() => setShowDetail((v) => !v)}
+                aria-controls={detailId}
+                onClick={() => setShowDetail((value) => !value)}
               >
                 {showDetail ? "Hide details" : "Show details"}
               </button>
-            )}
-          </p>
+            </p>
+          )}
         </div>
-        {(actions.primary || actions.secondary) && (
-          <div className="flex shrink-0 items-center gap-2 sm:justify-end sm:pt-0.5">
-            {!compact && actions.secondary && (
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid={actions.secondary.testId}
-                onClick={actions.secondary.onClick}
-              >
-                {actions.secondary.label}
-              </Button>
-            )}
-            {actions.primary && (
-              <Button
-                size="sm"
-                data-testid={actions.primary.testId}
-                onClick={actions.primary.onClick}
-              >
-                {actions.primary.label}
-              </Button>
-            )}
-          </div>
-        )}
-        {!actions.primary && !actions.secondary && (
-          <div className="flex shrink-0 items-center sm:pt-0.5">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={detailHref()}>Open</Link>
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end sm:pt-0.5">
+          {panelActions === "dismiss-only" ? (
+            dismissOnlyAction
+          ) : (
+            <>
+              {actions.secondary && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid={actions.secondary.testId}
+                  onClick={actions.secondary.onClick}
+                >
+                  {actions.secondary.label}
+                </Button>
+              )}
+              {panelPrimaryAction}
+              {queueActions}
+              {overflowMenu}
+            </>
+          )}
+        </div>
       </div>
       {showDetail && disclosedDetail && (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t bg-muted/40 px-4 py-2.5 font-mono text-xs text-muted-foreground">
+        <pre
+          id={detailId}
+          className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t bg-muted/40 px-4 py-2.5 font-mono text-xs text-muted-foreground"
+        >
           {disclosedDetail}
         </pre>
       )}
+      <DismissAlertDialog
+        open={dismissOpen}
+        onClose={() => setDismissOpen(false)}
+        targets={dismissTargets}
+        onDismissed={onTargetsCompleted}
+      />
+      <UninstallServerDialog
+        open={uninstallOpen}
+        onClose={() => setUninstallOpen(false)}
+        installs={uninstallInstalls}
+      />
     </div>
   );
 }
 
-const INLINE_DETAIL_MAX_CHARS = 80;
-
-function isShortOneLiner(text: string): boolean {
-  return !text.includes("\n") && text.trim().length <= INLINE_DETAIL_MAX_CHARS;
-}
-
 /**
- * The meta line's facts. In the compact row they read as one sentence
- * fragment separated by middots; the panel keeps them as spaced items.
+ * The dismissed state in words. The backend calls it a mute, but that
+ * transport vocabulary never reaches the interface.
  */
-function joinFacts(facts: Array<string | null>, compact: boolean) {
-  const present = facts.filter((f): f is string => !!f);
-  return present.map((fact, i) => (
-    <span key={fact}>
-      {compact && i > 0 && <span aria-hidden="true">· </span>}
-      {fact}
-    </span>
-  ));
+function dismissedSentence(reason: string | null): string {
+  const base = "You dismissed this alert, so it is not counted for you.";
+  return reason ? `${base} Your note: "${reason}"` : base;
 }
 
 function distinctByKind(issues: McpServerIssue[]): McpServerIssue[] {
@@ -291,4 +622,47 @@ function distinctByKind(issues: McpServerIssue[]): McpServerIssue[] {
     seen.add(i.kind);
     return true;
   });
+}
+
+function uniqueActions(
+  actions: Array<Action | undefined>,
+  excludedIds: Set<string | undefined>,
+): Action[] {
+  const seen = new Set(excludedIds);
+  return actions.filter((action): action is Action => {
+    if (!action || seen.has(action.actionId)) return false;
+    seen.add(action.actionId);
+    return true;
+  });
+}
+
+function repeatedActionLabels(actions: Array<Action | undefined>): Set<string> {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const action of actions) {
+    if (!action) continue;
+    if (seen.has(action.label)) repeated.add(action.label);
+    seen.add(action.label);
+  }
+  return repeated;
+}
+
+function contextualizeRepeatedActions(
+  actions: Action[],
+  repeatedLabels: Set<string>,
+): Action[] {
+  const contextualized = actions.map((action) =>
+    repeatedLabels.has(action.label) && action.context
+      ? { ...action, label: `${action.label} for ${action.context}` }
+      : action,
+  );
+  const counts = new Map<string, number>();
+  for (const action of contextualized) {
+    counts.set(action.label, (counts.get(action.label) ?? 0) + 1);
+  }
+  return contextualized.map((action) =>
+    (counts.get(action.label) ?? 0) > 1 && action.contextId
+      ? { ...action, label: `${action.label} (${action.contextId})` }
+      : action,
+  );
 }

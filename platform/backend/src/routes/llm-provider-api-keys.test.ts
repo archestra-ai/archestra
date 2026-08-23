@@ -31,19 +31,7 @@ vi.mock("@/auth");
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
-  testProviderApiKey: vi.fn(
-    async ({
-      provider,
-      baseUrl,
-    }: {
-      provider: string;
-      baseUrl?: string | null;
-    }) => {
-      if (provider === "bedrock" && !baseUrl) {
-        throw new Error("Bedrock base URL not configured");
-      }
-    },
-  ),
+  testProviderApiKey: vi.fn(async () => undefined),
 }));
 
 // Mock secrets-manager to use real DB-backed SecretModel for FK integrity
@@ -619,7 +607,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(openaiResponse.statusCode).toBe(200);
   });
 
-  test("prevent creating API keys with empty base URL for providers that require it", async () => {
+  test("creates a Bedrock key without a custom endpoint", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -630,13 +618,16 @@ describe("LLM Provider API Keys CRUD", () => {
         scope: "personal",
       },
     });
-    expect(createResponse.statusCode).toBe(400);
-    expect(createResponse.json().error.message).toContain(
-      "base URL not configured",
+    expect(createResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "bedrock",
+        baseUrl: undefined,
+      }),
     );
   });
 
-  test("prevent setting empty base URL to API keys for providers that require it", async () => {
+  test("clears a Bedrock custom endpoint to restore the regional default", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -658,9 +649,12 @@ describe("LLM Provider API Keys CRUD", () => {
       },
     });
 
-    expect(updateResponse.statusCode).toBe(400);
-    expect(updateResponse.json().error.message).toContain(
-      "base URL not configured",
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        provider: "bedrock",
+        baseUrl: null,
+      }),
     );
   });
 

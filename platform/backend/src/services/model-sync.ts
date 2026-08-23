@@ -18,6 +18,7 @@ import {
 } from "@/clients/models-dev-client";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
+import { findVertexMultimodalEmbeddingModel } from "@/knowledge-base/embedding-clients/vertex-models";
 import { findVoyageEmbeddingModel } from "@/knowledge-base/embedding-clients/voyage-models";
 import logger from "@/logging";
 import {
@@ -696,6 +697,14 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-2") {
     return 3072;
   }
+  if (provider === "gemini") {
+    // Vertex AI publisher embedding models (Vertex mode only) — the table is
+    // the only source for their dimension.
+    const vertexEmbedding = findVertexMultimodalEmbeddingModel(id);
+    if (vertexEmbedding) {
+      return vertexEmbedding.dimensions;
+    }
+  }
   if (provider === "cohere") {
     return findCohereEmbeddingModel(id)?.dimensions ?? null;
   }
@@ -1178,6 +1187,22 @@ function normalizeKnownModelCapabilities(params: {
       outputModalities: [],
       supportsToolCalling: false,
     };
+  }
+
+  // KB-supported Vertex multimodal embedding models (served under the Gemini
+  // provider in Vertex AI mode): `inferGeminiCapabilities` leaves their
+  // unbranded ids ("multimodalembedding@001") empty, and the KB's own client
+  // is the only thing that drives them, so its table decides the modalities.
+  if (provider === "gemini") {
+    const vertexEmbedding = findVertexMultimodalEmbeddingModel(modelId);
+    if (vertexEmbedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...vertexEmbedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
   }
 
   // An Azure embedding deployment stays classified as one even when the

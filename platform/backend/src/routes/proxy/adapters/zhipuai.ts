@@ -628,6 +628,32 @@ class ZhipuaiStreamAdapter
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so formatEndSSE finishes as "stop" (not the upstream "tool_calls")
   // and toProviderResponse persists the refusal rather than the blocked calls.
+  // A refusal does not erase what the model already said: its text streamed
+  // as it arrived and the refusal was appended after it, so the client holds
+  // both. Recording the refusal alone deletes the model's own answer from the
+  // turn, leaving anything that reads it back — conversation history, a
+  // summarizer, a human debugging a run that died — a turn in which the model
+  // never spoke.
+  //
+  // The refusal ships as one more content delta, which clients concatenate onto
+  // what they have accumulated, so the record is that same concatenation.
+  private contentWithAnyRefusal(): string | null {
+    if (this.replacedText === null) {
+      return this.state.text || null;
+    }
+    return `${this.state.text}${this.replacedText}`;
+  }
+
+  /**
+   * The reasoning the model streamed, accumulated.
+   *
+   * GLM thinking mode streams its thinking in `reasoning_content`. It was
+   * forwarded to the client but never accumulated, so the reconstructed turn —
+   * the one persisted as the interaction — recorded a reasoning turn as though
+   * the model had gone straight to its answer.
+   */
+  private reasoningText = "";
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -696,6 +722,9 @@ class ZhipuaiStreamAdapter
     // `delta.tool_calls`) exposed blocked tool calls to the client before policy
     // evaluation and defeated the handler's buffering.
     const hasStreamableContent = delta.content || delta.reasoning_content;
+    if (delta.reasoning_content && !delta.tool_calls) {
+      this.reasoningText += delta.reasoning_content;
+    }
     if (hasStreamableContent && !delta.tool_calls) {
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
@@ -874,7 +903,12 @@ class ZhipuaiStreamAdapter
           index: 0,
           message: {
             role: "assistant",
-            content: this.replacedText ?? (this.state.text || null),
+            content: this.contentWithAnyRefusal(),
+            // The same field GLM emits on the wire, so clients that render
+            // reasoning read it back from here.
+            ...(this.reasoningText
+              ? { reasoning_content: this.reasoningText }
+              : {}),
             tool_calls: toolCalls,
           },
           logprobs: null,

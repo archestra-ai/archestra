@@ -9,7 +9,10 @@
 // queue has been loaded; arrays are treated as immutable (replaced on every
 // change) so useSyncExternalStore snapshots stay referentially stable.
 
-import type { ChatSkillMetadata } from "@archestra/shared";
+import type {
+  ChatExternalMcpSkillMetadata,
+  ChatSkillMetadata,
+} from "@archestra/shared";
 import { useSyncExternalStore } from "react";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { generateUuid } from "@/lib/uuid";
@@ -21,6 +24,8 @@ export interface QueuedChatMessage {
   queuedAt: string;
   /** Skill activated via a slash command, resolved at enqueue time. */
   skill?: ChatSkillMetadata;
+  /** Live MCP Skill attached explicitly to this queued turn. */
+  externalMcpSkill?: ChatExternalMcpSkillMetadata;
   /** Marks a `!`-prefixed message for direct sandbox execution. */
   sandboxCommand?: true;
 }

@@ -1,8 +1,12 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import type {
+  ColumnDef,
+  RowSelectionState,
+  SortingState,
+} from "@tanstack/react-table";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +26,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -40,6 +45,8 @@ import {
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -51,12 +58,16 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  useAllMatchingProfiles,
+  useBulkDeleteProfiles,
+  useBulkUpdateProfileVisibility,
   useDeleteProfile,
   usePermanentlyDeleteProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -105,6 +116,59 @@ function SortIcon({
   );
 }
 
+/**
+ * What a gateway exposes, in the one column the list has for it.
+ *
+ * The column used to render `tools.length`, which is a lie for the default
+ * configuration: an Auto-mode gateway has no per-tool rows at all, so it
+ * showed "0" while exposing the whole catalogue. It is also a counter with no
+ * denominator, which the detail-page rules forbid — and the denominator cannot
+ * honestly be named here, because the catalogue a gateway reaches depends on
+ * its environment's installs and on its own exclusions, and `GET /api/tools`
+ * would pull every tool's JSON schema onto a list page to find out. So the set
+ * is named instead of counted, and the list itself is one hover away, which is
+ * what the rules say to do when the denominator is unavailable.
+ */
+function ExposedSetCell({
+  exposesEverything,
+  everythingLabel,
+  names,
+  noun,
+}: {
+  exposesEverything: boolean;
+  /** What "everything" is called here — "All tools", "All subagents". */
+  everythingLabel: string;
+  names: string[];
+  noun: string;
+}) {
+  if (exposesEverything) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-sm">{everythingLabel}</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          Every {noun} this gateway's environment offers, minus its exclusions.
+          The set grows as servers are installed.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (names.length === 0) {
+    return <span className="text-sm text-muted-foreground">None</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="text-sm">{names.length} selected</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{names.join(", ")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function McpGateways({
   initialData,
 }: {
@@ -141,6 +205,15 @@ function McpGateways({
     | "deleted"
     | null;
   const isDeletedView = statusFromUrl === "deleted";
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProfiles();
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkVisibility = useBulkUpdateProfileVisibility();
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
@@ -152,15 +225,9 @@ function McpGateways({
       : ["mcp_gateway", "profile"]
     : ["mcp_gateway"];
 
-  const {
-    data: agentsResponse,
-    isPending,
-    isLoadingError: isGatewaysLoadError,
-    refetch: refetchGateways,
-  } = useProfilesPaginated({
-    initialData: initialData?.agents ?? undefined,
-    limit: pageSize,
-    offset,
+  /** Everything narrowing the table, shared by the page query and
+      the "all matching" walk behind it. */
+  const listFilters = {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
@@ -172,6 +239,21 @@ function McpGateways({
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+  } satisfies Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >;
+
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isGatewaysLoadError,
+    refetch: refetchGateways,
+  } = useProfilesPaginated({
+    limit: pageSize,
+    offset,
+    initialData: initialData?.agents ?? undefined,
+    ...listFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -182,6 +264,10 @@ function McpGateways({
   const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
   const { data: isTeamAdmin } = useHasPermissions({
     mcpGateway: ["team-admin"],
+  });
+  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isLegacyTeamAdmin } = useHasPermissions({
+    agent: ["team-admin"],
   });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -259,7 +345,32 @@ function McpGateways({
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
 
+  // Derived from what is on screen rather than read straight out of
+  // `rowSelection`: the table is server-paginated, so ids left behind by
+  // another page drop out of both the count and the request.
+  const filterSignature = JSON.stringify(listFilters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
+
+  const pageSelection = isDeletedView
+    ? []
+    : agents.filter((row) => rowSelection[row.id]);
+  const selectedGateways =
+    allMatchingSelected && allMatching ? allMatching : pageSelection;
+
   const columns: ColumnDef<GatewayData>[] = [
+    // A deleted row can only be restored or purged, neither of which this
+    // selection drives, so the trash view keeps its rows unselectable.
+    ...(isDeletedView
+      ? []
+      : [
+          createSelectColumn<GatewayData>({
+            rowLabel: (row) => `Select ${row.name}`,
+            allLabel: "Select all gateways on this page",
+          }),
+        ]),
     {
       id: "icon",
       size: 40,
@@ -330,7 +441,7 @@ function McpGateways({
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
-      size: 80,
+      size: 110,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -341,17 +452,21 @@ function McpGateways({
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
+      cell: ({ row }) => (
+        <ExposedSetCell
+          exposesEverything={row.original.accessAllTools}
+          everythingLabel="All tools"
+          names={row.original.tools
+            .filter((tool) => !tool.delegateToAgentId)
+            .map((tool) => tool.name)}
+          noun="tool"
+        />
+      ),
     },
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
-      size: 100,
+      size: 120,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -362,12 +477,16 @@ function McpGateways({
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
-      },
+      cell: ({ row }) => (
+        <ExposedSetCell
+          exposesEverything={row.original.accessAllSubagents}
+          everythingLabel="All subagents"
+          names={row.original.tools
+            .filter((tool) => tool.delegateToAgentId)
+            .map((tool) => tool.name)}
+          noun="subagent"
+        />
+      ),
     },
     {
       id: "lastUsedAt",
@@ -419,16 +538,17 @@ function McpGateways({
     {
       id: "actions",
       header: "Actions",
-      // Pixel-sized so the five icon buttons never clip: the actions column
-      // keeps its px width while the sized columns scale down to fit.
-      size: 200,
+      // Pixel-sized so the row's buttons never clip: the actions column keeps
+      // its px width while the sized columns scale down to fit.
+      size: 140,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
+        const isLegacy = agent.agentType === "profile";
         const canModify = computeCanModifyAgent({
           agent,
-          isAdmin: !!isAdmin,
-          isTeamAdmin: !!isTeamAdmin,
+          isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
+          isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
           currentUserId,
           userTeamIds: userTeamIdSet,
         });
@@ -439,11 +559,6 @@ function McpGateways({
             <McpGatewayActions
               agent={agent}
               canModify={canModify}
-              onConnect={(target) =>
-                router.push(
-                  agentDetailHref("mcp_gateway", target.id, "connect"),
-                )
-              }
               onEdit={(target) =>
                 router.push(agentEditHref("mcp_gateway", target.id))
               }
@@ -564,9 +679,51 @@ function McpGateways({
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
+              <BulkActionsBar
+                count={selectedGateways.length}
+                noun="gateway"
+                plural="gateways"
+                onClear={clearSelection}
+                busy={bulkDelete.isPending || isFetchingAllMatching}
+                selectAllMatching={{
+                  total: pagination?.total ?? 0,
+                  pageFullySelected:
+                    agents.length > 0 && pageSelection.length === agents.length,
+                  active: allMatchingSelected,
+                  onSelectAll: () => setEscalatedFor(filterSignature),
+                  matchDescription: nameFilter
+                    ? "match this search query"
+                    : "match the current filters",
+                }}
+                className="mb-3"
+              >
+                <PermissionButton
+                  permissions={{ agent: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ agent: ["delete"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
+
               <DataTable
                 columns={columns}
                 data={agents}
+                getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                hideSelectedCount
                 sorting={sorting}
                 onSortingChange={handleSortingChange}
                 manualSorting={true}
@@ -617,6 +774,70 @@ function McpGateways({
                 }
               />
             </div>
+
+            {bulkVisibilityOpen && (
+              <BulkVisibilityDialog
+                items={selectedGateways.map((profile) => ({
+                  ...profile,
+                  teams: profile.teams ?? [],
+                  users: profile.users ?? [],
+                }))}
+                noun="gateway"
+                plural="gateways"
+                open={bulkVisibilityOpen}
+                onOpenChange={setBulkVisibilityOpen}
+                isPending={bulkVisibility.isPending}
+                onApply={async (change) => {
+                  const outcome = await bulkVisibility.mutateAsync({
+                    profiles: selectedGateways,
+                    scope: change.scope,
+                    teamIds: change.teamIds,
+                    userIds: change.userIds,
+                  });
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Updated",
+                    failureVerb: "update",
+                    noun: "gateway",
+                    plural: "gateways",
+                  });
+                  if (outcome.succeeded.length === 0) return false;
+                  if (outcome.failed.length === 0) clearSelection();
+                  return true;
+                }}
+              />
+            )}
+
+            {bulkDeleteOpen && (
+              <DeleteConfirmDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title="Delete gateways"
+                description={`Delete ${selectedGateways.length} ${
+                  selectedGateways.length === 1 ? "gateway" : "gateways"
+                }? This cannot be undone.`}
+                isPending={bulkDelete.isPending}
+                onConfirm={() => {
+                  bulkDelete.mutate(selectedGateways, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Deleted",
+                        failureVerb: "delete",
+                        noun: "gateway",
+                        plural: "gateways",
+                      });
+                      setBulkDeleteOpen(false);
+                      // Rows that failed stay ticked so the selection can be
+                      // retried rather than rebuilt.
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  });
+                }}
+                confirmLabel="Delete gateways"
+                pendingLabel="Deleting..."
+              />
+            )}
 
             {deletingGatewayId && (
               <DeleteGatewayDialog

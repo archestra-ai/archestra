@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { FilterBar } from "@/components/filter-bar";
 import { LoadingSpinner } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -12,8 +13,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
@@ -28,7 +33,10 @@ import {
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
 import { SkillAccessFields } from "../_parts/skill-access-fields";
-import { SkillContentEditor } from "../_parts/skill-content-editor";
+import {
+  SKILL_WIZARD_EDITOR_CLASS,
+  SkillContentEditor,
+} from "../_parts/skill-content-editor";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
@@ -199,13 +207,20 @@ function NewSkillWizard() {
                             : POPULAR_REPOS.length}
                         </Badge>
                       </div>
-                      <SearchInput
-                        value={search}
-                        onSearchChange={setSearch}
-                        syncQueryParams={false}
-                        placeholder="Search skills by name, repo, or use case..."
-                        className="relative w-full"
-                      />
+                      <FilterBar
+                        className="mb-0"
+                        onClearFilters={
+                          search ? () => setSearch("") : undefined
+                        }
+                      >
+                        <SearchInput
+                          value={search}
+                          onSearchChange={setSearch}
+                          syncQueryParams={false}
+                          placeholder="Search skills by name, repo, or use case..."
+                          className="w-full flex-1"
+                        />
+                      </FilterBar>
                     </CardHeader>
                     <CardContent className="p-0">
                       {isSearchingSkills ? (
@@ -282,8 +297,47 @@ function NewSkillWizard() {
               )}
 
               {effectiveStep === "content" && (
-                <div className="flex flex-col rounded-lg border">
-                  <div className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-lg border p-6">
+                    <div className="mb-6 space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="skill-name">Skill name</Label>
+                        <Input
+                          id="skill-name"
+                          value={parsed.name ?? ""}
+                          onChange={(event) =>
+                            patchDraft({
+                              manifest: updateManifestFrontmatterField({
+                                manifest: draft.manifest,
+                                field: "name",
+                                value: event.target.value,
+                              }),
+                            })
+                          }
+                          placeholder="release-checklist"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="skill-description">Description</Label>
+                        <Textarea
+                          id="skill-description"
+                          value={parsed.description ?? ""}
+                          onChange={(event) =>
+                            patchDraft({
+                              manifest: updateManifestFrontmatterField({
+                                manifest: draft.manifest,
+                                field: "description",
+                                value: event.target.value,
+                              }),
+                            })
+                          }
+                          placeholder="What this skill teaches agents to do"
+                          rows={2}
+                          required
+                        />
+                      </div>
+                    </div>
                     <SkillContentEditor
                       manifest={draft.manifest}
                       files={draft.files}
@@ -294,10 +348,10 @@ function NewSkillWizard() {
                           files: update(prev.files),
                         }))
                       }
-                      className="h-[calc(100vh-26rem)] min-h-[28rem]"
+                      className={SKILL_WIZARD_EDITOR_CLASS}
                     />
                   </div>
-                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                  <WizardFooter>
                     {catalogDisabled ? (
                       <Button variant="outline" asChild>
                         <Link href="/skills">Cancel</Link>
@@ -318,16 +372,16 @@ function NewSkillWizard() {
                       Continue
                       <ArrowRight className="h-4 w-4" />
                     </Button>
-                  </div>
+                  </WizardFooter>
                 </div>
               )}
 
               {effectiveStep === "access" && (
-                <div className="flex flex-col rounded-lg border">
-                  <div className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-lg border p-6">
                     <SkillAccessFields draft={draft} onChange={patchDraft} />
                   </div>
-                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
+                  <WizardFooter>
                     <Button
                       variant="outline"
                       onClick={() => setStep("content")}
@@ -342,7 +396,7 @@ function NewSkillWizard() {
                     >
                       {createSkill.isPending ? "Creating..." : "Create skill"}
                     </PermissionButton>
-                  </div>
+                  </WizardFooter>
                 </div>
               )}
             </>
@@ -431,4 +485,22 @@ function ActionCard({
       </div>
     </button>
   );
+}
+
+function updateManifestFrontmatterField(params: {
+  manifest: string;
+  field: "name" | "description";
+  value: string;
+}): string {
+  const line = `${params.field}: ${JSON.stringify(params.value)}`;
+  const fieldPattern = new RegExp(`^${params.field}:.*$`, "m");
+  if (fieldPattern.test(params.manifest)) {
+    return params.manifest.replace(fieldPattern, line);
+  }
+
+  const closingFence = params.manifest.indexOf("\n---", 4);
+  if (params.manifest.startsWith("---\n") && closingFence >= 0) {
+    return `${params.manifest.slice(0, closingFence)}\n${line}${params.manifest.slice(closingFence)}`;
+  }
+  return `---\n${line}\n---\n\n${params.manifest}`;
 }

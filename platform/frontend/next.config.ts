@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
   // Version skew protection during rolling deployments.
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
   // VERSION is set as a build arg by CI and baked into the
-  // client bundle here. On client navigation, a mismatch between
+  // browser build here. On client navigation, a mismatch between
   // the client's deployment id and the server's response header triggers a
   // hard reload, fetching fresh assets that match the server build.
   // Next.js restricts the id to [a-zA-Z0-9_-], so non-conforming characters
@@ -143,6 +143,16 @@ const nextConfig: NextConfig = {
       {
         source: "/v1/:path*",
         destination: `${backendUrl}/v1/:path*`,
+      },
+      // The backend serves two versioned API prefixes, and both have to be
+      // listed here: a path that is missing gets no rewrite, so Next.js answers
+      // it from the app router and a JSON client receives the HTML 404 page.
+      // /v2 is the A2A 1.0 surface (`/v2/a2a/*` — agent cards, the registry,
+      // and the JSON-RPC entry point), which is what the Connect tab and the
+      // A2A docs hand out on the public origin.
+      {
+        source: "/v2/:path*",
+        destination: `${backendUrl}/v2/:path*`,
       },
       {
         source: "/.well-known/:path*",

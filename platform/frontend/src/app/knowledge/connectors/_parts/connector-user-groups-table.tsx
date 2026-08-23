@@ -4,14 +4,14 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
-import { Clock, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { RelativeTime } from "@/components/relative-time";
 import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -31,8 +31,6 @@ import type {
   ConnectorUserGroupMember,
 } from "@/lib/knowledge/connector.query";
 import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
-import { formatDate } from "@/lib/utils";
-import { CollapsedBadgeList } from "./collapsed-badge-list";
 import { MembershipTruncationNotice } from "./connector-membership-truncation-notice";
 import {
   capitalizeNoun,
@@ -175,49 +173,36 @@ export function ConnectorUserGroupsTable({
         id: "documentCount",
         accessorKey: "documentCount",
         header: "Documents",
-        size: 90,
+        // Wide enough for the header word itself: the shared table breaks a
+        // header that outgrows its column mid-word ("Documen / ts").
+        size: 130,
         cell: ({ row }) => (
-          <span className="text-sm">
+          <span className="text-sm tabular-nums">
             {row.original.documentCount.toLocaleString()}
           </span>
         ),
       },
       {
-        id: "assigned",
-        header: "Assigned",
-        size: 110,
+        // One membership column, not two. The `assigned/total` verdict is
+        // what the tab is read for; the roster behind it is a hover away and
+        // in full on the Users tab, which is where a member can be acted on.
+        // As two columns the badge list took a third of the table to restate
+        // the number beside it.
+        id: "members",
+        header: "Members",
+        size: 260,
         cell: ({ row }) => (
           <GroupMembersSummary group={row.original} noun={noun} />
         ),
       },
       {
-        id: "members",
-        header: "Members",
-        // Like the documents table's Access column. Deliberately the widest
-        // size: under table-fixed the browser distributes leftover width
-        // proportionally to the declared sizes, and the badges are the one
-        // cell that can use it — the counter columns must stay compact.
-        size: 480,
-        cell: ({ row }) => <GroupMemberBadges group={row.original} />,
-      },
-      {
         id: "lastSyncedAt",
         accessorKey: "lastSyncedAt",
         header: "Last Synced",
-        size: 140,
-        cell: ({ row }) =>
-          row.original.lastSyncedAt ? (
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span title={formatDate({ date: row.original.lastSyncedAt })}>
-                {formatDistanceToNow(new Date(row.original.lastSyncedAt), {
-                  addSuffix: true,
-                })}
-              </span>
-            </div>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
-          ),
+        size: 160,
+        cell: ({ row }) => (
+          <RelativeTime date={row.original.lastSyncedAt} showIcon />
+        ),
       },
     ],
     [noun],
@@ -377,12 +362,16 @@ function compareGroupsBySeverity(
 }
 
 /**
- * Compact membership summary: `assigned/total assigned` over the group's
- * HUMAN accounts (app/bot accounts never resolve and are not assignable, so
- * they stay out of the counts — the hover tooltip still lists them,
- * labeled), with the full member list on hover. A group that gates
- * documents while resolving to nobody is the one state that makes documents
- * unreachable, so it gets an explicit verdict instead of a count.
+ * The Members cell: `assigned/total assigned` over the group's HUMAN accounts
+ * (app/bot accounts never resolve and are not assignable, so they stay out of
+ * the counts and the listing), with the roster itself on hover — resolved
+ * members as the org user they grant, unresolved ones with the reason. A group
+ * that gates documents while resolving to nobody is the one state that makes
+ * documents unreachable, so it gets an explicit verdict instead of a count.
+ *
+ * Hover, not a badge list: naming every member inline cost a third of the
+ * table to restate the count beside it, and per-member detail belongs on the
+ * Users tab, where a member can actually be assigned.
  */
 function GroupMembersSummary({
   group,
@@ -398,7 +387,7 @@ function GroupMembersSummary({
     return group.documentCount > 0 ? (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-default text-sm text-muted-foreground">
+          <span className="cursor-default text-sm text-amber-600">
             No resolvable members
           </span>
         </TooltipTrigger>
@@ -413,29 +402,21 @@ function GroupMembersSummary({
   }
 
   return (
-    <span className="text-sm">
-      {assigned.toLocaleString()}/{humans.length.toLocaleString()}
-      <span className="text-muted-foreground"> assigned</span>
-    </span>
-  );
-}
-
-/**
- * App/bot accounts are excluded — they never sign in, so they are noise here
- * (the Assigned counts skip them too).
- */
-function GroupMemberBadges({ group }: { group: ConnectorUserGroup }) {
-  const humans = group.members.filter((m) => !isServiceAccount(m));
-  if (humans.length === 0) {
-    return <span className="text-sm text-muted-foreground">-</span>;
-  }
-  return (
-    <CollapsedBadgeList
-      items={humans.map((member) => ({
-        id: member.accountId,
-        label: memberLabel(member),
-      }))}
-    />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-default text-sm underline decoration-dotted underline-offset-4">
+          {assigned.toLocaleString()}/{humans.length.toLocaleString()}
+          <span className="text-muted-foreground"> assigned</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {humans.map((member) => (
+            <div key={member.accountId}>{memberLabel(member)}</div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

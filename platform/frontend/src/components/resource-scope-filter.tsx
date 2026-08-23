@@ -1,7 +1,7 @@
 "use client";
 
 import type { Permissions } from "@archestra/shared";
-import { X } from "lucide-react";
+import { Braces, User, Users, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
@@ -13,7 +13,7 @@ import {
   serializeLabels,
 } from "@/components/label-select";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { scopeStyles } from "@/components/scope-vocabulary";
+import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -37,6 +37,7 @@ type SharedScopeValue = (typeof SHARED_SCOPES)[number];
 type ScopeValue = SharedScopeValue | "built_in";
 type OwnerValue = "mine" | "others";
 type StatusValue = "active" | "deleted";
+const OrganizationScopeIcon = SCOPE_META.org.icon;
 
 /**
  * Shared Personal / Team / Organization visibility filter for resource list
@@ -207,6 +208,9 @@ export function ResourceScopeFilter({
         })),
     [members, currentUserId],
   );
+  const selectedScopeMeta =
+    scope && scope !== "built_in" ? SCOPE_META[scope] : null;
+  const SelectedScopeIcon = selectedScopeMeta?.icon;
 
   return (
     // Wraps: at a phone width the selects below overflow one row, and this
@@ -219,19 +223,46 @@ export function ResourceScopeFilter({
           aria-label="Filter by type"
           className={filterControlClass({ active: Boolean(scope) })}
         >
-          <SelectValue />
+          <SelectValue>
+            {selectedScopeMeta && SelectedScopeIcon ? (
+              <span className="flex items-center gap-2">
+                <SelectedScopeIcon className="size-4" />
+                {selectedScopeMeta.label}
+              </span>
+            ) : scope === "built_in" ? (
+              <span className="flex items-center gap-2">
+                <Braces className="size-4" />
+                Built-in
+              </span>
+            ) : (
+              <span>{allLabel}</span>
+            )}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
           <SelectItem value="all">{allLabel}</SelectItem>
-          <SelectItem value="personal">Personal</SelectItem>
-          <SelectItem value="team" disabled={showTeamSelect && !canReadTeams}>
+          <SelectItem value="personal" icon={<User className="size-4" />}>
+            Personal
+          </SelectItem>
+          <SelectItem
+            value="team"
+            disabled={showTeamSelect && !canReadTeams}
+            icon={<Users className="size-4" />}
+          >
             Team
           </SelectItem>
-          <SelectItem value="org">Organization</SelectItem>
+          <SelectItem
+            value="org"
+            icon={<OrganizationScopeIcon className="size-4" />}
+          >
+            Organization
+          </SelectItem>
           {showBuiltIn && isAdmin && (
             <>
               <SelectSeparator />
-              <SelectItem value="built_in">Built-in</SelectItem>
+              <SelectItem value="built_in" icon={<Braces className="size-4" />}>
+                Built-in
+              </SelectItem>
             </>
           )}
         </SelectContent>
@@ -243,11 +274,26 @@ export function ResourceScopeFilter({
             aria-label="Filter by owner"
             className={filterControlClass({ active: ownerFilter !== "mine" })}
           >
-            <SelectValue />
+            <SelectValue>
+              <span className="flex items-center gap-2">
+                {ownerFilter === "mine" ? (
+                  <User className="size-4" />
+                ) : (
+                  <Users className="size-4" />
+                )}
+                {ownerFilter === "mine"
+                  ? `My ${ownerLabelPlural}`
+                  : "Other users"}
+              </span>
+            </SelectValue>
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
-            <SelectItem value="mine">My {ownerLabelPlural}</SelectItem>
-            <SelectItem value="others">Other users</SelectItem>
+            <SelectItem value="mine" icon={<User className="size-4" />}>
+              My {ownerLabelPlural}
+            </SelectItem>
+            <SelectItem value="others" icon={<Users className="size-4" />}>
+              Other users
+            </SelectItem>
           </SelectContent>
         </Select>
       )}

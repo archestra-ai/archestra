@@ -1,6 +1,7 @@
 import type { Permissions } from "@archestra/shared";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -15,15 +16,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useHasPermissions,
-  useMissingPermissions,
-} from "@/lib/auth/auth.query";
-import { formatMissingPermissions } from "@/lib/auth/auth.utils";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 
 type TableRowAction = {
   icon: React.ReactNode;
   label: string;
+  className?: string;
   onClick?: () => void;
   permissions?: Permissions | Readonly<Record<string, readonly string[]>>;
   disabled?: boolean;
@@ -36,6 +35,8 @@ type TableRowAction = {
   tooltip?: string;
   variant?: "default" | "destructive";
   href?: string;
+  /** The href leaves the app: open it in a new tab, as a link out should. */
+  external?: boolean;
   testId?: string;
 };
 
@@ -136,11 +137,14 @@ function ActionButton({
           aria-label={accessibleLabel}
           variant="outline"
           size={size}
+          className={action.className}
           asChild
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           data-testid={action.testId}
         >
-          <Link href={action.href}>{icon}</Link>
+          <Link href={action.href} {...externalLinkProps(action)}>
+            {icon}
+          </Link>
         </PermissionButton>
       );
     }
@@ -152,6 +156,7 @@ function ActionButton({
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
+        className={action.className}
         disabled={action.disabled}
         data-testid={action.testId}
         onClick={(e: React.MouseEvent) => {
@@ -170,18 +175,22 @@ function ActionButton({
       <Button
         variant="outline"
         size={size}
+        className={action.className}
         aria-label={accessibleLabel}
         asChild
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         data-testid={action.testId}
       >
-        <Link href={action.href}>{icon}</Link>
+        <Link href={action.href} {...externalLinkProps(action)}>
+          {icon}
+        </Link>
       </Button>
     ) : (
       <Button
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
+        className={action.className}
         disabled={action.disabled}
         data-testid={action.testId}
         onClick={(e: React.MouseEvent) => {
@@ -215,19 +224,21 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
   const { data: hasPermission } = useHasPermissions(
     (action.permissions as Permissions) || {},
   );
-  const missingPermissions = useMissingPermissions(
-    (action.permissions as Permissions) || {},
-  );
+  const reasonId = useId();
 
   const isPermitted = action.permissions ? hasPermission : true;
 
-  let tooltipText = action.tooltip ?? action.label;
+  // Why the action is refused, when it is. Kept apart from the caller's own
+  // tooltip: a refusal must win over decorative hover text, and only a refusal
+  // is announced as the control's description.
+  let reason: string | undefined;
   if (action.permissions && !hasPermission) {
-    tooltipText = formatMissingPermissions(missingPermissions);
+    reason = formatPermissionConstraint(action.permissions as Permissions);
   } else if (action.disabled && action.disabledTooltip) {
-    tooltipText = action.disabledTooltip;
+    reason = action.disabledTooltip;
   }
 
+  const tooltipText = reason ?? action.tooltip ?? action.label;
   const isDisabled = action.disabled || !isPermitted;
 
   const icon =
@@ -238,10 +249,21 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
     );
 
   const content = (
+    // `aria-disabled` rather than Radix's `disabled`: a disabled item is taken
+    // out of the menu's roving focus and typeahead, so the reason below would
+    // be unreachable by exactly the users it is written for. The refusal is
+    // enforced by preventing the select and the click instead.
     <DropdownMenuItem
-      disabled={isDisabled}
+      aria-disabled={isDisabled || undefined}
       variant={action.variant}
-      className={isDisabled ? "cursor-not-allowed" : "cursor-pointer"}
+      className={
+        isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+      }
+      onSelect={(e) => {
+        if (isDisabled) {
+          e.preventDefault();
+        }
+      }}
       onClick={(e) => {
         if (isDisabled) {
           e.preventDefault();
@@ -253,9 +275,10 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
       }}
       data-testid={action.testId}
       asChild={!!action.href && !isDisabled}
+      aria-describedby={reason ? reasonId : undefined}
     >
       {action.href && !isDisabled ? (
-        <Link href={action.href}>
+        <Link href={action.href} {...externalLinkProps(action)}>
           {icon}
           {action.label}
         </Link>
@@ -263,6 +286,15 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
         <>
           {icon}
           {action.label}
+          {/* The reason as text, not only as a tooltip: a menu item reached by
+              keyboard never opens one. `aria-hidden` keeps it out of the
+              accessible name, where it would duplicate the description a
+              screen reader already reads from `aria-describedby`. */}
+          {reason && (
+            <span id={reasonId} aria-hidden="true" className="sr-only">
+              {reason}
+            </span>
+          )}
         </>
       )}
     </DropdownMenuItem>
@@ -295,6 +327,12 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
   }
 
   return content;
+}
+
+function externalLinkProps(action: TableRowAction) {
+  return action.external
+    ? ({ target: "_blank", rel: "noreferrer" } as const)
+    : {};
 }
 
 function accessibleActionLabel(label: string, itemName?: string) {

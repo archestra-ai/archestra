@@ -8,6 +8,7 @@ import { Info } from "lucide-react";
 import { useMemo } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import { stripAssistantProtocolMarkers } from "@/components/chat/chat-messages.utils";
 import {
   EditableMessageEditor,
   useMessageEditor,
@@ -55,8 +56,9 @@ export function EditableAssistantMessage({
   onFeedbackChange,
   feedbackDisabled = false,
 }: EditableAssistantMessageProps) {
+  const visibleText = stripAssistantProtocolMarkers(text);
   const editor = useMessageEditor({
-    text,
+    text: visibleText,
     isEditing,
     onSave: (newText) => onSave(messageId, partIndex, newText),
     onCancelEdit,
@@ -67,11 +69,11 @@ export function EditableAssistantMessage({
   // render: markers become superscripts and the quotes move behind the chips.
   // Copying and editing keep the full original text.
   const folded = useMemo(
-    () => (citationParts ? foldCitationSources(text) : null),
-    [citationParts, text],
+    () => (citationParts ? foldCitationSources(visibleText) : null),
+    [citationParts, visibleText],
   );
   const displayText =
-    folded && folded.entries.length > 0 ? folded.displayText : text;
+    folded && folded.entries.length > 0 ? folded.displayText : visibleText;
 
   const handleStartEdit = () => {
     onStartEdit(partKey);
@@ -122,7 +124,7 @@ export function EditableAssistantMessage({
         </MessageContent>
         {showActions && (
           <MessageActions
-            textToCopy={text}
+            textToCopy={visibleText}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
             feedback={feedback}

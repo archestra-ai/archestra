@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-08-19
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,15 +12,16 @@ lastUpdated: 2026-08-19
 
 The Connection page lets you connect your local coding agent to Archestra with a single command. You pick the client — Claude Code, Codex, etc., and the page gives you a setup script to paste and run in your terminal.
 
-On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place.
+On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
 ## What the Script Configures
 
-A script can set up three things, in any combination you selected on the page:
+A script can set up four things:
 
 - **MCP gateway** — gives the client access to your Archestra tools. Its tools unlock after a one-time sign-in.
 - **LLM proxy** — routes the client's model calls through Archestra. In passthrough mode the script leaves your own provider credential untouched and changes only the base URL. In virtual-key mode it injects a key Archestra provisions for you.
-- **Skills** — installs a shared skills bundle into the client.
+- **Skills** — installs a shared skills plugin into the client.
+- **Plugins** — installs selected, approved, platform-compatible plugins for the client. The review step lets you change the selection before generating the command. See [Plugins](/docs/platform-agent-plugins).
 
 For Claude Code, Codex, and Copilot CLI the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
 
@@ -65,7 +66,9 @@ You can also read the generator. A deterministic renderer builds the script with
 
 For Claude Code, Codex, and Copilot CLI, the script installs a startup guard — a pre-loader that checks your Archestra remotes each time you launch `claude`, `codex`, or `copilot`. It makes a single health request covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — then plays each remote's check in turn with a brief spinner. When everything is healthy, the CLI starts in about a second. The guard draws on the terminal's alternate screen, so nothing lingers after the CLI exits.
 
-A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
+A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; plugins are uninstalled before their marketplace is removed. `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
+
+After an interactive client session exits, its Bash or PowerShell wrapper refreshes the Archestra marketplace and installed plugins if the last successful refresh was more than 24 hours ago. Refresh happens after the session, never in the startup path, and one-shot invocations such as `claude -p` and `codex exec` skip it.
 
 Under the checks the guard always shows its two keys: "To skip press [Space] · to reconfigure your Archestra connection press [C]". Press `Space` at any point to skip the rest of the checks and start the CLI at once — nothing is disconnected or remembered. When everything is healthy the guard waits about a second and a half for a key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
 
@@ -92,6 +95,7 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it sets the Bedrock variables instead and prints an `AWS_BEARER_TOKEN_BEDROCK` line to add to your shell profile.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
+- **Plugins** — installs the selected Claude Code plugins. OpenAPPA is imported by default and can be deselected, updated, or deleted.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
@@ -103,6 +107,7 @@ The `codex` CLI must be on your `PATH`.
 - **MCP gateway** — runs `codex mcp add <name> --url <url>`. Run `codex` once to finish the browser sign-in.
 - **LLM proxy** — adds a marker-delimited `[model_providers.<name>]` block to `~/.codex/config.toml`. Virtual-key mode signs in with `codex login --with-api-key`. Start Codex through the proxy with `codex -c model_provider=<name>`.
 - **Skills** — runs `codex plugin marketplace add`.
+- **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
 - **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: delete the `# >>> archestra:<name> >>>` block, run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`; if the script signed Codex in with a virtual key, run `codex logout`, then `codex login` with your own account.
@@ -114,6 +119,7 @@ Cursor is a desktop app, so the script edits its files directly and prints the U
 - **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Turn it on in Cursor under Settings → MCP.
 - **LLM proxy** — prints the values to paste under Settings → Models: the base URL to override and the API key to verify.
 - **Skills** — prints the clone URL to paste into `/add-plugin` from the command palette.
+- **Plugins** — advertises Cursor plugins in the same marketplace and prints the plugin names to install manually. Cursor delivery is not automated.
 - **Backup** — `~/.cursor/mcp.json.archestra-backup`.
 - **Revert** — restore the backup, or remove the server entry from `mcp.json`; clear the model override in Settings.
 
@@ -124,6 +130,7 @@ The `copilot` CLI must be on your `PATH`.
 - **MCP gateway** — runs `copilot mcp add --transport http <name> <url>`.
 - **LLM proxy** — on Windows the script sets the `COPILOT_PROVIDER_*` variables for you: in the current session and in your User environment. The model you pick in the review step is applied as `COPILOT_MODEL`. On macOS and Linux the script prints `export` lines to add to your shell profile — a piped script cannot set variables in your shell there. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
 - **Skills** — runs `copilot plugin marketplace add`.
+- **Plugins** — runs `copilot plugin install` for every enabled Copilot CLI plugin.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `copilot` launch. See [Startup Guard](#startup-guard).
 - **Backup** — none; the proxy settings are environment variables.
 - **Revert** — run `copilot mcp remove <name>`; on Windows remove the `COPILOT_PROVIDER_*` variables from your User environment, on macOS and Linux delete the export lines from your shell profile.

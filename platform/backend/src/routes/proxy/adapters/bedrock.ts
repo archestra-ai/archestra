@@ -7,13 +7,8 @@ import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
-import { BedrockClient } from "@/clients/bedrock-client";
-import {
-  decodeBedrockSigV4Marker,
-  getBedrockCredentialProvider,
-  getBedrockRegion,
-  isBedrockIamAuthEnabled,
-} from "@/clients/bedrock-credentials";
+import type { BedrockClient } from "@/clients/bedrock-client";
+import { buildBedrockClient } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -476,6 +471,49 @@ function isTextBlock(block: unknown): block is { text: string } {
 }
 
 /**
+ * DeepSeek on Bedrock emits this provider-internal DSML sentinel as a text
+ * delta immediately before the real Converse `toolUse` block. Forwarding it
+ * leaks protocol syntax into chat while the call is already represented
+ * structurally, so remove only the exact reserved marker and its separator.
+ */
+function stripBedrockToolProtocolSentinels(text: string): string {
+  return text.replace(
+    /(?:[ \t]*\r?\n){0,2}[ \t]*<\s*[|｜]\s*DSML\s*[|｜]\s*function_calls\s*>?/gi,
+    "",
+  );
+}
+
+function splitPendingBedrockToolProtocolText(text: string): {
+  emit: string;
+  pending: string;
+} {
+  const stripped = stripBedrockToolProtocolSentinels(text);
+  const markerStart = stripped.lastIndexOf("<");
+  if (markerStart < 0) {
+    return { emit: stripped, pending: "" };
+  }
+
+  const candidate = stripped.slice(markerStart);
+  const normalizedCandidate = candidate
+    .replace(/\s/g, "")
+    .replaceAll("|", "｜")
+    .toLowerCase();
+  const marker = "<｜dsml｜function_calls";
+  if (!marker.startsWith(normalizedCandidate)) {
+    return { emit: stripped, pending: "" };
+  }
+
+  let pendingStart = markerStart;
+  while (pendingStart > 0 && /\s/.test(stripped[pendingStart - 1] ?? "")) {
+    pendingStart--;
+  }
+  return {
+    emit: stripped.slice(0, pendingStart),
+    pending: stripped.slice(pendingStart),
+  };
+}
+
+/**
  * Check if a content block is a tool use block.
  * Works with both AWS SDK ContentBlock and our internal Zod types.
  */
@@ -487,6 +525,29 @@ function isToolUseBlock(block: unknown): block is {
     block !== null &&
     "toolUse" in block &&
     (block as { toolUse: unknown }).toolUse !== undefined
+  );
+}
+
+/** An extended-thinking block as it appears in a Converse response. */
+type BedrockReasoningContentBlock = Extract<
+  NonNullable<
+    NonNullable<BedrockResponse["output"]>["message"]
+  >["content"][number],
+  { reasoningContent: unknown }
+>;
+
+/**
+ * Check if a content block is an extended-thinking block, in either of the
+ * Converse API's variants (`reasoningText` or `redactedContent`).
+ */
+function isReasoningContentBlock(
+  block: unknown,
+): block is BedrockReasoningContentBlock {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "reasoningContent" in block &&
+    (block as { reasoningContent: unknown }).reasoningContent !== undefined
   );
 }
 
@@ -909,7 +970,9 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     if (!outputMessage?.content) return "";
 
     const textBlocks = outputMessage.content.filter(isTextBlock);
-    return textBlocks.map((block) => block.text).join("");
+    return textBlocks
+      .map((block) => stripBedrockToolProtocolSentinels(block.text))
+      .join("");
   }
 
   getToolCalls(): CommonToolCall[] {
@@ -1026,7 +1089,54 @@ class BedrockStreamAdapter
   // with the (discarded) tool events, so formatEndSSE must synthesize a terminal
   // messageStop (end_turn); toProviderResponse persists the refusal, not the
   // blocked tool calls.
+  /**
+   * The reasoning the model streamed, accumulated.
+   *
+   * Bedrock sends it as `reasoningContent` deltas which stream through
+   * untouched and are deliberately kept out of `state.text` (that holds the
+   * answer). Nothing else captured them, so the reconstructed turn — the one
+   * persisted as the interaction — recorded a reasoning turn as though the
+   * model had gone straight to its answer.
+   *
+   * The signature is kept with the text: it is what makes a reasoning block
+   * replayable, and a record without it describes something the API rejects.
+   */
+  private reasoningText = "";
+  private reasoningSignature = "";
+  private redactedReasoning: string | null = null;
+
+  private accumulateReasoningDelta(delta: unknown): void {
+    // Structurally narrowed rather than typed against the SDK union: the union
+    // members differ per reasoning kind (text/signature vs redacted), and this
+    // only ever reads the fields it recognises.
+    const reasoning = (
+      delta as {
+        reasoningContent?: {
+          text?: unknown;
+          signature?: unknown;
+          redactedContent?: unknown;
+          data?: unknown;
+        };
+      }
+    ).reasoningContent;
+    if (!reasoning) {
+      return;
+    }
+    if (typeof reasoning.text === "string") {
+      this.reasoningText += reasoning.text;
+    }
+    if (typeof reasoning.signature === "string") {
+      this.reasoningSignature += reasoning.signature;
+    }
+    const redacted = reasoning.redactedContent ?? reasoning.data;
+    if (typeof redacted === "string") {
+      this.redactedReasoning = (this.redactedReasoning ?? "") + redacted;
+    }
+  }
+
   private replacedText: string | null = null;
+  private pendingProtocolText = "";
+  private pendingProtocolContentBlockIndex: number | null = null;
 
   // Bedrock-specific extended state
   private bedrockState: {
@@ -1115,13 +1225,20 @@ class BedrockStreamAdapter
         "text" in blockDelta.delta &&
         typeof blockDelta.delta.text === "string"
       ) {
-        this.state.text += blockDelta.delta.text;
-        sseData =
-          rawBytes ??
-          encodeEventStreamMessage(
-            "contentBlockDelta",
-            chunk.contentBlockDelta,
-          );
+        const text = this.consumeProtocolFilteredText({
+          text: blockDelta.delta.text,
+          contentBlockIndex: blockDelta.contentBlockIndex ?? 0,
+        });
+        this.state.text += text;
+        if (text) {
+          sseData =
+            text === blockDelta.delta.text && rawBytes
+              ? rawBytes
+              : encodeEventStreamMessage("contentBlockDelta", {
+                  ...chunk.contentBlockDelta,
+                  delta: { ...blockDelta.delta, text },
+                });
+        }
       } else if (
         blockDelta.delta &&
         "toolUse" in blockDelta.delta &&
@@ -1140,7 +1257,9 @@ class BedrockStreamAdapter
         // and whatever Bedrock adds next — streams through unmodified. Only
         // toolUse deltas are held back for policy evaluation. Reasoning is
         // deliberately not folded into state.text, which holds the final
-        // answer for interaction logging.
+        // answer for interaction logging — it is accumulated separately so the
+        // recorded turn still shows the reasoning the model produced.
+        this.accumulateReasoningDelta(blockDelta.delta);
         sseData =
           rawBytes ??
           encodeEventStreamMessage(
@@ -1157,9 +1276,14 @@ class BedrockStreamAdapter
         this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
       } else {
-        sseData =
+        const contentBlockStop =
           rawBytes ??
           encodeEventStreamMessage("contentBlockStop", chunk.contentBlockStop);
+        // A held fragment only exists when it still matches the beginning of
+        // the DSML sentinel. Drop it at block end; normal text was emitted as
+        // soon as it stopped matching the reserved protocol prefix.
+        this.clearPendingProtocolText(chunk.contentBlockStop.contentBlockIndex);
+        sseData = contentBlockStop;
       }
     } else if ("messageStop" in chunk && chunk.messageStop) {
       this.state.stopReason = chunk.messageStop.stopReason ?? "end_turn";
@@ -1470,37 +1594,31 @@ class BedrockStreamAdapter
   }
 
   toProviderResponse(): BedrockResponse {
-    const content: Array<
-      | { text: string }
-      | {
-          toolUse: {
-            toolUseId: string;
-            name: string;
-            input: Record<string, unknown>;
-          };
-        }
-    > = [];
+    // Typed from the response shape itself so reasoning blocks are expressible
+    // here rather than only in the wire type.
+    const content: NonNullable<
+      NonNullable<BedrockResponse["output"]>["message"]
+    >["content"] = [];
 
-    if (this.replacedText !== null) {
-      return {
-        $metadata: { requestId: this.state.responseId },
-        output: {
-          message: {
-            role: "assistant",
-            content: [{ text: this.replacedText }],
+    // Reasoning first, matching the order Bedrock emits it: a reasoning block
+    // precedes the answer it produced, and a record that reordered them would
+    // not describe the turn the client saw.
+    if (this.reasoningText) {
+      content.push({
+        reasoningContent: {
+          reasoningText: {
+            text: this.reasoningText,
+            ...(this.reasoningSignature
+              ? { signature: this.reasoningSignature }
+              : {}),
           },
         },
-        stopReason: "end_turn",
-        usage: {
-          inputTokens: this.state.usage?.inputTokens ?? 0,
-          outputTokens: this.state.usage?.outputTokens ?? 0,
-        },
-        metrics:
-          this.bedrockState.latencyMs !== null
-            ? { latencyMs: this.bedrockState.latencyMs }
-            : undefined,
-        trace: this.bedrockState.trace ?? undefined,
-      };
+      });
+    }
+    if (this.redactedReasoning !== null) {
+      content.push({
+        reasoningContent: { redactedContent: this.redactedReasoning },
+      });
     }
 
     // Add text block if we have text
@@ -1508,8 +1626,20 @@ class BedrockStreamAdapter
       content.push({ text: this.state.text });
     }
 
-    // Add tool use blocks
-    for (const toolCall of this.state.toolCalls) {
+    // A refusal does not erase what the model already said: its text streamed
+    // as it arrived and the refusal was appended after it, so the client holds
+    // both. Recording the refusal alone deletes the model's own answer from the
+    // turn, leaving anything that reads it back a turn in which it never spoke.
+    if (this.replacedText !== null) {
+      content.push({ text: this.replacedText });
+    }
+
+    // Add tool use blocks. Calls held back by the gate never reached the
+    // client, so they stay out of the record — a turn naming them would owe
+    // tool results nothing will ever send.
+    for (const toolCall of this.replacedText === null
+      ? this.state.toolCalls
+      : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);
@@ -1543,7 +1673,10 @@ class BedrockStreamAdapter
         },
       },
       stopReason:
-        (this.state.stopReason as BedrockResponse["stopReason"]) ?? "end_turn",
+        this.replacedText !== null
+          ? "end_turn"
+          : ((this.state.stopReason as BedrockResponse["stopReason"]) ??
+            "end_turn"),
       usage: {
         inputTokens: this.state.usage?.inputTokens ?? 0,
         outputTokens: this.state.usage?.outputTokens ?? 0,
@@ -1551,6 +1684,33 @@ class BedrockStreamAdapter
       metrics,
       trace: this.bedrockState.trace ?? undefined,
     };
+  }
+
+  private consumeProtocolFilteredText(params: {
+    text: string;
+    contentBlockIndex: number;
+  }): string {
+    const combined = `${this.pendingProtocolText}${params.text}`;
+    this.pendingProtocolText = "";
+    this.pendingProtocolContentBlockIndex = null;
+
+    const { emit, pending } = splitPendingBedrockToolProtocolText(combined);
+    if (pending) {
+      this.pendingProtocolText = pending;
+      this.pendingProtocolContentBlockIndex = params.contentBlockIndex;
+    }
+    return emit;
+  }
+
+  private clearPendingProtocolText(contentBlockIndex?: number): void {
+    if (
+      this.pendingProtocolContentBlockIndex === null ||
+      contentBlockIndex === undefined ||
+      this.pendingProtocolContentBlockIndex === contentBlockIndex
+    ) {
+      this.pendingProtocolText = "";
+      this.pendingProtocolContentBlockIndex = null;
+    }
   }
 }
 
@@ -1876,38 +2036,9 @@ export const bedrockAdapterFactory: LLMProvider<
       { hasApiKey: !!apiKey, apiKeyLength: apiKey?.length },
       "[BedrockAdapter] createClient called",
     );
-    const baseUrl = options?.baseUrl ?? config.llm.bedrock.baseUrl;
-    const region = getBedrockRegion(baseUrl);
-
-    logger.info({ region }, "[BedrockAdapter] region");
-    logger.info({ endpoint: baseUrl }, "[BedrockAdapter] baseUrl");
-    logger.info({ hasApiKey: !!apiKey }, "[BedrockAdapter] apiKey");
-
-    if (!apiKey && isBedrockIamAuthEnabled()) {
-      logger.info("[BedrockAdapter] using IAM credential provider");
-      return new BedrockClient({
-        baseUrl,
-        region,
-        credentialProvider: getBedrockCredentialProvider(),
-      });
-    }
-
-    const sigV4 = decodeBedrockSigV4Marker(apiKey);
-    if (sigV4) {
-      logger.info("[BedrockAdapter] using static SigV4 credentials");
-      return new BedrockClient({
-        baseUrl,
-        region,
-        accessKeyId: sigV4.accessKeyId,
-        secretAccessKey: sigV4.secretAccessKey,
-        sessionToken: sigV4.sessionToken,
-      });
-    }
-
-    return new BedrockClient({
-      baseUrl,
-      region,
-      apiKey,
+    return buildBedrockClient({
+      apiKey: apiKey ?? null,
+      baseUrl: options?.baseUrl,
     });
   },
 
@@ -1928,7 +2059,10 @@ export const bedrockAdapterFactory: LLMProvider<
       run: (input) => bedrockClient.converse(request.modelId, input),
     });
 
-    // Convert response to our internal format with decoded tool names
+    // Convert response to our internal format with decoded tool names.
+    // Reasoning blocks are carried by reference: only tool names need decoding,
+    // and dropping them would strip extended thinking from the answer and cost
+    // the client the signature it has to echo back on the next turn.
     const outputContent: Array<
       | { text: string }
       | {
@@ -1938,11 +2072,15 @@ export const bedrockAdapterFactory: LLMProvider<
             input: Record<string, unknown>;
           };
         }
+      | BedrockReasoningContentBlock
     > = [];
     if (response.output?.message?.content) {
       for (const c of response.output.message.content) {
         if (isTextBlock(c)) {
-          outputContent.push({ text: c.text });
+          const text = stripBedrockToolProtocolSentinels(c.text);
+          if (text) {
+            outputContent.push({ text });
+          }
         } else if (isToolUseBlock(c)) {
           outputContent.push({
             toolUse: {
@@ -1951,6 +2089,8 @@ export const bedrockAdapterFactory: LLMProvider<
               input: (c.toolUse.input ?? {}) as Record<string, unknown>,
             },
           });
+        } else if (isReasoningContentBlock(c)) {
+          outputContent.push(c);
         }
       }
     }

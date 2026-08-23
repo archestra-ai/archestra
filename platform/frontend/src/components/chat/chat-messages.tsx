@@ -893,14 +893,16 @@ export function ChatMessages({
                               isLastAssistantInSequence &&
                               isLastTextPart &&
                               status !== "streaming";
-                            // Show citations on the last text part of the last
-                            // assistant message, only after streaming completes
-                            // to avoid citations jumping between messages.
+                            // Completed earlier turns keep their citations and
+                            // images while a later turn streams. Only suppress
+                            // citations for the response currently in flight to
+                            // avoid them jumping between its tool/text messages.
                             let citationParts: typeof message.parts | undefined;
                             if (
                               isLastAssistantInSequence &&
                               isLastTextPart &&
-                              !isResponseInProgress
+                              (!isResponseInProgress ||
+                                idx < messages.length - 1)
                             ) {
                               if (
                                 hasKnowledgeBaseToolCall(message.parts ?? [])
@@ -1043,11 +1045,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
-                                  skill={
-                                    ChatMessageMetadataSchema.safeParse(
-                                      message.metadata,
-                                    ).data?.skill
-                                  }
+                                  skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
@@ -1157,11 +1155,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
-                                  skill={
-                                    ChatMessageMetadataSchema.safeParse(
-                                      message.metadata,
-                                    ).data?.skill
-                                  }
+                                  skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
@@ -3055,4 +3049,17 @@ function ContextCompactionTimelineEvent({
       </div>
     </div>
   );
+}
+
+function getSkillAttribution(
+  metadata: unknown,
+): { name: string; href?: string } | undefined {
+  const parsed = ChatMessageMetadataSchema.safeParse(metadata).data;
+  if (parsed?.skill) return parsed.skill;
+  return parsed?.externalMcpSkill
+    ? {
+        name: parsed.externalMcpSkill.displayName,
+        href: `/skills/external/${parsed.externalMcpSkill.id}?mcpServerId=${parsed.externalMcpSkill.mcpServerId}`,
+      }
+    : undefined;
 }

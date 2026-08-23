@@ -13,10 +13,14 @@ export const STUB_COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
 export interface FakeGithubRepo {
   owner: string;
   repo: string;
+  /** Commit returned by metadata endpoints and accepted by raw-file routes. */
+  commitSha?: string;
   /** Repo files: path → utf8 string or raw bytes. */
   files: Record<string, string | Buffer>;
   /** Optional per-path size override for the tree listing (not the body). */
   treeSizes?: Record<string, number>;
+  /** Optional git mode override (for executable plugin scripts). */
+  modes?: Record<string, string>;
 }
 
 export function stubGithub(repos: FakeGithubRepo[]): ReturnType<typeof vi.fn> {
@@ -29,17 +33,19 @@ export function stubGithub(repos: FakeGithubRepo[]): ReturnType<typeof vi.fn> {
           : input.url,
     );
     for (const fake of repos) {
+      const commitSha = fake.commitSha ?? STUB_COMMIT_SHA;
       const base = `/repos/${fake.owner}/${fake.repo}`;
       if (url.hostname === "api.github.com") {
         if (url.pathname.startsWith(`${base}/commits/`)) {
-          return Response.json({ sha: STUB_COMMIT_SHA });
+          return Response.json({ sha: commitSha });
         }
         if (url.pathname.startsWith(`${base}/git/trees/`)) {
           return Response.json({
-            sha: STUB_COMMIT_SHA,
+            sha: commitSha,
             tree: Object.entries(fake.files).map(([path, content]) => ({
               type: "blob",
               path,
+              mode: fake.modes?.[path] ?? "100644",
               size:
                 fake.treeSizes?.[path] ??
                 (typeof content === "string"
@@ -49,7 +55,7 @@ export function stubGithub(repos: FakeGithubRepo[]): ReturnType<typeof vi.fn> {
           });
         }
       }
-      const rawPrefix = `/${fake.owner}/${fake.repo}/${STUB_COMMIT_SHA}/`;
+      const rawPrefix = `/${fake.owner}/${fake.repo}/${commitSha}/`;
       if (
         url.hostname === "raw.githubusercontent.com" &&
         url.pathname.startsWith(rawPrefix)

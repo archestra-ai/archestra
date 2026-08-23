@@ -17,6 +17,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { LoadingSpinner } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -394,98 +395,98 @@ export function ChannelsSection({
       ) : hasAnyChannels ? (
         <>
           {/* Search + filters + bulk assign */}
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <FilterBar
+            className="mb-0"
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
+            actions={
+              <BulkAssignButton
+                agents={channelAgentList}
+                selectedCount={selectedIds.size}
+                isUpdating={bulkMutation.isPending}
+                onAssign={handleBulkAssign}
+              />
+            }
+          >
             <SearchInput
               placeholder="Search channels..."
               paramName="search"
-              className="relative w-full xl:max-w-md xl:flex-1"
+              className={filterSearchClass}
               debounceMs={300}
               onSearchChange={handleSearchChange}
             />
 
-            <div className="flex flex-wrap items-center gap-1 xl:justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFromUrl === "all" && "bg-primary/10 text-primary",
-                )}
-                onClick={() => handleStatusChange("all")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                All{counts ? <span> ({totalCount})</span> : null}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFromUrl === "configured"
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => handleStatusChange("configured")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Configured{counts ? <span> ({counts.configured})</span> : null}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-xs rounded-full gap-1.5",
-                  statusFromUrl === "unassigned"
-                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => handleStatusChange("unassigned")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Unassigned{counts ? <span> ({counts.unassigned})</span> : null}
-              </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-8 rounded-full text-xs gap-1.5",
+                statusFromUrl === "all" && "bg-primary/10 text-primary",
+              )}
+              onClick={() => handleStatusChange("all")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+              All{counts ? <span> ({totalCount})</span> : null}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-8 rounded-full text-xs gap-1.5",
+                statusFromUrl === "configured"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => handleStatusChange("configured")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Configured{counts ? <span> ({counts.configured})</span> : null}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-8 rounded-full text-xs gap-1.5",
+                statusFromUrl === "unassigned"
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => handleStatusChange("unassigned")}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Unassigned{counts ? <span> ({counts.unassigned})</span> : null}
+            </Button>
 
-              {hasMultipleWorkspaces && (
-                <>
-                  <span className="mx-1 hidden self-stretch border-l border-border xl:block" />
+            {hasMultipleWorkspaces && (
+              <>
+                <span className="mx-1 hidden self-stretch border-l border-border sm:block" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 rounded-full text-xs",
+                    !workspaceIdFromUrl && "bg-muted",
+                  )}
+                  onClick={() => handleWorkspaceChange(null)}
+                >
+                  All workspaces
+                </Button>
+                {workspaces.map((ws) => (
                   <Button
+                    key={ws.id}
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-7 text-xs rounded-full",
-                      !workspaceIdFromUrl && "bg-muted",
+                      "h-8 rounded-full text-xs",
+                      workspaceIdFromUrl === ws.id && "bg-muted",
                     )}
-                    onClick={() => handleWorkspaceChange(null)}
+                    onClick={() => handleWorkspaceChange(ws.id)}
                   >
-                    All workspaces
+                    {ws.name}
                   </Button>
-                  {workspaces.map((ws) => (
-                    <Button
-                      key={ws.id}
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-7 text-xs rounded-full",
-                        workspaceIdFromUrl === ws.id && "bg-muted",
-                      )}
-                      onClick={() => handleWorkspaceChange(ws.id)}
-                    >
-                      {ws.name}
-                    </Button>
-                  ))}
-                </>
-              )}
-
-              <div className="ml-0 xl:ml-2">
-                <BulkAssignButton
-                  agents={channelAgentList}
-                  selectedCount={selectedIds.size}
-                  isUpdating={bulkMutation.isPending}
-                  onAssign={handleBulkAssign}
-                />
-              </div>
-            </div>
-          </div>
+                ))}
+              </>
+            )}
+          </FilterBar>
 
           {/* Table */}
           <div className="overflow-hidden rounded-md border">

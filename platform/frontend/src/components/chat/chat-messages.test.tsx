@@ -4,6 +4,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
+  vi.fn((_parts: unknown[]) => false),
+);
+
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -78,11 +82,37 @@ vi.mock("@/components/ai-elements/tool", () => ({
 }));
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
-  EditableAssistantMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableAssistantMessage: ({
+    text,
+    citationParts,
+  }: {
+    text: string;
+    citationParts?: unknown[];
+  }) => (
+    <div>
+      <span>{text}</span>
+      {citationParts ? <span data-testid="knowledge-citations" /> : null}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/editable-user-message", () => ({
-  EditableUserMessage: ({ text }: { text: string }) => <div>{text}</div>,
+  EditableUserMessage: ({
+    text,
+    skill,
+  }: {
+    text: string;
+    skill?: { name: string; href?: string };
+  }) => (
+    <div>
+      {text}
+      {skill && (
+        <span data-testid="skill-attribution" data-href={skill.href}>
+          {skill.name}
+        </span>
+      )}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/inline-chat-error", () => ({
@@ -204,7 +234,8 @@ vi.mock("@/components/chat/tool-status-row", () => ({
 }));
 
 vi.mock("@/components/chat/knowledge-graph-citations", () => ({
-  hasKnowledgeBaseToolCall: () => false,
+  hasKnowledgeBaseToolCall: mockHasKnowledgeBaseToolCall,
+  KnowledgeGraphCitations: () => <div data-testid="knowledge-citations" />,
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -270,6 +301,91 @@ describe("ChatMessages", () => {
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
+    mockHasKnowledgeBaseToolCall.mockReturnValue(false);
+  });
+
+  it("renders external MCP Skill attribution from message metadata", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Prepare the release" }],
+        metadata: {
+          externalMcpSkill: {
+            id: "11111111-1111-4111-8111-111111111111",
+            mcpServerId: "33333333-3333-4333-8333-333333333333",
+            uri: "skill://example/release/SKILL.md",
+            name: "release-checklist",
+            serverName: "Operations server",
+            commandValue: "/operations-server-release-checklist",
+            displayName:
+              "Operations server [team:33333333] / release-checklist",
+          },
+        },
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("skill-attribution")).toHaveTextContent(
+      "Operations server [team:33333333] / release-checklist",
+    );
+    expect(screen.getByTestId("skill-attribution")).toHaveAttribute(
+      "data-href",
+      "/skills/external/11111111-1111-4111-8111-111111111111?mcpServerId=33333333-3333-4333-8333-333333333333",
+    );
+  });
+
+  it("keeps a completed turn's knowledge image visible while a later turn streams", () => {
+    mockHasKnowledgeBaseToolCall.mockImplementation((parts: unknown[]) =>
+      parts.some(
+        (part) =>
+          (part as { type?: string }).type ===
+          "tool-archestra__query_knowledge_sources",
+      ),
+    );
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__query_knowledge_sources",
+            toolCallId: "tool-1",
+            state: "output-available",
+            input: { query: "lobsters" },
+            output: { content: "[image]" },
+          },
+          { type: "text", text: "I found an image." },
+        ],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "What else?" }],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Still working..." }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("knowledge-citations")).toBeInTheDocument();
   });
 
   it("does not render an accordion for an empty reasoning part", () => {

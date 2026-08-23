@@ -1,7 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -12,11 +12,14 @@ import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Popover,
   PopoverContent,
@@ -31,15 +34,18 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type EnvironmentWithAssignedCount,
+  useBulkDeleteEnvironments,
   useCreateEnvironment,
   useDeleteEnvironment,
   useEnvironments,
   useK8sCapabilities,
   useUpdateEnvironment,
 } from "@/lib/environment.query";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useDefaultEnvironment,
   useOrganization,
@@ -180,8 +186,39 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
 
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteEnvironments();
+
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedEnvironments,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows,
+    getId: (row) => row.id,
+    // The Default row is synthetic — it stands for "no environment" — and the
+    // delete route refuses one that still has catalog items assigned.
+    canSelect: (row) =>
+      row.kind === "environment" && row.assignedCatalogCount === 0,
+    filterSignature: "environments",
+    matchDescription: "can be deleted",
+  });
+
   const columns: ColumnDef<EnvironmentTableRow>[] = useMemo(
     () => [
+      createSelectColumn<EnvironmentTableRow>({
+        rowLabel: (row) => `Select ${row.name}`,
+        allLabel: "Select all environments on this page",
+        // Matches what the row's own Delete allows: the Default row is
+        // synthetic, and the backend refuses (409) an environment that still
+        // has catalog items assigned. Offering those would build a selection
+        // guaranteed to come back as failures.
+        canSelect: (row) =>
+          row.kind === "environment" && row.assignedCatalogCount === 0,
+      }),
       {
         accessorKey: "name",
         header: "Name",
@@ -262,13 +299,63 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-4">
+      <BulkActionsBar
+        count={selectedEnvironments.length}
+        noun="environment"
+        onClear={clearSelection}
+        selectAllMatching={selectAllMatching}
+        busy={bulkDelete.isPending}
+      >
+        <PermissionButton
+          permissions={{ environment: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActionsBar>
+
       <DataTable
         columns={columns}
         data={rows}
         getRowId={(row) => row.id}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        hideSelectedCount
         isLoading={isLoading}
         emptyMessage="No environments"
       />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete environments"
+          description={`Delete ${selectedEnvironments.length} ${
+            selectedEnvironments.length === 1 ? "environment" : "environments"
+          }? Resources in them fall back to Default.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectedEnvironments, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "environment",
+                });
+                setBulkDeleteOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete environments"
+          pendingLabel="Deleting..."
+        />
+      )}
 
       <EnvironmentEditorDialog
         mode="create"

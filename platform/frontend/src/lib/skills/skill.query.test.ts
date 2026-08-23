@@ -5,6 +5,9 @@ import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  useBulkDeleteSkills,
+  useBulkUpdateSkillsVisibility,
+  useExternalMcpSkill,
   useRestoreSkillVersion,
   useSkillVersion,
   useSkillVersions,
@@ -17,6 +20,7 @@ vi.mock("@archestra/shared", () => ({
     getSkill: vi.fn(),
     getSkillSourceRepos: vi.fn(),
     getSkillUsageStatistics: vi.fn(),
+    getExternalMcpSkill: vi.fn(),
     getSkillVersion: vi.fn(),
     getSkillVersions: vi.fn(),
     createSkill: vi.fn(),
@@ -29,6 +33,8 @@ vi.mock("@archestra/shared", () => ({
     searchSkillCatalog: vi.fn(),
     previewGithubSkill: vi.fn(),
     importGithubSkills: vi.fn(),
+    bulkUpdateSkillsVisibility: vi.fn(),
+    bulkDeleteSkills: vi.fn(),
   },
 }));
 
@@ -115,6 +121,33 @@ const restoreArgs = {
   version: 6,
   baseVersion: 12,
 };
+
+describe("useExternalMcpSkill", () => {
+  it("clears a removed external Skill when its refetch returns not found", async () => {
+    sdk.getExternalMcpSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message: "External skill not found",
+          type: "api_not_found_error",
+        },
+      },
+    } as never);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+
+    const { result } = renderHook(
+      () => useExternalMcpSkill({ id: "skill-1", mcpServerId: "server-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+  });
+});
 
 describe("useRestoreSkillVersion", () => {
   beforeEach(() => {
@@ -555,5 +588,125 @@ describe("useSkillVersions", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(result.current.hasNextPage).toBe(false);
+  });
+});
+
+/**
+ * A bulk route answers 200 with a per-skill breakdown, so a batch where some
+ * skills moved and others did not is a *success* as far as the mutation is
+ * concerned. These pin the one place that difference is visible to the user.
+ */
+describe("bulk skill mutations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function setupBulk<T>(hook: () => T) {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(hook, { wrapper });
+  }
+
+  const visibilityArgs = { skillIds: ["a"], scope: "org" as const };
+
+  it("reports a clean sweep as a plain success", async () => {
+    sdk.bulkUpdateSkillsVisibility.mockResolvedValue({
+      data: {
+        succeeded: [
+          { id: "a", name: "alpha" },
+          { id: "b", name: "beta" },
+        ],
+        failed: [],
+      },
+      error: undefined,
+    });
+    const { result } = setupBulk(useBulkUpdateSkillsVisibility);
+
+    await act(async () => {
+      await result.current.mutateAsync(visibilityArgs);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("Updated 2 skills");
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("names the skills a partial batch left behind", async () => {
+    sdk.bulkUpdateSkillsVisibility.mockResolvedValue({
+      data: {
+        succeeded: [{ id: "a", name: "alpha" }],
+        failed: [
+          {
+            id: "b",
+            name: "beta",
+            error: 'A skill named "beta" already exists',
+          },
+        ],
+      },
+      error: undefined,
+    });
+    const { result } = setupBulk(useBulkUpdateSkillsVisibility);
+
+    await act(async () => {
+      await result.current.mutateAsync(visibilityArgs);
+    });
+
+    // Not a success: claiming "Updated 1 skill" would hide that beta is still
+    // where it was.
+    expect(toast.success).not.toHaveBeenCalled();
+    const [message, options] = vi.mocked(toast.warning).mock.calls[0];
+    expect(message).toContain("Updated 1 skill");
+    expect(message).toContain("1 skill could not be updated");
+    expect(options?.description).toContain("beta");
+    expect(options?.description).toContain("already exists");
+  });
+
+  it("counts the failures it does not name", async () => {
+    sdk.bulkDeleteSkills.mockResolvedValue({
+      data: {
+        succeeded: [],
+        failed: ["a", "b", "c", "d", "e"].map((id) => ({
+          id,
+          name: `skill-${id}`,
+          error: "You can only manage your own personal skills",
+        })),
+      },
+      error: undefined,
+    });
+    const { result } = setupBulk(useBulkDeleteSkills);
+
+    await act(async () => {
+      await result.current.mutateAsync(["a", "b", "c", "d", "e"]);
+    });
+
+    const [message, options] = vi.mocked(toast.error).mock.calls[0];
+    expect(message).toBe("Could not delete 5 skills");
+    expect(options?.description).toContain("skill-a, skill-b, skill-c");
+    expect(options?.description).toContain("and 2 more");
+    // A toast is not a report, so the rest are counted rather than listed.
+    expect(options?.description).not.toContain("skill-d");
+  });
+
+  it("falls back to the id for a skill that resolved to nothing", async () => {
+    sdk.bulkDeleteSkills.mockResolvedValue({
+      data: {
+        succeeded: [],
+        failed: [{ id: "gone-id", name: null, error: "Skill not found" }],
+      },
+      error: undefined,
+    });
+    const { result } = setupBulk(useBulkDeleteSkills);
+
+    await act(async () => {
+      await result.current.mutateAsync(["gone-id"]);
+    });
+
+    const [, options] = vi.mocked(toast.error).mock.calls[0];
+    expect(options?.description).toContain("gone-id");
   });
 });

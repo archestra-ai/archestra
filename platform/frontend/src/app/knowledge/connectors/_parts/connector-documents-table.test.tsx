@@ -86,6 +86,10 @@ vi.mock("@/lib/knowledge/kb-document.query", () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
+  useBulkDeleteConnectorDocuments: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 describe("ConnectorDocumentsTable", () => {
@@ -121,6 +125,22 @@ describe("ConnectorDocumentsTable", () => {
     // kind is worded is AclBadges' contract, pinned in acl-badges.test.tsx.
     expect(screen.getByText("Everyone in org")).toBeInTheDocument();
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+  });
+
+  it("reaches the source through a row action instead of a column of near-identical URLs", () => {
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
+
+    // Every document on one connector shares a host and a URL shape, so the
+    // spelled-out column was dead weight; the link itself is what it was for.
+    expect(
+      screen.queryByText("https://example.com/quarterly-plan"),
+    ).not.toBeInTheDocument();
+    const openLink = screen.getAllByLabelText(/^Open at source/)[0];
+    expect(openLink).toHaveAttribute(
+      "href",
+      "https://example.com/quarterly-plan",
+    );
+    expect(openLink).toHaveAttribute("target", "_blank");
   });
 
   it("opens preview dialog from row action", async () => {

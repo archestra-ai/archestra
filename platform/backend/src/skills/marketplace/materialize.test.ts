@@ -8,6 +8,7 @@ import SkillShareLinkRevisionModel from "@/models/skill-share-link-revision";
 import { parseSkillManifest } from "@/skills/parser";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import {
+  MarketplaceMaterializationConflictError,
   MarketplaceMaterializer,
   type MaterializeRequest,
   type MaterializeSkillInput,
@@ -163,6 +164,7 @@ describe("MarketplaceMaterializer", () => {
     expect(claudeManifest.plugins[0].source).toBe(
       "./plugins/org-abcd1234-skills",
     );
+    expect(claudeManifest.plugins[0].version).toBe("0.1.0");
 
     const codexManifest = JSON.parse(
       await fs.readFile(
@@ -176,6 +178,7 @@ describe("MarketplaceMaterializer", () => {
       source: "local",
       path: "./plugins/org-abcd1234-skills",
     });
+    expect(codexManifest.plugins[0].version).toBe("0.1.0");
   });
 
   test("recovers from a cross-replica revision sequence collision", async () => {
@@ -205,6 +208,29 @@ describe("MarketplaceMaterializer", () => {
       );
     } finally {
       // the global test setup clears mocks but does not restore originals
+      spy.mockRestore();
+    }
+  });
+
+  test("rejects a stale request after a different replica wins the sequence", async () => {
+    const realAppend = SkillShareLinkRevisionModel.append.bind(
+      SkillShareLinkRevisionModel,
+    );
+    const spy = vi
+      .spyOn(SkillShareLinkRevisionModel, "append")
+      .mockImplementationOnce(async (params, sequence) => {
+        await realAppend({ ...params, contentHash: "f".repeat(64) }, sequence);
+        return realAppend(params, sequence);
+      });
+
+    try {
+      await expect(
+        materializer.materialize(makeRequest(linkId)),
+      ).rejects.toBeInstanceOf(MarketplaceMaterializationConflictError);
+      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
+        1,
+      );
+    } finally {
       spy.mockRestore();
     }
   });
@@ -373,7 +399,62 @@ describe("MarketplaceMaterializer", () => {
     expect(Buffer.compare(written, original)).toBe(0);
   });
 
-  test("bundle plugin contains a deterministic skills/<slug> dir per shared skill", async () => {
+  test("materializes executable plugin files with payload-owned git modes", async () => {
+    const result = await materializer.materialize(
+      makeRequest(linkId, {
+        plugins: [
+          {
+            pluginSlug: "session-attribution-12345678",
+            displayName: "Session attribution",
+            description: "Attributes sessions",
+            clientType: "claude-code",
+            files: [
+              {
+                path: "hooks/hooks.json",
+                content: '  {\n    "hooks": {}\n  }  \n',
+                encoding: "utf8",
+                mode: "100644",
+              },
+              {
+                path: "scripts/run.sh",
+                content: "#!/bin/sh\ntrue\n",
+                encoding: "utf8",
+                mode: "100755",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(
+      await git(
+        result.repoPath,
+        "ls-tree",
+        "HEAD",
+        "plugins/session-attribution-12345678/scripts/run.sh",
+      ),
+    ).toMatch(/^100755 blob /);
+    expect(
+      await git(
+        result.repoPath,
+        "ls-tree",
+        "HEAD",
+        "plugins/session-attribution-12345678/hooks/hooks.json",
+      ),
+    ).toMatch(/^100644 blob /);
+
+    const raw = await fs.readFile(
+      path.join(
+        result.repoPath,
+        "plugins/session-attribution-12345678/hooks/hooks.json",
+      ),
+      "utf8",
+    );
+    expect(raw).toBe('  {\n    "hooks": {}\n  }  \n');
+  });
+
+  test("skills plugin contains a deterministic skills/<slug> dir per shared skill", async () => {
     const skills = [
       makeSkill({ id: "b", name: "Beta" }),
       makeSkill({ id: "a", name: "Alpha" }),
@@ -386,11 +467,11 @@ describe("MarketplaceMaterializer", () => {
         "utf8",
       ),
     );
-    // exactly one bundle plugin regardless of how many skills are shared
+    // exactly one skills plugin regardless of how many skills are shared
     expect(manifest.plugins.map((p: { name: string }) => p.name)).toEqual([
       "org-abcd1234-skills",
     ]);
-    // each shared skill gets its own subdirectory inside the bundle plugin
+    // each shared skill gets its own subdirectory inside the skills plugin
     await expect(
       fs.access(
         path.join(result.repoPath, "plugins/org-abcd1234-skills/skills/beta"),
@@ -416,6 +497,7 @@ describe("MarketplaceMaterializer", () => {
     // and only one revision was persisted
     const revs = await SkillShareLinkRevisionModel.listByLink(linkId);
     expect(revs).toHaveLength(1);
+    expect(readMarketplaceVersion(revs[0].payload.files)).toBe("0.1.0");
   });
 
   test("changed content advances HEAD with a child commit (no unrelated histories)", async () => {
@@ -440,6 +522,8 @@ describe("MarketplaceMaterializer", () => {
     expect(revs).toHaveLength(2);
     expect(revs[0].parentSha).toBeNull();
     expect(revs[1].parentSha).toBe(revs[0].commitSha);
+    expect(readMarketplaceVersion(revs[0].payload.files)).toBe("0.1.0");
+    expect(readMarketplaceVersion(revs[1].payload.files)).toBe("0.2.0");
   });
 
   test("per-link mutex serializes concurrent calls into a single commit", async () => {
@@ -605,6 +689,16 @@ async function commitCount(repoPath: string): Promise<number> {
 
 function diskHead(repoPath: string): Promise<string> {
   return git(repoPath, "rev-parse", "HEAD");
+}
+
+function readMarketplaceVersion(
+  files: Array<{ path: string; content: string }>,
+): string {
+  const file = files.find(
+    ({ path: filePath }) => filePath === ".claude-plugin/marketplace.json",
+  );
+  if (!file) throw new Error("missing Claude marketplace manifest");
+  return JSON.parse(file.content).plugins[0].version;
 }
 
 async function readCommitMeta(repoPath: string): Promise<{

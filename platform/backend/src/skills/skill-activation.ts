@@ -183,9 +183,10 @@ export function neutralizeFrameTags(value: string): string {
 /**
  * Every XML-ish frame tag this pipeline emits around model-facing skill text:
  * the activation block (`skill_content`, `skill_resources`,
- * `skill_compatibility`, `skill_allowed_tools`), the `load_skill` file framing
- * (`skill_file`), and the catalog (`available_skills`, `skill`). Adding a new
- * frame anywhere in skill prompts requires registering its tag here.
+ * `skill_compatibility`, `skill_allowed_tools`), external file lists
+ * (`skill_files`), the `load_skill` file framing (`skill_file`), and the catalog
+ * (`available_skills`, `skill`). Adding a new frame anywhere in skill prompts
+ * requires registering its tag here.
  *
  * Deliberately scoped to the skill pipeline's own frames: tags other parts of
  * the prompt assembly may use (tool-result or attachment framing, reminder
@@ -197,6 +198,7 @@ const FRAME_TAG_NAMES = [
   "skill_resources",
   "skill_compatibility",
   "skill_allowed_tools",
+  "skill_files",
   "skill_file",
   "available_skills",
   "skill",

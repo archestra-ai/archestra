@@ -3,63 +3,127 @@
 import Link from "next/link";
 import type React from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useExternalMcpSkills } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 
-interface SkillPillProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Skill name to display. When null, the pill collapses to a 32×32 placeholder. */
-  skillName: string | null;
-  /** Optional adornment (e.g. status dot) absolutely-positioned in the corner. */
-  children?: React.ReactNode;
+export function getSkillPillDisplay(skillName: string | null): {
+  name: string | null;
+  source: string | null;
+  externalMcp: boolean;
+  scope: "personal" | "team" | "org" | null;
+  serverIdPrefix: string | null;
+} {
+  if (!skillName)
+    return {
+      name: null,
+      source: null,
+      externalMcp: false,
+      scope: null,
+      serverIdPrefix: null,
+    };
+  const external = /^(.+) \[(personal|team|org):([^ ]+)\] \/ (.+)$/.exec(
+    skillName,
+  );
+  if (!external)
+    return {
+      name: skillName,
+      source: null,
+      externalMcp: false,
+      scope: null,
+      serverIdPrefix: null,
+    };
+  return {
+    name: external[4]?.trim() || skillName,
+    source: external[1]?.trim() || null,
+    externalMcp: true,
+    scope: external[2] as "personal" | "team" | "org",
+    serverIdPrefix: external[3] ?? null,
+  };
 }
 
 /**
- * Shared "Skill: <name>" pill used both in the assistant's tool-call row
- * (`archestra__load_skill`) and in the user-message attribution badge for
- * skills invoked via slash command. When the user has `skill:read`, the name
- * links to the skills list searched for that name, which resolves it to an id
- * and forwards to the skill's page.
+ * Compact Skill attribution shared by assistant load_skill calls and
+ * slash-command user messages. Technical external-install qualifiers stay out
+ * of the primary surface; source provenance remains available on hover.
  */
 export function SkillPill({
   skillName,
   className,
   children,
+  href,
+  showNativeTitle = true,
+  title,
   ...rest
 }: SkillPillProps) {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const display = getSkillPillDisplay(skillName);
+  const { data: externalSkills = [] } = useExternalMcpSkills({
+    enabled:
+      canReadSkills === true && display.externalMcp && href === undefined,
+  });
+  const externalSkill = externalSkills.find(
+    (skill) =>
+      skill.name === display.name &&
+      skill.serverName === display.source &&
+      skill.scope === display.scope &&
+      (display.serverIdPrefix === null ||
+        skill.mcpServerId.startsWith(display.serverIdPrefix)),
+  );
   const skillsHref =
-    skillName && canReadSkills === true
-      ? `/skills?search=${encodeURIComponent(skillName)}&openEdit=${encodeURIComponent(skillName)}`
+    display.name && canReadSkills === true
+      ? (href ??
+        (externalSkill
+          ? `/skills/external/${externalSkill.id}?mcpServerId=${externalSkill.mcpServerId}`
+          : !display.externalMcp
+            ? `/skills?search=${encodeURIComponent(display.name)}&openEdit=${encodeURIComponent(display.name)}`
+            : null))
       : null;
+  const sourceTitle =
+    display.name && display.source
+      ? `${display.name} from ${display.source}`
+      : undefined;
 
   return (
     <div
       {...rest}
+      title={showNativeTitle ? (title ?? sourceTitle) : title}
       className={cn(
-        "relative inline-flex items-center h-8 rounded-full border bg-background",
-        skillName ? "px-3" : "size-8 justify-center",
+        "relative inline-flex h-7 min-w-0 max-w-[min(24rem,calc(100vw-5rem))] items-center rounded-md bg-muted/60 px-2.5 transition-colors",
+        skillsHref && "hover:bg-muted",
         className,
       )}
     >
-      {skillName ? (
-        <span className="text-xs text-muted-foreground mr-1">Skill:</span>
-      ) : (
-        <span className="text-xs text-muted-foreground">Skill</span>
-      )}
-      {skillName ? (
+      {display.name ? (
         skillsHref ? (
           <Link
             href={skillsHref}
-            className="text-xs font-medium text-foreground hover:underline underline-offset-2 whitespace-nowrap"
+            className="min-w-0 truncate text-xs font-medium text-foreground transition-colors hover:text-primary"
           >
-            {skillName}
+            {display.name}
           </Link>
         ) : (
-          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-            {skillName}
+          <span className="min-w-0 truncate text-xs font-medium text-foreground/80">
+            {display.name}
+            {display.source && (
+              <span className="sr-only"> from {display.source}</span>
+            )}
           </span>
         )
-      ) : null}
+      ) : (
+        <span className="text-xs text-muted-foreground">Loading skill</span>
+      )}
       {children}
     </div>
   );
+}
+
+interface SkillPillProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** Raw load_skill name. External MCP qualifiers are reduced for display. */
+  skillName: string | null;
+  /** Optional adornment (e.g. status dot) absolutely-positioned in the corner. */
+  children?: React.ReactNode;
+  /** Disable when a custom tooltip already provides the source description. */
+  showNativeTitle?: boolean;
+  /** Exact Skill route when identity is already available in message metadata. */
+  href?: string;
 }

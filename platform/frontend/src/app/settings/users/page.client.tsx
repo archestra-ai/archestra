@@ -1,7 +1,8 @@
 "use client";
 
 import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import { useMutation } from "@tanstack/react-query";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
   Copy,
@@ -32,6 +33,8 @@ import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
@@ -46,6 +49,7 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import {
@@ -56,6 +60,7 @@ import {
 import {
   type Invitation,
   type Member,
+  useAllMatchingMembers,
   useCancelInvitationMutation,
   useInvitationsPaginated,
   useMembersPaginated,
@@ -319,7 +324,63 @@ function MembersTab({
       (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
     );
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
+  const clearSelection = useCallback(() => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  }, []);
+
+  const rowKey = (row: Member | PendingSignupMember) =>
+    "provider" in row ? `pending-${row.userId}` : row.id;
+
+  /**
+   * Your own membership is never part of a selection — removing yourself from
+   * the organization mid-batch would revoke the session doing the removing.
+   */
+  const isSelf = (row: Member | PendingSignupMember) =>
+    row.userId === currentUserId;
+
+  const filterSignature = JSON.stringify({ nameFilter, roleFilter });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { data: allMatchingMembers, isFetching: isFetchingAllMatching } =
+    useAllMatchingMembers(
+      { name: nameFilter || undefined, role: roleFilter || undefined },
+      { enabled: allMatchingSelected },
+    );
+
+  const pageSelection = tableRows.filter(
+    (row) => !isSelf(row) && rowSelection[rowKey(row)],
+  );
+  const selectedMembers =
+    allMatchingSelected && allMatchingMembers
+      ? allMatchingMembers.filter((row) => !isSelf(row))
+      : pageSelection;
+
+  // Two removal routes behind one action: an accepted member leaves the
+  // organization, a pending one has their invitation withdrawn.
+  const bulkRemove = useMutation({
+    mutationFn: async (selection: readonly (Member | PendingSignupMember)[]) =>
+      runBulkAction({
+        items: selection,
+        describe: (row) => row.email,
+        run: async (row) => {
+          if ("provider" in row) {
+            await deletePendingSignupMember.mutateAsync(row.userId);
+            return;
+          }
+          await removeMember.mutateAsync(row.id);
+        },
+      }),
+  });
+
   const columns: ColumnDef<Member | PendingSignupMember>[] = [
+    createSelectColumn<Member | PendingSignupMember>({
+      rowLabel: (row) => `Select ${row.email}`,
+      allLabel: "Select all users on this page",
+      canSelect: (row) => !isSelf(row),
+    }),
     {
       id: "avatar",
       size: 40,
@@ -520,9 +581,44 @@ function MembersTab({
         isPending={isPending}
         loadingFallback={<LoadingSpinner />}
       >
+        <BulkActionsBar
+          count={selectedMembers.length}
+          noun="user"
+          onClear={clearSelection}
+          busy={bulkRemove.isPending || isFetchingAllMatching}
+          selectAllMatching={{
+            // Members only: the pending-signup rows come from a separate,
+            // unpaginated source shown on page one alone.
+            total: pagination?.total ?? 0,
+            pageFullySelected:
+              tableRows.length > 0 &&
+              pageSelection.length ===
+                tableRows.filter((row) => !isSelf(row)).length,
+            active: allMatchingSelected,
+            onSelectAll: () => setEscalatedFor(filterSignature),
+            matchDescription: nameFilter
+              ? "match this search query"
+              : "match the current filters",
+          }}
+          className="mb-3"
+        >
+          <PermissionButton
+            permissions={{ member: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setBulkRemoveOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Remove</span>
+          </PermissionButton>
+        </BulkActionsBar>
+
         <DataTable
           columns={columns}
           data={tableRows}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          hideSelectedCount
           manualPagination
           getRowId={(row) =>
             "provider" in row ? `pending-${row.userId}` : row.id
@@ -559,6 +655,34 @@ function MembersTab({
             setChangingRole(null);
           }}
           isPending={updateMemberRole.isPending}
+        />
+      )}
+
+      {bulkRemoveOpen && (
+        <DeleteConfirmDialog
+          open={bulkRemoveOpen}
+          onOpenChange={setBulkRemoveOpen}
+          title="Remove users"
+          description={`Remove ${selectedMembers.length} ${
+            selectedMembers.length === 1 ? "user" : "users"
+          } from the organization? Pending invitations are withdrawn; accepted members lose access.`}
+          isPending={bulkRemove.isPending}
+          onConfirm={() => {
+            bulkRemove.mutate(selectedMembers, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Removed",
+                  failureVerb: "remove",
+                  noun: "user",
+                });
+                setBulkRemoveOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Remove users"
+          pendingLabel="Removing..."
         />
       )}
 

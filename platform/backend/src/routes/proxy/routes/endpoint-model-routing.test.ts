@@ -18,7 +18,6 @@ import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { vllmAdapterFactory } from "../adapters/vllm";
-import * as proxyUtils from "../utils";
 import vllmProxyRoutes from "./vllm";
 
 const SERVER_A_URL = "http://vllm-a:8000/v1";
@@ -151,7 +150,7 @@ describe("vLLM endpoint selection by model", () => {
     return { serverA, serverB, modelA, modelB, tokenValue };
   }
 
-  test("keeps a cost-optimized model the resolved endpoint does not serve", async ({
+  test("routes a request to the endpoint that serves the requested model", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -160,7 +159,7 @@ describe("vLLM endpoint selection by model", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
-      name: "vLLM optimization",
+      name: "vLLM endpoint selection",
     });
     const { tokenValue } = await seedTwoServers({
       organizationId: org.id,
@@ -168,13 +167,6 @@ describe("vLLM endpoint selection by model", () => {
       makeLlmProviderApiKey: makeLlmProviderApiKey as never,
     });
 
-    // A rule names a model, not an endpoint. This one lives on the other
-    // server, so applying it would send the call somewhere it cannot run.
-    vi.spyOn(
-      proxyUtils.costOptimization,
-      "getOptimizedModel",
-    ).mockResolvedValue(MODEL_ON_B);
-
     const calls = await setupRoute();
     const response = await app.inject({
       method: "POST",
@@ -190,56 +182,11 @@ describe("vLLM endpoint selection by model", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    // The virtual key maps to server A, which is the server that carries the
+    // requested model, so the call goes there with the model untouched.
     expect(calls.at(-1)).toMatchObject({
       baseUrl: SERVER_A_URL,
       model: MODEL_ON_A,
-    });
-  });
-
-  test("applies a cost-optimized model the resolved endpoint serves", async ({
-    makeAgent,
-    makeOrganization,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "vLLM optimization same endpoint",
-    });
-    const { serverA, tokenValue } = await seedTwoServers({
-      organizationId: org.id,
-      makeSecret: makeSecret as never,
-      makeLlmProviderApiKey: makeLlmProviderApiKey as never,
-    });
-
-    const smallModel = await makeVllmModel("Qwen/Qwen2.5-1.5B-Instruct");
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(serverA.id, [
-      smallModel.id,
-    ]);
-    vi.spyOn(
-      proxyUtils.costOptimization,
-      "getOptimizedModel",
-    ).mockResolvedValue(smallModel.modelId);
-
-    const calls = await setupRoute();
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/vllm/${agent.id}/chat/completions`,
-      headers: {
-        Authorization: `Bearer ${tokenValue}`,
-        "Content-Type": "application/json",
-      },
-      payload: {
-        model: MODEL_ON_A,
-        messages: [{ role: "user", content: "Hello" }],
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(calls.at(-1)).toMatchObject({
-      baseUrl: SERVER_A_URL,
-      model: smallModel.modelId,
     });
   });
 });

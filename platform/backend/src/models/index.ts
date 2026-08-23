@@ -44,6 +44,7 @@ export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
+export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as GithubPatModel } from "./github-pat";
@@ -71,6 +72,7 @@ export {
   selectionKey,
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";
 export type { ClusterLeaseGuard } from "./mcp-deployment-lease";
 export {
   ClusterLeaseHeldError,
@@ -80,6 +82,7 @@ export { default as McpGatewayTaskModel } from "./mcp-gateway-task";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpOauthClientModel } from "./mcp-oauth-client";
 export { default as McpServerModel } from "./mcp-server";
+export { default as McpServerAlertMuteModel } from "./mcp-server-alert-mute";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
@@ -89,9 +92,10 @@ export { default as ModelUserModel } from "./model-user";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
-export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export { default as PluginModel } from "./plugin";
+export { default as PluginTeamModel } from "./plugin-team";
 export {
   ConversationNotOwnedError,
   default as ProjectModel,

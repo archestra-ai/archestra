@@ -200,7 +200,17 @@ describe("gemini model fetchers", () => {
       const mockClient = {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
-          get: vi.fn(),
+          get: vi.fn(async ({ model }: { model: string }) => {
+            // The KB-supported Vertex multimodal embedding models are probed
+            // by id — the Gemini catalog filter drops their unbranded ids.
+            if (model === "multimodalembedding@001") {
+              return {
+                name: "publishers/google/models/multimodalembedding@001",
+                displayName: "Multimodal Embedding",
+              };
+            }
+            throw new Error("Not found");
+          }),
           countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
@@ -230,8 +240,15 @@ describe("gemini model fetchers", () => {
           displayName: "Gemma 3 27b It",
           provider: "gemini",
         },
+        {
+          id: "multimodalembedding@001",
+          displayName: "Multimodal Embedding",
+          provider: "gemini",
+        },
       ]);
-      expect(mockClient.models.get).not.toHaveBeenCalled();
+      expect(mockClient.models.get).toHaveBeenCalledWith({
+        model: "multimodalembedding@001",
+      });
     });
 
     test("falls back to probing known Gemini model IDs when list is incomplete", async () => {

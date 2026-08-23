@@ -5,6 +5,7 @@ import {
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useExternalMcpSkills } from "@/lib/skills/skill.query";
 
 const mockIsToolName = vi.fn();
 const mockGetToolShortName = vi.fn();
@@ -17,6 +18,7 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/skills/skill.query");
 
 vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
@@ -57,17 +59,40 @@ describe("CompactToolGroup", () => {
     // override per-call.
     mockGetToolShortName.mockReturnValue(null);
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
+    vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
   });
 
-  it("renders a Skill pill for a load_skill activation (no path)", () => {
+  it("renders a compact Skill marker for a load_skill activation (no path)", () => {
     mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
 
     render(
       <CompactToolGroup tools={[loadSkillEntry({ name: "Build App" })]} />,
     );
 
-    expect(screen.getByText("Skill:")).toBeInTheDocument();
+    expect(screen.queryByText("Skill:")).not.toBeInTheDocument();
     expect(screen.getByText("Build App")).toBeInTheDocument();
+  });
+
+  it("hides external installation qualifiers from the Skill marker", () => {
+    mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
+
+    render(
+      <CompactToolGroup
+        tools={[
+          loadSkillEntry({
+            name: "TTRPG Helper [personal:7e8933c4] / fallout-rpg",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("fallout-rpg")).toBeInTheDocument();
+    expect(screen.queryByText(/personal:7e8933c4/)).not.toBeInTheDocument();
+    const marker = screen.getByRole("status", {
+      name: "fallout-rpg from TTRPG Helper",
+    });
+    expect(marker).toHaveAttribute("tabindex", "0");
+    expect(marker).not.toHaveAttribute("title");
   });
 
   it("renders a plain tool circle, not a Skill pill, for a load_skill file read (with path)", () => {

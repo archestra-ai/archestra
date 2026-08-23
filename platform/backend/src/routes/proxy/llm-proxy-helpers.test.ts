@@ -288,6 +288,47 @@ describe("planDispatchModeToolCallRewrites", () => {
 // normalizeToolCallsForPolicy
 // --------------------------------------------------------------------------
 describe("normalizeToolCallsForPolicy", () => {
+  // Regression: an MCP client namespaces the gateway's tools with the alias it
+  // was registered under, and that alias is free text typed at `claude mcp add`
+  // time — so the gateway's own branded prefix ends up a segment deeper than
+  // the decoration-stripping canonicalizer reaches, and a strict match misses
+  // the wrapper. A missed wrapper is not a harmless miss: the dispatch is never
+  // unwrapped, so policies are evaluated against a name that matches no `tools`
+  // row and fail open instead of against the tool the call actually runs.
+  test("unwraps a run_tool dispatch decorated with an alias the platform does not know", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "mcp__some_local_alias__archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "github__create_or_update_file",
+          tool_args: { path: "README.md" },
+        }),
+      },
+    ]);
+
+    expect(result[0].toolCallName).toBe("github__create_or_update_file");
+    expect(result[0].isRunToolDispatchTarget).toBe(true);
+    expect(JSON.parse(result[0].toolCallArgs)).toEqual({ path: "README.md" });
+  });
+
+  // The loosening must stay anchored on a prefix the branding recognizes as
+  // ours: a third-party tool that happens to be called `run_tool` is an
+  // ordinary tool, and treating it as the wrapper would hand policy evaluation
+  // whatever that server put in `tool_name`.
+  test("does not treat a third-party tool named run_tool as a dispatch", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "mcp__some_local_alias__github__run_tool",
+        arguments: JSON.stringify({ tool_name: "anything__at_all" }),
+      },
+    ]);
+
+    expect(result[0].toolCallName).toBe(
+      "mcp__some_local_alias__github__run_tool",
+    );
+    expect(result[0].isRunToolDispatchTarget).toBeUndefined();
+  });
+
   test("passes through valid JSON string arguments", () => {
     const result = normalizeToolCallsForPolicy([
       { name: "tool1", arguments: '{"key":"value"}' },
@@ -397,10 +438,8 @@ describe("normalizeToolCallsForPolicy", () => {
 // calculateInteractionCosts
 // --------------------------------------------------------------------------
 describe("calculateInteractionCosts", () => {
-  test("returns both costs when models differ", async () => {
-    mockCalculateCost
-      .mockResolvedValueOnce(0.001) // baseline
-      .mockResolvedValueOnce(0.0005); // actual
+  test("prices the model actually used, once", async () => {
+    mockCalculateCost.mockResolvedValue(0.0005);
     mockCalculateCacheCost.mockResolvedValue({
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
@@ -408,49 +447,29 @@ describe("calculateInteractionCosts", () => {
     });
 
     const result = await calculateInteractionCosts({
-      baselineModel: "gpt-4",
       actualModel: "gpt-3.5-turbo",
       usage: { inputTokens: 100, outputTokens: 50 },
       providerName: "openai",
     });
 
     expect(result).toEqual({
-      baselineCost: 0.001,
       actualCost: 0.0005,
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
       cacheReadSavings: 0.001,
     });
-    expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
-    expect(mockCalculateCost).toHaveBeenCalledWith(
-      "gpt-4",
-      100,
-      50,
-      "openai",
-      cacheTokens,
-    );
+    expect(mockCalculateCost).toHaveBeenCalledTimes(1);
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-3.5-turbo",
       100,
       50,
       "openai",
-      cacheTokens,
+      {
+        readTokens: 0,
+        writeTokens: 0,
+        write1hTokens: 0,
+      },
     );
-  });
-
-  test("returns same cost for both when models match", async () => {
-    mockCalculateCost.mockResolvedValue(0.002);
-
-    const result = await calculateInteractionCosts({
-      baselineModel: "gpt-4",
-      actualModel: "gpt-4",
-      usage: { inputTokens: 200, outputTokens: 100 },
-      providerName: "openai",
-    });
-
-    expect(result.baselineCost).toBe(0.002);
-    expect(result.actualCost).toBe(0.002);
   });
 
   test("handles undefined costs (model not found)", async () => {
@@ -458,14 +477,12 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCacheCost.mockResolvedValue(undefined);
 
     const result = await calculateInteractionCosts({
-      baselineModel: "unknown-model",
       actualModel: "unknown-model",
       usage: { inputTokens: 100, outputTokens: 50 },
       providerName: "openai",
     });
 
     expect(result).toEqual({
-      baselineCost: undefined,
       actualCost: undefined,
       cacheCost: undefined,
       cacheSavings: undefined,
@@ -490,7 +507,6 @@ describe("buildInteractionRecord", () => {
     processedRequest: { messages: [], model: "gpt-4" },
     response: { id: "resp-1" },
     actualModel: "gpt-3.5-turbo",
-    baselineModel: "gpt-4",
     usage: {
       inputTokens: 100,
       outputTokens: 50,
@@ -498,7 +514,6 @@ describe("buildInteractionRecord", () => {
       cacheWriteTokens: 20,
     },
     costs: {
-      baselineCost: 0.001,
       actualCost: 0.0005,
       cacheCost: 0.0002,
       cacheSavings: 0.0018,
@@ -537,7 +552,8 @@ describe("buildInteractionRecord", () => {
     expect(record.processedRequest).toEqual({ messages: [], model: "gpt-4" });
     expect(record.response).toEqual({ id: "resp-1" });
     expect(record.model).toBe("gpt-3.5-turbo");
-    expect(record.baselineModel).toBe("gpt-4");
+    // Nothing rewrites the model any more, so the baseline mirrors it.
+    expect(record.baselineModel).toBe("gpt-3.5-turbo");
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
@@ -568,7 +584,7 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord(baseParams);
 
     expect(record.cost).toBe("0.0005000000");
-    expect(record.baselineCost).toBe("0.0010000000");
+    expect(record.baselineCost).toBe("0.0005000000");
     expect(record.cacheCost).toBe("0.0002000000");
     expect(record.cacheSavings).toBe("0.0018000000");
     expect(record.cacheReadTokens).toBe(80);
@@ -579,7 +595,6 @@ describe("buildInteractionRecord", () => {
     const record = buildInteractionRecord({
       ...baseParams,
       costs: {
-        baselineCost: undefined,
         actualCost: undefined,
         cacheCost: undefined,
         cacheSavings: undefined,

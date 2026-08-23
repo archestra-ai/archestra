@@ -6,10 +6,14 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  bulkDeleteAgents,
+  bulkUpdateAgents,
   createAgent,
   cloneAgent,
   convertAgentToSkill,
@@ -386,6 +390,100 @@ export function useDeleteProfile() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // Deleting a member's personal default moves it to their next personal
       // agent (or clears it), so the cached value is stale.
+      queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
+    },
+  });
+}
+
+/**
+ * Deletes a selection of profiles — agents, LLM proxies and MCP gateways are
+ * all profiles, so all three tables share this.
+ *
+ * There is no bulk delete route, so this fans out over the single-item one.
+ * It deliberately does NOT go through `useDeleteProfile`: that reports each
+ * failure with its own toast, which for a selection means one toast per row.
+ * The caller reports the batch once instead, via `reportBulkOutcome`.
+ */
+/**
+ * Every profile matching the table's filters, not just the page in view —
+ * what backs "select all N agents that match this search query".
+ *
+ * Shared by the agents, LLM proxy and MCP gateway tables; `agentTypes` is what
+ * keeps each one to its own rows.
+ */
+/**
+ * Sets one visibility across a selection of profiles.
+ *
+ * One request to the agents bulk route, which reports per-agent outcomes. The
+ * wire names differ from skills — `teams`/`users` rather than
+ * `teamIds`/`userIds` — which is why the shared dialog hands over a neutral
+ * shape and each resource maps it.
+ */
+export function useBulkUpdateProfileVisibility() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      profiles,
+      scope,
+      teamIds,
+      userIds,
+    }: {
+      profiles: readonly { id: string; name: string }[];
+      scope: "personal" | "team" | "org";
+      teamIds: string[];
+      userIds: string[];
+    }) =>
+      bulkUpdateAgents({
+        body: {
+          ids: profiles.map((profile) => profile.id),
+          scope,
+          teams: teamIds,
+          users: userIds,
+        },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useAllMatchingProfiles(
+  params: Omit<
+    NonNullable<archestraApiTypes.GetAgentsData["query"]>,
+    "limit" | "offset"
+  >,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["agents", "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getAgents({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+  });
+}
+
+export function useBulkDeleteProfiles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (profiles: readonly { id: string; name: string }[]) =>
+      bulkDeleteAgents({
+        body: { ids: profiles.map((profile) => profile.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    // Settled rather than success: a partly applied batch still moved rows, so
+    // the list is stale either way.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
     },
   });

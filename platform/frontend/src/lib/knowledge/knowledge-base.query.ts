@@ -1,10 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toBulkOutcome } from "@/lib/bulk-action";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  bulkDeleteKnowledgeBases,
   getKnowledgeBases,
   getKnowledgeBase,
   getKnowledgeBaseHealth,
@@ -65,6 +68,47 @@ export function useKnowledgeBases(params?: KnowledgeBasesListParams) {
       return data?.data ?? [];
     },
     enabled: params?.enabled,
+  });
+}
+
+/** Every knowledge base matching the table's filters, not just the page in view. */
+export function useAllMatchingKnowledgeBases(
+  params: Omit<KnowledgeBasesPaginatedParams, "limit" | "offset">,
+  options?: { enabled?: boolean },
+) {
+  return useAllMatching({
+    queryKey: ["knowledge-bases", "all-matching", params],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getKnowledgeBases({
+        query: { ...params, limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+  });
+}
+
+/**
+ * Deletes a selection of knowledge bases in one request.
+ *
+ * There is no companion visibility action: a knowledge base has no audience of
+ * its own — it is reached through the connectors and documents assigned to it —
+ * so the only things editable about one are its name and description, which are
+ * per-row by nature.
+ */
+export function useBulkDeleteKnowledgeBases() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (knowledgeBases: readonly { id: string }[]) =>
+      bulkDeleteKnowledgeBases({
+        body: { ids: knowledgeBases.map((kb) => kb.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] }),
   });
 }
 

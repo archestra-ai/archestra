@@ -81,8 +81,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // AND the operator kill switch); the licence and the
               // organization toggle sit behind it.
               mcpIdleHibernationBetaEnabled: z.boolean(),
+              /** BETA: MCP registry attention and alert dismissal surfaces. */
+              mcpServerAlertingEnabled: z.boolean(),
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
+              plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
@@ -141,8 +144,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 redirectUri: z.string(),
               }),
               /**
-               * BETA: gateways publish this deployment's skills over MCP as
-               * `skill://` resources. Gates the per-gateway skill selection UI.
+               * BETA: publish local Skills over gateways and project Skills
+               * discovered from installed MCP servers.
                */
               mcpGatewaySkillsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
@@ -204,8 +207,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // per-server control with it, or the UI renders an operational
           // feature nothing behind it will ever run.
           mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+          mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
+          plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:
             config.chat.attachmentStorageBytesLimit,

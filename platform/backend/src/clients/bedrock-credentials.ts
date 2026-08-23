@@ -80,6 +80,20 @@ export function getBedrockRegion(baseUrl?: string): string {
 }
 
 /**
+ * Resolve the concrete regional runtime endpoint shared by discovery and
+ * inference. A per-key custom endpoint wins, then server config; otherwise the
+ * endpoint is derived from the configured/default region. This keeps the UI's
+ * region selector primary and its custom-endpoint field optional.
+ */
+export function getBedrockBaseUrl(baseUrl?: string | null): string {
+  return (
+    baseUrl ||
+    config.llm.bedrock.baseUrl ||
+    bedrockRuntimeBaseUrl(getBedrockRegion(baseUrl ?? undefined))
+  );
+}
+
+/**
  * Build an Amazon Bedrock provider from the single `apiKey` string that flows
  * through the pipeline, applying the one canonical auth-precedence order used by
  * both chat (LLM proxy) and KB embedding:
@@ -98,8 +112,8 @@ export function buildBedrockProvider(params: {
   fetch?: typeof globalThis.fetch;
 }): AmazonBedrockProvider {
   const { apiKey, baseUrl, headers, fetch } = params;
-  const baseURL = baseUrl ?? config.llm.bedrock.baseUrl ?? undefined;
-  const region = getBedrockRegion(baseURL ?? undefined);
+  const baseURL = getBedrockBaseUrl(baseUrl);
+  const region = getBedrockRegion(baseURL);
 
   if (!apiKey && isBedrockIamAuthEnabled()) {
     return createAmazonBedrock({
@@ -147,9 +161,8 @@ export function buildBedrockClient(params: {
   baseUrl?: string | null;
 }): BedrockClient {
   const { apiKey, baseUrl } = params;
-  const region = getBedrockRegion(baseUrl ?? undefined);
-  const resolvedBaseUrl =
-    baseUrl || config.llm.bedrock.baseUrl || bedrockRuntimeBaseUrl(region);
+  const resolvedBaseUrl = getBedrockBaseUrl(baseUrl);
+  const region = getBedrockRegion(resolvedBaseUrl);
 
   if (!apiKey && isBedrockIamAuthEnabled()) {
     return new BedrockClient({

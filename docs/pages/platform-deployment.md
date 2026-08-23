@@ -2,6 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
+lastUpdated: 2026-08-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -481,7 +482,7 @@ archestra:
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
-The bundled PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The bundled instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
+The included PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The included instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
 
 During Helm upgrades, the chart runs `node ./scripts/migrate-with-lock.mjs` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band. This also disables migrations during web pod startup.
 
@@ -542,7 +543,7 @@ Then visit:
 
 #### PostgreSQL Infrastructure
 
-For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the bundled PostgreSQL instance. Cloud-managed databases provide:
+For production deployments, we strongly recommend using a cloud-hosted PostgreSQL database instead of the included PostgreSQL instance. Cloud-managed databases provide:
 
 - **High availability** with automatic failover
 - **Automated backups** and point-in-time recovery
@@ -550,7 +551,7 @@ For production deployments, we strongly recommend using a cloud-hosted PostgreSQ
 - **Security** with encryption at rest and in transit
 - **Monitoring** and alerting out of the box
 
-To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the bundled PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
+To use an external database, specify the connection string via the `ARCHESTRA_DATABASE_URL` environment variable. When using an external database, the included PostgreSQL instance is automatically disabled. See the [Environment Variables](#environment-variables) section for details.
 
 ##### pgvector Extension (Knowledge Base Feature)
 
@@ -769,7 +770,7 @@ To run your own engine instead of the ones Archestra creates, set `ARCHESTRA_COD
 
 If your nodes cannot host a privileged pod, either point `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` at an engine you run elsewhere, or turn the sandbox off with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
 
-Upgrading from a chart that ran the bundled engine leaves its cache volume behind. The old `dagger-runtime-engine` StatefulSet is gone, but Kubernetes keeps its `data-dagger-runtime-engine-0` PVC and the disk it holds. Delete it once after the upgrade: `kubectl delete pvc data-dagger-runtime-engine-0 -n <release-namespace>`.
+Upgrading from a chart that ran the included engine leaves its cache volume behind. The old `dagger-runtime-engine` StatefulSet is gone, but Kubernetes keeps its `data-dagger-runtime-engine-0` PVC and the disk it holds. Delete it once after the upgrade: `kubectl delete pvc data-dagger-runtime-engine-0 -n <release-namespace>`.
 
 - **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Set `false` to turn the sandbox off; that wins even when a runner host is set. Set `true` with the orchestrator configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`) and Archestra creates one Dagger engine per organization. Kubernetes is required for that: the engines are Kubernetes workloads. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute. The quickstart Docker image and the Helm chart enable it by default; opt out with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
   - Default: `false`
@@ -817,6 +818,11 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Default: `50`
 
 ### Skills Marketplace
+
+- **`ARCHESTRA_PLUGINS_ENABLED`** - Enables the Plugins catalog, an initial OpenAPPA import, and delivery through connection setup commands. Plugin files execute on connected developer machines, so this gate is off by default.
+  - Default: unset (falls back to the `ARCHESTRA_BETA` master switch)
+  - Values: `true`, `false`
+  - An explicit `false` keeps the feature off even when `ARCHESTRA_BETA=true`.
 
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
@@ -1188,7 +1194,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Bedrock IAM setup guide](/docs/platform-supported-llm-providers#iam-authentication-setup-irsa)
 
 - **`ARCHESTRA_BEDROCK_REGION`** - Explicit AWS region for Bedrock.
-  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`
+  - Optional: Falls back to extracting from `ARCHESTRA_BEDROCK_BASE_URL`, then to `us-east-1`
   - Example: `us-east-1`
 
 - **`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`** - Filter Bedrock inference profiles by provider.
@@ -1356,14 +1362,21 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
-- Publishing Agent Skills over the gateway as `skill://` resources is gated by `ARCHESTRA_BETA`, not a flag of its own. It implements the draft MCP Skills extension (SEP-2640). See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) for what a gateway publishes and how to choose it.
+- **`ARCHESTRA_MCP_SKILLS_ENABLED`** - Beta gate for both directions of the draft MCP Skills extension (SEP-2640): publishing local Skills through gateways and projecting Skills discovered from installed MCP servers.
+  - Default: unset (falls back to `ARCHESTRA_BETA`)
+  - An explicit `false` keeps both directions off even when the master beta switch is enabled.
+  - See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) and [Skills from MCP servers](/docs/platform-agent-skills#skills-from-mcp-servers).
 
 ### MCP Servers
 
-- **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools. Every N minutes, each installed server's stored tool list is re-synced from the live server — new tools are added, changed descriptions and input schemas are updated, and removed tools are dropped. No restart or reinstall happens. Tool assignments and policies are preserved.
+- **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools and Skills metadata. Every N minutes, each installed server's stored listing is re-synced from the live server — new entries are added, changed metadata is updated, and removed entries are dropped. No restart or reinstall happens. Tool assignments and policies are preserved; Skill content is always read live rather than copied.
   - Default: unset (disabled). Set to `0` to disable explicitly.
   - Example: `30`
   - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.
+
+- **`ARCHESTRA_MCP_SERVER_ALERTING_ENABLED`** - Beta gate for MCP Registry attention facets, issue diagnostics, ownership guidance, and per-viewer alert dismissal.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. An explicit `false` keeps alerting and its dismissal APIs hidden even when the master switch is enabled.
 
 ### MCP Server Orchestrator
 

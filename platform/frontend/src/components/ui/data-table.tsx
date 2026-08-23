@@ -28,10 +28,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 import { DataTablePagination } from "./data-table-pagination";
 
-const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar"]);
+const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
+const SELECT_COLUMN_ID = "select";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -52,6 +54,15 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
+  /**
+   * The ids of the rows currently on screen, whenever they change.
+   *
+   * A bulk bar sits outside the table, so it cannot otherwise tell when the
+   * visible page is fully ticked — which is what gates its "select everything
+   * that matches" offer. Pass a stable callback (`useCallback`); an inline one
+   * re-subscribes every render.
+   */
+  onPageRowIdsChange?: (ids: string[]) => void;
   /** Hide the "X of Y row(s) selected" text. Defaults to true when rowSelection is not provided. */
   hideSelectedCount?: boolean;
   /** Function to get a stable unique ID for each row. When provided, row selection will use these IDs instead of indices. */
@@ -85,6 +96,10 @@ interface DataTableProps<TData, TValue> {
    * the contents overlap.
    */
   tableClassName?: string;
+  /** Column ids whose configured sizes must remain fixed pixels. */
+  fixedWidthColumnIds?: string[];
+  /** Column ids that absorb remaining table width. */
+  flexibleColumnIds?: string[];
 }
 
 export function DataTable<TData, TValue>({
@@ -99,6 +114,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  onPageRowIdsChange,
   hideSelectedCount,
   getRowId,
   renderSubComponent,
@@ -113,6 +129,8 @@ export function DataTable<TData, TValue>({
   hideHeader = false,
   compactPagination = false,
   tableClassName,
+  fixedWidthColumnIds = [],
+  flexibleColumnIds = [],
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -203,6 +221,16 @@ export function DataTable<TData, TValue>({
   // applied while on a later page) strands the table on a nonexistent page.
   // Clamp to the last valid page; setPageIndex routes through
   // onPaginationChange, covering both controlled and internal pagination.
+  // Joined rather than the array itself: a new array identity every render
+  // would re-fire the effect forever.
+  const pageRowIdsKey = table
+    .getRowModel()
+    .rows.map((row) => row.id)
+    .join(",");
+  React.useEffect(() => {
+    onPageRowIdsChange?.(pageRowIdsKey ? pageRowIdsKey.split(",") : []);
+  }, [pageRowIdsKey, onPageRowIdsChange]);
+
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   React.useEffect(() => {
@@ -214,6 +242,33 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
+  const visibleColumns = table.getVisibleLeafColumns();
+  const selectColumn = visibleColumns.find(
+    (column) => column.id === SELECT_COLUMN_ID,
+  );
+  const configuredTableSize =
+    table.getTotalSize() +
+    (selectColumn ? DATA_TABLE_SELECT_COLUMN_SIZE - selectColumn.getSize() : 0);
+  const fixedColumnsSize = visibleColumns
+    .filter(
+      (column) =>
+        column.id === SELECT_COLUMN_ID ||
+        column.id === ACTIONS_COLUMN_ID ||
+        fixedWidthColumnIds.includes(column.id),
+    )
+    .reduce(
+      (total, column) =>
+        total +
+        (column.id === SELECT_COLUMN_ID
+          ? DATA_TABLE_SELECT_COLUMN_SIZE
+          : column.getSize()),
+      0,
+    );
+  const flexibleColumnsSize = Math.max(
+    configuredTableSize - fixedColumnsSize,
+    1,
+  );
+
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
@@ -223,7 +278,7 @@ export function DataTable<TData, TValue>({
             headers stack letter-by-letter and cell contents overlap. */}
         <Table
           className={tableClassName}
-          style={{ minWidth: table.getTotalSize() }}
+          style={{ minWidth: configuredTableSize }}
         >
           {!hideHeader && (
             <TableHeader>
@@ -250,7 +305,14 @@ export function DataTable<TData, TValue>({
                           configuredSize: header.column.columnDef.size,
                           minSize: header.column.columnDef.minSize,
                           renderedSize: header.getSize(),
-                          totalSize: table.getTotalSize(),
+                          fixedWidth: fixedWidthColumnIds.includes(
+                            header.column.id,
+                          ),
+                          flexibleWidth: flexibleColumnIds.includes(
+                            header.column.id,
+                          ),
+                          fixedColumnsSize,
+                          flexibleColumnsSize,
                         })}
                       >
                         {header.isPlaceholder
@@ -282,13 +344,25 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         data-column-id={cell.column.id}
+                        onClick={
+                          cell.column.id === SELECT_COLUMN_ID
+                            ? handleSelectCellClick
+                            : undefined
+                        }
                         className={getColumnClassName(cell.column.id)}
                         style={getColumnStyle({
                           columnId: cell.column.id,
                           configuredSize: cell.column.columnDef.size,
                           minSize: cell.column.columnDef.minSize,
                           renderedSize: cell.column.getSize(),
-                          totalSize: table.getTotalSize(),
+                          fixedWidth: fixedWidthColumnIds.includes(
+                            cell.column.id,
+                          ),
+                          flexibleWidth: flexibleColumnIds.includes(
+                            cell.column.id,
+                          ),
+                          fixedColumnsSize,
+                          flexibleColumnsSize,
                         })}
                       >
                         {flexRender(
@@ -365,6 +439,10 @@ export function DataTable<TData, TValue>({
 }
 
 function getColumnClassName(columnId: string) {
+  if (columnId === SELECT_COLUMN_ID) {
+    return "!p-0 text-center [&>[role=checkbox]]:translate-y-0";
+  }
+
   if (COMPACT_ICON_COLUMN_IDS.has(columnId)) {
     return "w-0 px-2 md:px-2";
   }
@@ -376,15 +454,34 @@ function getColumnClassName(columnId: string) {
   return undefined;
 }
 
+function handleSelectCellClick(
+  event: React.MouseEvent<HTMLTableCellElement>,
+): void {
+  event.stopPropagation();
+  const target = event.target as HTMLElement;
+  if (target.closest('[role="checkbox"]')) return;
+  event.currentTarget.querySelector<HTMLElement>('[role="checkbox"]')?.click();
+}
+
 function getColumnStyle(params: {
   columnId: string;
   configuredSize?: number;
   minSize?: number;
   renderedSize: number;
-  totalSize: number;
+  fixedWidth?: boolean;
+  flexibleWidth?: boolean;
+  fixedColumnsSize: number;
+  flexibleColumnsSize: number;
 }): React.CSSProperties | undefined {
+  if (params.columnId === SELECT_COLUMN_ID) {
+    return {
+      width: DATA_TABLE_SELECT_COLUMN_SIZE,
+      minWidth: DATA_TABLE_SELECT_COLUMN_SIZE,
+      maxWidth: DATA_TABLE_SELECT_COLUMN_SIZE,
+    };
+  }
   const style: React.CSSProperties = {};
-  if (params.configuredSize) {
+  if (params.configuredSize && !params.flexibleWidth) {
     // On a fixed-layout table an absolute pixel width forces the table wider
     // than its container when the sizes don't fit, hiding trailing columns
     // behind the horizontal scroll. The actions column keeps its pixel width
@@ -392,11 +489,17 @@ function getColumnStyle(params: {
     // share of the summed sizes, which the browser scales down to fit the
     // container. Only px and % work here — fixed table layout ignores
     // min()/calc() widths and min-width on cells.
-    if (params.columnId === ACTIONS_COLUMN_ID) {
+    if (
+      params.columnId === ACTIONS_COLUMN_ID ||
+      COMPACT_ICON_COLUMN_IDS.has(params.columnId) ||
+      params.fixedWidth
+    ) {
       style.width = params.renderedSize;
     } else {
-      const share = (params.renderedSize / params.totalSize) * 100;
-      style.width = `${share.toFixed(4)}%`;
+      const share = params.renderedSize / params.flexibleColumnsSize;
+      const percent = (share * 100).toFixed(4);
+      const fixedOffset = (params.fixedColumnsSize * share).toFixed(2);
+      style.width = `calc(${percent}% - ${fixedOffset}px)`;
     }
   }
   if (params.minSize) {

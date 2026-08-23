@@ -58,8 +58,7 @@ import { useOrganization } from "@/lib/organization.query";
 
 /**
  * Admin-facing "how to connect" content for the LLM Proxy and MCP Gateway
- * pages (the Connect tab of the detail page and the Connect step of the setup
- * wizard). Unlike the /connection page (end-user, one-client setup), the
+ * detail pages. Unlike the /connection page (end-user, one-client setup), the
  * audience here is the admin: the endpoint plus the full authentication
  * surface — every credential type the entity accepts, how each reaches
  * models downstream, and create actions for minting credentials per use case.
@@ -69,6 +68,7 @@ type ConnectTarget = {
   id: string;
   name: string;
   agentType: AgentType;
+  identityProviderId?: string | null;
 };
 
 /**
@@ -103,7 +103,7 @@ export function LlmProxyConnectInstructions({
         selectedProvider={selected === "model-router" ? null : selected}
         onSelectRouter={() => setSelected("model-router")}
         onSelectProvider={setSelected}
-        caption={<div className="text-xs text-muted-foreground">Endpoint</div>}
+        caption={<h3 className="text-sm font-semibold">Endpoint</h3>}
       />
       {selected === "model-router" && <ModelRouterAlert />}
       <LlmProxyAuthSurface proxy={proxy} />
@@ -131,8 +131,8 @@ export function McpGatewayConnectInstructions({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <div className="text-xs text-muted-foreground">Endpoint</div>
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <h3 className="text-sm font-semibold">Endpoint</h3>
         <TerminalBlock code={`${baseUrl}/mcp/${slug}`} />
       </div>
       <McpGatewayAuthSurface gateway={gateway} />
@@ -150,19 +150,17 @@ export function McpGatewayConnectInstructions({
 type ProxyAuthTab = "virtual-keys" | "passthrough" | "oauth" | "idp";
 
 function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
-  const [tab, setTab] = useState<ProxyAuthTab>("virtual-keys");
-  // Keys are created without leaving the page; the create dialog opens on
-  // top and the tables refresh via the create mutation's invalidations.
   const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
     null,
   );
   const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
+  const [authTab, setAuthTab] = useState<ProxyAuthTab>("virtual-keys");
 
   const { data: canReadOauth } = useHasPermissions({
     llmOauthClient: ["read"],
   });
   const { data: oauthClients } = useLlmOauthClients({
-    enabled: canReadOauth === true,
+    enabled: authTab === "oauth" && canReadOauth === true,
     toastOnError: false,
   });
 
@@ -174,11 +172,12 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
   });
 
   return (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="text-xs font-medium text-muted-foreground">
-        Authentication
-      </div>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as ProxyAuthTab)}>
+    <section className="space-y-4 rounded-lg border bg-card p-4">
+      <h3 className="text-sm font-semibold">Authentication</h3>
+      <Tabs
+        value={authTab}
+        onValueChange={(value) => setAuthTab(value as ProxyAuthTab)}
+      >
         <TabsList>
           <TabsTrigger value="virtual-keys">Virtual keys</TabsTrigger>
           <TabsTrigger value="passthrough">Passthrough</TabsTrigger>
@@ -187,13 +186,12 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
         </TabsList>
       </Tabs>
 
-      {tab === "virtual-keys" && (
+      {authTab === "virtual-keys" && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="max-w-3xl text-xs text-muted-foreground">
-              Use a virtual key in your app instead of a provider API key.
-              Assign one API key per provider, and the matching key is used for
-              each request. Send the virtual key in the Authorization header.
+              Use one key in your app; the matching provider key is used for
+              each request.
             </p>
             {canCreateKey ? (
               <Button
@@ -210,13 +208,12 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
         </div>
       )}
 
-      {tab === "passthrough" && (
+      {authTab === "passthrough" && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="max-w-3xl text-xs text-muted-foreground">
-              Send your own provider API key or subscription token directly. An
-              optional passthrough key links requests to a user but does not
-              grant access.
+              Send your provider key directly. A passthrough key links requests
+              to a user but does not grant access.
             </p>
             {canCreateKey ? (
               <Button
@@ -241,14 +238,12 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
         </div>
       )}
 
-      {tab === "oauth" && (
+      {authTab === "oauth" && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="max-w-3xl text-xs text-muted-foreground">
-              Use OAuth clients for apps that connect to this proxy. App tokens
-              use the provider keys assigned to the client. User tokens use the
-              signed-in user&apos;s keys. Secrets are shown only when created or
-              rotated.
+              Register apps that call this proxy as themselves or for signed-in
+              users.
             </p>
             {canCreateOauth ? (
               <Button
@@ -268,7 +263,7 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
         </div>
       )}
 
-      {tab === "idp" && <IdentityProviderStatus target={proxy} />}
+      {authTab === "idp" && <IdentityProviderStatus target={proxy} />}
 
       <CreateVirtualKeyDialogWithData
         open={createKeyType !== null}
@@ -282,7 +277,7 @@ function LlmProxyAuthSurface({ proxy }: { proxy: ConnectTarget }) {
         open={oauthCreateOpen}
         onOpenChange={setOauthCreateOpen}
       />
-    </div>
+    </section>
   );
 }
 
@@ -379,14 +374,15 @@ function OauthClientCreateFlow({
 type GatewayAuthTab = "oauth" | "token" | "idp";
 
 function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
-  const [tab, setTab] = useState<GatewayAuthTab>("oauth");
+  const [authTab, setAuthTab] = useState<GatewayAuthTab>("oauth");
 
   return (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="text-xs font-medium text-muted-foreground">
-        Authentication
-      </div>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as GatewayAuthTab)}>
+    <section className="space-y-4 rounded-lg border bg-card p-4">
+      <h3 className="text-sm font-semibold">Authentication</h3>
+      <Tabs
+        value={authTab}
+        onValueChange={(value) => setAuthTab(value as GatewayAuthTab)}
+      >
         <TabsList>
           <TabsTrigger value="oauth">OAuth</TabsTrigger>
           <TabsTrigger value="token">Platform token</TabsTrigger>
@@ -394,7 +390,7 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
         </TabsList>
       </Tabs>
 
-      {tab === "oauth" && (
+      {authTab === "oauth" && (
         <div className="space-y-3">
           <AuthFacts
             rows={[
@@ -410,8 +406,7 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
             <div className="space-y-1">
               <p className="text-xs font-medium">Registered OAuth clients</p>
               <p className="text-xs text-muted-foreground">
-                Use these for applications calling as themselves or on behalf of
-                signed-in users.
+                For applications calling as themselves or for signed-in users.
               </p>
             </div>
             <McpOauthManagement
@@ -422,7 +417,7 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
         </div>
       )}
 
-      {tab === "token" && (
+      {authTab === "token" && (
         <div className="space-y-3">
           <AuthFacts
             rows={[
@@ -438,8 +433,8 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
         </div>
       )}
 
-      {tab === "idp" && <IdentityProviderStatus target={gateway} />}
-    </div>
+      {authTab === "idp" && <IdentityProviderStatus target={gateway} />}
+    </section>
   );
 }
 
@@ -447,16 +442,14 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
 // Shared pieces
 // =========================================================================
 
-/** IdP tab body shared by both surfaces: status + edit deep link. */
 function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
-  const { data: detail } = useProfile(target.id);
   const { data: identityProviders } = useIdentityProviders();
   const isGateway = target.agentType === "mcp_gateway";
   const { data: canUpdate } = useHasPermissions(
     isGateway ? { mcpGateway: ["update"] } : { llmProxy: ["update"] },
   );
 
-  const idpId = detail?.identityProviderId;
+  const idpId = target.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
   // The edit form only shows its IdP field when the org has identity
   // providers configured — without any, "Edit …" would be a dead end, so

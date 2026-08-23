@@ -29,11 +29,14 @@ import {
   CASCADE_SCENARIOS,
   CATALOG_SHAPES,
   isMetadataOnlyEdit,
+  MCP_SKILLS_EXTENSION_ID,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { McpServerModel, ToolModel } from "@/models";
+import { McpCatalogSkillModel, McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 
@@ -1581,6 +1584,9 @@ describe("mcp-reinstall", () => {
   describe("reloadToolsForServer", () => {
     beforeEach(() => {
       vi.restoreAllMocks();
+      vi.spyOn(mcpClient, "withSkillsSession").mockImplementation(
+        async ({ run }) => run({} as never, { serverExtensions: () => ({}) }),
+      );
     });
 
     test("re-discovers tools without a restart: updates schemas, adds new, removes gone", async ({
@@ -1650,6 +1656,60 @@ describe("mcp-reinstall", () => {
         type: "object",
         properties: { b: { type: "number" } },
       });
+    });
+
+    test("refreshes Skills metadata at the same discovery point", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+    }) => {
+      const originalEnabled = config.mcpGateway.skillsEnabled;
+      config.mcpGateway.skillsEnabled = true;
+      const org = await makeOrganization();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        serverType: "remote",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "org",
+      });
+      vi.spyOn(McpServerModel, "getToolsFromServer").mockResolvedValue([]);
+      vi.mocked(mcpClient.withSkillsSession).mockImplementation(
+        async ({ run }) =>
+          run(
+            {
+              request: vi.fn(async () => ({
+                skills: [
+                  {
+                    uri: "skill://example/reload/SKILL.md",
+                    frontmatter: {
+                      name: "reloaded-skill",
+                      description: "Reloaded.",
+                    },
+                    resources: [],
+                  },
+                ],
+              })),
+            } as never,
+            {
+              serverExtensions: () => ({ [MCP_SKILLS_EXTENSION_ID]: {} }),
+            },
+          ),
+      );
+
+      try {
+        await reloadToolsForServer(server);
+      } finally {
+        config.mcpGateway.skillsEnabled = originalEnabled;
+      }
+
+      expect(
+        (await McpCatalogSkillModel.findByCatalogIds([catalog.id])).map(
+          (skill) => skill.name,
+        ),
+      ).toEqual(["reloaded-skill"]);
     });
 
     // SPDX-SnippetBegin

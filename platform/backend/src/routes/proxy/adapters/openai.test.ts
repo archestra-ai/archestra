@@ -826,6 +826,88 @@ describe("OpenAIStreamAdapter", () => {
     return (JSON.parse(firstData) as { usage?: unknown }).usage;
   }
 
+  // The refusal is emitted as a further delta, which clients concatenate onto
+  // the content they have accumulated — so the client holds the model's text
+  // AND the refusal. Reporting the refusal alone dropped the model's own answer
+  // from the record, leaving later readers a turn in which it never spoke.
+  test("toProviderResponse keeps streamed content and appends the refusal", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        { index: 0, delta: { content: "let me check" }, finish_reason: null },
+      ],
+    } as Chunk);
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.choices[0].message.content).toBe(
+      "let me checkblocked message",
+    );
+    expect(response.choices[0].finish_reason).toBe("stop");
+  });
+
+  // Reasoning models stream their thinking in `reasoning_content`. It reached
+  // the client but was never accumulated, so the recorded turn looked as though
+  // the model had gone straight to its answer.
+  test("toProviderResponse records the reasoning the model streamed", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          // Not part of the typed delta — the adapter reads it by cast for the
+          // same reason.
+          delta: {
+            reasoning_content: "weighing ",
+          } as Chunk["choices"][number]["delta"],
+          finish_reason: null,
+        },
+      ],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          // Not part of the typed delta — the adapter reads it by cast for the
+          // same reason.
+          delta: {
+            reasoning_content: "it up",
+          } as Chunk["choices"][number]["delta"],
+          finish_reason: null,
+        },
+      ],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        { index: 0, delta: { content: "the answer" }, finish_reason: null },
+      ],
+    } as Chunk);
+
+    const message = adapter.toProviderResponse().choices[0].message as {
+      content: string | null;
+      reasoning_content?: string;
+    };
+    expect(message.reasoning_content).toBe("weighing it up");
+    expect(message.content).toBe("the answer");
+  });
+
   test("carries the trailing usage chunk into the final SSE (net of cache)", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({

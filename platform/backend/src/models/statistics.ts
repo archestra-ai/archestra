@@ -1166,7 +1166,6 @@ class StatisticsModel {
           totalActualCost: 0,
           totalSavings: 0,
           totalSubscriptionCost: 0,
-          totalOptimizationSavings: 0,
           totalToonSavings: 0,
           totalCacheSavings: 0,
           timeSeries: [],
@@ -1177,10 +1176,10 @@ class StatisticsModel {
     const query = db
       .select({
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-        // All cost/savings figures are billed (metered) only: optimization,
-        // TOON, and cache savings reflect money actually spent. Subscription
-        // traffic is reported separately as its would-be list-price cost, never
-        // as an optimization saving.
+        // All cost/savings figures are billed (metered) only: TOON and cache
+        // savings reflect money actually spent. Subscription traffic is
+        // reported separately as its would-be list-price cost, never as a
+        // saving.
         baselineCost: billedSum(
           schema.interactionsTable.baselineCost,
           "DECIMAL",
@@ -1273,42 +1272,43 @@ class StatisticsModel {
     // Calculate totals and build time series
     let totalBaselineCost = 0;
     let totalActualCost = 0;
-    let totalOptimizationSavings = 0;
     let totalToonSavings = 0;
     let totalCacheSavings = 0;
     let totalSubscriptionCost = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
       // `row.actualCost` is SUM(interactions.cost) over METERED rows only: the
-      // real billed spend. It already reflects every applied optimization — the
-      // cheaper model, TOON's reduced billed token count, and the prompt-cache
-      // discount — so it is the true "Actual Cost". Subscription-fulfilled
-      // traffic is excluded here and surfaced separately as `subscriptionCost`.
+      // real billed spend. It already reflects every applied saving — TOON's
+      // reduced billed token count, the prompt-cache discount, and on
+      // historical rows the cheaper model a rule swapped in — so it is the true
+      // "Actual Cost". Subscription-fulfilled traffic is excluded here and
+      // surfaced separately as `subscriptionCost`.
       const actualCost = Number(row.actualCost);
       // Would-be list-price cost of subscription-covered traffic (not billed).
       const subscriptionCost = Number(row.subscriptionCost);
-      // `row.baselineCost` is SUM(interactions.baseline_cost): the same usage
-      // priced at the original (pre-optimization) model.
+      // `row.baselineCost` is SUM(interactions.baseline_cost). It only differs
+      // from the billed spend on rows written while optimization rules could
+      // swap the requested model for a cheaper one; that feature is gone, so
+      // new rows record the two as equal and this term is zero for them.
       const baselineModelCost = Number(row.baselineCost);
       const toonSavings = Number(row.toonSavings);
       const cacheSavings = Number(row.cacheSavings);
 
-      // Savings from optimization rules alone: identical token usage, original
+      // Historical savings from a model swap: identical token usage, requested
       // model vs. the model actually used.
-      const optimizationSavings = baselineModelCost - actualCost;
+      const modelSwapSavings = baselineModelCost - actualCost;
 
       // "Non-optimized" cost: what the request would have cost with none of the
-      // optimizations applied (original model, uncompressed tokens, no cache).
-      // Adding each realized saving back onto the real spend keeps this line
-      // exactly `optimizationSavings + toonSavings + cacheSavings` above the
-      // actual-cost line, so the savings-breakdown chart reconciles with the
-      // gap shown in the non-optimized-vs-actual chart.
+      // savings applied (uncompressed tokens, no cache, and — on historical
+      // rows — the requested model). Adding each realized saving back onto the
+      // real spend keeps this line exactly that far above the actual-cost line,
+      // so the savings-breakdown chart reconciles with the gap shown in the
+      // non-optimized-vs-actual chart.
       const baselineCost =
-        actualCost + optimizationSavings + toonSavings + cacheSavings;
+        actualCost + modelSwapSavings + toonSavings + cacheSavings;
 
       totalBaselineCost += baselineCost;
       totalActualCost += actualCost;
-      totalOptimizationSavings += optimizationSavings;
       totalToonSavings += toonSavings;
       totalCacheSavings += cacheSavings;
       totalSubscriptionCost += subscriptionCost;
@@ -1317,7 +1317,6 @@ class StatisticsModel {
         timestamp: row.timeBucket,
         baselineCost,
         actualCost,
-        optimizationSavings,
         toonSavings,
         cacheSavings,
         subscriptionCost,
@@ -1331,7 +1330,6 @@ class StatisticsModel {
       totalActualCost,
       totalSavings,
       totalSubscriptionCost,
-      totalOptimizationSavings,
       totalToonSavings,
       totalCacheSavings,
       timeSeries,

@@ -641,6 +641,85 @@ class AnthropicStreamAdapter
   // that makes agent harnesses treat the turn as a malformed tool call and
   // retry), and toProviderResponse persists the refusal rather than the blocked
   // tool calls so the interaction log matches what the client received.
+  /**
+   * Reasoning blocks the model produced, in order, keyed by their upstream
+   * content-block index.
+   *
+   * These stream straight through to the client but were never accumulated, so
+   * the reconstructed turn — the one persisted as the interaction — omitted
+   * them entirely. A reasoning turn was therefore recorded as if the model had
+   * gone straight to its answer, which is the same erasure as dropping the
+   * answer text, and it is what makes a thinking turn impossible to review
+   * after the fact.
+   *
+   * Signatures are kept with their block: they are what makes a thinking block
+   * replayable, and a record that dropped them would describe something the
+   * upstream API would reject.
+   */
+  private reasoningBlocks = new Map<
+    number,
+    | { type: "thinking"; thinking: string; signature: string }
+    | {
+        type: "redacted_thinking";
+        data: string;
+      }
+  >();
+
+  private startReasoningBlock(
+    index: number,
+    block: {
+      type?: string;
+      thinking?: string;
+      signature?: string;
+      data?: string;
+    },
+  ): void {
+    if (block.type === "thinking") {
+      this.reasoningBlocks.set(index, {
+        type: "thinking",
+        thinking: block.thinking ?? "",
+        signature: block.signature ?? "",
+      });
+      return;
+    }
+    if (block.type === "redacted_thinking") {
+      this.reasoningBlocks.set(index, {
+        type: "redacted_thinking",
+        data: block.data ?? "",
+      });
+    }
+  }
+
+  private appendReasoningDelta(
+    index: number,
+    delta: { type?: string; thinking?: string; signature?: string },
+  ): void {
+    const block = this.reasoningBlocks.get(index);
+    if (!block || block.type !== "thinking") {
+      return;
+    }
+    if (delta.type === "thinking_delta" && delta.thinking) {
+      block.thinking += delta.thinking;
+    } else if (delta.type === "signature_delta" && delta.signature) {
+      block.signature += delta.signature;
+    }
+  }
+
+  /** Accumulated reasoning blocks in upstream content-block order. */
+  private orderedReasoningBlocks(): AnthropicResponse["content"] {
+    return [...this.reasoningBlocks.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, block]) =>
+        block.type === "thinking"
+          ? {
+              type: "thinking" as const,
+              thinking: block.thinking,
+              signature: block.signature,
+            }
+          : { type: "redacted_thinking" as const, data: block.data },
+      ) as AnthropicResponse["content"];
+  }
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -704,6 +783,7 @@ class AnthropicStreamAdapter
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
         } else {
+          this.startReasoningBlock(chunk.index, chunk.content_block);
           // Everything except client tool calls (text, thinking,
           // redacted_thinking, server_tool_use, ...) streams through
           // unmodified. Thinking blocks in particular must reach the client:
@@ -733,6 +813,7 @@ class AnthropicStreamAdapter
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
           }
+          this.appendReasoningDelta(chunk.index, chunk.delta);
           sseData = `event: content_block_delta\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
@@ -919,20 +1000,12 @@ class AnthropicStreamAdapter
   }
 
   toProviderResponse(): AnthropicResponse {
-    if (this.replacedText !== null) {
-      return {
-        id: this.state.responseId,
-        type: "message",
-        role: "assistant",
-        content: [{ type: "text", text: this.replacedText, citations: null }],
-        model: this.state.model,
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: this.responseUsage(),
-      };
-    }
-
     const content: AnthropicResponse["content"] = [];
+
+    // Reasoning first, matching the order upstream emits it: a thinking block
+    // precedes the answer it produced, and a record that reordered them would
+    // not describe the turn the client saw.
+    content.push(...this.orderedReasoningBlocks());
 
     // Add text block if we have text
     if (this.state.text) {
@@ -960,6 +1033,19 @@ class AnthropicStreamAdapter
       });
     }
 
+    // A refusal does not erase what the model already said. Its text streamed as
+    // it arrived and the refusal was appended after it as a further content
+    // block, so the client holds both — and the reconstructed turn has to say
+    // the same thing. Returning the refusal alone drops the model's own answer
+    // from the record, and whatever reads the turn back later (conversation
+    // history, a summarizer, a human debugging a failed run) then sees a turn
+    // in which the model never spoke. The withheld tool calls stay withheld:
+    // `toolCallsReleased` is false on this path, so the loop above skipped
+    // them, which is right — the client never received them.
+    if (this.replacedText !== null) {
+      content.push({ type: "text", text: this.replacedText, citations: null });
+    }
+
     const upstreamStopReason = this.state
       .stopReason as AnthropicResponse["stop_reason"];
     // A turn that delivered no tool call cannot owe a tool result. Upstream may
@@ -968,7 +1054,8 @@ class AnthropicStreamAdapter
     // that contradicts its own content.
     const hasToolUse = content.some((block) => block.type === "tool_use");
     const stopReason =
-      upstreamStopReason === "tool_use" && !hasToolUse
+      this.responseReplacedWithText ||
+      (upstreamStopReason === "tool_use" && !hasToolUse)
         ? "end_turn"
         : (upstreamStopReason ?? "end_turn");
 

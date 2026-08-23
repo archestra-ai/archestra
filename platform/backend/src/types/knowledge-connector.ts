@@ -83,6 +83,9 @@ export const ConnectorSyncStatusSchema = z.enum([
   "no_documents",
   "failed",
   "partial",
+  // Stopped explicitly by a user. Documents already ingested by the run stay
+  // available; the run's fencing epoch prevents any later batch from writing.
+  "cancelled",
   // A newer sync run for the same connector replaced this one. Distinct from
   // "failed" so it can be surfaced as an informational (not error) state.
   "superseded",

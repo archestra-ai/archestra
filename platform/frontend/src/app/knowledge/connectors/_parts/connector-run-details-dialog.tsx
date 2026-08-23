@@ -226,10 +226,11 @@ export function ConnectorRunDetailsDialog({
                 </p>
               )}
 
-              {/* Superseded runs carry an explanatory note, not a real error —
-                  render it neutrally so it doesn't read as a failure. */}
+              {/* Superseded/cancelled runs carry an explanatory note, not a
+                  real error — render it neutrally so it doesn't read as a
+                  failure. */}
               {run.error &&
-                (run.status === "superseded" ? (
+                (run.status === "superseded" || run.status === "cancelled" ? (
                   <div>
                     <h4 className="mb-1 text-sm font-medium">Note</h4>
                     <pre className="max-h-48 overflow-auto rounded-md bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap break-words">

@@ -59442,10 +59442,10 @@ export type GetConnectorsResponses = {
             permissionSyncIntervalSeconds: number;
             enabled: boolean;
             lastSyncAt: string | null;
-            lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+            lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
             lastSyncError: string | null;
             lastPermissionSyncAt: string | null;
-            lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+            lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
@@ -59914,10 +59914,10 @@ export type CreateConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -60270,10 +60270,10 @@ export type GetConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -60729,10 +60729,10 @@ export type UpdateConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -62627,7 +62627,7 @@ export type GetConnectorRunsData = {
         limit?: number;
         offset?: number;
         runType?: 'content' | 'permission';
-        status?: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        status?: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         /**
          * Only runs that changed something (or nothing)
          */
@@ -62709,7 +62709,7 @@ export type GetConnectorRunsResponses = {
         data: Array<{
             id: string;
             connectorId: string;
-            status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+            status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
             runType: 'content' | 'permission';
             startedAt: string;
             completedAt: string | null;
@@ -62844,7 +62844,7 @@ export type GetConnectorRunResponses = {
     200: {
         id: string;
         connectorId: string;
-        status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
+        status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'cancelled' | 'superseded';
         runType: 'content' | 'permission';
         startedAt: string;
         completedAt: string | null;
@@ -62884,6 +62884,92 @@ export type GetConnectorRunResponses = {
 };
 
 export type GetConnectorRunResponse = GetConnectorRunResponses[keyof GetConnectorRunResponses];
+
+export type CancelConnectorRunData = {
+    body?: never;
+    path: {
+        id: string;
+        runId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/runs/{runId}/cancel';
+};
+
+export type CancelConnectorRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelConnectorRunError = CancelConnectorRunErrors[keyof CancelConnectorRunErrors];
+
+export type CancelConnectorRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        cancelled: true;
+    };
+};
+
+export type CancelConnectorRunResponse = CancelConnectorRunResponses[keyof CancelConnectorRunResponses];
 
 export type GetKnowledgeFilesData = {
     body?: never;

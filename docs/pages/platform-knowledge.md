@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -264,6 +264,10 @@ The output of `query_knowledge_sources` is treated as sensitive by default, whic
 ![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
+
+## Sync Runs
+
+Open a connector to review its document sync runs and progress. You can cancel a running document sync from its **Actions** column. Cancellation stops new source batches and keeps documents already ingested by the run. A later sync continues from the saved connector checkpoint.
 
 ## Visibility
 

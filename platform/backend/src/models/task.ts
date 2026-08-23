@@ -443,6 +443,34 @@ class TaskModel {
     `);
     return rowCount ?? 0;
   }
+
+  /**
+   * Remove the queue work owned by one cancelled content run. The source-sync
+   * task is keyed by connector id; embedding tasks are keyed by run id. A
+   * processing handler may still be on the stack, but the cancelled run's
+   * fencing epoch makes its next guarded write fail and deleting the task keeps
+   * it from being retried or recovered as stuck.
+   */
+  static async deleteActiveForContentRun(params: {
+    connectorId: string;
+    runId: string;
+  }): Promise<number> {
+    const { rowCount } = await db.execute(sql`
+      DELETE FROM tasks
+      WHERE status IN ('pending', 'processing')
+        AND (
+          (
+            task_type = 'connector_sync'
+            AND payload->>'connectorId' = ${params.connectorId}
+          )
+          OR (
+            task_type = 'batch_embedding'
+            AND payload->>'connectorRunId' = ${params.runId}
+          )
+        )
+    `);
+    return rowCount ?? 0;
+  }
 }
 
 export default TaskModel;

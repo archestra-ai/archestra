@@ -105,6 +105,11 @@ describe("resolveAuditableRouteConfig", () => {
       ["/api/teams/:id/members/:userId", "team", "team.updated"],
       ["/api/connectors/:id/sync", "connector", "connector.synced"],
       [
+        "/api/connectors/:id/runs/:runId/cancel",
+        "connector",
+        "connector.updated",
+      ],
+      [
         "/api/connectors/:id/documents/:docId",
         "connector",
         "connector.updated",

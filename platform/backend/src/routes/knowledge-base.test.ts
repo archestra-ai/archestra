@@ -2754,6 +2754,119 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("POST /api/connectors/:id/runs/:runId/cancel", () => {
+    test("cancels an active document sync, fences later writes, and clears its queue work", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const other = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const claim = await ConnectorRunModel.claim({
+        connectorId: connector.id,
+        owner: "route-test-worker",
+        leaseTtlSeconds: 300,
+      });
+      if (claim.outcome !== "claimed") throw new Error("Run was not claimed");
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+        lastSyncAt: claim.run.startedAt,
+      });
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+        status: "processing",
+        startedAt: new Date(),
+      });
+      await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: {
+          connectorRunId: claim.run.id,
+          documentIds: [crypto.randomUUID()],
+        },
+      });
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: other.id },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/runs/${claim.run.id}/cancel`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ cancelled: true });
+      const cancelled = await ConnectorRunModel.findById(claim.run.id);
+      expect(cancelled).toMatchObject({
+        status: "cancelled",
+        error: "Sync cancelled by a user.",
+      });
+      expect(cancelled?.completedAt).not.toBeNull();
+      expect(cancelled?.leaseEpoch).toBe(claim.run.leaseEpoch + 1);
+      expect(
+        await ConnectorRunModel.updateIfOwned({
+          runId: claim.run.id,
+          epoch: claim.run.leaseEpoch,
+          data: { documentsProcessed: 1 },
+        }),
+      ).toBeNull();
+      expect(
+        await TaskModel.deleteActiveForContentRun({
+          connectorId: connector.id,
+          runId: claim.run.id,
+        }),
+      ).toBe(0);
+      expect(
+        await TaskModel.hasPendingOrProcessing("connector_sync", other.id),
+      ).toBe(true);
+      expect(
+        await KnowledgeBaseConnectorModel.findById(connector.id),
+      ).toMatchObject({
+        lastSyncStatus: "cancelled",
+        lastSyncError: null,
+      });
+
+      // The audit hook persists after the response; its connector snapshot
+      // must expose the state transition so this mutation has a real diff.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const { data: auditRows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const audit = auditRows.find(
+        (row) =>
+          row.resourceId === connector.id &&
+          row.httpMethod === "POST" &&
+          row.action === "connector.updated",
+      );
+      expect(audit?.before?.lastSyncStatus).toBe("running");
+      expect(audit?.after?.lastSyncStatus).toBe("cancelled");
+    });
+
+    test("rejects a run that is already terminal", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const run = await makeConnectorRun(connector.id, { status: "success" });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/runs/${run.id}/cancel`,
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toBe(
+        "This sync run is no longer in progress",
+      );
+    });
+  });
+
   // ===== Cross-Entity Behavior =====
 
   test("deleting a knowledge base removes its connector assignments without deleting the connector", async () => {

@@ -3038,6 +3038,59 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(run);
     },
   );
+
+  fastify.post(
+    "/api/connectors/:id/runs/:runId/cancel",
+    {
+      schema: {
+        operationId: RouteId.CancelConnectorRun,
+        description:
+          "Cancel an in-progress document sync. Documents already ingested remain available; the worker stops before writing its next source batch.",
+        tags: ["Connectors"],
+        params: z.object({
+          id: z.uuid(),
+          runId: z.uuid(),
+        }),
+        response: constructResponseSchema(
+          z.object({ cancelled: z.literal(true) }),
+        ),
+      },
+    },
+    async ({ params: { id, runId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const run = await ConnectorRunModel.findById(runId);
+      if (!run || run.connectorId !== id) {
+        throw new ApiError(404, "Connector run not found");
+      }
+      if (run.runType !== "content") {
+        throw new ApiError(400, "Only document sync runs can be cancelled");
+      }
+
+      const cancelled = await ConnectorRunModel.cancelRunningContentRun({
+        connectorId: id,
+        runId,
+        reason: "Sync cancelled by a user.",
+      });
+      if (!cancelled) {
+        throw new ApiError(409, "This sync run is no longer in progress");
+      }
+
+      await Promise.all([
+        TaskModel.deleteActiveForContentRun({ connectorId: id, runId }),
+        KnowledgeBaseConnectorModel.markContentRunCancelledIfCurrent({
+          connectorId: id,
+          runId,
+        }),
+      ]);
+
+      return reply.send({ cancelled: true });
+    },
+  );
 };
 
 export default knowledgeBaseRoutes;

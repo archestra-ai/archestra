@@ -21,6 +21,7 @@ const {
   restoreConnector,
   permanentlyDeleteConnector,
   syncConnector,
+  cancelConnectorRun,
   forceResyncConnector,
   testConnectorConnection,
   getConnectorRuns,
@@ -366,6 +367,35 @@ export function useSyncConnector() {
         queryKey: ["connectors", connectorId, "runs"],
       });
       toast.success("Sync started successfully");
+    },
+  });
+}
+
+export function useCancelConnectorRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { connectorId: string; runId: string }) => {
+      const { data, error } = await cancelConnectorRun({
+        path: { id: params.connectorId, runId: params.runId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, { connectorId, runId }) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "runs"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "runs", runId],
+      });
+      toast.success("Sync cancelled");
     },
   });
 }

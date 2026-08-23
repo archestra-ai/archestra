@@ -1774,6 +1774,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Connector Run Routes
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
+  [RouteId.CancelConnectorRun]: { knowledgeSource: ["update"] },
 
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },

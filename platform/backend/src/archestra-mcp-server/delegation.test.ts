@@ -14,7 +14,7 @@ import {
   EnvironmentModel,
   ToolModel,
 } from "@/models";
-import { ProviderError } from "@/routes/chat/errors";
+import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
@@ -278,12 +278,13 @@ describe("delegation tool execution", () => {
 describe("delegation error propagation", () => {
   let callerAgent: Agent;
   let baseContext: ArchestraContext;
+  let targetAgent: Agent;
   let toolName: string;
 
   beforeEach(async ({ makeAgent, makeAgentTool }) => {
     vi.clearAllMocks();
     callerAgent = await makeAgent({ name: "Caller Agent" });
-    const targetAgent = await makeAgent({ name: "Target Agent" });
+    targetAgent = await makeAgent({ name: "Target Agent" });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
       targetAgent.id,
     );
@@ -309,16 +310,23 @@ describe("delegation error propagation", () => {
     expect((result.content[0] as any).text).toContain("subagent exploded");
   });
 
-  test("rethrows a ProviderError so the parent stream reports the provider", async () => {
+  test("rethrows a ProviderError with the originating subagent", async () => {
     const providerError = new ProviderError({
       message: "upstream is down",
       authenticated: false,
     } as any);
     mockExecuteA2AMessage.mockRejectedValue(providerError);
 
-    await expect(
-      executeArchestraTool(toolName, { message: "hello" }, baseContext),
-    ).rejects.toBe(providerError);
+    const error = await executeArchestraTool(
+      toolName,
+      { message: "hello" },
+      baseContext,
+    ).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(SubagentProviderError);
+    expect(error.chatErrorResponse).toBe(providerError.chatErrorResponse);
+    expect(error.subagentId).toBe(targetAgent.id);
+    expect(error.subagentName).toBe(targetAgent.name);
   });
 
   test("rethrows an abort so cancellation propagates instead of becoming a tool error", async () => {

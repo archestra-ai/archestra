@@ -4,7 +4,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { generateText, Output } from "ai";
-import { createLLMModel } from "@/clients/llm-client";
+import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -23,8 +23,7 @@ import {
 } from "@/types";
 import {
   type ResolvedLlmSelection,
-  resolveBestAvailableLlm,
-  resolveConfiguredAgentLlm,
+  resolveAgentLlmOrDefault,
 } from "@/utils/llm-resolution";
 
 interface AutoPolicyResult {
@@ -48,28 +47,59 @@ interface BulkAutoPolicyResult {
  */
 export class PolicyConfigurationService {
   /**
-   * Resolve the LLM provider/key using the built-in agent's configured
-   * llmApiKeyId/llmModel, falling back to the best available LLM across the
-   * org's keys.
+   * Resolve the LLM for this subagent through the shared built-in-subagent
+   * chain: the agent's own configured model/key, then the ORGANIZATION DEFAULT
+   * model (Settings -> Agents), then the best available key, then the env
+   * fallback.
+   *
+   * Resolving through `resolveAgentLlmOrDefault` — rather than reading the
+   * agent's pinned selection directly — is what makes the returned selection
+   * usable. `resolveConfiguredAgentLlm` is ownership-blind: it deliberately
+   * returns a selection with NO apiKey when the pinned credential belongs to an
+   * individual (a Claude Pro/Max or ChatGPT subscription, a Copilot token),
+   * leaving the caller to re-resolve it for the acting user. Treating that
+   * half-resolved selection as final is what made "Configure with Subagent"
+   * fail on every tool at once: the LLM call had no credential, but a non-null
+   * selection had already satisfied the caller's "is an LLM configured?" check.
+   *
+   * Returns null when no usable credential resolves, so the caller can surface
+   * one actionable error instead of N identical provider failures.
    */
   async resolveLlm(params: {
     organizationId: string;
     userId?: string;
   }): Promise<ResolvedLlmSelection | null> {
-    const { organizationId } = params;
+    const { organizationId, userId } = params;
 
-    // Check the built-in agent's own LLM configuration first
     const builtInAgent = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.POLICY_CONFIG,
       organizationId,
     );
 
-    if (builtInAgent) {
-      const agentLlm = await resolveConfiguredAgentLlm(builtInAgent);
-      if (agentLlm) return agentLlm;
+    const selection = await resolveAgentLlmOrDefault({
+      agent: builtInAgent
+        ? {
+            llmApiKeyId: builtInAgent.llmApiKeyId,
+            modelId: builtInAgent.modelId,
+          }
+        : null,
+      organizationId,
+      userId,
+    });
+
+    if (isApiKeyRequired(selection.provider, selection.apiKey)) {
+      logger.warn(
+        {
+          organizationId,
+          provider: selection.provider,
+          modelName: selection.modelName,
+        },
+        "resolveLlm: resolved provider has no usable credential",
+      );
+      return null;
     }
 
-    return resolveBestAvailableLlm(params);
+    return selection;
   }
 
   /**
@@ -89,10 +119,10 @@ export class PolicyConfigurationService {
       "configurePoliciesForTool: starting",
     );
 
-    // Use pre-resolved LLM or resolve now
+    // Use pre-resolved LLM or resolve now, through the same chain the bulk
+    // flow uses — a direct single-tool call must not resolve differently.
     const resolved =
-      resolvedLlm ??
-      (await resolveBestAvailableLlm({ organizationId, userId }));
+      resolvedLlm ?? (await this.resolveLlm({ organizationId, userId }));
     if (!resolved) {
       logger.warn(
         { toolId, organizationId },
@@ -142,6 +172,7 @@ export class PolicyConfigurationService {
         apiKey: resolved.apiKey,
         modelName: resolved.modelName,
         baseUrl: resolved.baseUrl,
+        chatApiKeyId: resolved.chatApiKeyId,
         organizationId,
       });
 
@@ -367,20 +398,40 @@ export class PolicyConfigurationService {
       }),
     );
 
-    const allSuccess = results.every((r) => r.success);
-    const successCount = results.filter((r) => r.success).length;
-    const failureCount = results.filter((r) => !r.success).length;
+    const failures = results.filter((r) => !r.success);
+    const successCount = results.length - failures.length;
+    const allSuccess = failures.length === 0;
 
     logger.info(
       {
         organizationId,
         total: results.length,
         successCount,
-        failureCount,
+        failureCount: failures.length,
         allSuccess,
       },
       "configurePoliciesForTools: bulk auto-configure completed",
     );
+
+    // A bulk run that configured nothing is the shape this fails in — one
+    // cause (no usable credential, a model that won't produce the structured
+    // output) takes down every tool at once. Counts alone say nothing about
+    // which, so name the reasons here, on one line, next to the counts.
+    if (failures.length > 0) {
+      logger.warn(
+        {
+          organizationId,
+          successCount,
+          failureCount: failures.length,
+          failures: failures.map(({ toolId, error, timedOut }) => ({
+            toolId,
+            error,
+            timedOut,
+          })),
+        },
+        "configurePoliciesForTools: some tools could not be auto-configured",
+      );
+    }
 
     return {
       success: allSuccess,
@@ -398,6 +449,8 @@ export class PolicyConfigurationService {
     apiKey: string | undefined;
     modelName: string;
     baseUrl: string | null;
+    /** The key row the credential came from; see the createLLMModel call. */
+    chatApiKeyId?: string;
     organizationId: string;
   }): Promise<PolicyConfig> {
     const {
@@ -407,6 +460,7 @@ export class PolicyConfigurationService {
       apiKey,
       modelName,
       baseUrl,
+      chatApiKeyId,
       organizationId,
     } = params;
     logger.info(
@@ -436,6 +490,11 @@ export class PolicyConfigurationService {
       agentId: builtInAgent.id,
       modelName,
       baseUrl,
+      // The proxy must know which key row supplied the credential: per-key
+      // configuration (extra headers) hangs off it, and Codex refresh tokens
+      // rotate on every redemption — a loopback call without the row id
+      // discards the rotation and burns the stored credential.
+      chatApiKeyId,
     });
     const annotations = tool.meta?.annotations as
       | Record<string, unknown>

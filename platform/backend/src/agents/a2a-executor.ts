@@ -51,6 +51,7 @@ import {
   getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
+  SubagentProviderError,
 } from "@/routes/chat/errors";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
@@ -784,9 +785,15 @@ export async function executeA2AMessage(
         NoOutputGeneratedError.isInstance(streamError) &&
         capturedStreamError !== undefined
       ) {
+        if (capturedStreamError instanceof SubagentProviderError) {
+          throw capturedStreamError;
+        }
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
         );
+      }
+      if (streamError instanceof SubagentProviderError) {
+        throw streamError;
       }
       throw new ProviderError(mapProviderError(streamError, provider));
     }

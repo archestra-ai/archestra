@@ -1,17 +1,7 @@
 "use client";
 
-import { AlertCircle, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { trackEvent } from "@/lib/analytics";
 import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
@@ -46,6 +36,7 @@ import {
   type OAuthCallbackErrorState,
   toInternalReturnPath,
 } from "./oauth-callback.utils";
+import { OAuthCallbackStatus } from "./oauth-callback-status";
 
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -222,49 +213,23 @@ function OAuthCallbackContent() {
   if (callbackError) {
     return (
       <OAuthCallbackLayout>
-        <Card>
-          <CardHeader>
-            <CardTitle>OAuth Authentication</CardTitle>
-            <CardDescription>
-              Authentication could not be completed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>{callbackError.title}</AlertTitle>
-              <AlertDescription>{callbackError.description}</AlertDescription>
-            </Alert>
-            <Button
-              onClick={() => {
-                clearOAuthReturnUrl();
-                router.push(errorReturnPath ?? "/mcp/registry");
-              }}
-            >
-              {errorReturnPath ? "Go Back" : "Return to MCP Registry"}
-            </Button>
-          </CardContent>
-        </Card>
+        <OAuthCallbackStatus
+          status="error"
+          errorTitle={callbackError.title}
+          errorDescription={callbackError.description}
+          actionLabel={errorReturnPath ? "Go Back" : "Return to MCP Registry"}
+          onAction={() => {
+            clearOAuthReturnUrl();
+            router.push(errorReturnPath ?? "/mcp/registry");
+          }}
+        />
       </OAuthCallbackLayout>
     );
   }
 
   return (
     <OAuthCallbackLayout>
-      <Card>
-        <CardHeader>
-          <CardTitle>OAuth Authentication</CardTitle>
-          <CardDescription>Processing authentication...</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-            <p className="text-center text-muted-foreground">
-              Completing OAuth authentication and installing MCP server...
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <OAuthCallbackStatus status="processing" phase="completing" />
     </OAuthCallbackLayout>
   );
 }
@@ -272,28 +237,17 @@ function OAuthCallbackContent() {
 function LoadingFallback() {
   return (
     <OAuthCallbackLayout>
-      <Card>
-        <CardHeader>
-          <CardTitle>OAuth Authentication</CardTitle>
-          <CardDescription>Initializing OAuth flow...</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-            <p className="text-center text-muted-foreground">
-              Preparing to complete authentication...
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <OAuthCallbackStatus status="processing" phase="initializing" />
     </OAuthCallbackLayout>
   );
 }
 
 function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-2xl items-center justify-center p-6">
-      <div className="w-full">{children}</div>
+    <div className="relative isolate mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-6xl items-center justify-center overflow-hidden px-4 py-10 sm:px-6 lg:px-10">
+      <div className="absolute top-[12%] left-[8%] -z-10 size-48 rounded-full bg-primary/5 blur-3xl" />
+      <div className="absolute right-[4%] bottom-[8%] -z-10 size-64 rounded-full bg-muted blur-3xl" />
+      {children}
     </div>
   );
 }

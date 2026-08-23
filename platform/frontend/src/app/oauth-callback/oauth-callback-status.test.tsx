@@ -5,14 +5,12 @@ describe("OAuthCallbackStatus", () => {
   it("explains the secure handoff while the connection is completing", () => {
     render(<OAuthCallbackStatus status="processing" phase="completing" />);
 
+    expect(screen.getByText("Finishing OAuth Connection")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Finishing the connection" }),
+      screen.getByText("Completing OAuth authentication"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Authorization received")).toBeInTheDocument();
-    expect(screen.getByText("Securing credentials")).toBeInTheDocument();
-    expect(screen.getByText("Connecting MCP server")).toBeInTheDocument();
     expect(
-      screen.getByRole("status", { name: "OAuth connection in progress" }),
+      screen.getByText("Securing credentials and connecting the MCP server"),
     ).toBeInTheDocument();
   });
 
@@ -29,13 +27,7 @@ describe("OAuthCallbackStatus", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("heading", {
-        name: "We couldn't finish the connection",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Authorization not completed")).toBeInTheDocument();
-    expect(screen.getByText("Credentials unchanged")).toBeInTheDocument();
+    expect(screen.getByText("Connection Not Completed")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The authorization request was declined.",
     );

@@ -244,9 +244,7 @@ function LoadingFallback() {
 
 function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative isolate mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-6xl items-center justify-center overflow-hidden px-4 py-10 sm:px-6 lg:px-10">
-      <div className="absolute top-[12%] left-[8%] -z-10 size-48 rounded-full bg-primary/5 blur-3xl" />
-      <div className="absolute right-[4%] bottom-[8%] -z-10 size-64 rounded-full bg-muted blur-3xl" />
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full items-center justify-center p-4">
       {children}
     </div>
   );

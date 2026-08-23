@@ -366,7 +366,7 @@ fn text_result(text: impl Into<String>) -> CallToolResult {
 fn schema_errors(validator: &Validator, result: &JsonValue) -> Vec<String> {
     let mut errors = Vec::new();
     for error in validator.iter_errors(result) {
-        let location = error.instance_path.as_str().trim_start_matches('/');
+        let location = error.instance_path().as_str().trim_start_matches('/');
         let location = if location.is_empty() {
             "(root)".to_string()
         } else {
@@ -379,25 +379,26 @@ fn schema_errors(validator: &Validator, result: &JsonValue) -> Vec<String> {
 }
 
 fn explain(error: &jsonschema::ValidationError) -> String {
-    if !matches!(error.kind, jsonschema::error::ValidationErrorKind::Type { .. }) {
+    if !matches!(error.kind(), jsonschema::error::ValidationErrorKind::Type { .. }) {
         return error.to_string();
     }
-    let expected_str = match &error.kind {
+    let expected_str = match error.kind() {
         jsonschema::error::ValidationErrorKind::Type {
             kind: jsonschema::error::TypeKind::Single(pt),
         } => pt.to_string(),
         jsonschema::error::ValidationErrorKind::Type {
             kind: jsonschema::error::TypeKind::Multiple(bits),
         } => {
-            let names: Vec<String> = (*bits).into_iter().map(|pt| pt.to_string()).collect();
+            let names: Vec<String> = bits.into_iter().map(|pt| pt.to_string()).collect();
             names.join(" or ")
         }
         _ => "unknown".to_string(),
     };
-    let received = json_type_name(&error.instance);
+    let instance = error.instance().as_ref();
+    let received = json_type_name(instance);
     format!(
         "expected a JSON {expected_str}, but received a {received}: {}. Send a bare JSON {expected_str}, not a {received}.",
-        serde_json::to_string(&error.instance).unwrap_or_default()
+        serde_json::to_string(instance).unwrap_or_default()
     )
 }
 

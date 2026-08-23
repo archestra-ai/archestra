@@ -1,12 +1,13 @@
 "use client";
 
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -250,10 +251,20 @@ export default function ServiceAccountsSettingsPage() {
           loadingFallback={<LoadingSpinner />}
         >
           <div className="space-y-4">
-            <SearchInput
-              objectNamePlural="service accounts"
-              searchFields={["name"]}
-            />
+            <FilterBar
+              className="mb-0"
+              onClearFilters={
+                search
+                  ? () => updateQueryParams({ search: null, page: "1" })
+                  : undefined
+              }
+            >
+              <SearchInput
+                objectNamePlural="service accounts"
+                searchFields={["name"]}
+                className={filterSearchClass}
+              />
+            </FilterBar>
             {isServiceAccountsLoadError ? (
               <QueryLoadError
                 title="Couldn't load your service accounts"

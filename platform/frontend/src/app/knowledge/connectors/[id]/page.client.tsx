@@ -43,13 +43,13 @@ import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/conne
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { FilterBar, filterControlClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RelativeTime } from "@/components/relative-time";
-import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -711,7 +711,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           />
         ) : (
           <div>
-            <TableFilters>
+            <FilterBar>
               {isAutoSync && (
                 <Select
                   value={runTypeFilter}
@@ -721,7 +721,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   }}
                 >
                   <SelectTrigger
-                    className="h-9 w-full text-sm sm:w-[200px]"
+                    size="sm"
+                    className={filterControlClass({
+                      active: runTypeFilter !== "all",
+                    })}
                     aria-label="Filter runs"
                   >
                     <SelectValue placeholder="All runs" />
@@ -741,7 +744,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                 }}
               >
                 <SelectTrigger
-                  className="h-9 w-full text-sm sm:w-[200px]"
+                  size="sm"
+                  className={filterControlClass({
+                    active: runStatusFilter !== "all",
+                  })}
                   aria-label="Filter by status"
                 >
                   <SelectValue placeholder="All statuses" />
@@ -767,7 +773,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                 }}
               >
                 <SelectTrigger
-                  className="h-9 w-full text-sm sm:w-[200px]"
+                  size="sm"
+                  className={filterControlClass({
+                    active: runResultFilter !== "all",
+                  })}
                   aria-label="Filter by result"
                 >
                   <SelectValue placeholder="All results" />
@@ -778,7 +787,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <SelectItem value="no-changes">No changes</SelectItem>
                 </SelectContent>
               </Select>
-            </TableFilters>
+            </FilterBar>
             <LoadingWrapper
               isPending={isRunsPending}
               loadingFallback={<LoadingSpinner />}

@@ -1477,13 +1477,17 @@ export const anthropicAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): AnthropicProvider {
     // Use observable fetch for request duration metrics if agent is provided
-    const customFetch = options.agent
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch(
           "anthropic",
           options.agent,
           options.source,
         )
       : undefined;
+    const customFetch = observeResponseHeaders(
+      observableFetch,
+      options.onResponseHeaders,
+    );
 
     // Check if this is a Bearer token (OAuth) or regular API key
     const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
@@ -1625,6 +1629,26 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+function observeResponseHeaders(
+  baseFetch: typeof fetch | undefined,
+  onResponseHeaders: CreateClientOptions["onResponseHeaders"],
+): typeof fetch | undefined {
+  if (!onResponseHeaders) {
+    return baseFetch;
+  }
+
+  return async (input, init) => {
+    const response = await (baseFetch ?? fetch)(input, init);
+    // Billing mode describes the interaction we persist. Failed attempts may
+    // be retried and are not themselves billed interactions, so only the
+    // successful response can refine it.
+    if (response.ok) {
+      onResponseHeaders(response.headers);
+    }
+    return response;
+  };
+}
 
 /**
  * Whether a non-streaming request with this `max_tokens` would exceed the SDK's

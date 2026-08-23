@@ -16,6 +16,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
@@ -234,12 +235,19 @@ function ProjectsList() {
           />
         )}
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterBar
+            className="mb-0"
+            actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+          >
             {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
             {!isDeletedView && (
               <>
-                <SearchInput placeholder="Search projects" paramName="search" />
+                <SearchInput
+                  placeholder="Search projects"
+                  paramName="search"
+                  className={filterSearchClass}
+                />
                 <ResourceScopeFilter
                   ownerLabelPlural="projects"
                   allLabel="All projects"
@@ -252,12 +260,7 @@ function ProjectsList() {
             <ResourceDeletedStatusFilter
               deletePermission={{ project: ["admin"] }}
             />
-            {!isDeletedView && (
-              <span className="ml-auto">
-                <TableCardViewToggle />
-              </span>
-            )}
-          </div>
+          </FilterBar>
           {isDeletedView ? (
             projects.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">

@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { FilterBar } from "@/components/filter-bar";
 import { LoadingSpinner } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -209,13 +210,18 @@ function NewPluginWizard() {
                         : POPULAR_PLUGIN_MARKETPLACES.length}
                     </Badge>
                   </div>
-                  <SearchInput
-                    value={search}
-                    onSearchChange={setSearch}
-                    syncQueryParams={false}
-                    placeholder="Search marketplaces by name or use case..."
-                    className="relative w-full"
-                  />
+                  <FilterBar
+                    className="mb-0"
+                    onClearFilters={search ? () => setSearch("") : undefined}
+                  >
+                    <SearchInput
+                      value={search}
+                      onSearchChange={setSearch}
+                      syncQueryParams={false}
+                      placeholder="Search marketplaces by name or use case..."
+                      className="w-full flex-1"
+                    />
+                  </FilterBar>
                 </CardHeader>
                 <CardContent className="p-0">
                   {filteredMarketplaces.length === 0 ? (

@@ -377,9 +377,12 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    // role=combobox is not a name-from-content role, so the trigger has no
-    // accessible name — reach it through its visible label instead.
-    await userEvent.click(screen.getByText("All resources"));
+    // The resource picker is one of the secondary filters, so it is reached
+    // through "More filters" until something is selected in it.
+    await userEvent.click(screen.getByRole("button", { name: /More filters/ }));
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Filter by resource" }),
+    );
     await userEvent.click(
       await screen.findByRole("button", { name: /context7/i }),
     );
@@ -387,6 +390,24 @@ describe("AuditLogTable", () => {
     expect(push).toHaveBeenCalled();
     const url = String(push.mock.calls[push.mock.calls.length - 1][0]);
     expect(url).toContain("resourceId=mcp-1");
+  });
+
+  it("keeps an applied secondary filter on the bar rather than behind More filters", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("actorType=user") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+
+    renderTable();
+
+    // Applied, so it is inline and readable without opening anything —
+    // a filter narrowing the table from inside a closed popover would leave
+    // the empty result unexplained.
+    expect(
+      screen.getByRole("combobox", { name: "Filter by actor type" }),
+    ).toBeInTheDocument();
   });
 
   it("reads action and resource filters from URL params and passes to useAuditLogs", () => {

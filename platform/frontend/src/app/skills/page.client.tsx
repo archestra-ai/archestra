@@ -30,6 +30,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -721,16 +726,23 @@ function SkillsList() {
           ) : (
             <>
               <div className="mb-6 flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-3">
+                <FilterBar
+                  className="mb-0"
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                  actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                >
                   <SearchInput
                     paramName="search"
-                    className="relative w-[370px]"
+                    className={filterSearchClass}
                   />
                   {mcpSkillsEnabled && !isDeletedView && (
                     <Select value={kind} onValueChange={setKindFilter}>
                       <SelectTrigger
+                        size="sm"
                         aria-label="Filter by skill source"
-                        className="w-[180px]"
+                        className={filterControlClass({
+                          active: kind !== "all",
+                        })}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -768,8 +780,11 @@ function SkillsList() {
                       }
                     >
                       <SelectTrigger
+                        size="sm"
                         aria-label="Filter by repository"
-                        className="w-[260px]"
+                        className={filterControlClass({
+                          active: Boolean(sourceRepo),
+                        })}
                       >
                         <SelectValue placeholder="All repositories">
                           {sourceRepo ? (
@@ -802,12 +817,7 @@ function SkillsList() {
                       </SelectContent>
                     </Select>
                   )}
-                  {!isDeletedView ? (
-                    <span className="ml-auto">
-                      <TableCardViewToggle />
-                    </span>
-                  ) : null}
-                </div>
+                </FilterBar>
                 <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
               </div>
 

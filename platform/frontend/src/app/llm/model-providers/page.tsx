@@ -27,6 +27,11 @@ import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import {
   deserializeExtraHeaders,
@@ -735,11 +740,12 @@ export default function ApiKeysPage() {
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <FilterBar>
           <SearchInput
             objectNamePlural="credentials"
             searchFields={["name"]}
             paramName="search"
+            className={filterSearchClass}
           />
           <Select
             value={providerFilter}
@@ -750,8 +756,11 @@ export default function ApiKeysPage() {
             }
           >
             <SelectTrigger
+              size="sm"
               aria-label="Filter by provider"
-              className="w-full sm:w-[240px]"
+              className={filterControlClass({
+                active: providerFilter !== "all",
+              })}
             >
               <SelectValue placeholder="All providers" />
             </SelectTrigger>
@@ -760,7 +769,7 @@ export default function ApiKeysPage() {
               <LlmProviderSelectItems options={providerOptions} />
             </SelectContent>
           </Select>
-        </div>
+        </FilterBar>
 
         {byosEnabled &&
           apiKeys.some((key) => key.secretStorageType === "database") && (

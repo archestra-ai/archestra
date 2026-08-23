@@ -4,6 +4,7 @@ import type { Permissions } from "@archestra/shared";
 import { Braces, User, Users, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { filterControlClass } from "@/components/filter-bar";
 import {
   LabelFilterBadges,
   LabelKeyRowBase,
@@ -212,12 +213,16 @@ export function ResourceScopeFilter({
   const SelectedScopeIcon = selectedScopeMeta?.icon;
 
   return (
-    // Wraps: at a phone width the fixed-width selects below overflow one row,
-    // and this group shares that row with a list page's search box, which is
-    // then squeezed to its magnifier with no room left to show what was typed.
-    <div className="flex flex-wrap items-center gap-2">
+    // Wraps: at a phone width the selects below overflow one row, and this
+    // group shares that row with a list page's search box, which is then
+    // squeezed to its magnifier with no room left to show what was typed.
+    <div className="flex flex-wrap items-center gap-1.5">
       <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
-        <SelectTrigger aria-label="Filter by type" className="w-[180px]">
+        <SelectTrigger
+          size="sm"
+          aria-label="Filter by type"
+          className={filterControlClass({ active: Boolean(scope) })}
+        >
           <SelectValue>
             {selectedScopeMeta && SelectedScopeIcon ? (
               <span className="flex items-center gap-2">
@@ -264,7 +269,11 @@ export function ResourceScopeFilter({
       </Select>
       {showOwnerSelect && (
         <Select value={ownerFilter} onValueChange={handleOwnerChange}>
-          <SelectTrigger aria-label="Filter by owner" className="w-[180px]">
+          <SelectTrigger
+            size="sm"
+            aria-label="Filter by owner"
+            className={filterControlClass({ active: ownerFilter !== "mine" })}
+          >
             <SelectValue>
               <span className="flex items-center gap-2">
                 {ownerFilter === "mine" ? (
@@ -297,7 +306,9 @@ export function ResourceScopeFilter({
             onValueChange={handleTeamIdsChange}
             items={teamItems}
             placeholder="All teams"
-            className="w-[220px]"
+            className={filterControlClass({
+              active: selectedTeamIds.length > 0,
+            })}
             showSelectedBadges={false}
             selectedSuffix={(n) => `${n === 1 ? "team" : "teams"} selected`}
           />
@@ -315,7 +326,9 @@ export function ResourceScopeFilter({
           onValueChange={handleAuthorIdsChange}
           users={userOptions}
           placeholder="All users"
-          className="w-[220px]"
+          className={filterControlClass({
+            active: selectedAuthorIds.length > 0,
+          })}
           showSelectedBadges={false}
           selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
         />
@@ -413,7 +426,11 @@ export function ResourceDeletedStatusFilter({
 
   return (
     <Select value={status} onValueChange={handleStatusChange}>
-      <SelectTrigger aria-label="Filter by status" className="w-[150px]">
+      <SelectTrigger
+        size="sm"
+        aria-label="Filter by status"
+        className={filterControlClass({ active: status !== "active" })}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper" side="bottom" align="start">
@@ -603,10 +620,13 @@ export function ActiveFilterBadges({
 // in a child component keeps its queries out of pages that don't render it.
 function AgentLabelFilter() {
   const { data: labelKeys } = useLabelKeys();
+  const labelsParam = useSearchParams().get("labels");
+  const hasLabels = Object.keys(parseLabelsParam(labelsParam) ?? {}).length > 0;
   return (
     <LabelSelect
       labelKeys={labelKeys}
       LabelKeyRowComponent={AgentLabelKeyRow}
+      className={filterControlClass({ active: hasLabels })}
     />
   );
 }

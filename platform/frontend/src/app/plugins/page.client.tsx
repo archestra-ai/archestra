@@ -18,6 +18,11 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -587,16 +592,20 @@ function PluginsList() {
           )
         }
       >
-        <TableCardView storageKey="archestra-plugins-view">
+        <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
           {showEmptyState ? (
             <PluginsEmptyState />
           ) : (
             <>
               <div className="mb-6 flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-3">
+                <FilterBar
+                  className="mb-0"
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                  actions={<TableCardViewToggle />}
+                >
                   <SearchInput
                     paramName="search"
-                    className="relative w-[370px]"
+                    className={filterSearchClass}
                   />
                   <ResourceScopeFilter
                     ownerLabelPlural="plugins"
@@ -665,12 +674,6 @@ function PluginsList() {
                       onChange={(value) =>
                         setFilter("sourceRepo", value === "all" ? "" : value)
                       }
-                      width={`min(${
-                        Math.max(
-                          "All repositories".length,
-                          ...sourceRepos.map((repo) => repo.length),
-                        ) + 10
-                      }ch, calc(100vw - 2rem))`}
                       options={[
                         ["all", "All repositories"],
                         ...[...sourceRepos]
@@ -689,10 +692,7 @@ function PluginsList() {
                       ]}
                     />
                   )}
-                  <span className="ml-auto">
-                    <TableCardViewToggle />
-                  </span>
-                </div>
+                </FilterBar>
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
               </div>
 
@@ -979,27 +979,25 @@ function FacetSelect({
   value,
   onChange,
   options,
-  width,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: Array<readonly [string, string, ReactNode?, string?]>;
-  width?: string;
 }) {
   const selectedOption = options.find(([option]) => option === value);
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
+        size="sm"
         aria-label={label}
-        className={width ? undefined : "w-[170px]"}
-        style={width ? { width } : undefined}
+        className={filterControlClass({ active: value !== "all" })}
       >
         <SelectValue>
           {selectedOption ? (
             <span className="flex min-w-0 items-center gap-2">
               <span aria-hidden>{selectedOption[2]}</span>
-              <span className="whitespace-nowrap">{selectedOption[1]}</span>
+              <span className="truncate">{selectedOption[1]}</span>
             </span>
           ) : null}
         </SelectValue>
@@ -1008,7 +1006,7 @@ function FacetSelect({
         position="popper"
         side="bottom"
         align="start"
-        className="w-[var(--radix-select-trigger-width)]"
+        className="w-auto min-w-[14rem] max-w-[min(22rem,calc(100vw-2rem))]"
       >
         {options.map(([option, text, icon, optionClassName]) => (
           <SelectItem

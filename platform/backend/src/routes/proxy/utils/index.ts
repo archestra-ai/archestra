@@ -2,7 +2,10 @@ export * as toolInvocation from "@/guardrails/tool-invocation";
 export * as trustedData from "@/guardrails/trusted-data";
 export * as tracing from "@/observability/tracing";
 export * as tokenizers from "@/tokenizers";
-export { resolveInteractionBillingMode } from "./billing-mode";
+export {
+  refineAnthropicBillingModeFromHeaders,
+  resolveInteractionBillingMode,
+} from "./billing-mode";
 export * as costOptimization from "./cost-optimization";
 export { collectDeclaredToolNames } from "./declared-tool-names";
 export * as gatewayToolNames from "./gateway-tool-names";

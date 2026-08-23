@@ -4,6 +4,7 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockOrganization: Record<string, unknown> | null = null;
@@ -33,6 +34,7 @@ vi.mock("@archestra/shared", async () => {
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("next/navigation");
 
 import {
   useHasPermissions,
@@ -46,6 +48,13 @@ import {
 import { useTeams } from "@/lib/teams/team.query";
 
 beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(usePathname).mockReturnValue("/settings/llm");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,

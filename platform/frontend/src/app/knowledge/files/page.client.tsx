@@ -22,6 +22,7 @@ import {
   FilePreviewDialog,
   type PreviewableDocument,
 } from "@/components/files/file-preview-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -507,7 +508,18 @@ export default function KnowledgeFilesPage() {
     >
       <TableCardView storageKey="archestra-knowledge-files-view">
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterBar
+            className="mb-0"
+            onClearFilters={
+              search
+                ? () => {
+                    setSearch("");
+                    updateQueryParams({ page: "1" });
+                  }
+                : undefined
+            }
+            actions={<TableCardViewToggle />}
+          >
             {openDirectory ? (
               <Button
                 variant="ghost"
@@ -538,12 +550,9 @@ export default function KnowledgeFilesPage() {
               // second router push per keystroke.
               syncQueryParams={false}
               placeholder="Search documents…"
-              className="w-full max-w-sm flex-1"
+              className={filterSearchClass}
             />
-            <span className="ml-auto">
-              <TableCardViewToggle />
-            </span>
-          </div>
+          </FilterBar>
 
           {/* Visibility follows the ticked rows, not the document count: picking
             an empty directory selects something the bar has to be able to

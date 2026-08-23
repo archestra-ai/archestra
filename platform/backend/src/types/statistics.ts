@@ -51,6 +51,24 @@ export const UserModelUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Share of this user's input + output tokens. */
+  percentage: z.number(),
+  billedCost: z.number(),
+  subscriptionCost: z.number(),
+});
+
+/** One client application's slice of the caller's usage. */
+export const MyClientUsageSchema = z.object({
+  /** Known client-family label, raw attribution value, or null when absent. */
+  client: z.string().nullable(),
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Share of the caller's input + output tokens. */
+  percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
 });
@@ -86,6 +104,143 @@ export const UserStatisticsSchema = z.object({
   models: z.array(UserModelUsageSchema).optional(),
   /** Present only when `includeTimeSeries` is set. */
   timeSeries: z.array(StatisticsTimeSeriesPointSchema).optional(),
+});
+
+/**
+ * The caller's own cost and usage — the personal summary that leads the Costs
+ * page.
+ *
+ * Deliberately a separate shape from {@link UserStatisticsSchema} rather than a
+ * one-row page of it: this is the only statistics view that carries no
+ * permission over other people's data, so it names no other user, exposes no
+ * organization totals, and cannot be widened by a query parameter.
+ *
+ * Cost is split the same way as everywhere else — `billedCost` is money spent,
+ * `subscriptionCost` is the list-price estimate of flat-rate-covered traffic
+ * that was never billed — so a heavy subscription user is not reported as
+ * costing nothing.
+ */
+export const MyStatisticsSchema = z.object({
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  totalTokens: z.number(),
+  /** Billed spend: list-price `cost` of metered rows only. */
+  billedCost: z.number(),
+  /** Would-be list-price cost of subscription-covered rows — not billed. */
+  subscriptionCost: z.number(),
+  /** Distinct UTC days with at least one request in the timeframe. */
+  activeDays: z.number(),
+  lastActiveAt: z.string().nullable(),
+  /** The caller's model mix, heaviest first. */
+  models: z.array(UserModelUsageSchema),
+  /** Billed spend over the timeframe, bucketed like the other cost charts. */
+  timeSeries: z.array(StatisticsTimeSeriesPointSchema),
+});
+
+/**
+ * Where the caller's tokens actually went, by the price band each kind is
+ * charged at.
+ *
+ * This is the cut that explains a surprising bill, which the headline totals
+ * cannot: the four kinds are charged at wildly different rates — a cache read
+ * is a tenth of fresh input, a cache write is a *premium* over it — so two
+ * users with identical token counts can differ several-fold in cost purely by
+ * how well their context is being reused.
+ *
+ * `cacheSavings` is the platform's stored net figure (read savings minus write
+ * surcharge) and is deliberately allowed to go negative: a session that keeps
+ * re-writing a cache it never reads back costs more than not caching at all,
+ * and reporting that as zero would hide the single most actionable problem a
+ * heavy agentic user can have.
+ */
+export const MyTokenMixSchema = z.object({
+  /** Uncached prompt tokens, charged at the full input rate. */
+  freshInputTokens: z.number(),
+  /** Tokens served from cache, charged at roughly a tenth of the input rate. */
+  cacheReadTokens: z.number(),
+  /** Tokens written into the cache, charged at a premium over the input rate. */
+  cacheWriteTokens: z.number(),
+  outputTokens: z.number(),
+  /** List-price cost of the cache read+write tokens alone. */
+  cacheCost: z.number(),
+  /**
+   * Net list-price effect of caching versus paying full input price for the
+   * same tokens. Negative means caching cost more than it saved.
+   */
+  cacheSavings: z.number(),
+});
+
+/**
+ * One context-size band and the share of usage that happened inside it.
+ *
+ * Context size is `input_tokens + cache_read_tokens` — what the model was
+ * actually asked to read on that turn, cached or not. Long agentic sessions
+ * spend most of their money at the top band without it being visible anywhere
+ * in a per-request view, because no single request looks unusual; only the
+ * distribution does.
+ */
+export const MyContextBucketSchema = z.object({
+  /** Stable identifier for the band, ascending. */
+  bucket: z.enum(["under32k", "under128k", "under256k", "over256k"]),
+  requests: z.number(),
+  tokens: z.number(),
+  /** List-price cost of the requests in this band, both billing modes. */
+  cost: z.number(),
+});
+
+/**
+ * One of the caller's sessions, costed.
+ *
+ * A session is the unit people actually recognise ("that refactor I ran on
+ * Tuesday"), and agentic spend concentrates in a handful of them, so naming the
+ * expensive ones is the most directly actionable thing this endpoint returns.
+ */
+export const MySessionCostSchema = z.object({
+  sessionId: z.string(),
+  requests: z.number(),
+  tokens: z.number(),
+  /** List-price cost, both billing modes — this is a consumption view. */
+  cost: z.number(),
+  /** Portion of `cost` that was actually billed (metered rows only). */
+  billedCost: z.number(),
+  startedAt: z.string(),
+  lastActiveAt: z.string(),
+  /** Wall-clock minutes from first to last request in the session. */
+  durationMinutes: z.number(),
+  /** Heaviest model in the session, by request count. */
+  model: z.string().nullable(),
+  /** Human-readable client attribution, when one could be resolved. */
+  client: z.string().nullable(),
+});
+
+/**
+ * The diagnostic cuts behind {@link MyStatisticsSchema}: not "how much did I
+ * spend" but "what shape of work produced it".
+ *
+ * Split from the headline summary into its own endpoint on purpose. These are
+ * three more aggregations over `interactions` — the platform's largest table —
+ * and the headline card is on a page many people load without ever scrolling to
+ * the detail, so it should not pay for them.
+ */
+export const MyUsageBreakdownSchema = z.object({
+  tokenMix: MyTokenMixSchema,
+  /** The caller's usage grouped by client application, heaviest first. */
+  clients: z.array(MyClientUsageSchema),
+  /** Ascending by band; bands with no activity are omitted. */
+  contextBuckets: z.array(MyContextBucketSchema),
+  /** The caller's costliest sessions in the timeframe, heaviest first. */
+  topSessions: z.array(MySessionCostSchema),
+  /**
+   * Total list-price cost of every request in the timeframe, including those in
+   * sessions that did not make `topSessions` and those with no session id at
+   * all. The denominator for "these sessions were N% of your usage" — computing
+   * it from the returned rows alone would silently overstate their share.
+   */
+  totalCost: z.number(),
+  /** Requests in the timeframe carrying no session id, so attributable to none. */
+  unsessionedRequests: z.number(),
 });
 
 /**
@@ -325,6 +480,10 @@ export type AgentStatistics = z.infer<typeof AgentStatisticsSchema>;
 export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type UserStatistics = z.infer<typeof UserStatisticsSchema>;
 export type UserModelUsage = z.infer<typeof UserModelUsageSchema>;
+export type MyClientUsage = z.infer<typeof MyClientUsageSchema>;
+export type MyStatistics = z.infer<typeof MyStatisticsSchema>;
+export type MyContextBucketId = z.infer<typeof MyContextBucketSchema>["bucket"];
+export type MyUsageBreakdown = z.infer<typeof MyUsageBreakdownSchema>;
 export type UserStatisticsSortBy = z.infer<typeof UserStatisticsSortBySchema>;
 export type AppStatistics = z.infer<typeof AppStatisticsSchema>;
 export type AppStatisticsSortBy = z.infer<typeof AppStatisticsSortBySchema>;

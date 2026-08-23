@@ -13,6 +13,11 @@ import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import {
   LabelFilterBadges,
   LabelKeyRowBase,
   LabelSelect,
@@ -291,18 +296,18 @@ export function TeamsList() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          {/* `flex-1`: without it this row is shrink-to-fit, so the search box
-              resolves its `w-full` against its own intrinsic width and stays a
-              stub of the column instead of filling it. */}
-          <div className="flex flex-1 flex-wrap items-center gap-2">
-            <SearchInput objectNamePlural="teams" searchFields={["name"]} />
-            <LabelSelect
-              labelKeys={labelKeys}
-              LabelKeyRowComponent={TeamLabelKeyRow}
-            />
-          </div>
-        </div>
+        <FilterBar className="mb-0">
+          <SearchInput
+            objectNamePlural="teams"
+            searchFields={["name"]}
+            className={filterSearchClass}
+          />
+          <LabelSelect
+            labelKeys={labelKeys}
+            LabelKeyRowComponent={TeamLabelKeyRow}
+            className={filterControlClass({ active: hasLabelFilters })}
+          />
+        </FilterBar>
 
         {hasLabelFilters && (
           <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />

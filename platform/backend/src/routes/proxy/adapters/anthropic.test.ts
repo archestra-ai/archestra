@@ -1297,6 +1297,83 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 });
 
 describe("anthropicAdapterFactory.execute", () => {
+  test("reports upstream response headers to the proxy", async () => {
+    const responseHeaders = new Headers({
+      "content-type": "application/json",
+      "anthropic-ratelimit-unified-status": "rejected",
+      "anthropic-ratelimit-unified-overage-status": "allowed",
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createMockResponse([{ type: "text", text: "ok", citations: null }]),
+          ),
+          { status: 200, headers: responseHeaders },
+        ),
+      );
+    const onResponseHeaders = vi.fn();
+
+    try {
+      const client = anthropicAdapterFactory.createClient("test-key", {
+        source: "api",
+        onResponseHeaders,
+      });
+
+      await anthropicAdapterFactory.execute(
+        client,
+        createMockRequest([{ role: "user", content: "hi" }]),
+      );
+
+      expect(onResponseHeaders).toHaveBeenCalledTimes(1);
+      expect(
+        onResponseHeaders.mock.calls[0]?.[0].get(
+          "anthropic-ratelimit-unified-overage-status",
+        ),
+      ).toBe("allowed");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("does not use headers from a failed upstream attempt for billing", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "error",
+          error: { type: "invalid_request_error", message: "Invalid request" },
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+            "anthropic-ratelimit-unified-status": "rejected",
+            "anthropic-ratelimit-unified-overage-status": "allowed",
+          },
+        },
+      ),
+    );
+    const onResponseHeaders = vi.fn();
+
+    try {
+      const client = anthropicAdapterFactory.createClient("test-key", {
+        source: "api",
+        onResponseHeaders,
+      });
+
+      await expect(
+        anthropicAdapterFactory.execute(
+          client,
+          createMockRequest([{ role: "user", content: "hi" }]),
+        ),
+      ).rejects.toBeDefined();
+      expect(onResponseHeaders).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   // Claude Code sends large max_tokens (e.g. 32000) non-streaming. Such a
   // request would exceed the SDK's ~10-minute non-streaming limit, so — rather
   // than attempt it non-streaming (which the client's explicit timeout would

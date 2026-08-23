@@ -254,6 +254,70 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry");
   });
 
+  it("searches pages by their visible labels and navigates to a match", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: true,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "registry" },
+    });
+
+    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.getByText("MCP Registry")).toBeInTheDocument();
+    expect(screen.queryByText("Agents")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("MCP Registry"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry");
+  });
+
+  it("searches pages by navigation keywords", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "catalog" },
+    });
+
+    expect(screen.getByText("MCP Registry")).toBeInTheDocument();
+    expect(screen.queryByText("Agents")).not.toBeInTheDocument();
+  });
+
+  it("shows page matches alongside matching chats", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "agent" },
+    });
+
+    expect(screen.getByText("Agents")).toBeInTheDocument();
+    expect(screen.getByText("First conversation")).toBeInTheDocument();
+    expect(screen.getByText("Second conversation")).toBeInTheDocument();
+    expect(screen.getByText("Chats")).toBeInTheDocument();
+  });
+
+  it("reports an empty unified search only when no chat or page matches", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "nothing-matches-this" },
+    });
+
+    expect(screen.getByText("No chats or pages found.")).toBeInTheDocument();
+  });
+
   it("does not show the recent chats empty state in the full search palette", () => {
     mockUseConversations.mockReturnValue({
       data: [],

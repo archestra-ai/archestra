@@ -17,6 +17,8 @@ export interface DateTimeRangePickerProps {
   onTempEndDateChange: (date: Date | undefined) => void;
   onOpenDialog: () => void;
   onApply: () => void;
+  /** Trigger styling — filter bars pass `filterControlClass()`. */
+  className?: string;
 }
 
 export function DateTimeRangePicker({
@@ -31,19 +33,17 @@ export function DateTimeRangePicker({
   onTempEndDateChange,
   onOpenDialog,
   onApply,
+  className,
 }: DateTimeRangePickerProps) {
   return (
     <>
       <Button
         variant="outline"
         onClick={onOpenDialog}
-        className={cn(
-          "justify-start text-left font-normal",
-          !startDate && !endDate && "text-muted-foreground",
-        )}
+        className={cn("justify-start text-left font-normal", className)}
       >
         <CalendarIcon className="h-4 w-4 shrink-0" />
-        {displayText || <span>Pick a date range</span>}
+        <span className="truncate">{displayText || "Date range"}</span>
       </Button>
 
       <CustomDateTimeRangeDialog

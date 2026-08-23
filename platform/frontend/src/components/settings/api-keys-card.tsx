@@ -1,15 +1,16 @@
 "use client";
 
 import { API_KEY_MAX_NAME_LENGTH } from "@archestra/shared";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -302,10 +303,20 @@ function ApiKeysCardContent() {
             loadingFallback={<LoadingSpinner />}
           >
             <div className="space-y-4">
-              <SearchInput
-                objectNamePlural="API keys"
-                searchFields={["key name"]}
-              />
+              <FilterBar
+                className="mb-0"
+                onClearFilters={
+                  search
+                    ? () => updateQueryParams({ search: null, page: "1" })
+                    : undefined
+                }
+              >
+                <SearchInput
+                  objectNamePlural="API keys"
+                  searchFields={["key name"]}
+                  className={filterSearchClass}
+                />
+              </FilterBar>
               {isApiKeysLoadError ? (
                 <QueryLoadError
                   title="Couldn't load your API keys"

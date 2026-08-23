@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -261,62 +262,70 @@ export default function EmailPage() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <FilterBar
+              className="mb-0"
+              onClearFilters={
+                hasActiveFilters
+                  ? () => {
+                      setSearch("");
+                      setStatusFilter("all");
+                    }
+                  : undefined
+              }
+            >
               <SearchInput
                 placeholder="Search agents..."
                 value={search}
                 syncQueryParams={false}
                 debounceMs={250}
                 onSearchChange={setSearch}
-                className="relative w-full xl:max-w-md xl:flex-1"
+                className={filterSearchClass}
               />
 
-              <div className="flex flex-wrap items-center gap-1 xl:justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Filter: All agents"
-                  className={cn(
-                    "h-7 text-xs rounded-full gap-1.5",
-                    statusFilter === "all" && "bg-primary/10 text-primary",
-                  )}
-                  onClick={() => setStatusFilter("all")}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                  All ({sortedAgents.length})
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Filter: Enabled agents"
-                  className={cn(
-                    "h-7 text-xs rounded-full gap-1.5",
-                    statusFilter === "enabled"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "text-muted-foreground",
-                  )}
-                  onClick={() => setStatusFilter("enabled")}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Enabled ({enabledAgentsCount})
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Filter: Disabled agents"
-                  className={cn(
-                    "h-7 text-xs rounded-full gap-1.5",
-                    statusFilter === "disabled"
-                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                      : "text-muted-foreground",
-                  )}
-                  onClick={() => setStatusFilter("disabled")}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  Disabled ({disabledAgentsCount})
-                </Button>
-              </div>
-            </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Filter: All agents"
+                className={cn(
+                  "h-8 rounded-full text-xs gap-1.5",
+                  statusFilter === "all" && "bg-primary/10 text-primary",
+                )}
+                onClick={() => setStatusFilter("all")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                All ({sortedAgents.length})
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Filter: Enabled agents"
+                className={cn(
+                  "h-8 rounded-full text-xs gap-1.5",
+                  statusFilter === "enabled"
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setStatusFilter("enabled")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Enabled ({enabledAgentsCount})
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Filter: Disabled agents"
+                className={cn(
+                  "h-8 rounded-full text-xs gap-1.5",
+                  statusFilter === "disabled"
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setStatusFilter("disabled")}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Disabled ({disabledAgentsCount})
+              </Button>
+            </FilterBar>
 
             <div className="overflow-hidden rounded-md border">
               <Table>

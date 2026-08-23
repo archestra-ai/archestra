@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import {
@@ -426,20 +427,23 @@ function KnowledgeBasesList() {
     >
       <div>
         <div className="mb-6 flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <SearchInput
-              paramName="search"
-              className="relative w-full sm:w-[370px]"
-            />
+          <FilterBar
+            className="mb-0"
+            actions={
+              !isDeletedView && (
+                <ListViewToggle
+                  value={viewMode}
+                  onChange={setViewMode}
+                  size="sm"
+                />
+              )
+            }
+          >
+            <SearchInput paramName="search" className={filterSearchClass} />
             <ResourceDeletedStatusFilter
               deletePermission={{ knowledgeSource: ["delete"] }}
             />
-            {!isDeletedView && (
-              <span className="ml-auto">
-                <ListViewToggle value={viewMode} onChange={setViewMode} />
-              </span>
-            )}
-          </div>
+          </FilterBar>
         </div>
 
         {!isDeletedView && (

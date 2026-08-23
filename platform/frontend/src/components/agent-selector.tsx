@@ -71,6 +71,13 @@ type AgentSelectorProps =
        */
       flat?: boolean;
       /**
+       * Keep the trigger to a single line: the agent's name and scope badge,
+       * without the owner email that otherwise wraps underneath. For filter
+       * bars, where every control is one compact row height and the owner is
+       * still there to read in the open dropdown.
+       */
+      compactTrigger?: boolean;
+      /**
        * An extra choice rendered above the agent list whose value is not an
        * agent id — e.g. "All agents" in a log filter, or "Each user personal"
        * in a default picker. Hidden while a search excludes its label.
@@ -124,6 +131,7 @@ function SingleAgentSelector({
   className,
   hint,
   flat,
+  compactTrigger,
   sentinelOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
@@ -168,7 +176,10 @@ function SingleAgentSelector({
         >
           <span className="min-w-0 flex-1 truncate text-left">
             {selectedAgent ? (
-              <AgentSelectorRow agent={selectedAgent} />
+              <AgentSelectorRow
+                agent={selectedAgent}
+                variant={compactTrigger ? "compact" : "trigger"}
+              />
             ) : isSentinelSelected ? (
               <span>{sentinelOption.label}</span>
             ) : (
@@ -534,11 +545,13 @@ function AgentSelectorRow({
    * "trigger" is the compact button showing the current value — no
    * description, and the badge stays beside the name rather than stranded
    * across the control.
+   * "compact" is "trigger" pared back to one line, dropping the owner email so
+   * the control fits a filter bar's row height.
    */
-  variant?: "trigger" | "option";
+  variant?: "trigger" | "option" | "compact";
 }) {
   const isOption = variant === "option";
-  const owner = getOwnerLabel(agent);
+  const owner = variant === "compact" ? null : getOwnerLabel(agent);
   const description = isOption ? agent.description?.trim() : null;
 
   return (

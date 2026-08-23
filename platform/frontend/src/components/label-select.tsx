@@ -23,11 +23,17 @@ export interface LabelSelectProps {
     selectedValues: string[];
     onToggleValue: (key: string, value: string) => void;
   }>;
+  /**
+   * Trigger styling. Filter bars pass `filterControlClass({ active })` so the
+   * control matches the rest of the row.
+   */
+  className?: string;
 }
 
 export function LabelSelect({
   labelKeys,
   LabelKeyRowComponent,
+  className,
 }: LabelSelectProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -100,6 +106,7 @@ export function LabelSelect({
           className={cn(
             "w-[180px] justify-between font-normal",
             !totalSelected && "text-muted-foreground",
+            className,
           )}
         >
           <span className="truncate">

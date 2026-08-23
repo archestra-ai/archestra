@@ -44,14 +44,25 @@ export function ListViewToggle({
   value,
   onChange,
   order = ["cards", "table"],
+  size = "default",
 }: {
   value: ListViewMode;
   onChange: (mode: ListViewMode) => void;
   /** The page's default view goes first. */
   order?: readonly [ListViewMode, ListViewMode];
+  /** "sm" matches a filter bar's 32px control height. */
+  size?: "default" | "sm";
 }) {
+  const isSmall = size === "sm";
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border p-0.5">
+    <div
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-md border",
+        // `p-px` rather than `p-0.5`: the border and padding are inside the
+        // 32px box, and only a 1px inset leaves room for two 28px buttons.
+        isSmall ? "h-8 p-px" : "p-0.5",
+      )}
+    >
       {order.map((mode) => (
         <ListViewToggleButton
           key={mode}
@@ -65,6 +76,7 @@ export function ListViewToggle({
           }
           active={value === mode}
           onClick={() => onChange(mode)}
+          className={isSmall ? "size-7" : undefined}
         />
       ))}
     </div>
@@ -83,11 +95,13 @@ function ListViewToggleButton({
   icon,
   active,
   onClick,
+  className,
 }: {
   label: string;
   icon: React.ReactNode;
   active: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <Tooltip>
@@ -97,7 +111,7 @@ function ListViewToggleButton({
           size="icon-sm"
           aria-label={label}
           aria-pressed={active}
-          className={cn(!active && "text-muted-foreground")}
+          className={cn(!active && "text-muted-foreground", className)}
           onClick={onClick}
         >
           {icon}

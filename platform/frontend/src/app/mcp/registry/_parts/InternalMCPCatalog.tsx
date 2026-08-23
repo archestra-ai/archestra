@@ -11,6 +11,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  FilterBar,
+  filterControlClass,
+  filterSearchClass,
+} from "@/components/filter-bar";
+import {
   LabelFilterBadges,
   LabelKeyRowBase,
   LabelSelect,
@@ -1086,6 +1091,27 @@ export function InternalMCPCatalog({
   const hasActiveFilters = Boolean(
     searchQueryFromUrl.trim() || hasLabelFilters,
   );
+  // A selected attention facet is the list's current view, not an applied
+  // control within the bar. Keep it in place when clearing the narrower
+  // search, label, issue, installation, environment and author filters.
+  const hasAppliedBarFilters =
+    hasActiveFilters ||
+    filters.issue.size > 0 ||
+    filters.environment.size > 0 ||
+    filters.author.size > 0 ||
+    filters.status.has(INSTALLED_STATUS_VALUE) ||
+    filters.status.has(NOT_INSTALLED_STATUS_VALUE);
+  const handleClearAllFilters = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("search");
+    params.delete("labels");
+    for (const group of FILTER_GROUPS) params.delete(group);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
+  const handleClearBarFilters = selectedFacet
+    ? clearFiltersKeepingFacet
+    : handleClearAllFilters;
 
   const registryItems = (catalogItems ?? []).filter(
     (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
@@ -1114,7 +1140,25 @@ export function InternalMCPCatalog({
             />
           </div>
         )}
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <FilterBar
+          className="mb-0"
+          onClearFilters={
+            hasAppliedBarFilters ? handleClearBarFilters : undefined
+          }
+          actions={
+            <>
+              <RegistrySortMenu value={sort} onChange={setSort} />
+              {!selectedFacet && (
+                <ListViewToggle
+                  value={viewMode}
+                  onChange={setViewMode}
+                  order={["table", "cards"]}
+                  size="sm"
+                />
+              )}
+            </>
+          }
+        >
           <SearchInput
             objectNamePlural="MCP servers"
             searchFields={["name"]}
@@ -1122,9 +1166,10 @@ export function InternalMCPCatalog({
             onSearchChange={handleSearchChange}
             syncQueryParams={false}
             debounceMs={300}
+            className={filterSearchClass}
             inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
           />
-          <McpCatalogLabelFilter />
+          <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
           {selectedFacet ? (
             <RegistryFilterDropdown
               label="Issue"
@@ -1156,15 +1201,7 @@ export function InternalMCPCatalog({
               onToggle={(value) => toggleFilter("author", value)}
             />
           )}
-          <RegistrySortMenu value={sort} onChange={setSort} />
-          {!selectedFacet && (
-            <ListViewToggle
-              value={viewMode}
-              onChange={setViewMode}
-              order={["table", "cards"]}
-            />
-          )}
-        </div>
+        </FilterBar>
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
@@ -1513,12 +1550,13 @@ function oldestIssueTime(issues: McpServerIssue[] | undefined): number | null {
   return oldest;
 }
 
-function McpCatalogLabelFilter() {
+function McpCatalogLabelFilter({ active }: { active: boolean }) {
   const { data: labelKeys } = useMcpCatalogLabelKeys();
   return (
     <LabelSelect
       labelKeys={labelKeys}
       LabelKeyRowComponent={McpCatalogLabelKeyRow}
+      className={filterControlClass({ active })}
     />
   );
 }

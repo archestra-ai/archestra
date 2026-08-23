@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
@@ -407,19 +408,22 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* `flex-1` alone lays out from a zero basis, so the search box kept
-              sharing the row with the action however little room was left. The
-              min-width is what makes the row break instead. */}
-          <div className="flex-1 min-w-[220px]">
-            <SearchInput
-              objectNamePlural="roles"
-              searchFields={["name"]}
-              paramName="name"
-            />
-          </div>
-          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
-        </div>
+        <FilterBar
+          className="mb-0"
+          onClearFilters={
+            nameFilter
+              ? () => updateQueryParams({ name: null, page: "1" })
+              : undefined
+          }
+          actions={headerAction}
+        >
+          <SearchInput
+            objectNamePlural="roles"
+            searchFields={["name"]}
+            paramName="name"
+            className={filterSearchClass}
+          />
+        </FilterBar>
 
         {isLoadingError ? (
           <QueryLoadError

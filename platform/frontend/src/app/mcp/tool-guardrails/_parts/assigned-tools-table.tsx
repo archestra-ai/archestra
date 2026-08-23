@@ -21,6 +21,11 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
+import {
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LoadingSpinner } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResultPolicyToggle } from "@/components/result-policy-toggle";
@@ -34,7 +39,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
   TooltipContent,
@@ -806,15 +810,16 @@ export function AssignedToolsTable({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-4">
+      <FilterBar>
         <SearchInput
           objectNamePlural="tools"
           searchFields={["name"]}
           paramName="search"
           onSearchChange={handleSearchChange}
+          className={filterSearchClass}
         />
 
-        <SearchableSelect
+        <FilterSelect
           value={originFilter}
           onValueChange={handleOriginFilterChange}
           placeholder="Filter by Source"
@@ -901,7 +906,6 @@ export function AssignedToolsTable({
               ),
             })),
           ]}
-          className="w-full sm:w-[200px]"
         />
 
         {/* Observed-tool attribution filters: narrow the list to tools seen in
@@ -924,7 +928,7 @@ export function AssignedToolsTable({
               clients={toolObservers?.clients}
             />
           )}
-      </div>
+      </FilterBar>
 
       <ToolPolicyBulkActionsBar
         selectedToolIds={bulkTools.map((tool) => tool.id)}

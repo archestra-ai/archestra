@@ -3032,6 +3032,13 @@
       "when": 1787406752442,
       "tag": "0432_handy_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 433,
+      "version": "7",
+      "when": 1787487754938,
+      "tag": "0433_exotic_master_chief",
+      "breakpoints": true
     }
   ]
 }

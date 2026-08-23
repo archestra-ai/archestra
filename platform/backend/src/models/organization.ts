@@ -743,6 +743,7 @@ class OrganizationModel {
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
+      kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,
       defaultModel: defaultModelRows[0]?.externalId ?? null,
       defaultLlmApiKey: defaultKeyRows[0]
         ? {

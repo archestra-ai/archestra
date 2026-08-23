@@ -1733,9 +1733,9 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `1`. Clamped to `0`–`4`; `0` disables it.
   - Ranking is unaffected — this only widens the passage the model reads around a hit it already earned, so a hit landing mid-sentence or mid-table still arrives with its surroundings. Each step of radius adds up to two more chunks per result, so raising it increases the tokens sent to the model roughly proportionally.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Summarize each document once at ingest and index that summary alongside every one of its chunks.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Default contextual retrieval mode for organizations that have not saved a choice under **Settings > Knowledge**. `true` selects per-document context; `false` disables context.
   - Default: `false`
-  - Improves recall for chunks that never name their own subject: a chunk reading "the limit was raised to 5,000" becomes findable by "billing API rate limit". Costs one LLM call per document per sync, billed against the configured reranking model; unchanged documents are skipped, so a steady-state re-sync costs nothing. Requires a reranking model that can generate text — with a dedicated Cohere Rerank model configured it is skipped.
+  - Per-document context costs one model call per changed document, billed against the configured reranking model. Administrators can also choose per-passage context in the UI for higher recall; it batches passages and uses prompt caching where supported. See [Contextual Retrieval](/docs/platform-knowledge#contextual-retrieval).
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`** - Ceiling on how many textless pages of one PDF the [Document OCR](/docs/platform-knowledge#document-ocr) pass transcribes.
   - Default: `100`

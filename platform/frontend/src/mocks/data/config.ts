@@ -64,6 +64,7 @@ export function makeConfig(
       kbMfilesOauthEnabled: true,
       kbBm25DefaultK1: 1.2,
       kbBm25DefaultB: 0.75,
+      kbContextualRetrievalDefaultMode: "disabled",
       kbGoogleDriveOAuth: {
         configured: false,
         redirectUri:

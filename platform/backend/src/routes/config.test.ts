@@ -1,3 +1,4 @@
+import config from "@/config";
 import { OrganizationModel } from "@/models";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
@@ -110,6 +111,9 @@ describe("config routes", () => {
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
       kbAutoSyncPermissionsEnabled: expect.any(Boolean),
+      kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
+        ? "document"
+        : "disabled",
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

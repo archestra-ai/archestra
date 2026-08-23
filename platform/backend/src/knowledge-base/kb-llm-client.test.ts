@@ -28,6 +28,7 @@ import {
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
+  resolveContextualRetrievalConfig,
   resolveEmbeddingConfig,
   resolveOcrConfig,
   resolveRerankerConfig,
@@ -546,6 +547,83 @@ describe("resolveRerankerConfig", () => {
     await expect(resolveRerankerConfig(org.id)).rejects.toBeInstanceOf(
       RerankerConfigUnresolvableError,
     );
+  });
+});
+
+describe("resolveContextualRetrievalConfig", () => {
+  const originalDeploymentDefault = config.kb.contextualRetrievalEnabled;
+
+  afterEach(() => {
+    config.kb.contextualRetrievalEnabled = originalDeploymentDefault;
+  });
+
+  test("uses the deployment flag as the default for an untouched organization", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    config.kb.contextualRetrievalEnabled = true;
+
+    const result = await resolveContextualRetrievalConfig(org.id);
+
+    expect(result).toEqual({ mode: "document", reranker: null });
+  });
+
+  test("an organization override can disable context without resolving its credential", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Context Key",
+      provider: "openai",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      kbContextualRetrievalMode: "disabled",
+      rerankerChatApiKeyId: chatApiKey.id,
+      rerankerModel: "gpt-4o-mini",
+    });
+
+    const result = await resolveContextualRetrievalConfig(org.id);
+
+    expect(result).toEqual({ mode: "disabled", reranker: null });
+    expect(mockGetSecretValue).not.toHaveBeenCalled();
+    expect(mockCreateDirectLLMModel).not.toHaveBeenCalled();
+  });
+
+  test("resolves the chat reranker for per-passage context", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Context Key",
+      provider: "openai",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      kbContextualRetrievalMode: "chunk",
+      rerankerChatApiKeyId: chatApiKey.id,
+      rerankerModel: "gpt-4o-mini",
+    });
+    mockGetSecretValue.mockResolvedValueOnce("sk-context-key");
+
+    const result = await resolveContextualRetrievalConfig(org.id);
+
+    expect(result.mode).toBe("chunk");
+    expect(result.reranker).toMatchObject({
+      kind: "llm",
+      modelName: "gpt-4o-mini",
+      provider: "openai",
+    });
   });
 });
 

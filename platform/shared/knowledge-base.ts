@@ -116,6 +116,28 @@ export const DEFAULT_CONTEXT_EXPANSION_RADIUS = 1;
 export const MAX_CONTEXT_EXPANSION_RADIUS = 4;
 
 /**
+ * How document context is generated and added to the search index.
+ *
+ * `disabled` indexes chunks as-is. `document` generates one inexpensive
+ * summary for the whole document. `chunk` generates passage-specific context
+ * for sufficiently long documents and falls back to the document summary for
+ * short ones where the extra calls provide little benefit.
+ */
+export const CONTEXTUAL_RETRIEVAL_MODES = [
+  "disabled",
+  "document",
+  "chunk",
+] as const;
+
+export const ContextualRetrievalModeSchema = z
+  .enum(CONTEXTUAL_RETRIEVAL_MODES)
+  .meta({ id: "ContextualRetrievalMode" });
+
+export type ContextualRetrievalMode = z.infer<
+  typeof ContextualRetrievalModeSchema
+>;
+
+/**
  * Bounds for the BM25 keyword-ranker tuning constants, shared by the env-var
  * parser, the settings API schema, and the settings UI so all three reject the
  * same values.

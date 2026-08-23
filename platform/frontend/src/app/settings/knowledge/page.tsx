@@ -10,6 +10,7 @@ import {
   BM25_K1_MIN,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
+  type ContextualRetrievalMode,
   DocsPage,
   getDocsUrl,
   isProviderApiKeyOptional,
@@ -73,6 +74,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -749,6 +757,8 @@ function KnowledgeSettingsContent() {
   const [rerankerModel, setRerankerModel] = useState<string | null>(null);
   const [ocrChatApiKeyId, setOcrChatApiKeyId] = useState<string | null>(null);
   const [ocrModel, setOcrModel] = useState<string | null>(null);
+  const [contextualRetrievalMode, setContextualRetrievalMode] =
+    useState<ContextualRetrievalMode | null>(null);
   // BM25 factors, as the text the inputs show. The deployment default is shown
   // as a value like any other; a value equal to it is saved as "inherit"
   // (null), so an organization that never strays from the default follows it
@@ -763,10 +773,17 @@ function KnowledgeSettingsContent() {
   const [bm25BText, setBm25BText] = useState<string | null>(null);
   const kbBm25DefaultK1 = useFeature("kbBm25DefaultK1");
   const kbBm25DefaultB = useFeature("kbBm25DefaultB");
+  const kbContextualRetrievalDefaultMode = useFeature(
+    "kbContextualRetrievalDefaultMode",
+  );
   const bm25DefaultK1 =
     typeof kbBm25DefaultK1 === "number" ? kbBm25DefaultK1 : BM25_K1_DEFAULT;
   const bm25DefaultB =
     typeof kbBm25DefaultB === "number" ? kbBm25DefaultB : BM25_B_DEFAULT;
+  const contextualRetrievalDefaultMode =
+    typeof kbContextualRetrievalDefaultMode === "string"
+      ? kbContextualRetrievalDefaultMode
+      : "disabled";
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
   const {
@@ -847,8 +864,12 @@ function KnowledgeSettingsContent() {
       setRerankerModel(organization.rerankerModel ?? null);
       setOcrChatApiKeyId(organization.ocrChatApiKeyId ?? null);
       setOcrModel(organization.ocrModel ?? null);
+      setContextualRetrievalMode(
+        organization.kbContextualRetrievalMode ??
+          contextualRetrievalDefaultMode,
+      );
     }
-  }, [organization]);
+  }, [organization, contextualRetrievalDefaultMode]);
 
   // The factors are re-seeded only when the SAVED values move, not on every
   // organization object. Other sections of this page (Available connectors,
@@ -906,6 +927,10 @@ function KnowledgeSettingsContent() {
   const serverOcrModel = organization?.ocrModel ?? null;
   const serverBm25K1 = organization?.kbBm25K1 ?? bm25DefaultK1;
   const serverBm25B = organization?.kbBm25B ?? bm25DefaultB;
+  const serverContextualRetrievalMode =
+    organization?.kbContextualRetrievalMode ?? contextualRetrievalDefaultMode;
+  const effectiveContextualRetrievalMode =
+    contextualRetrievalMode ?? serverContextualRetrievalMode;
   // What the inputs show: the edit if there is one, else what is in effect.
   const bm25K1Value = bm25K1Text ?? String(serverBm25K1);
   const bm25BValue = bm25BText ?? String(serverBm25B);
@@ -921,6 +946,7 @@ function KnowledgeSettingsContent() {
     rerankerModel !== serverRerankerModel ||
     ocrChatApiKeyId !== serverOcrKeyId ||
     ocrModel !== serverOcrModel ||
+    effectiveContextualRetrievalMode !== serverContextualRetrievalMode ||
     bm25K1 !== serverBm25K1 ||
     bm25B !== serverBm25B;
 
@@ -1068,6 +1094,10 @@ function KnowledgeSettingsContent() {
           ocrChatApiKeyId: ocrChatApiKeyId ?? null,
           ocrModel: ocrModel ?? null,
         }),
+        ...(effectiveContextualRetrievalMode !==
+          serverContextualRetrievalMode && {
+          kbContextualRetrievalMode: effectiveContextualRetrievalMode,
+        }),
         kbBm25K1: bm25K1 === bm25DefaultK1 ? null : bm25K1,
         kbBm25B: bm25B === bm25DefaultB ? null : bm25B,
       });
@@ -1098,6 +1128,7 @@ function KnowledgeSettingsContent() {
     setRerankerModel(serverRerankerModel);
     setOcrChatApiKeyId(serverOcrKeyId);
     setOcrModel(serverOcrModel);
+    setContextualRetrievalMode(serverContextualRetrievalMode);
     setBm25K1Text(null);
     setBm25BText(null);
   };
@@ -1317,14 +1348,77 @@ function KnowledgeSettingsContent() {
           <CardHeader>
             <CardTitle>Search Ranking Configuration</CardTitle>
             <CardDescription>
-              Orders the passages a search has found. Keyword ranking scores
-              them by the words they share with the question and builds the
-              shortlist; reranking reads that shortlist and puts the passages
-              that answer the question first. Changes apply to the next search —
-              nothing is re-indexed.
+              Orders the passages a search has found. Reranking reads the
+              shortlist and puts the passages that answer the question first;
+              keyword ranking scores them by the words they share with the
+              question. Changes apply to the next search — nothing is
+              re-indexed.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
+            <section
+              id="reranking-configuration"
+              className="flex flex-col gap-3"
+            >
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium">Reranking</h4>
+                <p className="text-sm text-muted-foreground">
+                  Reads the shortlisted passages with a model and puts the ones
+                  that answer the question first. Works with any chat model, or
+                  a Cohere Rerank model on Cohere and Azure AI Foundry keys.
+                  Optional.{" "}
+                  <ExternalDocsLink
+                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
+                    className="text-primary hover:underline"
+                    showIcon={false}
+                  >
+                    Learn more.
+                  </ExternalDocsLink>
+                </p>
+              </div>
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <div className="flex flex-col gap-4">
+                    <CardRow label="Key">
+                      <ApiKeySelector
+                        value={rerankerChatApiKeyId}
+                        onChange={handleRerankerKeyChange}
+                        disabled={!hasPermission}
+                        label="reranker API key"
+                        pulse={
+                          !embeddingSetupStep &&
+                          (rerankerSetupStep === "add-key" ||
+                            rerankerSetupStep === "select-key")
+                        }
+                      />
+                    </CardRow>
+                    <CardRow label="Model">
+                      <RerankerModelSelector
+                        value={rerankerModel}
+                        onChange={setRerankerModel}
+                        disabled={!hasPermission}
+                        selectedKeyId={rerankerChatApiKeyId}
+                        pulse={
+                          !embeddingSetupStep &&
+                          rerankerSetupStep === "select-model"
+                        }
+                      />
+                    </CardRow>
+                    {rerankerStatus.status === "failed" &&
+                      rerankerStatus.error && (
+                        <p className="flex items-start gap-2 text-sm text-destructive sm:pl-44">
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>{rerankerStatus.error}</span>
+                        </p>
+                      )}
+                  </div>
+                )}
+              </WithPermissions>
+            </section>
+            <Separator />
             <section id="keyword-ranking" className="flex flex-col gap-3">
               <div className="space-y-1">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1421,19 +1515,20 @@ function KnowledgeSettingsContent() {
               </WithPermissions>
             </section>
             <Separator />
-            <section
-              id="reranking-configuration"
-              className="flex flex-col gap-3"
-            >
+            <section id="contextual-retrieval" className="flex flex-col gap-3">
               <div className="space-y-1">
-                <h4 className="text-sm font-medium">Reranking</h4>
+                <h4 className="text-sm font-medium">Contextual retrieval</h4>
                 <p className="text-sm text-muted-foreground">
-                  Reads the shortlisted passages with a model and puts the ones
-                  that answer the question first. Works with any chat model, or
-                  a Cohere Rerank model on Cohere and Azure AI Foundry keys.
-                  Optional.{" "}
+                  Adds search-only context to passages during ingestion. The
+                  document option makes one model call per document. The passage
+                  option generates specific context in batches for longer
+                  documents and uses the document option for short ones.
+                  Requires a chat reranking model.{" "}
                   <ExternalDocsLink
-                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
+                    href={getDocsUrl(
+                      DocsPage.PlatformKnowledge,
+                      "contextual-retrieval",
+                    )}
                     className="text-primary hover:underline"
                     showIcon={false}
                   >
@@ -1446,42 +1541,45 @@ function KnowledgeSettingsContent() {
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
-                  <div className="flex flex-col gap-4">
-                    <CardRow label="Key">
-                      <ApiKeySelector
-                        value={rerankerChatApiKeyId}
-                        onChange={handleRerankerKeyChange}
-                        disabled={!hasPermission}
-                        label="reranker API key"
-                        pulse={
-                          !embeddingSetupStep &&
-                          (rerankerSetupStep === "add-key" ||
-                            rerankerSetupStep === "select-key")
-                        }
-                      />
-                    </CardRow>
-                    <CardRow label="Model">
-                      <RerankerModelSelector
-                        value={rerankerModel}
-                        onChange={setRerankerModel}
-                        disabled={!hasPermission}
-                        selectedKeyId={rerankerChatApiKeyId}
-                        pulse={
-                          !embeddingSetupStep &&
-                          rerankerSetupStep === "select-model"
-                        }
-                      />
-                    </CardRow>
-                    {rerankerStatus.status === "failed" &&
-                      rerankerStatus.error && (
-                        <p className="flex items-start gap-2 text-sm text-destructive sm:pl-44">
-                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span>{rerankerStatus.error}</span>
-                        </p>
-                      )}
-                  </div>
+                  <CardRow label="Context generation">
+                    <Select
+                      value={effectiveContextualRetrievalMode}
+                      onValueChange={(value) =>
+                        setContextualRetrievalMode(
+                          value as ContextualRetrievalMode,
+                        )
+                      }
+                      disabled={!hasPermission}
+                    >
+                      <SelectTrigger
+                        className="w-full max-w-xs"
+                        aria-label="Context generation"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="disabled">Disabled</SelectItem>
+                        <SelectItem value="document">
+                          Per document — lower cost
+                        </SelectItem>
+                        <SelectItem value="chunk">
+                          Per passage — higher recall
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardRow>
                 )}
               </WithPermissions>
+              {effectiveContextualRetrievalMode !== "disabled" &&
+                !rerankerConfigured && (
+                  <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-44">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Configure a chat reranking model before ingestion can add
+                      context.
+                    </span>
+                  </p>
+                )}
             </section>
           </CardContent>
           {(rerankerChatApiKeyId || rerankerModel) && (

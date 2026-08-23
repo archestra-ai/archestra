@@ -40,6 +40,7 @@ export function makeOrganization(
     ocrModel: null,
     kbBm25K1: null,
     kbBm25B: null,
+    kbContextualRetrievalMode: null,
     defaultLlmModel: null,
     defaultLlmProvider: "openai",
     defaultLlmApiKeyId: null,

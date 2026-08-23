@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -848,6 +851,53 @@ describe("GET /api/statistics/me/breakdown", () => {
     expect(body.clients[0].client).toBe("Agent: Example calling agent");
     expect(body.topSessions[0].client).toBe("Agent: Example calling agent");
     expect(JSON.stringify(body)).not.toContain(callingAgent.id);
+  });
+
+  test("uses deployment branding when a referenced internal agent no longer exists", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const servingAgent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+    });
+    const originalFullWhiteLabeling =
+      config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Example Platform",
+      iconLogo: null,
+    });
+
+    try {
+      const missingCallingAgentId = randomUUID();
+      await makeInteraction(servingAgent.id, {
+        userId: currentUser.id,
+        sessionId: "missing-agent-session",
+        inputTokens: 100,
+        outputTokens: 20,
+        cost: "1.0000000000",
+        externalAgentId: missingCallingAgentId,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/statistics/me/breakdown?timeframe=24h",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.clients[0].client).toBe("Example Platform agent");
+      expect(body.topSessions[0].client).toBe("Example Platform agent");
+      expect(JSON.stringify(body)).not.toContain(missingCallingAgentId);
+    } finally {
+      archestraMcpBranding.syncFromOrganization(null);
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = originalFullWhiteLabeling;
+    }
   });
 
   test("never reports anyone else's usage", async ({

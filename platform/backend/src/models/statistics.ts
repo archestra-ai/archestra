@@ -20,6 +20,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -2279,7 +2280,9 @@ function formatUsageClient(
   const agentId = extractUsageClientAgentId(externalAgentId);
   if (agentId) {
     const agentName = agentNames.get(agentId);
-    return agentName ? `Agent: ${agentName}` : "Archestra agent";
+    return agentName
+      ? `Agent: ${agentName}`
+      : `${archestraMcpBranding.appName} agent`;
   }
 
   return externalAgentId;

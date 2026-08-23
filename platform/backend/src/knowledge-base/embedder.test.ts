@@ -349,7 +349,7 @@ describe("EmbeddingService", () => {
     expect(updated?.embeddingStatus).toBe("failed");
   });
 
-  test("no chunks marks document as completed with chunkCount 0", async ({
+  test("no chunks marks document as failed with chunkCount 0", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -370,8 +370,36 @@ describe("EmbeddingService", () => {
     await embeddingService.processDocument(doc.id, makeEmbeddingContext());
 
     const updated = await KbDocumentModel.findById(doc.id);
-    expect(updated?.embeddingStatus).toBe("completed");
+    expect(updated?.embeddingStatus).toBe("failed");
     expect(updated?.chunkCount).toBe(0);
+    expect(embeddingRequests).toHaveLength(0);
+  });
+
+  test("a zero-chunk batch is counted and names the document", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Unchunkable Guide",
+      content: "Content but no chunks",
+      contentHash: "hash-zero-chunk-batch",
+      embeddingStatus: "pending",
+    });
+
+    const outcome = await embeddingService.processDocuments([doc.id]);
+
+    expect(outcome).toMatchObject({
+      failedDocumentCount: 1,
+      skippedImageChunkCount: 0,
+    });
+    expect(outcome.errorMessage).toContain("Unchunkable Guide");
+    expect(outcome.errorMessage).toContain(doc.id);
     expect(embeddingRequests).toHaveLength(0);
   });
 
@@ -621,19 +649,22 @@ describe("EmbeddingService", () => {
     await KbChunkModel.insertMany([
       { documentId: doc1.id, content: "Chunk", chunkIndex: 0 },
     ]);
-    // doc2 has no chunks → should complete with chunkCount 0
+    // doc2 has no chunks → should fail visibly with chunkCount 0
 
     responseQueue.push({ kind: "error", status: 400 });
 
-    await embeddingService.processDocuments([doc1.id, doc2.id]);
+    const outcome = await embeddingService.processDocuments([doc1.id, doc2.id]);
 
     const updated1 = await KbDocumentModel.findById(doc1.id);
     expect(updated1?.embeddingStatus).toBe("failed");
 
-    // doc2 had no chunks, so it completes regardless
+    // doc2 had no chunks, so it is part of the surfaced batch failure.
     const updated2 = await KbDocumentModel.findById(doc2.id);
-    expect(updated2?.embeddingStatus).toBe("completed");
+    expect(updated2?.embeddingStatus).toBe("failed");
     expect(updated2?.chunkCount).toBe(0);
+    expect(outcome.failedDocumentCount).toBe(2);
+    expect(outcome.errorMessage).toContain("No Chunks Doc");
+    expect(outcome.errorMessage).toContain("could not be reached");
   });
 
   test("attributes a single-document embed to that document's connector", async ({

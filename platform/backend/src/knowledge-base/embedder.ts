@@ -63,9 +63,13 @@ class EmbeddingService {
 
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
-          embeddingStatus: "completed",
+          embeddingStatus: "failed",
           chunkCount: 0,
         });
+        logger.warn(
+          { documentId, title: document.title },
+          "[Embedder] Document produced no chunks and cannot be retrieved",
+        );
         return;
       }
 
@@ -162,6 +166,7 @@ class EmbeddingService {
       chunkIds: string[];
       chunkCount: number;
     }> = [];
+    const zeroChunkDocuments: Array<{ documentId: string; title: string }> = [];
     // Store raw chunk data; inputs are built after the embedding config is resolved.
     const allChunks: Array<{
       chunkId: string;
@@ -200,9 +205,17 @@ class EmbeddingService {
 
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
-          embeddingStatus: "completed",
+          embeddingStatus: "failed",
           chunkCount: 0,
         });
+        zeroChunkDocuments.push({
+          documentId,
+          title: document.title,
+        });
+        logger.warn(
+          { documentId, runId: connectorRunId, title: document.title },
+          "[Embedder] Document produced no chunks and cannot be retrieved",
+        );
         continue;
       }
 
@@ -220,10 +233,12 @@ class EmbeddingService {
       }
     }
 
+    const zeroChunkError = describeZeroChunkDocuments(zeroChunkDocuments);
+
     if (allChunks.length === 0) {
       return {
-        failedDocumentCount: 0,
-        errorMessage: null,
+        failedDocumentCount: zeroChunkDocuments.length,
+        errorMessage: zeroChunkError,
         skippedImageChunkCount: 0,
       };
     }
@@ -245,8 +260,8 @@ class EmbeddingService {
         await KbDocumentModel.update(documentId, { embeddingStatus: "failed" });
       }
       return {
-        failedDocumentCount: docChunkMap.length,
-        errorMessage: message,
+        failedDocumentCount: docChunkMap.length + zeroChunkDocuments.length,
+        errorMessage: combineEmbeddingErrors(zeroChunkError, message),
         skippedImageChunkCount: 0,
       };
     }
@@ -263,8 +278,8 @@ class EmbeddingService {
         });
       }
       return {
-        failedDocumentCount: 0,
-        errorMessage: null,
+        failedDocumentCount: zeroChunkDocuments.length,
+        errorMessage: zeroChunkError,
         skippedImageChunkCount: 0,
       };
     }
@@ -406,8 +421,11 @@ class EmbeddingService {
     }
 
     return {
-      failedDocumentCount,
-      errorMessage: failedDocumentCount > 0 ? firstErrorMessage : null,
+      failedDocumentCount: failedDocumentCount + zeroChunkDocuments.length,
+      errorMessage: combineEmbeddingErrors(
+        zeroChunkError,
+        failedDocumentCount > 0 ? firstErrorMessage : null,
+      ),
       skippedImageChunkCount,
     };
   }
@@ -600,6 +618,25 @@ class EmbeddingService {
 export const embeddingService = new EmbeddingService();
 
 // ===== Internal helpers =====
+
+function describeZeroChunkDocuments(
+  documents: Array<{ documentId: string; title: string }>,
+): string | null {
+  if (documents.length === 0) return null;
+
+  const names = documents
+    .map((document) => `"${document.title}" (${document.documentId})`)
+    .join(", ");
+  return `${documents.length} document${documents.length === 1 ? "" : "s"} produced no chunks and cannot be retrieved: ${names}`;
+}
+
+function combineEmbeddingErrors(
+  first: string | null,
+  second: string | null,
+): string | null {
+  if (first && second) return `${first}; ${second}`;
+  return first ?? second;
+}
 
 function embeddingInputLogValue(input: EmbeddingInput): string {
   return typeof input === "string" ? input : `[image:${input.mimeType}]`;

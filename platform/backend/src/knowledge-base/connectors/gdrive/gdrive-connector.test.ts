@@ -349,6 +349,42 @@ describe("GoogleDriveConnector", () => {
       expect(batches[0].documents[1].title).toBe("notes.txt");
     });
 
+    it("marks text that exceeds the connector indexing limit", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      const source = Buffer.from("x".repeat(500_001));
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [makeDriveFile("long-1", "long.txt")],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: source.buffer.slice(
+          source.byteOffset,
+          source.byteOffset + source.byteLength,
+        ),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents[0].contentTruncation).toMatchObject({
+        originalCharacterCount: 500_001,
+        indexedCharacterCount: 500_000,
+      });
+      expect(batches[0].documents[0].content).not.toContain(
+        "x".repeat(500_001),
+      );
+    });
+
     it("syncs Google Docs via export", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();

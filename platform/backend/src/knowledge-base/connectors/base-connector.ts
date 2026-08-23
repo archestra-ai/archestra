@@ -1,15 +1,37 @@
+import { createHash } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
 import type { OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import defaultLogger from "@/logging";
 import type {
   Connector,
+  ConnectorContentTruncation,
   ConnectorCredentials,
   ConnectorItemFailure,
   ConnectorItemSkipped,
   ConnectorSyncBatch,
   ConnectorType,
 } from "@/types";
+
+export function truncateConnectorContent(params: {
+  content: string;
+  maxLength: number;
+}): { content: string; truncation?: ConnectorContentTruncation } {
+  if (params.content.length <= params.maxLength) {
+    return { content: params.content };
+  }
+
+  return {
+    content: params.content.slice(0, params.maxLength),
+    truncation: {
+      originalCharacterCount: params.content.length,
+      indexedCharacterCount: params.maxLength,
+      originalContentHash: createHash("sha256")
+        .update(params.content)
+        .digest("hex"),
+    },
+  };
+}
 
 /**
  * The image MIME types a connector should ingest: empty unless the configured

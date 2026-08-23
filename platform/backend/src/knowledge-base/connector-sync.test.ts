@@ -72,6 +72,11 @@ function makeMockConnector(
     sourceUrl?: string;
     metadata?: Record<string, unknown>;
     operationalMetadataKeys?: string[];
+    contentTruncation?: {
+      originalCharacterCount: number;
+      indexedCharacterCount: number;
+      originalContentHash: string;
+    };
   }>,
   options?: { hasMore?: boolean },
 ) {
@@ -132,6 +137,90 @@ describe("ConnectorSyncService", () => {
     // Connector stays "running" — the last batch_embedding task sets "success"
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
     expect(updated?.lastSyncStatus).toBe("running");
+  });
+
+  test("persists and logs a connector content-truncation marker", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    const contentTruncation = {
+      originalCharacterCount: 600_000,
+      indexedCharacterCount: 500_000,
+      originalContentHash: "full-source-hash",
+    };
+    mockGetConnector.mockReturnValue(
+      makeMockConnector([
+        {
+          id: "long-doc",
+          title: "Long handbook",
+          content: "retained prefix",
+          contentTruncation,
+        },
+      ]),
+    );
+
+    const warn = vi.fn();
+    const stubLogger = {
+      info: vi.fn(),
+      warn,
+      debug: vi.fn(),
+      error: vi.fn(),
+      child: () => stubLogger,
+    };
+    const firstRun = await connectorSyncService.executeSync(connector.id, {
+      logger: stubLogger as never,
+    });
+
+    const firstStored = await KbDocumentModel.findBySourceId({
+      connectorId: connector.id,
+      sourceId: "long-doc",
+    });
+    expect(firstStored?.metadata).toMatchObject({ contentTruncation });
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: "long-doc",
+        name: "Long handbook",
+        ...contentTruncation,
+      }),
+      "Document content exceeded the indexing limit and was truncated",
+    );
+
+    // A tail-only source change retains the exact same indexed prefix. The
+    // full-source fingerprint must still invalidate the stored content hash.
+    await ConnectorRunModel.update(firstRun.runId, {
+      status: "success",
+      completedAt: new Date(),
+    });
+    mockGetConnector.mockReturnValue(
+      makeMockConnector([
+        {
+          id: "long-doc",
+          title: "Long handbook",
+          content: "retained prefix",
+          contentTruncation: {
+            ...contentTruncation,
+            originalContentHash: "changed-tail-hash",
+          },
+        },
+      ]),
+    );
+    await connectorSyncService.executeSync(connector.id, {
+      logger: stubLogger as never,
+    });
+    const secondStored = await KbDocumentModel.findBySourceId({
+      connectorId: connector.id,
+      sourceId: "long-doc",
+    });
+    expect(secondStored?.id).toBe(firstStored?.id);
+    expect(secondStored?.contentHash).not.toBe(firstStored?.contentHash);
   });
 
   test("an unresolvable OCR configuration degrades to syncing without OCR", async ({

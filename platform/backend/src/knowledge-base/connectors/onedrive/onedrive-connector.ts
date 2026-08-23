@@ -6,6 +6,7 @@ import type { DriveItem as GraphDriveItem } from "@microsoft/microsoft-graph-typ
 import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
+  ConnectorContentTruncation,
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
@@ -26,6 +27,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -715,12 +717,7 @@ export class OneDriveConnector extends BaseConnector {
               });
               return null;
             }
-            return driveItemToDocument(
-              item,
-              userId,
-              result.text,
-              result.mediaContent,
-            );
+            return driveItemToDocument({ item, userId, ...result });
           },
           fallback: null,
           itemId: item.id,
@@ -809,6 +806,7 @@ export class OneDriveConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    contentTruncation?: ConnectorContentTruncation;
     /** Why the text came back empty, for skip reporting on the run. */
     emptyReason?: string;
     /**
@@ -825,10 +823,13 @@ export class OneDriveConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
+      const limited = truncateConnectorContent({
+        content: Buffer.from(arrayBuffer).toString("utf-8"),
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: Buffer.from(arrayBuffer)
-          .toString("utf-8")
-          .slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
       };
     }
 
@@ -849,8 +850,13 @@ export class OneDriveConnector extends BaseConnector {
           "OneDrive: PDF page extraction warning",
         );
       }
+      const limited = truncateConnectorContent({
+        content: extracted.text,
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
         emptyReason: extracted.emptyReason,
       };
     }
@@ -1956,12 +1962,20 @@ async function extractTextFromBinary(params: {
   }
 }
 
-function driveItemToDocument(
-  item: DriveItem,
-  userId: string,
-  content: string,
-  mediaContent?: { mimeType: string; data: string },
-): ConnectorDocument {
+function driveItemToDocument(params: {
+  item: DriveItem;
+  userId: string;
+  text: string;
+  mediaContent?: { mimeType: string; data: string };
+  contentTruncation?: ConnectorContentTruncation;
+}): ConnectorDocument {
+  const {
+    item,
+    userId,
+    text: content,
+    mediaContent,
+    contentTruncation,
+  } = params;
   const title = item.name;
   const fullContent = content ? `# ${title}\n\n${content}` : `# ${title}`;
 
@@ -1982,5 +1996,6 @@ function driveItemToDocument(
     },
     updatedAt: new Date(item.lastModifiedDateTime),
     mediaContent,
+    contentTruncation,
   };
 }

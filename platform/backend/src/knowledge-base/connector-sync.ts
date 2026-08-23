@@ -935,13 +935,30 @@ class ConnectorSyncService {
     // text (and the hash stays stable, so a later clean re-sync still dedupes).
     const content = stripNullBytes(doc.content);
     const title = stripNullBytes(doc.title);
+    const metadata = doc.contentTruncation
+      ? {
+          ...doc.metadata,
+          contentTruncation: doc.contentTruncation,
+        }
+      : doc.metadata;
+
+    if (doc.contentTruncation) {
+      log.warn(
+        {
+          documentId: doc.id,
+          name: title,
+          ...doc.contentTruncation,
+        },
+        "Document content exceeded the indexing limit and was truncated",
+      );
+    }
 
     // Include media data in hash so unchanged images are properly skipped.
     const hashMetadata = metadataForContentHash(
-      doc.metadata,
+      metadata,
       doc.operationalMetadataKeys,
     );
-    const hashInput = doc.mediaContent
+    const indexedHashInput = doc.mediaContent
       ? `${doc.mediaContent.mimeType}:${doc.mediaContent.data}` +
         (hashMetadata
           ? "\n" +
@@ -952,6 +969,12 @@ class ConnectorSyncService {
           "\n" +
           JSON.stringify(hashMetadata, Object.keys(hashMetadata).sort())
         : content;
+    // A connector retains only the indexed prefix, so include the fingerprint
+    // of the complete source text explicitly. Changes confined to the omitted
+    // tail must still invalidate the document and re-run indexing.
+    const hashInput = doc.contentTruncation
+      ? `${indexedHashInput}\ntruncated-source:${doc.contentTruncation.originalContentHash}`
+      : indexedHashInput;
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
@@ -977,7 +1000,7 @@ class ConnectorSyncService {
             title,
             content,
             mediaContent: doc.mediaContent,
-            metadata: doc.metadata,
+            metadata,
             connectorType,
             connectorId,
             organizationId,
@@ -1008,7 +1031,7 @@ class ConnectorSyncService {
           await KbDocumentModel.update(existing.id, {
             title,
             sourceUrl: doc.sourceUrl ?? null,
-            metadata: doc.metadata,
+            metadata,
             embeddingStatus: "pending",
           });
 
@@ -1026,14 +1049,14 @@ class ConnectorSyncService {
         // not content. Keep them current without re-chunking unchanged text.
         if (
           JSON.stringify(existing.metadata ?? {}) !==
-            JSON.stringify(doc.metadata ?? {}) ||
+            JSON.stringify(metadata ?? {}) ||
           existing.title !== title ||
           existing.sourceUrl !== (doc.sourceUrl ?? null)
         ) {
           await KbDocumentModel.update(existing.id, {
             title,
             sourceUrl: doc.sourceUrl ?? null,
-            metadata: doc.metadata,
+            metadata,
           });
         }
 
@@ -1059,7 +1082,7 @@ class ConnectorSyncService {
         // for its older M-Files revision. Lock first; the permission pass
         // unlocks only after evaluating cached+latest source revisions.
         acl: isAutoSync ? [] : acl,
-        metadata: doc.metadata,
+        metadata,
         embeddingStatus: "pending",
       });
       const chunkAcl = isAutoSync ? [] : acl;
@@ -1071,7 +1094,7 @@ class ConnectorSyncService {
         title,
         content,
         mediaContent: doc.mediaContent,
-        metadata: doc.metadata,
+        metadata,
         connectorType,
         connectorId,
         organizationId,
@@ -1100,7 +1123,7 @@ class ConnectorSyncService {
       contentHash,
       sourceUrl: doc.sourceUrl,
       acl,
-      metadata: doc.metadata,
+      metadata,
     });
 
     await this.chunkAndStore({
@@ -1108,7 +1131,7 @@ class ConnectorSyncService {
       title,
       content,
       mediaContent: doc.mediaContent,
-      metadata: doc.metadata,
+      metadata,
       connectorType,
       connectorId,
       organizationId,

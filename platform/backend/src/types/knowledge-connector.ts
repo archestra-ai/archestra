@@ -806,12 +806,27 @@ export interface DocumentPermissions {
   isPublic?: boolean;
 }
 
+export interface ConnectorContentTruncation {
+  /** Character count before the connector applied its indexing limit. */
+  originalCharacterCount: number;
+  /** Character count retained for indexing. */
+  indexedCharacterCount: number;
+  /** Hash of the complete source text, including the omitted tail. */
+  originalContentHash: string;
+}
+
 export interface ConnectorDocument {
   id: string;
   title: string;
   content: string;
   sourceUrl?: string;
   metadata: Record<string, unknown>;
+  /**
+   * Set when a connector intentionally retains only a prefix of the source
+   * text. The sync persists this marker in document metadata and names the
+   * affected document in the run log.
+   */
+  contentTruncation?: ConnectorContentTruncation;
   /**
    * Metadata keys used only for sync bookkeeping. They are persisted but do
    * not change the content hash or force re-chunking when their values rotate.

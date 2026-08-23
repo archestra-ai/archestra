@@ -1,9 +1,5 @@
 import type { IdpRoleMappingConfig } from "@archestra/shared";
-import {
-  IDENTITY_TRUSTED_PROVIDER_IDS,
-  MEMBER_ROLE_NAME,
-  OAUTH_TOKEN_TYPE,
-} from "@archestra/shared";
+import { MEMBER_ROLE_NAME, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -202,7 +198,7 @@ describe("IdentityProviderModel", () => {
       ).toBe(OAUTH_TOKEN_TYPE.AccessToken);
     });
 
-    test("clears persisted allowed email domains for non-Google API submissions", async ({
+    test("keeps persisted allowed email domains for non-Google API submissions", async ({
       makeOrganization,
       makeUser,
     }) => {
@@ -251,14 +247,14 @@ describe("IdentityProviderModel", () => {
       expect(registerSSOProvider).toHaveBeenCalledWith(
         expect.objectContaining({
           body: expect.objectContaining({
-            domain: "sso-placeholder.example.com",
+            domain: "example.com",
           }),
         }),
       );
-      expect(created.domain).toBe("");
+      expect(created.domain).toBe("example.com");
     });
 
-    test("keeps persisted allowed email domains for Google API submissions", async ({
+    test("uses a registration placeholder without persisting it when allowed domains are empty", async ({
       makeOrganization,
       makeUser,
     }) => {
@@ -281,18 +277,18 @@ describe("IdentityProviderModel", () => {
 
       const created = await IdentityProviderModel.create(
         {
-          providerId: "Google",
-          issuer: "https://accounts.google.com",
-          domain: "example.com",
+          providerId: "Okta",
+          issuer: "https://integrator-8514409.okta.com",
+          domain: "",
           userId: user.id,
           oidcConfig: {
-            issuer: "https://accounts.google.com",
+            issuer: "https://integrator-8514409.okta.com",
             skipDiscovery: true,
             pkce: true,
-            clientId: "google-client-id",
-            clientSecret: "google-client-secret",
+            clientId: "okta-client-id",
+            clientSecret: "okta-client-secret",
             discoveryEndpoint:
-              "https://accounts.google.com/.well-known/openid-configuration",
+              "https://integrator-8514409.okta.com/.well-known/openid-configuration",
           },
         },
         org.id,
@@ -304,7 +300,14 @@ describe("IdentityProviderModel", () => {
         } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
       );
 
-      expect(created.domain).toBe("example.com");
+      expect(registerSSOProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            domain: "sso-placeholder.example.com",
+          }),
+        }),
+      );
+      expect(created.domain).toBe("");
     });
 
     test("rejects registration when discovery fetch returns a non-2xx response", async ({
@@ -800,117 +803,6 @@ describe("IdentityProviderModel", () => {
     });
   });
 
-  describe("getTrustedAccountLinkingProviderIds", () => {
-    test("returns built-in trusted providers when no custom identity providers exist", async () => {
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("includes configured generic OIDC and SAML provider IDs", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      await makeIdentityProvider(org.id, {
-        providerId: "custom-oidc",
-        oidcConfig: { clientId: "client-id" },
-      });
-      await makeIdentityProvider(org.id, {
-        providerId: "custom-saml",
-        samlConfig: { entryPoint: "https://example.com/saml" },
-      });
-
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([
-        ...IDENTITY_TRUSTED_PROVIDER_IDS,
-        "custom-oidc",
-        "custom-saml",
-      ]);
-    });
-
-    test("deduplicates built-in providers that are also configured in the database", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      await makeIdentityProvider(org.id, { providerId: "Okta" });
-
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("caches the trusted provider list until an identity provider write clears it", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      // Prime the cache before any custom provider exists.
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      // A row inserted behind the model's back stays invisible while the
-      // cached list is live...
-      const provider = await makeIdentityProvider(org.id, {
-        providerId: "cached-oidc",
-        oidcConfig: { clientId: "client-id" },
-      });
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      // ...a model write clears the cache, so the next read sees it...
-      await IdentityProviderModel.update(provider.id, {}, org.id);
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS, "cached-oidc"]);
-
-      // ...and delete clears it again.
-      await IdentityProviderModel.delete(provider.id, org.id);
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("returns the built-in trusted providers before database initialization", async () => {
-      vi.resetModules();
-      vi.doMock("@/database", async () => {
-        const actual =
-          await vi.importActual<typeof import("@/database")>("@/database");
-
-        return {
-          ...actual,
-          default: new Proxy(
-            {},
-            {
-              get() {
-                throw new Error(
-                  "Database not initialized. Call initializeDatabase() first.",
-                );
-              },
-            },
-          ),
-        };
-      });
-
-      const { default: IsolatedIdentityProviderModel } = await import(
-        "./identity-provider.ee"
-      );
-
-      await expect(
-        IsolatedIdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      vi.doUnmock("@/database");
-    });
-  });
-
   describe("findAll", () => {
     test("returns empty array when no providers exist", async ({
       makeOrganization,
@@ -1157,29 +1049,8 @@ describe("IdentityProviderModel", () => {
 
       expect(updated).not.toBeNull();
       expect(updated?.issuer).toBe("https://new-issuer.com");
-      expect(updated?.domain).toBe("");
-      expect(updated?.providerId).toBe("Okta"); // Unchanged
-    });
-
-    test("keeps updated allowed email domains for Google providers", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      const inserted = await makeIdentityProvider(org.id, {
-        providerId: "Google",
-        issuer: "https://accounts.google.com",
-        domain: "old.example.com",
-      });
-
-      const updated = await IdentityProviderModel.update(
-        inserted.id,
-        { domain: "new.example.com" },
-        org.id,
-      );
-
       expect(updated?.domain).toBe("new.example.com");
+      expect(updated?.providerId).toBe("Okta"); // Unchanged
     });
 
     test("can update oidcConfig", async ({
@@ -1444,14 +1315,7 @@ describe("IdentityProviderModel", () => {
     });
   });
 
-  /**
-   * Test for domainVerified workaround.
-   * With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
-   * all SSO providers need `domainVerified: true` for sign-in to work.
-   * See: https://github.com/better-auth/better-auth/issues/6481
-   * TODO: Remove this test once the upstream issue is fixed.
-   */
-  describe("domainVerified workaround", () => {
+  describe("trusted-domain account linking", () => {
     test("SAML providers are created with domainVerified: true", async ({
       makeOrganization,
       makeIdentityProvider,
@@ -1501,7 +1365,6 @@ describe("IdentityProviderModel", () => {
       );
 
       expect(provider).not.toBeNull();
-      // With domainVerification enabled, OIDC providers also need domainVerified: true
       expect(provider?.domainVerified).toBe(true);
     });
 
@@ -1511,7 +1374,6 @@ describe("IdentityProviderModel", () => {
     }) => {
       const org = await makeOrganization();
 
-      // Create a provider (will have domainVerified: true from create)
       const provider = await makeIdentityProvider(org.id, {
         providerId: "Update-Test",
         oidcConfig: {
@@ -1523,28 +1385,23 @@ describe("IdentityProviderModel", () => {
         },
       });
 
-      // Manually set domainVerified to false to simulate old data
-      // (This simulates providers created before the workaround was added)
       await IdentityProviderModel.setDomainVerifiedForTesting(
         provider.id,
         false,
       );
 
-      // Verify it's now false
       const beforeUpdate = await IdentityProviderModel.findById(
         provider.id,
         org.id,
       );
       expect(beforeUpdate?.domainVerified).toBe(false);
 
-      // Update the provider (change domain)
       await IdentityProviderModel.update(
         provider.id,
         { domain: "updated.example.com" },
         org.id,
       );
 
-      // After update, domainVerified should be set back to true
       const afterUpdate = await IdentityProviderModel.findById(
         provider.id,
         org.id,

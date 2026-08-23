@@ -4,7 +4,6 @@ import { DOMAIN_VALIDATION_REGEX } from "./incoming-email";
 
 /**
  * Identity provider IDs - these are the canonical built-in provider identifiers used for:
- * - account linking trust configuration
  * - provider registration
  * - callback URLs (e.g. `/api/auth/sso/callback/{providerId}`)
  */
@@ -19,8 +18,8 @@ export const IDENTITY_PROVIDER_ID = {
 export type IdentityProviderId =
   (typeof IDENTITY_PROVIDER_ID)[keyof typeof IDENTITY_PROVIDER_ID];
 
-/** List of built-in identity provider IDs trusted for account linking. */
-export const IDENTITY_TRUSTED_PROVIDER_IDS =
+/** List of canonical IDs used by the built-in identity provider templates. */
+export const BUILT_IN_IDENTITY_PROVIDER_IDS =
   Object.values(IDENTITY_PROVIDER_ID);
 
 export const OAUTH_TOKEN_TYPE = {

@@ -1302,16 +1302,16 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "member" });
       await makeAccount(user.id, { providerId: CREDENTIAL_PROVIDER_ID });
       await makeIdentityProvider(org.id, {
-        providerId: "google-workspace",
+        providerId: "EntraID",
         domain: "example.com",
       });
-      await makeAccount(user.id, { providerId: "google-workspace" });
+      await makeAccount(user.id, { providerId: "EntraID" });
       const session = await makeSession(user.id, {
         activeOrganizationId: org.id,
       });
 
       const ctx = createMockContext({
-        path: "/sso/callback/google-workspace",
+        path: "/sso/callback/EntraID",
         method: "GET",
         body: {},
         context: {
@@ -1333,7 +1333,7 @@ describe("handleAfterHook", () => {
       expect(
         await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
           user.id,
-          "google-workspace",
+          "EntraID",
         ),
       ).toBeUndefined();
       expect(await MemberModel.getByUserId(user.id, org.id)).toBeDefined();
@@ -4238,7 +4238,7 @@ describe("SSO account linking onto existing password users", () => {
     const provider = await makeIdentityProvider(org.id, {
       providerId: "oidc-unverified-link",
       issuer: IDP_ORIGIN,
-      domain: "example.com",
+      domain: "",
       oidcConfig: {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
@@ -4334,5 +4334,110 @@ describe("SSO account linking onto existing password users", () => {
       .from(schema.usersTable)
       .where(eq(schema.usersTable.id, user.id));
     expect(userRow.emailVerified).toBe(true);
+  });
+
+  test("OIDC callback links an existing account through a matching allowed domain without an email verification claim", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAccount,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser({
+      email: "domain-trusted-password-user@example.com",
+      emailVerified: false,
+    });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+    await makeAccount(user.id, {
+      providerId: CREDENTIAL_PROVIDER_ID,
+      accountId: user.id,
+    });
+
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "EntraID",
+      issuer: IDP_ORIGIN,
+      domain: "example.com",
+      oidcConfig: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        authorizationEndpoint: `${IDP_ORIGIN}/authorize`,
+        tokenEndpoint: `${IDP_ORIGIN}/token`,
+        userInfoEndpoint: `${IDP_ORIGIN}/userinfo`,
+        jwksEndpoint: `${IDP_ORIGIN}/jwks`,
+        pkce: false,
+      },
+    });
+
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/sso", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          providerId: provider.providerId,
+          callbackURL: "http://localhost:3000/chat",
+        }),
+      }),
+    );
+    expect(signInResponse.status).toBe(200);
+    const { url: authorizationUrl } = (await signInResponse.json()) as {
+      url: string;
+    };
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    expect(state).toBeTruthy();
+    const stateCookies = signInResponse.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(";")[0])
+      .join("; ");
+
+    mswServer.use(
+      http.post(`${IDP_ORIGIN}/token`, () =>
+        HttpResponse.json({
+          access_token: "domain-trusted-sso-access-token",
+          token_type: "Bearer",
+        }),
+      ),
+      http.get(`${IDP_ORIGIN}/userinfo`, () =>
+        HttpResponse.json({
+          sub: "domain-trusted-external-subject",
+          email: user.email,
+          name: "Domain Trusted Password User",
+        }),
+      ),
+    );
+
+    const callbackResponse = await auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/sso/callback/${provider.providerId}?code=fake-code&state=${state}`,
+        { headers: { cookie: stateCookies } },
+      ),
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    const location = callbackResponse.headers.get("location") ?? "";
+    expect(location).not.toContain("error=");
+    expect(location).toContain("http://localhost:3000/chat");
+
+    const linkedAccounts = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, user.id));
+    expect(
+      linkedAccounts.find(
+        (account) => account.providerId === provider.providerId,
+      ),
+    ).toMatchObject({
+      accountId: "domain-trusted-external-subject",
+      userId: user.id,
+    });
+
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, user.id));
+    expect(userRow.emailVerified).toBe(false);
   });
 });

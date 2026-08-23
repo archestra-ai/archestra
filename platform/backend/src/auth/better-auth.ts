@@ -8,7 +8,6 @@ import {
   DEFAULT_APP_NAME,
   emailMatchesAllowedIdentityProviderDomains,
   getEmailDomain,
-  IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
   PredefinedRoleNameSchema,
@@ -326,15 +325,10 @@ export const auth = betterAuth({
      */
     accountLinking: {
       enabled: true,
-      /**
-       * Trust built-in SSO providers plus any identity providers configured by
-       * users. Note this list only affects better-auth's built-in social
-       * providers: the SSO plugin calls handleOAuthUserInfo with
-       * `trustProviderByName: false` and instead derives trust from the
-       * provider's `domainVerified` flag, so custom OIDC/SAML providers are
-       * NOT trusted through this list.
-       */
-      trustedProviders: getTrustedAccountLinkingProviderIds,
+      // Do not add SSO provider IDs to `trustedProviders`. Better Auth reserves
+      // every ID in that option and refuses to register an SSO provider with
+      // the same ID. SSO callbacks pass `trustProviderByName: false` and use
+      // the provider's `domainVerified` value instead.
       /**
        * Don't allow linking accounts with different emails. From the better-auth typescript
        * annotations they mention for this attribute:
@@ -1003,19 +997,6 @@ async function getTrustedOriginsForAuthRequest(request?: Request) {
       "https://*",
     ]),
   ];
-}
-
-async function getTrustedAccountLinkingProviderIds(): Promise<string[]> {
-  if (!enterpriseTier.isCoreActive()) {
-    return [...IDENTITY_TRUSTED_PROVIDER_IDS];
-  }
-
-  const { default: IdentityProviderModel } = await import(
-    // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
-    "@/models/identity-provider.ee"
-  );
-
-  return IdentityProviderModel.getTrustedAccountLinkingProviderIds();
 }
 
 /**

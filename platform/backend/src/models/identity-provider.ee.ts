@@ -2,12 +2,7 @@ import type {
   IdentityProviderOidcConfig,
   IdpRoleMappingConfig,
 } from "@archestra/shared";
-import {
-  IDENTITY_PROVIDER_ID,
-  IDENTITY_TRUSTED_PROVIDER_IDS,
-  MEMBER_ROLE_NAME,
-  TimeInMs,
-} from "@archestra/shared";
+import { MEMBER_ROLE_NAME, TimeInMs } from "@archestra/shared";
 import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
@@ -57,27 +52,11 @@ export type IdpGetRoleData = Parameters<
 
 class IdentityProviderModel {
   /**
-   * Process-local cache for {@link getTrustedAccountLinkingProviderIds}. The
-   * lookup backs better-auth's account-linking `trustedProviders` option, which
-   * is evaluated on auth requests (including session reads), so without a cache
-   * it costs one `select distinct` per request for a list that only changes
-   * when an admin edits identity providers. Writes in this process clear the
-   * cache immediately; other pods converge within the TTL.
-   */
-  private static readonly trustedProviderIdsCache = registerProcessLocalCache(
-    new LRUCacheManager<string[]>({
-      maxSize: 1,
-      defaultTtl: TimeInMs.Minute,
-    }),
-  );
-
-  /**
    * Process-local cache for {@link findAllPublic}. Backs the unauthenticated
    * SSO-provider list the login page fetches on every render, so without a
    * cache each login-page view costs a database query for a list that only
-   * changes when an admin edits identity providers. Same invalidation story
-   * as {@link trustedProviderIdsCache}: writes in this process clear it
-   * immediately; other pods converge within the TTL.
+   * changes when an admin edits identity providers. Writes in this process
+   * clear it immediately; other pods converge within the TTL.
    */
   private static readonly publicProvidersCache = registerProcessLocalCache(
     new LRUCacheManager<PublicIdentityProvider[]>({
@@ -521,53 +500,6 @@ class IdentityProviderModel {
     return idpProviders;
   }
 
-  static async getTrustedAccountLinkingProviderIds(): Promise<string[]> {
-    const cached = IdentityProviderModel.trustedProviderIdsCache.get(
-      TRUSTED_PROVIDER_IDS_CACHE_KEY,
-    );
-    if (cached) {
-      return cached;
-    }
-
-    let configuredProviderIds: Array<{ providerId: string }> = [];
-
-    try {
-      configuredProviderIds = await db
-        .selectDistinct({
-          providerId: schema.identityProvidersTable.providerId,
-        })
-        .from(schema.identityProvidersTable);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("Database not initialized")
-      ) {
-        // Pre-initialization fallback: don't cache it, so the DB-backed list
-        // takes over on the first call after the database comes up.
-        return [...IDENTITY_TRUSTED_PROVIDER_IDS];
-      }
-
-      throw error;
-    }
-
-    const providerIds = [
-      ...new Set([
-        ...IDENTITY_TRUSTED_PROVIDER_IDS,
-        ...configuredProviderIds
-          .map(({ providerId }) => providerId)
-          .filter((providerId) => providerId.length > 0)
-          .sort((a, b) => a.localeCompare(b)),
-      ]),
-    ];
-
-    IdentityProviderModel.trustedProviderIdsCache.set(
-      TRUSTED_PROVIDER_IDS_CACHE_KEY,
-      providerIds,
-    );
-
-    return providerIds;
-  }
-
   /**
    * Find all identity providers with full configuration including secrets.
    * Use this only for authenticated admin endpoints.
@@ -674,11 +606,7 @@ class IdentityProviderModel {
     const parsedData = {
       providerId: data.providerId,
       issuer: data.issuer,
-      domain:
-        normalizePersistedAllowedEmailDomain({
-          providerId: data.providerId,
-          domain: data.domain,
-        }) || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
+      domain: data.domain || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
       ssoLoginEnabled: data.ssoLoginEnabled ?? true,
       organizationId,
       ...(data.oidcConfig && {
@@ -733,11 +661,10 @@ class IdentityProviderModel {
     }
 
     /**
-     * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
-     * all identity providers require `domainVerified: true` for sign-in to work without DNS verification.
-     * We auto-set this for all providers to bypass the DNS verification requirement.
-     * See: https://github.com/better-auth/better-auth/issues/6481
-     * TODO: Remove this workaround once the upstream issue is fixed.
+     * Better Auth trusts an SSO provider for implicit account linking only
+     * when its configured domain is verified and matches the returned email.
+     * Archestra administrators explicitly configure these allowed domains, so
+     * mark the provider domain as verified without Better Auth's DNS flow.
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
@@ -747,14 +674,10 @@ class IdentityProviderModel {
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
-    const persistedDomain = normalizePersistedAllowedEmailDomain({
-      providerId: data.providerId,
-      domain: data.domain,
-    });
     const [updatedProvider] = await db
       .update(schema.identityProvidersTable)
       .set({
-        domain: persistedDomain,
+        domain: data.domain,
         domainVerified: true,
         ssoLoginEnabled: data.ssoLoginEnabled ?? true,
         ...(oidcConfigJson !== undefined && {
@@ -778,7 +701,6 @@ class IdentityProviderModel {
       throw new Error("Failed to update identity provider after creation");
     }
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return {
@@ -821,15 +743,10 @@ class IdentityProviderModel {
     const samlConfigJson = serializeConfigValue(samlConfig);
     const roleMappingJson = serializeConfigValue(roleMapping);
     const teamSyncConfigJson = serializeConfigValue(teamSyncConfig);
-    const nextProviderId = restData.providerId ?? existingProvider.providerId;
-    const nextDomain = normalizePersistedAllowedEmailDomain({
-      providerId: nextProviderId,
-      domain: restData.domain ?? existingProvider.domain,
-    });
+    const nextDomain = restData.domain ?? existingProvider.domain;
 
     // Update in database
-    // WORKAROUND: Always ensure domainVerified is true to enable account linking
-    // See: https://github.com/better-auth/better-auth/issues/6481
+    // Keep administrator-configured domains trusted for implicit account linking.
     const [updatedProvider] = await db
       .update(schema.identityProvidersTable)
       .set({
@@ -860,7 +777,6 @@ class IdentityProviderModel {
 
     if (!updatedProvider) return null;
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return {
@@ -925,7 +841,6 @@ class IdentityProviderModel {
       }
     });
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return true;
@@ -933,10 +848,8 @@ class IdentityProviderModel {
 
   /**
    * Sets domainVerified flag directly (TEST ONLY)
-   * This is used to simulate legacy data that has domainVerified: false
-   * to test the workaround in update() that sets it back to true.
-   * TODO: Remove this when upstream issue is fixed:
-   * https://github.com/better-auth/better-auth/issues/6481
+   * Used to verify that updating a provider restores the trusted state for
+   * its administrator-configured allowed domains.
    */
   static async setDomainVerifiedForTesting(
     id: string,
@@ -1023,7 +936,6 @@ export default IdentityProviderModel;
 
 const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
 const SSO_REGISTRATION_PLACEHOLDER_DOMAIN = "sso-placeholder.example.com";
-const TRUSTED_PROVIDER_IDS_CACHE_KEY = "trusted-provider-ids";
 const PUBLIC_PROVIDERS_CACHE_KEY = "public-providers";
 
 function serializeConfigValue(
@@ -1038,17 +950,6 @@ function serializeConfigValue(
   }
 
   return JSON.stringify(value);
-}
-
-function normalizePersistedAllowedEmailDomain(params: {
-  providerId: string;
-  domain: string;
-}): string {
-  if (params.providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
-    return params.domain;
-  }
-
-  return "";
 }
 
 async function hydrateOidcConfigForRegistration<

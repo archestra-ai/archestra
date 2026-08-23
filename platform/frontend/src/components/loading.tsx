@@ -2,7 +2,6 @@
 
 import {
   type ComponentProps,
-  type CSSProperties,
   type ReactNode,
   useEffect,
   useId,
@@ -15,16 +14,16 @@ type LoadingStateVariant = "page" | "content" | "compact" | "inline";
 
 const LOADING_MASCOTS = [
   {
-    light: "/loading/openappa-headphones-light.png",
-    dark: "/loading/openappa-headphones-dark.png",
+    light: "/loading/openappa-headphones-light.gif",
+    dark: "/loading/openappa-headphones-dark.gif",
   },
   {
-    light: "/loading/openappa-step-light.png",
-    dark: "/loading/openappa-step-dark.png",
+    light: "/loading/openappa-step-light.gif",
+    dark: "/loading/openappa-step-dark.gif",
   },
   {
-    light: "/loading/openappa-bop-light.png",
-    dark: "/loading/openappa-bop-dark.png",
+    light: "/loading/openappa-bop-light.gif",
+    dark: "/loading/openappa-bop-dark.gif",
   },
 ] as const;
 
@@ -34,13 +33,6 @@ const MASCOT_SIZE_BY_VARIANT: Record<LoadingStateVariant, number> = {
   compact: 48,
   inline: 20,
 };
-
-const MASCOT_MOTION: CSSProperties[] = [
-  { transform: "translateY(0) rotate(-1deg)" },
-  { transform: "translateY(-3px) rotate(1deg)" },
-  { transform: "translateY(-1px) rotate(-1deg)" },
-  { transform: "translateY(0) rotate(1deg)" },
-];
 
 export function LoadingSkeletons({
   rows = 4,
@@ -69,7 +61,7 @@ export function LoadingState({
   /**
    * Accessible name announced to assistive tech (WCAG 4.1.3 Status Messages).
    * The loading state is a polite live region, so screen-reader users hear it
-   * it appears. Pass a context-specific label (e.g. "Loading tools") where the
+   * when it appears. Pass a context-specific label (e.g. "Loading tools") where the
    * generic default is unhelpful.
    */
   label?: string;
@@ -79,13 +71,10 @@ export function LoadingState({
   showLabel?: boolean;
 }) {
   const loadingId = useId();
-  const [motionFrame, setMotionFrame] = useState(0);
   const startingMascot = hashLoadingId(loadingId) % LOADING_MASCOTS.length;
+  const [mascotOffset, setMascotOffset] = useState(0);
   const mascot =
-    LOADING_MASCOTS[
-      (startingMascot + Math.floor(motionFrame / MASCOT_MOTION.length)) %
-        LOADING_MASCOTS.length
-    ];
+    LOADING_MASCOTS[(startingMascot + mascotOffset) % LOADING_MASCOTS.length];
   const mascotSize = MASCOT_SIZE_BY_VARIANT[variant];
 
   useEffect(() => {
@@ -97,8 +86,8 @@ export function LoadingState({
     }
 
     const interval = window.setInterval(() => {
-      setMotionFrame((frame) => frame + 1);
-    }, 650);
+      setMascotOffset((offset) => offset + 1);
+    }, 5400);
 
     return () => window.clearInterval(interval);
   }, []);
@@ -117,11 +106,10 @@ export function LoadingState({
     >
       <span
         aria-hidden="true"
-        className="relative block transition-transform duration-500 ease-in-out motion-reduce:transition-none"
+        className="relative block"
         style={{
           height: mascotSize,
           width: mascotSize,
-          ...MASCOT_MOTION[motionFrame % MASCOT_MOTION.length],
         }}
       >
         <img

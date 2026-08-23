@@ -14,8 +14,9 @@ describe("LoadingState", () => {
     expect(images[0]).toHaveClass("dark:hidden");
     expect(images[1]).toHaveClass("hidden", "dark:block");
     expect(
-      images[0].getAttribute("src")?.replace("-light.png", "-dark.png"),
+      images[0].getAttribute("src")?.replace("-light.gif", "-dark.gif"),
     ).toBe(images[1].getAttribute("src"));
+    expect(images[0]).toHaveAttribute("src", expect.stringMatching(/\.gif$/));
   });
 
   it("centers page loading states across the available viewport", () => {

@@ -90,6 +90,7 @@ export function SessionsCard() {
     {
       id: "device",
       header: "Device",
+      size: 320,
       cell: ({ row }) => {
         const { deviceType, label } = describeUserAgent(row.original.userAgent);
         return (
@@ -116,6 +117,7 @@ export function SessionsCard() {
     {
       id: "signed-in",
       header: "Signed in",
+      size: 130,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.createdAt)}
@@ -125,6 +127,7 @@ export function SessionsCard() {
     {
       id: "expires",
       header: "Expires",
+      size: 130,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.expiresAt)}
@@ -133,7 +136,8 @@ export function SessionsCard() {
     },
     {
       id: "actions",
-      header: () => <div className="text-right">Actions</div>,
+      header: "Actions",
+      size: 90,
       cell: ({ row }) => (
         <TableRowActions
           itemName={row.original.ipAddress ?? "this session"}
@@ -240,6 +244,9 @@ export function SessionsCard() {
             hideSelectedCount
             isLoading={isPending}
             emptyMessage="No active sessions."
+            hidePaginationWhenSinglePage
+            fixedWidthColumnIds={["signed-in", "expires", "actions"]}
+            flexibleColumnIds={["device"]}
           />
         </>
       )}

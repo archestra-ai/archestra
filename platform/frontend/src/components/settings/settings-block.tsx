@@ -26,9 +26,17 @@ export function SettingsBlock({
   children,
   id,
 }: SettingsBlockProps) {
+  const hasControl = control != null;
+
   return (
     <section id={id} className="scroll-mt-24">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:gap-8">
+      <div
+        className={cn(
+          "grid gap-4",
+          hasControl &&
+            "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:gap-8",
+        )}
+      >
         <div className="min-w-0 space-y-1">
           <h2 className="text-sm font-medium leading-5">{title}</h2>
           {description && (
@@ -38,7 +46,7 @@ export function SettingsBlock({
           )}
           {notice && <div className="pt-2 text-sm leading-5">{notice}</div>}
         </div>
-        {control && (
+        {hasControl && (
           <div className="flex min-w-0 items-start lg:justify-end">
             {control}
           </div>

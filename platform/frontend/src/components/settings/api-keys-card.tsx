@@ -137,22 +137,37 @@ function ApiKeysCardContent() {
       {
         accessorKey: "name",
         header: "Name",
-        cell: ({ row }) => row.original.name || "Untitled key",
+        size: 160,
+        cell: ({ row }) => {
+          const name = row.original.name || "Untitled key";
+          return (
+            <span className="block truncate" title={name}>
+              {name}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "start",
         header: "Key",
-        cell: ({ row }) => (
-          <code className="text-xs font-mono">
-            {row.original.start || row.original.prefix
-              ? `${row.original.start || row.original.prefix}...`
-              : "Hidden"}
-          </code>
-        ),
+        size: 130,
+        cell: ({ row }) => {
+          const keyPrefix = row.original.start || row.original.prefix;
+          const displayValue = keyPrefix ? `${keyPrefix}...` : "Hidden";
+          return (
+            <code
+              className="block truncate font-mono text-xs"
+              title={displayValue}
+            >
+              {displayValue}
+            </code>
+          );
+        },
       },
       {
         accessorKey: "enabled",
         header: "Status",
+        size: 90,
         cell: ({ row }) =>
           row.original.enabled ? (
             <Badge variant="secondary">Active</Badge>
@@ -163,16 +178,19 @@ function ApiKeysCardContent() {
       {
         accessorKey: "createdAt",
         header: "Created",
+        size: 130,
         cell: ({ row }) => formatRelativeTimeFromNow(row.original.createdAt),
       },
       {
         accessorKey: "lastRequest",
         header: "Last used",
+        size: 110,
         cell: ({ row }) => formatRelativeTimeFromNow(row.original.lastRequest),
       },
       {
         accessorKey: "expiresAt",
         header: "Expires",
+        size: 100,
         cell: ({ row }) => formatRelativeTime(row.original.expiresAt),
       },
     ];
@@ -186,6 +204,7 @@ function ApiKeysCardContent() {
       {
         id: "actions",
         header: "Actions",
+        size: 80,
         cell: ({ row }) => (
           <TableRowActions
             actions={[
@@ -299,9 +318,8 @@ function ApiKeysCardContent() {
           isPending={isPending}
           loadingFallback={<LoadingSpinner />}
         >
-          <div className="space-y-4">
+          <div>
             <FilterBar
-              className="mb-0"
               onClearFilters={
                 search
                   ? () => updateQueryParams({ search: null, page: "1" })
@@ -366,6 +384,16 @@ function ApiKeysCardContent() {
                   onClearFilters={() =>
                     updateQueryParams({ search: null, page: "1" })
                   }
+                  hidePaginationWhenSinglePage
+                  fixedWidthColumnIds={[
+                    "start",
+                    "enabled",
+                    "createdAt",
+                    "lastRequest",
+                    "expiresAt",
+                    "actions",
+                  ]}
+                  flexibleColumnIds={["name"]}
                 />
               </>
             )}

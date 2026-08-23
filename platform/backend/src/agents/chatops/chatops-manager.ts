@@ -27,7 +27,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
-import { ProviderError } from "@/routes/chat/errors";
+import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import type {
   ChatOpsApprovalDecision,
@@ -1906,6 +1906,10 @@ export class ChatOpsManager {
     // Show truncated error details as a subtle footer (max 500 chars)
     const errorDetail =
       errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
+    const isSubagentError = error instanceof SubagentProviderError;
+    const sourcedErrorDetail = isSubagentError
+      ? `Subagent ${error.subagentName} · ${errorDetail}`
+      : errorDetail;
 
     // The LLM provider rejected the API key (e.g. Anthropic's "invalid
     // x-api-key"). Users rarely realize the bot resolves its model/key the
@@ -1913,7 +1917,10 @@ export class ChatOpsManager {
     // fix it instead of leaving only the provider's cryptic one-liner.
     if (isLlmProviderAuthError(errMsg)) {
       const usedLlm = llmContext
-        ? await this.describeLlmUsedForRun(llmContext)
+        ? await this.describeLlmUsedForRun({
+            ...llmContext,
+            agentId: isSubagentError ? error.subagentId : llmContext.agentId,
+          })
         : null;
       await provider.sendReply({
         originalMessage: message,
@@ -1925,7 +1932,7 @@ export class ChatOpsManager {
           "",
           `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
         ].join("\n"),
-        footer: footer(errorDetail),
+        footer: footer(sourcedErrorDetail),
         conversationReference: message.metadata?.conversationReference,
       });
       return;
@@ -1933,8 +1940,10 @@ export class ChatOpsManager {
 
     await provider.sendReply({
       originalMessage: message,
-      text: "Sorry, I encountered an error processing your request.",
-      footer: footer(errorDetail),
+      text: isSubagentError
+        ? "Sorry, a subagent encountered an error while processing your request."
+        : "Sorry, I encountered an error processing your request.",
+      footer: footer(sourcedErrorDetail),
       conversationReference: message.metadata?.conversationReference,
     });
   }

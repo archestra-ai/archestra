@@ -63,6 +63,27 @@ export class ProviderError extends Error {
 }
 
 /**
+ * A provider failure raised while a parent agent was waiting on a delegated
+ * agent. Keeping this as a ProviderError preserves the parent run's existing
+ * retry and provider-error handling while retaining where the failure began.
+ */
+export class SubagentProviderError extends ProviderError {
+  public readonly subagentId: string;
+  public readonly subagentName: string;
+
+  constructor(params: {
+    providerError: ProviderError;
+    subagentId: string;
+    subagentName: string;
+  }) {
+    super(params.providerError.chatErrorResponse);
+    this.name = "SubagentProviderError";
+    this.subagentId = params.subagentId;
+    this.subagentName = params.subagentName;
+  }
+}
+
+/**
  * Thrown when the provider finishes a turn cleanly (finishReason stop/length)
  * but produces no renderable content, after the empty-response auto-retries are
  * exhausted (or immediately for a non-retryable finishReason). Carries the last

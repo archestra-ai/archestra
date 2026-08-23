@@ -36,7 +36,7 @@ import {
   ModelModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
-import { ProviderError } from "@/routes/chat/errors";
+import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   ChatOpsApprovalDecision,
@@ -1060,6 +1060,69 @@ describe("ChatOpsManager security validation", () => {
       expect.objectContaining({
         text: "Sorry, I encountered an error processing your request.",
         footer: `🤖 ${agent.name} · upstream exploded`,
+      }),
+    );
+  });
+
+  test("provider errors from a subagent identify the source in the reply", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const providerError = new ProviderError({
+      code: ChatErrorCode.RateLimit,
+      message: "usage limit reached",
+      isRetryable: false,
+    });
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new SubagentProviderError({
+        providerError,
+        subagentId: "00000000-0000-0000-0000-000000000099",
+        subagentName: "Research Helper",
+      }),
+    );
+
+    const user = await makeUser({ email: "subagent-error@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "subagent-error@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Sorry, a subagent encountered an error while processing your request.",
+        footer: `🤖 ${agent.name} · Subagent Research Helper · usage limit reached`,
       }),
     );
   });

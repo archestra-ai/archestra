@@ -207,6 +207,13 @@ export async function resolveConversationModel(
  * iterating configured providers and checking DB-managed keys.
  *
  * Returns null if no provider has both a key and a synced model.
+ *
+ * One rung of the resolution chain, not an entry point: it knows nothing about
+ * an agent's own configuration or the organization default. Callers resolving
+ * an LLM for a built-in subagent want `resolveAgentLlmOrDefault`, which walks
+ * the whole chain and ends here.
+ *
+ * @public — exercised by llm-resolution.test.ts (knip --production ignores tests)
  */
 export async function resolveBestAvailableLlm(params: {
   organizationId: string;
@@ -296,6 +303,17 @@ interface InheritedLlmSelection {
  * Resolve an agent's explicitly configured LLM (its `modelId` FK and API key),
  * including the API key secret. Returns null when the agent has no usable
  * configuration.
+ *
+ * NOT a complete resolution, and never the final answer for a caller about to
+ * make a request. This helper is ownership-blind: it returns a selection with
+ * `apiKey: undefined` whenever the credential belongs to an individual rather
+ * than the organization (a subscription connection, a per-user provider) or
+ * when the agent pins a model without a key, leaving the caller to re-resolve
+ * the credential for the acting user. Treating that half-resolved selection as
+ * final yields a selection that looks configured and fails every call.
+ * `resolveAgentLlmOrDefault` is the entry point that completes it.
+ *
+ * @public — exercised by llm-resolution.test.ts (knip --production ignores tests)
  */
 export async function resolveConfiguredAgentLlm(
   agent: PinnedLlmSelection,

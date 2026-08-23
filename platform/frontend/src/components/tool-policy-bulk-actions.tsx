@@ -131,20 +131,21 @@ export function ToolPolicyBulkActionsBar({
       ]);
       if (!result) return;
 
-      const successCount = result.results.filter(
-        (r: { success: boolean }) => r.success,
-      ).length;
-      const failureCount = result.results.filter(
-        (r: { success: boolean }) => !r.success,
-      ).length;
+      const failures = result.results.filter((r) => !r.success);
+      const successCount = result.results.length - failures.length;
 
-      if (failureCount === 0) {
+      if (failures.length === 0) {
         toast.success(
           `Default policies configured for ${successCount} tool(s). Custom policies are preserved.`,
         );
       } else {
         toast.warning(
-          `Default policies configured for ${successCount} tool(s), failed ${failureCount}. Custom policies are preserved.`,
+          `Default policies configured for ${successCount} tool(s), failed ${failures.length}. Custom policies are preserved.`,
+          {
+            description: summarizeFailureReasons(failures),
+            // A reason worth reading needs longer than the default 4s.
+            duration: 12000,
+          },
         );
       }
 
@@ -288,3 +289,36 @@ export function ToolPolicyBulkActionsBar({
     </BulkActionsBar>
   );
 }
+
+/**
+ * Why the failures failed, for the toast's description line.
+ *
+ * The API returns an error per failed tool, but the bar used to render only
+ * the count — so "failed 4" was the whole story a user got, and the actual
+ * cause (no usable LLM credential, a timeout, a model that would not produce
+ * the structured policy output) only existed in the server logs. Distinct
+ * reasons, because a bulk run overwhelmingly fails the same way for every
+ * tool, and capped so a genuinely mixed batch stays a toast rather than a wall.
+ */
+function summarizeFailureReasons(
+  failures: readonly { error?: string }[],
+): string | undefined {
+  const reasons = [
+    ...new Set(
+      failures
+        .map((failure) => failure.error?.trim())
+        .filter((error): error is string => Boolean(error)),
+    ),
+  ];
+  if (reasons.length === 0) {
+    return undefined;
+  }
+
+  const shown = reasons.slice(0, MAX_TOAST_FAILURE_REASONS);
+  const hidden = reasons.length - shown.length;
+  return hidden > 0
+    ? `${shown.join(" · ")} (+${hidden} more)`
+    : shown.join(" · ");
+}
+
+const MAX_TOAST_FAILURE_REASONS = 2;

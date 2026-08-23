@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import { createLLMModel } from "@/clients/llm-client";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { PolicyConfig } from "@/types";
-import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
+import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { PolicyConfigurationService } from "./policy-configuration";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
@@ -26,12 +27,14 @@ vi.mock("@/clients/llm-client", async () => {
   }).chat("gpt-4o-mini");
   return {
     createLLMModel: vi.fn(() => model),
+    isApiKeyRequired: vi.fn(
+      (_provider: string, apiKey: string | undefined) => !apiKey,
+    ),
   };
 });
 
 vi.mock("@/utils/llm-resolution", () => ({
-  resolveBestAvailableLlm: vi.fn(),
-  resolveConfiguredAgentLlm: vi.fn(),
+  resolveAgentLlmOrDefault: vi.fn(),
 }));
 
 // Serves the structured policy analysis as an OpenAI chat completion whose
@@ -80,42 +83,58 @@ describe("PolicyConfigurationService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new PolicyConfigurationService();
-    // Default: no LLM available
-    vi.mocked(resolveBestAvailableLlm).mockResolvedValue(null);
+    // Default: resolution lands on a provider with no usable credential.
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      ...MOCK_RESOLVED_LLM,
+      apiKey: undefined,
+    });
   });
 
   describe("resolveLlm", () => {
-    test("returns null when resolveBestAvailableLlm returns null", async ({
+    test("returns null when the resolved provider has no usable credential", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
       const result = await service.resolveLlm({ organizationId: org.id });
 
+      // A half-resolved selection is worse than none: it satisfies the
+      // caller's "is an LLM configured?" check and then fails every tool.
       expect(result).toBeNull();
     });
 
-    test("returns resolved config when resolveBestAvailableLlm returns a result", async ({
+    test("returns the resolved selection when a credential is available", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.resolveLlm({ organizationId: org.id });
 
       expect(result).toEqual(MOCK_RESOLVED_LLM);
     });
 
-    test("passes userId when provided", async ({ makeOrganization }) => {
+    test("resolves through the shared built-in-subagent chain", async ({
+      makeOrganization,
+    }) => {
       const org = await makeOrganization();
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue({
+        ...MOCK_BUILT_IN_AGENT,
+        llmApiKeyId: "key-1",
+        modelId: "model-1",
+      } as never);
 
       await service.resolveLlm({
         organizationId: org.id,
         userId: "user-123",
       });
 
-      expect(resolveBestAvailableLlm).toHaveBeenCalledWith({
+      // The agent's own pinned selection is a HINT for the chain, not the
+      // final answer — the chain re-resolves the credential for the acting
+      // user, which is what makes per-user and subscription credentials work.
+      expect(resolveAgentLlmOrDefault).toHaveBeenCalledWith({
+        agent: { llmApiKeyId: "key-1", modelId: "model-1" },
         organizationId: org.id,
         userId: "user-123",
       });
@@ -140,7 +159,7 @@ describe("PolicyConfigurationService", () => {
     test("returns error when tool not found", async ({ makeOrganization }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
 
       const result = await service.configurePoliciesForTool({
         toolId: "nonexistent-tool",
@@ -158,7 +177,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -214,6 +233,42 @@ describe("PolicyConfigurationService", () => {
       expect(trustedDataPolicies[0].action).toBe("mark_as_trusted");
     });
 
+    test("forwards the key row the credential came from to the proxy", async ({
+      makeOrganization,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+        ...MOCK_RESOLVED_LLM,
+        chatApiKeyId: "key-row-1",
+      });
+      vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
+        MOCK_BUILT_IN_AGENT as never,
+      );
+
+      const mcpServer = await makeMcpServer({ name: "test-server" });
+      const tool = await makeTool({ catalogId: mcpServer.catalogId });
+      servePolicyAnalysis({
+        toolInvocationAction: "allow_when_context_is_sensitive",
+        trustedDataAction: "mark_as_safe",
+        reasoning: "Safe",
+      });
+
+      await service.configurePoliciesForTool({
+        toolId: tool.id,
+        organizationId: org.id,
+      });
+
+      // Per-key configuration hangs off this row, and a Codex refresh token
+      // rotates on redemption — a loopback call without it burns the stored
+      // credential.
+      expect(vi.mocked(createLLMModel)).toHaveBeenCalledWith(
+        expect.objectContaining({ chatApiKeyId: "key-row-1" }),
+      );
+    });
+
     test("maps blocking policy config to correct actions", async ({
       makeOrganization,
       makeMcpServer,
@@ -221,7 +276,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue({
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
         provider: "openai",
         apiKey: "sk-openai-test-key",
         modelName: "gpt-4o",
@@ -267,7 +322,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -300,7 +355,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );
@@ -341,7 +396,7 @@ describe("PolicyConfigurationService", () => {
     }) => {
       const org = await makeOrganization();
 
-      vi.mocked(resolveBestAvailableLlm).mockResolvedValue(MOCK_RESOLVED_LLM);
+      vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue(MOCK_RESOLVED_LLM);
       vi.spyOn(AgentModel, "getBuiltInAgent").mockResolvedValue(
         MOCK_BUILT_IN_AGENT as never,
       );

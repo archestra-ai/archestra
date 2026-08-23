@@ -467,6 +467,27 @@ class KnowledgeBaseConnectorModel {
   }
 
   /**
+   * Mirror an explicit cancellation onto the connector only if it still points
+   * at that run. A newer run stamps a different `last_sync_at`, so a late
+   * cancellation response cannot overwrite the newer run's live status.
+   */
+  static async markContentRunCancelledIfCurrent(params: {
+    connectorId: string;
+    runId: string;
+  }): Promise<void> {
+    await db.execute(sql`
+      UPDATE knowledge_base_connectors
+      SET last_sync_status = 'cancelled', last_sync_error = NULL
+      WHERE id = ${params.connectorId}
+        AND deleted_at IS NULL
+        AND last_sync_status = 'running'
+        AND last_sync_at = (
+          SELECT started_at FROM connector_runs WHERE id = ${params.runId}
+        )
+    `);
+  }
+
+  /**
    * Reconcile connectors left showing `running` when they have no running run —
    * e.g. a run finalized but its connector-status write was lost. Derives the
    * connector's status from its latest run (the authoritative source) in one

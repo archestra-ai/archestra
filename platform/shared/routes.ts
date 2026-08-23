@@ -678,6 +678,7 @@ export const RouteId = {
   // Connector Run Routes
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
+  CancelConnectorRun: "cancelConnectorRun",
 
   // Knowledge File Routes
   GetKnowledgeFiles: "getKnowledgeFiles",

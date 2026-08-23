@@ -17,6 +17,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Square,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -43,6 +44,7 @@ import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/conne
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterControlClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -92,6 +94,7 @@ import {
 } from "@/lib/hooks/use-dialog-url-param";
 import {
   useAssignConnectorToKnowledgeBases,
+  useCancelConnectorRun,
   useConnector,
   useConnectorKnowledgeBases,
   useConnectorPermissionCoverage,
@@ -209,6 +212,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       : []),
   ];
   const syncConnector = useSyncConnector();
+  const cancelRun = useCancelConnectorRun();
   const forceResync = useForceResyncConnector();
   const testConnection = useTestConnectorConnection();
   // Coverage feeds the Permissions metadata items and the Sync Permissions
@@ -222,6 +226,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   const { open: isEditOpen, setOpen: setIsEditOpen } =
     useDialogFlagUrlParam("edit");
   const [isForceResyncOpen, setIsForceResyncOpen] = useState(false);
+  const [runToCancel, setRunToCancel] = useState<ConnectorRunItem | null>(null);
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -421,6 +426,18 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   label: "View logs",
                   onClick: () => openRunDetails(row.original),
                 },
+                ...(row.original.status === "running" &&
+                row.original.runType === "content"
+                  ? [
+                      {
+                        icon: <Square className="h-4 w-4" />,
+                        label: "Cancel sync",
+                        tooltip: "Cancel this sync run",
+                        variant: "destructive" as const,
+                        onClick: () => setRunToCancel(row.original),
+                      },
+                    ]
+                  : []),
               ]}
             />
           );
@@ -762,6 +779,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <SelectItem value="no_documents">No documents</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="superseded">Superseded</SelectItem>
                 </SelectContent>
               </Select>
@@ -821,6 +839,26 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           connectorId={connectorId}
           runId={selectedRun?.id ?? null}
           onClose={closeRunDetails}
+        />
+
+        <DeleteConfirmDialog
+          open={runToCancel !== null}
+          onOpenChange={(open) => {
+            if (!open) setRunToCancel(null);
+          }}
+          title="Cancel sync run"
+          description="Stop fetching and processing new documents for this run? Documents already ingested remain available. The worker stops at the next source batch boundary."
+          isPending={cancelRun.isPending}
+          onConfirm={async () => {
+            if (!runToCancel) return;
+            const result = await cancelRun.mutateAsync({
+              connectorId,
+              runId: runToCancel.id,
+            });
+            if (result) setRunToCancel(null);
+          }}
+          confirmLabel="Cancel sync"
+          pendingLabel="Cancelling..."
         />
 
         <EditConnectorDialog

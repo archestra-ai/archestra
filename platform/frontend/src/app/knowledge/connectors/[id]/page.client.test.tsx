@@ -8,12 +8,14 @@ const {
   mockUseConnectorKnowledgeBases,
   mockUseConnectorPermissionCoverage,
   mockTriggerPermissionSyncMutate,
+  mockCancelRunMutateAsync,
 } = vi.hoisted(() => ({
   mockUseConnector: vi.fn(),
   mockUseConnectorRuns: vi.fn(),
   mockUseConnectorKnowledgeBases: vi.fn(),
   mockUseConnectorPermissionCoverage: vi.fn(),
   mockTriggerPermissionSyncMutate: vi.fn(),
+  mockCancelRunMutateAsync: vi.fn(),
 }));
 
 const noopMutation = () => ({
@@ -38,6 +40,11 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
     isPending: false,
   }),
   useSyncConnector: () => noopMutation(),
+  useCancelConnectorRun: () => ({
+    mutate: vi.fn(),
+    mutateAsync: mockCancelRunMutateAsync,
+    isPending: false,
+  }),
   useForceResyncConnector: () => noopMutation(),
   useTestConnectorConnection: () => noopMutation(),
   useAssignConnectorToKnowledgeBases: () => noopMutation(),
@@ -375,6 +382,65 @@ describe("ConnectorDetailPage", () => {
       expect(
         screen.getByText("Ingesting documents 120/500"),
       ).toBeInTheDocument();
+    });
+
+    it("offers cancellation only for a running document sync and confirms it", async () => {
+      const { userEvent } = await import("@testing-library/user-event").then(
+        (module) => ({ userEvent: module.default.setup() }),
+      );
+      mockCancelRunMutateAsync.mockResolvedValue({ cancelled: true });
+      mockUseConnectorRuns.mockReturnValue({
+        data: {
+          data: [
+            {
+              id: "run-cancellable",
+              connectorId: CONNECTOR_ID,
+              status: "running",
+              runType: "content",
+              startedAt: "2026-07-08T10:00:00Z",
+              completedAt: null,
+              documentsProcessed: 120,
+              documentsIngested: 120,
+              totalItems: 500,
+            },
+            {
+              id: "run-complete",
+              connectorId: CONNECTOR_ID,
+              status: "success",
+              runType: "content",
+              startedAt: "2026-07-07T10:00:00Z",
+              completedAt: "2026-07-07T10:01:00Z",
+              documentsProcessed: 10,
+              documentsIngested: 10,
+              totalItems: 10,
+            },
+          ],
+          pagination: { total: 2 },
+        },
+        isPending: false,
+      });
+
+      render(<ConnectorDetailPage connectorId={CONNECTOR_ID} />);
+
+      const cancelButtons = screen.getAllByRole("button", {
+        name: /Cancel sync for the run started/,
+      });
+      expect(cancelButtons).toHaveLength(1);
+      await userEvent.click(cancelButtons[0]);
+      expect(
+        screen.getByRole("heading", { name: "Cancel sync run" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/already ingested remain available/),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Cancel sync" }),
+      );
+      expect(mockCancelRunMutateAsync).toHaveBeenCalledWith({
+        connectorId: CONNECTOR_ID,
+        runId: "run-cancellable",
+      });
     });
 
     it("keeps the live processed counter when no total estimate is available", () => {

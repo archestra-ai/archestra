@@ -534,6 +534,40 @@ class ConnectorRunModel {
     return rows.length;
   }
 
+  /**
+   * Cancel one active document-sync run. The status + epoch update is the
+   * cancellation signal: every content writer is fenced by `running` and this
+   * epoch, so an in-flight worker stops at its next batch boundary and cannot
+   * publish any later progress or checkpoint.
+   */
+  static async cancelRunningContentRun(params: {
+    connectorId: string;
+    runId: string;
+    reason: string;
+  }): Promise<ConnectorRun | null> {
+    const t = schema.connectorRunsTable;
+    const [run] = await db
+      .update(t)
+      .set({
+        status: "cancelled",
+        completedAt: new Date(),
+        leaseEpoch: sql`${t.leaseEpoch} + 1`,
+        leaseExpiresAt: null,
+        error: params.reason,
+      })
+      .where(
+        and(
+          eq(t.id, params.runId),
+          eq(t.connectorId, params.connectorId),
+          eq(t.runType, "content"),
+          eq(t.status, "running"),
+        ),
+      )
+      .returning();
+
+    return run ?? null;
+  }
+
   static async deleteByConnector(connectorId: string): Promise<number> {
     const result = await db
       .delete(schema.connectorRunsTable)

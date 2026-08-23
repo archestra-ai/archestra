@@ -956,6 +956,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
+  "/api/connectors/:id/runs/:runId/cancel": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
   "/api/connectors/:id/force-resync": {
     resourceType: "connector",
     action: "connector.updated",

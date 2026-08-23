@@ -54,6 +54,11 @@ const STATUS_CONFIG: Record<ConnectorSyncStatus, StatusConfig> = {
     className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",
     animated: false,
   },
+  cancelled: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground border border-border",
+    animated: false,
+  },
   superseded: {
     label: "Superseded",
     className: "bg-muted text-muted-foreground border border-border",

@@ -739,3 +739,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @GMNeonsky
 - @pacocartones
 - @matthewgregor
+- @rohanmalhotracodes

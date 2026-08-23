@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -254,7 +254,7 @@ flowchart TD
 
 #### Called As
 
-Every tool call records the identity whose credential served it. Chat shows it on the tool call card. The MCP Gateway logs show it in the **Called as** column, next to the user who made the call. A call through a shared service account reads as that account, on behalf of the caller.
+Every tool call records the identity whose credential served it. Chat shows it on the tool call card. The MCP Gateway logs show the caller and serving credential together in the **Identity** column. A call through a shared service account reads as that account, on behalf of the caller.
 
 The identity is a person, a team, or the organization. Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — run as that caller. A call made with a gateway token runs as the team or the organization that issued the token.
 

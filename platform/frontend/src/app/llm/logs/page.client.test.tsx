@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -24,6 +25,7 @@ globalThis.ResizeObserver = class {
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
 vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
@@ -52,6 +54,55 @@ const orgProxy = {
 };
 
 const push = vi.fn();
+
+type SessionSummary =
+  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+
+function makeSessionSummary(
+  overrides: Partial<SessionSummary> = {},
+): SessionSummary {
+  return {
+    sessionId: "demo-session",
+    sessionSource: null,
+    source: "api",
+    sources: ["api"],
+    interactionId: null,
+    requestCount: 1,
+    totalInputTokens: 100,
+    totalOutputTokens: 50,
+    totalCacheReadTokens: 0,
+    totalCacheWriteTokens: 0,
+    totalCost: "0.01",
+    totalBilledCost: "0.01",
+    totalSubscriptionCost: null,
+    totalBaselineCost: "0.01",
+    totalToonCostSavings: null,
+    totalCacheSavings: null,
+    toonSkipReasonCounts: {
+      applied: 0,
+      notEnabled: 0,
+      notEffective: 0,
+      noToolResults: 0,
+    },
+    firstRequestTime: "2026-08-23T16:20:00.000Z",
+    lastRequestTime: "2026-08-23T16:30:00.000Z",
+    models: ["gpt-5.4"],
+    profileId: orgProxy.id,
+    profileName: orgProxy.name,
+    externalAgentIds: [],
+    externalAgentIdLabels: [],
+    authMethods: [],
+    authenticatedAppNames: [],
+    userNames: [],
+    userIds: [],
+    unattributedReason: null,
+    lastUserMessagePreview: null,
+    lastInteractionType: null,
+    conversationTitle: null,
+    claudeCodeTitle: null,
+    ...overrides,
+  };
+}
 
 // role="combobox" takes no accessible name from its contents, so the trigger is
 // addressed by the label it renders.
@@ -122,5 +173,49 @@ describe("LlmProxyLogsPage proxy filter", () => {
       expect.stringContaining("page=1"),
       expect.anything(),
     );
+  });
+
+  it("presents session context and usage without separate source and details columns", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: "demo-session",
+            profileId: orgProxy.id,
+            profileName: orgProxy.name,
+            lastUserMessagePreview: "Summarize the quarterly report",
+            requestCount: 3,
+            totalInputTokens: 100,
+            totalCacheReadTokens: 50,
+            totalCacheWriteTokens: 50,
+            models: ["gpt-5.4", "gpt-5.4-mini"],
+            userNames: ["Demo Admin"],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    for (const header of [
+      "Session",
+      "Agent",
+      "Model",
+      "Usage",
+      "Spend",
+      "Last request",
+    ]) {
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getByText("Summarize the quarterly report")).toBeVisible();
+    expect(screen.getByText("3 requests")).toBeVisible();
+    expect(screen.getByText("25% cache read")).toBeVisible();
+    expect(screen.getByText("+1 more")).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();
   });
 });

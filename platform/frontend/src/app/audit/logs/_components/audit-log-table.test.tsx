@@ -9,7 +9,8 @@ import { ALL_ACTOR_TYPES, ALL_OUTCOMES } from "./audit-log-action-labels";
 import { AuditLogTable } from "./audit-log-table";
 
 /**
- * Contract: AuditLogTable — columns (When / Actor / Action / Outcome / Resource / Where),
+ * Contract: AuditLogTable — compact columns (Activity / Actor / Resource / Time),
+ * with network metadata reserved for the detail dialog,
  * resource NAME shown in grid (denormalized, snapshot fallback) for the
  * high-signal picker types only, while the raw resource id stays hidden,
  * detail dialog on row click, URL-driven filters (incl. the entity picker →
@@ -203,8 +204,12 @@ describe("AuditLogTable", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("Agent updated")).toBeInTheDocument();
     expect(screen.getByText("Success")).toBeInTheDocument();
-    // The resource chip reads "Agent: <name>"; the bold prefix is the type alone.
     expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Activity" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Where" })).toBeNull();
+    expect(screen.queryByText("10.0.0.1")).toBeNull();
   });
 
   it("action column renders the human label, not the raw dotted name", () => {
@@ -229,7 +234,7 @@ describe("AuditLogTable", () => {
     expect(screen.queryByText("Unknown create")).not.toBeInTheDocument();
   });
 
-  it("outcome column renders the correct badge text for each outcome", () => {
+  it("activity shows the correct result for each outcome", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([makeEvent({ outcome: "denied" })]),
     );
@@ -268,9 +273,10 @@ describe("AuditLogTable", () => {
       await screen.findByRole("heading", { name: /Event details/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("/api/agents/agent-123")).toBeInTheDocument();
+    expect(screen.getByText("10.0.0.1")).toBeInTheDocument();
   });
 
-  it("does not render the resource_id in the table — only the resource-type badge", () => {
+  it("does not render the resource_id in the table — only the resource type", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([
         makeEvent({
@@ -536,7 +542,7 @@ describe("AuditLogTable", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("renders When / Where headers and surfaces the client IP in the grid", () => {
+  it("keeps client network metadata out of the overview", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([
         makeEvent({
@@ -548,9 +554,9 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("When")).toBeInTheDocument();
-    expect(screen.getByText("Where")).toBeInTheDocument();
-    expect(screen.getByText("172.16.0.5")).toBeInTheDocument();
+    expect(screen.getByText("Time")).toBeInTheDocument();
+    expect(screen.queryByText("Where")).toBeNull();
+    expect(screen.queryByText("172.16.0.5")).toBeNull();
   });
 
   it("Clear filters resets URL search params via router.push", async () => {

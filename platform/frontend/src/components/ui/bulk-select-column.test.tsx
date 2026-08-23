@@ -37,7 +37,10 @@ describe("createSelectColumn", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select all rows" }));
 
     expect(
-      screen.getByRole("checkbox", { name: "Select Custom" }),
+      screen.getByRole("checkbox", { name: "Select Custom one" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Custom two" }),
     ).toBeChecked();
     expect(
       screen.getByRole("checkbox", { name: "Select Predefined" }),
@@ -49,7 +52,8 @@ function TestTable() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const data: TestRow[] = [
     { id: "fixed", name: "Predefined", fixed: true },
-    { id: "custom", name: "Custom", fixed: false },
+    { id: "custom-one", name: "Custom one", fixed: false },
+    { id: "custom-two", name: "Custom two", fixed: false },
   ];
 
   return (

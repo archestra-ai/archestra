@@ -54,9 +54,14 @@ export function createSelectColumn<T>({
         <Checkbox
           checked={allSelected || (someSelected && "indeterminate")}
           onCheckedChange={(value) => {
-            for (const row of selectableRows) {
-              row.toggleSelected(!!value);
-            }
+            table.setRowSelection((current) => {
+              const next = { ...current };
+              for (const row of selectableRows) {
+                if (value) next[row.id] = true;
+                else delete next[row.id];
+              }
+              return next;
+            });
           }}
           onClick={(event) => event.stopPropagation()}
           aria-label={allLabel}

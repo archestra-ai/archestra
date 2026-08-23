@@ -6,6 +6,7 @@ import {
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -84,22 +85,38 @@ describe("chat active-run routes", () => {
     ).resolves.toHaveLength(0);
   });
 
-  test("stop marks an accessible running active run with stopRequestedAt", async () => {
-    await ActiveChatRunModel.create({
+  test("stop waits for the accessible running run to become terminal", async () => {
+    const run = await ActiveChatRunModel.create({
       conversationId,
       userId: user.id,
       organizationId,
     });
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/chat/conversations/${conversationId}/stop`,
+    let responseSettled = false;
+    const responsePromise = app
+      .inject({
+        method: "POST",
+        url: `/api/chat/conversations/${conversationId}/stop`,
+      })
+      .then((response) => {
+        responseSettled = true;
+        return response;
+      });
+
+    await waitForStopRequest(run?.id ?? "");
+    expect(responseSettled).toBe(false);
+
+    await activeChatRunService.markTerminal({
+      runId: run?.id ?? "",
+      status: "cancelled",
     });
 
+    const response = await responsePromise;
     expect(response.statusCode).toBe(200);
-    const run =
-      await ActiveChatRunModel.findRunningByConversation(conversationId);
-    expect(run?.stopRequestedAt).toBeInstanceOf(Date);
+    expect(response.json()).toEqual({ stopped: true });
+    expect((await ActiveChatRunModel.findById(run?.id ?? ""))?.status).toBe(
+      "cancelled",
+    );
   });
 
   test("stop returns 404 for an inaccessible conversation and does not mutate a running run", async ({
@@ -431,4 +448,16 @@ function readSsePayloads(body: string): unknown[] {
     .map((entry) => entry.slice("data: ".length))
     .filter((entry) => entry !== "[DONE]")
     .map((entry) => JSON.parse(entry));
+}
+
+async function waitForStopRequest(runId: string): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const run = await ActiveChatRunModel.findById(runId);
+    if (run?.stopRequestedAt) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Active chat run did not record the Stop request");
 }

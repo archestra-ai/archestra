@@ -282,7 +282,7 @@ test("createReplayStream wakes from notifier without waiting for the polling int
     organizationId: organization.id,
   });
   const notifier = new InMemoryActiveChatRunNotifier();
-  const service = new ActiveChatRunService(notifier, 10_000, 10_000);
+  const service = new ActiveChatRunService(notifier, 10, 10_000);
 
   const streamPromise = Promise.race([
     readStream(service.createReplayStream(run?.id ?? "")),
@@ -343,6 +343,64 @@ test("startStopPolling aborts after a durable stop request notification", async 
   await notifier.notifyStop(run?.id ?? "");
 
   await waitForAbort(abortController.signal);
+  stopPolling();
+});
+
+test("Stop aborts a locally owned run immediately and its barrier waits for terminal state", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const notifier = new PollingActiveChatRunNotifier();
+  const service = new ActiveChatRunService(notifier, 10_000, 10_000);
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const abortController = new AbortController();
+  const stopPolling = service.startStopPolling({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    abortController,
+  });
+
+  await service.requestStop({
+    conversationId: conversation.id,
+    organizationId: organization.id,
+  });
+
+  // Polling-only mode cannot wake through the notifier. A run owned by this
+  // process still aborts synchronously instead of waiting for its poll timer.
+  expect(abortController.signal.aborted).toBe(true);
+
+  let barrierResolved = false;
+  const barrier = service.waitForTerminal(run?.id ?? "").then(() => {
+    barrierResolved = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(barrierResolved).toBe(false);
+
+  await service.markTerminal({
+    runId: run?.id ?? "",
+    status: "cancelled",
+  });
+  await barrier;
+
+  const next = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(next).not.toBeNull();
   stopPolling();
 });
 

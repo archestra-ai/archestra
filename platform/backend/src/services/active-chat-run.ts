@@ -25,6 +25,9 @@ export class ActiveChatRunService {
   // Run ids this process created and believes may still be 'running'. Used to
   // fail only this pod's runs on graceful shutdown (no schema-level pod id).
   private readonly inFlightRunIds = new Set<string>();
+  // Lets a Stop request handled by this process abort its stream immediately.
+  // Cross-replica requests still wake the owner through the notifier below.
+  private readonly abortControllersByRunId = new Map<string, AbortController>();
   private isShuttingDown = false;
 
   constructor(
@@ -82,6 +85,7 @@ export class ActiveChatRunService {
   }): Promise<void> {
     await ActiveChatRunModel.markTerminal(params);
     this.inFlightRunIds.delete(params.runId);
+    await this.notifyEvent(params.runId);
   }
 
   // Periodic safety net for runs orphaned by a hard kill (OOM/SIGKILL) that
@@ -132,10 +136,31 @@ export class ActiveChatRunService {
   }) {
     const run = await ActiveChatRunModel.requestStop(params);
     if (run) {
+      const abortController = this.abortControllersByRunId.get(run.id);
+      if (abortController && !abortController.signal.aborted) {
+        abortController.abort();
+      }
       await this.notifyStop(run.id);
     }
 
     return run;
+  }
+
+  async waitForTerminal(runId: string): Promise<void> {
+    while (true) {
+      const run = await ActiveChatRunModel.findById(runId);
+      if (!run || run.status !== "running") {
+        return;
+      }
+
+      // Terminal transitions publish on the event channel. The timeout is a
+      // correctness fallback for a missed/cross-replica notification; every
+      // wake re-reads the durable row before Stop is allowed to return.
+      await this.notifier.waitForEvent({
+        runId,
+        timeoutMs: this.replayPollIntervalMs,
+      });
+    }
   }
 
   /**
@@ -245,7 +270,6 @@ export class ActiveChatRunService {
               status: "failed",
               error: value.errorText,
             });
-            await this.notifyEvent(params.runId);
           }
         }
 
@@ -256,7 +280,6 @@ export class ActiveChatRunService {
           status: terminal.status,
           error: terminal.error,
         });
-        await this.notifyEvent(params.runId);
       } catch (error) {
         if (!params.abortController?.signal.aborted) {
           params.abortController?.abort();
@@ -294,7 +317,6 @@ export class ActiveChatRunService {
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         });
-        await this.notifyEvent(params.runId);
       }
     })()
       .catch((error) => {
@@ -382,25 +404,10 @@ export class ActiveChatRunService {
   }): () => void {
     let stopped = false;
     const waitController = new AbortController();
+    this.abortControllersByRunId.set(params.runId, params.abortController);
 
     void (async () => {
       while (!stopped && !params.abortController.signal.aborted) {
-        // Default mode wakes this loop with Postgres LISTEN/NOTIFY. The timeout
-        // is still a safety poll so missed notifications or broken listener
-        // connections do not leave Stop requests undetected forever. In polling
-        // compatibility mode, this wait always lasts until the interval expires,
-        // so each running chat stream performs roughly one stop-check read per
-        // interval.
-        await this.notifier.waitForStop({
-          runId: params.runId,
-          timeoutMs: this.stopPollIntervalMs,
-          abortSignal: waitController.signal,
-        });
-
-        if (stopped || params.abortController.signal.aborted) {
-          return;
-        }
-
         try {
           const run = await ActiveChatRunModel.findById(params.runId);
           // The row existed when polling started, so a null read now means the
@@ -432,11 +439,28 @@ export class ActiveChatRunService {
             "Failed to poll active chat run stop flag",
           );
         }
+
+        // Default mode wakes this loop with Postgres LISTEN/NOTIFY. The timeout
+        // is still a safety poll so missed notifications or broken listener
+        // connections do not leave Stop requests undetected forever. Reading
+        // before the first wait closes the small create/register race where a
+        // Stop notification can arrive before this waiter is installed.
+        await this.notifier.waitForStop({
+          runId: params.runId,
+          timeoutMs: this.stopPollIntervalMs,
+          abortSignal: waitController.signal,
+        });
       }
     })();
 
     return () => {
       stopped = true;
+      if (
+        this.abortControllersByRunId.get(params.runId) ===
+        params.abortController
+      ) {
+        this.abortControllersByRunId.delete(params.runId);
+      }
       waitController.abort();
     };
   }

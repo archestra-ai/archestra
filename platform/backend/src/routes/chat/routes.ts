@@ -2172,19 +2172,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // connection close, even when the stream runs on a different pod.
       const activeStreamKey = `${CacheKey.ChatActiveStream}-${id}` as const;
       const streamId = await cacheManager.get<string>(activeStreamKey);
-      if (!streamId) {
-        return reply.send({ stopped: !!activeRun });
+      if (streamId) {
+        const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
+        try {
+          await cacheManager.set(stopKey, true, TimeInMs.Minute);
+        } catch (error) {
+          logger.warn(
+            { error, conversationId: id, streamId },
+            "Failed to set chat stop cache flag",
+          );
+        }
       }
-      const stopKey = `${CacheKey.ChatStop}-${streamId}` as const;
-      try {
-        await cacheManager.set(stopKey, true, TimeInMs.Minute);
-      } catch (error) {
-        logger.warn(
-          { error, conversationId: id, streamId },
-          "Failed to set chat stop cache flag",
-        );
+
+      // A successful Stop response is the submission hand-off barrier: do not
+      // let the client close its local stream and accept a new turn until the
+      // old run has durably left `running`. Otherwise the next POST can race
+      // the unique active-run guard and fail with a duplicate-run 409.
+      if (activeRun) {
+        await activeChatRunService.waitForTerminal(activeRun.id);
       }
-      return reply.send({ stopped: true });
+      return reply.send({ stopped: !!activeRun || !!streamId });
     },
   );
 

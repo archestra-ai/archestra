@@ -715,7 +715,10 @@ function SkillsList() {
           )
         }
       >
-        <TableCardView storageKey="archestra-skills-view">
+        <TableCardView
+          storageKey="archestra-skills-view"
+          defaultMode="table"
+        >
           {showEmptyState ? (
             <SkillsEmptyState />
           ) : (

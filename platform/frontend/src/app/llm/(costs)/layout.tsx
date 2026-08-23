@@ -1,10 +1,12 @@
 "use client";
 
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
+import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 const TABS = [
@@ -55,10 +57,19 @@ export default function CostsLayout({
 }) {
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
+  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const prometheusDocsUrl = getFrontendDocsUrl(
     "platform-deployment",
     "prometheus-metrics",
   );
+
+  // Wait for the permission answer rather than flashing tabs that would only
+  // render a forbidden page.
+  const tabs = TABS.filter(({ href }) => {
+    const required = requiredPagePermissionsMap[href];
+    const isGated = required && Object.keys(required).length > 0;
+    return isGated ? permissionMap?.[href] === true : true;
+  });
 
   const config = PAGE_CONFIG[pathname] ?? {
     title: "Costs & Limits",
@@ -88,7 +99,7 @@ export default function CostsLayout({
             config.description
           )
         }
-        tabs={TABS}
+        tabs={tabs}
         actionButton={actionButton}
       >
         {children}

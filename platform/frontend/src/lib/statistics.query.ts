@@ -13,11 +13,69 @@ const {
   getAgentStatistics,
   getModelStatistics,
   getUserStatistics,
+  getMyStatistics,
+  getMyUsageBreakdown,
   getAppStatistics,
   getSkillStatistics,
   getOverviewStatistics,
   getCostSavingsStatistics,
 } = archestraApiSdk;
+
+/**
+ * The signed-in user's own cost and usage. The one statistics hook that needs
+ * no `llmCost:read`, so it stays enabled on the Costs page for people who see
+ * none of the organization-wide charts.
+ */
+export function useMyStatistics({
+  timeframe = "24h",
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "me", timeframe],
+    queryFn: async () => {
+      const { data, error } = await getMyStatistics({ query: { timeframe } });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
+/**
+ * What produced the signed-in user's usage: clients, token price bands,
+ * context-size distribution, and costliest sessions.
+ *
+ * Separate from {@link useMyStatistics} because it is separate server-side —
+ * several more aggregations over the largest table, which only the detail page
+ * asks for. Needs no `llmCost:read` for the same reason its sibling doesn't.
+ */
+export function useMyUsageBreakdown({
+  timeframe = "24h",
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: ["statistics", "me", "breakdown", timeframe],
+    queryFn: async () => {
+      const { data, error } = await getMyUsageBreakdown({
+        query: { timeframe },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    // Deliberately not on the 30s refetch its sibling uses: this is a page you
+    // read and think about, not a live counter, and it costs three aggregations
+    // over `interactions` each time.
+    staleTime: 60_000,
+  });
+}
 
 /**
  * Per-user usage. Unlike the sibling statistics hooks this one is paginated —

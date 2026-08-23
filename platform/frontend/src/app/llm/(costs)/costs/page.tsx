@@ -146,35 +146,37 @@ export default function StatisticsPage() {
   const [customTo, setCustomTo] = useState<Date | undefined>();
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
 
+  const organizationStatisticsEnabled = isTimeframeResolved;
+
   // Statistics data fetching hooks
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const { data: userStatisticsPage } = useUserStatistics({
     timeframe,
     limit: USER_STATISTICS_PAGE_SIZE,
     includeModels: true,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const userStatistics = userStatisticsPage?.data ?? [];
   const userStatisticsTotal = userStatisticsPage?.pagination?.total ?? 0;
   const { data: appStatisticsPage } = useAppStatistics({
     timeframe,
     limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const appStatistics = appStatisticsPage?.data ?? [];
   const appStatisticsTotal = appStatisticsPage?.pagination?.total ?? 0;
@@ -184,7 +186,7 @@ export default function StatisticsPage() {
   const { data: skillStatisticsPage } = useSkillStatistics({
     timeframe,
     limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: isTimeframeResolved,
+    enabled: organizationStatisticsEnabled,
   });
   const skillStatistics = skillStatisticsPage?.data ?? [];
   const skillStatisticsTotal = skillStatisticsPage?.pagination?.total ?? 0;
@@ -319,6 +321,22 @@ export default function StatisticsPage() {
   );
   const sortedModelStatistics = useMemo(
     () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
+    [modelStatistics],
+  );
+  const organizationRequestCount = useMemo(
+    () => modelStatistics.reduce((total, model) => total + model.requests, 0),
+    [modelStatistics],
+  );
+  const organizationTokenCount = useMemo(
+    () =>
+      modelStatistics.reduce(
+        (total, model) =>
+          total +
+          model.inputTokens +
+          model.outputTokens +
+          model.cacheReadTokens,
+        0,
+      ),
     [modelStatistics],
   );
 
@@ -596,6 +614,13 @@ export default function StatisticsPage() {
         description="Set a custom time period for the statistics view."
       />
 
+      <OrganizationSummary
+        billedSpend={costSavingsData?.totalActualCost ?? 0}
+        subscriptionCost={costSavingsData?.totalSubscriptionCost ?? 0}
+        requests={organizationRequestCount}
+        tokens={organizationTokenCount}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -643,7 +668,11 @@ export default function StatisticsPage() {
                   type="monotone"
                   stroke="var(--color-actual)"
                   strokeWidth={2}
-                  dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-actual)",
+                  }}
                   activeDot={{ strokeWidth: 0, r: 5 }}
                 />
                 {hasSubscriptionCost && (
@@ -1205,11 +1234,11 @@ export default function StatisticsPage() {
         <CardContent>
           <StatisticsTablePanel>
             {/*
-              `table-fixed` splits width equally without explicit widths, and
-              badges neither wrap nor shrink — too narrow a share and they
-              overflow their cell onto the next column. The floor width makes
-              the panel scroll rather than crush the columns.
-            */}
+                `table-fixed` splits width equally without explicit widths, and
+                badges neither wrap nor shrink — too narrow a share and they
+                overflow their cell onto the next column. The floor width makes
+                the panel scroll rather than crush the columns.
+              */}
             <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
@@ -1360,8 +1389,8 @@ export default function StatisticsPage() {
                       className="text-center py-8 text-muted-foreground"
                     >
                       {/* Every app is listed regardless of activity — an app with
-                          none simply reports zeros — so an empty table means
-                          there are no apps, not none in this timeframe. */}
+                            none simply reports zeros — so an empty table means
+                            there are no apps, not none in this timeframe. */}
                       No apps have been created yet
                     </TableCell>
                   </TableRow>
@@ -1548,6 +1577,63 @@ function AppBuildCostCell({
   }
 
   return <span>${app.buildCost.toFixed(2)}</span>;
+}
+
+function OrganizationSummary({
+  billedSpend,
+  subscriptionCost,
+  requests,
+  tokens,
+}: {
+  billedSpend: number;
+  subscriptionCost: number;
+  requests: number;
+  tokens: number;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <OrganizationSummaryCard
+        label="Billed spend"
+        value={`$${billedSpend.toFixed(2)}`}
+        description="Metered usage charged at API rates"
+      />
+      <OrganizationSummaryCard
+        label="Subscription-covered"
+        value={`$${subscriptionCost.toFixed(2)}`}
+        description="List-price value not billed"
+      />
+      <OrganizationSummaryCard
+        label="Requests"
+        value={requests.toLocaleString()}
+        description="Across all models"
+      />
+      <OrganizationSummaryCard
+        label="Tokens"
+        value={tokens.toLocaleString()}
+        description="Input, output, and cache reads"
+      />
+    </div>
+  );
+}
+
+function OrganizationSummaryCard({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="gap-1">
+        <CardDescription>{label}</CardDescription>
+        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
+        <p className="text-muted-foreground text-xs">{description}</p>
+      </CardHeader>
+    </Card>
+  );
 }
 
 /**

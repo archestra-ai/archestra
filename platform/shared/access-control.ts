@@ -1582,6 +1582,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
   },
+  // Deliberately open to any authenticated user: it reports only the caller's
+  // own usage, so it needs no permission over other people's data. This is what
+  // keeps the Costs page useful to someone without `llmCost:read`, who sees the
+  // personal summary and none of the organization-wide charts.
+  [RouteId.GetMyStatistics]: {},
+  // Open for the same reason as GetMyStatistics: it explains the caller's own
+  // usage and names no one else's activity, no agent they cannot see, and no
+  // organization total.
+  [RouteId.GetMyUsageBreakdown]: {},
   // Per-app and per-skill cost additionally narrow to what the caller can see:
   // the routes resolve the same visibility the Apps page and the skills list use,
   // so cost reporting never lists an app or skill the caller has no access to.
@@ -2071,8 +2080,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies/new": { llmProxy: ["create"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
-  "/llm/limits": { llmLimit: ["read"] },
+  // Intentionally ungated: this page is fixed to the caller's own usage.
+  "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },
+  "/llm/limits": { llmLimit: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

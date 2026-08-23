@@ -28,3 +28,40 @@ export function resolveInteractionBillingMode(params: {
   }
   return DEFAULT_BILLING_MODE;
 }
+
+/**
+ * Refine an Anthropic OAuth request after the upstream has decided how it will
+ * be funded.
+ *
+ * The OAuth credential identifies a subscription account, but the same token
+ * can roll into paid usage credits after its included allowance is exhausted.
+ * Anthropic marks that state by rejecting the normal unified allowance while
+ * allowing (or warning on) the overage allowance.
+ *
+ * Missing or unfamiliar headers keep the credential-derived mode. API-key
+ * traffic is already metered and can never be reclassified here.
+ */
+export function refineAnthropicBillingModeFromHeaders(params: {
+  billingMode: BillingMode;
+  headers: Headers;
+}): BillingMode {
+  if (params.billingMode !== "subscription") {
+    return params.billingMode;
+  }
+
+  const subscriptionStatus = params.headers.get(
+    "anthropic-ratelimit-unified-status",
+  );
+  const overageStatus = params.headers.get(
+    "anthropic-ratelimit-unified-overage-status",
+  );
+
+  if (
+    subscriptionStatus === "rejected" &&
+    (overageStatus === "allowed" || overageStatus === "allowed_warning")
+  ) {
+    return "metered";
+  }
+
+  return params.billingMode;
+}

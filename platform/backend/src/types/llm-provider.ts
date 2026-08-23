@@ -82,6 +82,11 @@ export interface CreateClientOptions {
    * serves a model varies by generation and is fixed at client construction.
    */
   model?: string;
+  /**
+   * Observe successful upstream response headers before the provider SDK
+   * consumes the body. Used for billing signals at the HTTP boundary.
+   */
+  onResponseHeaders?: (headers: Headers) => void;
 }
 
 /**

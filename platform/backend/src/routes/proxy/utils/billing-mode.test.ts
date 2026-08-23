@@ -5,7 +5,10 @@ import { anthropicAdapterFactory } from "../adapters/anthropic";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openAiResponsesAdapterFactory } from "../adapters/openai-responses";
 import { xaiAdapterFactory } from "../adapters/xai";
-import { resolveInteractionBillingMode } from "./billing-mode";
+import {
+  refineAnthropicBillingModeFromHeaders,
+  resolveInteractionBillingMode,
+} from "./billing-mode";
 
 describe("resolveInteractionBillingMode", () => {
   test("subscription credential => subscription", () => {
@@ -31,6 +34,65 @@ describe("resolveInteractionBillingMode", () => {
       resolveInteractionBillingMode({
         isSubscriptionCredential: true,
         autodetectEnabled: false,
+      }),
+    ).toBe("metered");
+  });
+});
+
+describe("refineAnthropicBillingModeFromHeaders", () => {
+  test("OAuth request fulfilled from paid overage becomes metered", () => {
+    expect(
+      refineAnthropicBillingModeFromHeaders({
+        billingMode: "subscription",
+        headers: new Headers({
+          "anthropic-ratelimit-unified-status": "rejected",
+          "anthropic-ratelimit-unified-overage-status": "allowed",
+        }),
+      }),
+    ).toBe("metered");
+  });
+
+  test("overage warning is still paid overage", () => {
+    expect(
+      refineAnthropicBillingModeFromHeaders({
+        billingMode: "subscription",
+        headers: new Headers({
+          "anthropic-ratelimit-unified-status": "rejected",
+          "anthropic-ratelimit-unified-overage-status": "allowed_warning",
+        }),
+      }),
+    ).toBe("metered");
+  });
+
+  test("available overage does not reclassify included usage", () => {
+    expect(
+      refineAnthropicBillingModeFromHeaders({
+        billingMode: "subscription",
+        headers: new Headers({
+          "anthropic-ratelimit-unified-status": "allowed",
+          "anthropic-ratelimit-unified-overage-status": "allowed",
+        }),
+      }),
+    ).toBe("subscription");
+  });
+
+  test("missing headers keep the credential-derived classification", () => {
+    expect(
+      refineAnthropicBillingModeFromHeaders({
+        billingMode: "subscription",
+        headers: new Headers(),
+      }),
+    ).toBe("subscription");
+  });
+
+  test("metered credentials cannot be reclassified", () => {
+    expect(
+      refineAnthropicBillingModeFromHeaders({
+        billingMode: "metered",
+        headers: new Headers({
+          "anthropic-ratelimit-unified-status": "rejected",
+          "anthropic-ratelimit-unified-overage-status": "allowed",
+        }),
       }),
     ).toBe("metered");
   });

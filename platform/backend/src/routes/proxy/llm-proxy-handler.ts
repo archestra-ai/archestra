@@ -179,6 +179,8 @@ export interface LLMProxyContext<TRequest> {
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
   billingMode: BillingMode;
+  /** Billing can be refined from provider response headers after execution. */
+  getBillingMode: () => BillingMode;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -1169,6 +1171,14 @@ export async function handleLLMProxy<
       provider: providerName,
     });
 
+    // Start with the credential-derived billing mode. Anthropic OAuth requests
+    // can refine this after the upstream response identifies paid overage.
+    let billingMode = utils.resolveInteractionBillingMode({
+      isSubscriptionCredential:
+        provider.isSubscriptionCredential?.(apiKey) ?? false,
+      autodetectEnabled: config.llmCost.subscriptionAutodetect,
+    });
+
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
       providerName === "microsoft-365-copilot"
@@ -1183,6 +1193,14 @@ export async function handleLLMProxy<
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,
+      onResponseHeaders: (responseHeaders) => {
+        if (providerName === "anthropic") {
+          billingMode = utils.refineAnthropicBillingModeFromHeaders({
+            billingMode,
+            headers: responseHeaders,
+          });
+        }
+      },
     });
 
     // Build final request
@@ -1239,17 +1257,6 @@ export async function handleLLMProxy<
       }
     }
 
-    // Billing mode: whether this call actually incurs a per-token charge,
-    // classified purely from the resolved credential's format (e.g. Anthropic
-    // `sk-ant-oat…` OAuth tokens = Claude Pro/Max subscription). Stored on the
-    // interaction so analytics can report billed spend (metered `cost`, $0 for
-    // subscription) alongside the list-price cost.
-    const billingMode = utils.resolveInteractionBillingMode({
-      isSubscriptionCredential:
-        provider.isSubscriptionCredential?.(apiKey) ?? false,
-      autodetectEnabled: config.llmCost.subscriptionAutodetect,
-    });
-
     const ctx: LLMProxyContext<TRequest> = {
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -1268,6 +1275,7 @@ export async function handleLLMProxy<
       externalAgentId,
       authMethod,
       billingMode,
+      getBillingMode: () => billingMode,
       authenticatedApp,
       userId,
       resolvedUser,
@@ -1399,7 +1407,8 @@ async function handleStreaming<
     appId,
     externalAgentId,
     authMethod,
-    billingMode,
+    billingMode: initialBillingMode,
+    getBillingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1416,6 +1425,7 @@ async function handleStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  let billingMode = initialBillingMode;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
@@ -1507,6 +1517,7 @@ async function handleStreaming<
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
+        billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
         // transport can't self-instrument it (Bedrock). This mirrors
@@ -1969,7 +1980,8 @@ async function handleNonStreaming<
     appId,
     externalAgentId,
     authMethod,
-    billingMode,
+    billingMode: initialBillingMode,
+    getBillingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1986,6 +1998,7 @@ async function handleNonStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
 
   logger.debug(
@@ -2022,6 +2035,7 @@ async function handleNonStreaming<
       let result: TResponse;
       try {
         result = await provider.execute(client, request);
+        billingMode = getBillingMode();
       } catch (error) {
         if (provider.recordRequestDurationInHandler) {
           metrics.llm.reportRequestDuration(

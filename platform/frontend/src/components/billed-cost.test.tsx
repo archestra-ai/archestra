@@ -52,6 +52,20 @@ describe("BilledCost", () => {
     expect(screen.getByText("$0.00")).toBeInTheDocument();
   });
 
+  it("uses a compact subscription label in dense tables", () => {
+    renderBilledCost({
+      cost: "5.0000000000",
+      billingMode: "subscription",
+      baselineCost: "5.0000000000",
+      subscriptionBadge: "compact",
+    });
+
+    expect(screen.getByText("Sub")).toHaveAccessibleName(
+      "Subscription-covered usage",
+    );
+    expect(screen.queryByText("Subscription")).not.toBeInTheDocument();
+  });
+
   it("delegates to the metered savings display when there is no subscription cost", () => {
     renderBilledCost({
       cost: "10.0000000000",

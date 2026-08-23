@@ -60,7 +60,7 @@ describe("SidebarUserMenu", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the user and exposes Settings and Sign Out links", async () => {
+  it("shows the user and exposes personal links and Sign Out", async () => {
     const user = userEvent.setup();
     mockSignedInSession();
 
@@ -78,13 +78,17 @@ describe("SidebarUserMenu", () => {
     expect(
       await screen.findByRole("menuitem", { name: /personal settings/i }),
     ).toHaveAttribute("href", "/account");
+    expect(screen.getByRole("menuitem", { name: /my usage/i })).toHaveAttribute(
+      "href",
+      "/llm/usage",
+    );
     expect(screen.getByRole("menuitem", { name: /sign out/i })).toHaveAttribute(
       "href",
       "/auth/sign-out",
     );
   });
 
-  it("orders the menu as theme switcher, Personal Settings, then Sign Out", async () => {
+  it("orders My Usage between Personal Settings and Sign Out", async () => {
     const user = userEvent.setup();
     mockSignedInSession();
 
@@ -100,6 +104,7 @@ describe("SidebarUserMenu", () => {
     const settings = screen.getByRole("menuitem", {
       name: /personal settings/i,
     });
+    const usage = screen.getByRole("menuitem", { name: /my usage/i });
     const signOut = screen.getByRole("menuitem", { name: /sign out/i });
 
     expect(
@@ -107,8 +112,11 @@ describe("SidebarUserMenu", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      settings.compareDocumentPosition(signOut) &
+      settings.compareDocumentPosition(usage) &
         Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      usage.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

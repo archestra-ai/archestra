@@ -19,6 +19,8 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   ModelStatisticsSchema,
+  MyStatisticsSchema,
+  MyUsageBreakdownSchema,
   OverviewStatisticsSchema,
   SKILL_STATISTICS_SORT_BY,
   SkillStatisticsSchema,
@@ -57,6 +59,15 @@ const UserStatisticsQuerySchema = StatisticsQuerySchema.extend({
 })
   .merge(PaginationQuerySchema)
   .merge(createSortingQuerySchema(USER_STATISTICS_SORT_BY));
+
+/**
+ * How many of the caller's costliest sessions the breakdown names.
+ *
+ * Fixed rather than a query parameter: the point of the list is that agentic
+ * spend concentrates in a few sessions, and a page that can be widened to
+ * hundreds is a log view — which already exists, filterable, at /llm/logs.
+ */
+const TOP_SESSION_LIMIT = 8;
 
 const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -200,6 +211,51 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
     },
+  );
+
+  fastify.get(
+    "/api/statistics/me",
+    {
+      schema: {
+        operationId: RouteId.GetMyStatistics,
+        description:
+          "Get the calling user's own cost and usage for a timeframe: requests, tokens, billed and subscription-covered spend, active days and model mix. Reports only the caller's own activity, so unlike the other statistics endpoints it requires no permission over organization-wide cost data.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(MyStatisticsSchema),
+      },
+    },
+    async ({ query: { timeframe }, user, organizationId }, reply) =>
+      reply.send(
+        await StatisticsModel.getMyStatistics({
+          timeframe,
+          userId: user.id,
+          organizationId,
+        }),
+      ),
+  );
+
+  fastify.get(
+    "/api/statistics/me/breakdown",
+    {
+      schema: {
+        operationId: RouteId.GetMyUsageBreakdown,
+        description:
+          "Explain the calling user's own usage: the client applications that generated it, the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(MyUsageBreakdownSchema),
+      },
+    },
+    async ({ query: { timeframe }, user, organizationId }, reply) =>
+      reply.send(
+        await StatisticsModel.getMyUsageBreakdown({
+          timeframe,
+          userId: user.id,
+          organizationId,
+          sessionLimit: TOP_SESSION_LIMIT,
+        }),
+      ),
   );
 
   fastify.get(

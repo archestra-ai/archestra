@@ -141,6 +141,8 @@ export function AppsTable({
       rowLabel: (app) => `Select ${app.name}`,
       allLabel: "Select all apps on this page",
       canSelect: (app) => app.source === "owned",
+      disabledReason: () =>
+        "Installed apps are managed through their MCP server",
     }),
     {
       id: "name",

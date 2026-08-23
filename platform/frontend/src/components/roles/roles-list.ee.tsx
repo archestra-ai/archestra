@@ -308,6 +308,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
       // Predefined roles are immutable — there is nothing a bulk action could
       // do to them.
       canSelect: (role) => !role.predefined,
+      disabledReason: () => "Predefined roles cannot be deleted",
     }),
     {
       id: "icon",

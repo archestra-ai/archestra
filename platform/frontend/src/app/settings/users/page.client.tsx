@@ -380,6 +380,7 @@ function MembersTab({
       rowLabel: (row) => `Select ${row.email}`,
       allLabel: "Select all users on this page",
       canSelect: (row) => !isSelf(row),
+      disabledReason: () => "You cannot remove your own account",
     }),
     {
       id: "avatar",

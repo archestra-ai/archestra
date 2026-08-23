@@ -168,6 +168,7 @@ export function McpServerTable({
       rowLabel: (item) => `Select ${item.name}`,
       allLabel: "Select all MCP servers on this page",
       canSelect,
+      disabledReason: () => "Wait for installation to finish",
     }),
     {
       id: "name",

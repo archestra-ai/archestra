@@ -5,13 +5,7 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { cn } from "@/lib/utils";
 
@@ -61,17 +55,25 @@ export function SettingsBlock({
   id,
 }: SettingsBlockProps) {
   return (
-    <Card id={id} className="scroll-mt-24">
-      <SettingsCardHeader
-        title={title}
-        description={description}
-        action={control}
-        notice={notice}
-      />
-      {children && (
-        <CardContent className="pt-6 border-t">{children}</CardContent>
-      )}
-    </Card>
+    <section id={id} className="scroll-mt-24">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:gap-8">
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-sm font-medium leading-5">{title}</h2>
+          {description && (
+            <div className="text-sm leading-5 text-muted-foreground">
+              {description}
+            </div>
+          )}
+          {notice && <div className="pt-2 text-sm leading-5">{notice}</div>}
+        </div>
+        {control && (
+          <div className="flex min-w-0 items-start lg:justify-end">
+            {control}
+          </div>
+        )}
+      </div>
+      {children && <div className="mt-4">{children}</div>}
+    </section>
   );
 }
 
@@ -133,7 +135,7 @@ export function SettingsSectionStack({
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
 
   return (
-    <div className={cn("space-y-5", className)}>
+    <div className={cn("space-y-8", className)}>
       <SaveBarSlotContext.Provider value={slot}>
         {children}
       </SaveBarSlotContext.Provider>

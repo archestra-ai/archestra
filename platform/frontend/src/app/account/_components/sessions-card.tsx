@@ -88,6 +88,7 @@ export function SessionsCard() {
       // Signing yourself out is the row's own action; doing it inside a batch
       // would kill the request revoking the rest.
       canSelect: (row) => !isCurrent(row),
+      disabledReason: () => "Use Sign out for your current session",
     }),
     {
       id: "device",

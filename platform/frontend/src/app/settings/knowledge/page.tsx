@@ -154,11 +154,9 @@ function CardRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-      <Label className="shrink-0 text-sm text-muted-foreground sm:w-40">
-        {label}
-      </Label>
-      <div className="min-w-0 flex-1">{children}</div>
+    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_20rem] sm:items-center sm:gap-8">
+      <Label className="text-sm text-muted-foreground">{label}</Label>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -1239,7 +1237,7 @@ function KnowledgeSettingsContent() {
                       }
                     />
                   </CardRow>
-                  <p className="text-sm text-muted-foreground sm:pl-44">
+                  <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
                     Don't see your model?{" "}
                     <Link
                       href="/llm/models"
@@ -1264,12 +1262,12 @@ function KnowledgeSettingsContent() {
                             : null
                         }
                         showSettingsLink={false}
-                        className="sm:ml-44"
+                        className="sm:ml-auto sm:w-80"
                       />
                     )}
                   {selectedEmbeddingProvider === "gemini" &&
                     selectedEmbeddingModel?.embeddingDimensions === 1536 && (
-                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-44">
+                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
                         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         <span>
                           Gemini will truncate from its native 3072 dimensions
@@ -1279,7 +1277,7 @@ function KnowledgeSettingsContent() {
                     )}
                   {embeddingStatus.status === "failed" &&
                     embeddingStatus.error && (
-                      <p className="flex items-start gap-2 text-sm text-destructive sm:pl-44">
+                      <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>{embeddingStatus.error}</span>
                       </p>
@@ -1348,77 +1346,14 @@ function KnowledgeSettingsContent() {
           <CardHeader>
             <CardTitle>Search Ranking Configuration</CardTitle>
             <CardDescription>
-              Orders the passages a search has found. Reranking reads the
-              shortlist and puts the passages that answer the question first;
-              keyword ranking scores them by the words they share with the
-              question. Changes apply to the next search — nothing is
-              re-indexed.
+              Orders the passages a search has found. Keyword ranking scores
+              them by the words they share with the question and builds the
+              shortlist; reranking reads that shortlist and puts the passages
+              that answer the question first. Changes apply to the next search —
+              nothing is re-indexed.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
-            <section
-              id="reranking-configuration"
-              className="flex flex-col gap-3"
-            >
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium">Reranking</h4>
-                <p className="text-sm text-muted-foreground">
-                  Reads the shortlisted passages with a model and puts the ones
-                  that answer the question first. Works with any chat model, or
-                  a Cohere Rerank model on Cohere and Azure AI Foundry keys.
-                  Optional.{" "}
-                  <ExternalDocsLink
-                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
-                    className="text-primary hover:underline"
-                    showIcon={false}
-                  >
-                    Learn more.
-                  </ExternalDocsLink>
-                </p>
-              </div>
-              <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-              >
-                {({ hasPermission }) => (
-                  <div className="flex flex-col gap-4">
-                    <CardRow label="Key">
-                      <ApiKeySelector
-                        value={rerankerChatApiKeyId}
-                        onChange={handleRerankerKeyChange}
-                        disabled={!hasPermission}
-                        label="reranker API key"
-                        pulse={
-                          !embeddingSetupStep &&
-                          (rerankerSetupStep === "add-key" ||
-                            rerankerSetupStep === "select-key")
-                        }
-                      />
-                    </CardRow>
-                    <CardRow label="Model">
-                      <RerankerModelSelector
-                        value={rerankerModel}
-                        onChange={setRerankerModel}
-                        disabled={!hasPermission}
-                        selectedKeyId={rerankerChatApiKeyId}
-                        pulse={
-                          !embeddingSetupStep &&
-                          rerankerSetupStep === "select-model"
-                        }
-                      />
-                    </CardRow>
-                    {rerankerStatus.status === "failed" &&
-                      rerankerStatus.error && (
-                        <p className="flex items-start gap-2 text-sm text-destructive sm:pl-44">
-                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span>{rerankerStatus.error}</span>
-                        </p>
-                      )}
-                  </div>
-                )}
-              </WithPermissions>
-            </section>
-            <Separator />
             <section id="keyword-ranking" className="flex flex-col gap-3">
               <div className="space-y-1">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1510,6 +1445,69 @@ function KnowledgeSettingsContent() {
                         </p>
                       )}
                     </CardRow>
+                  </div>
+                )}
+              </WithPermissions>
+            </section>
+            <Separator />
+            <section
+              id="reranking-configuration"
+              className="flex flex-col gap-3"
+            >
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium">Reranking</h4>
+                <p className="text-sm text-muted-foreground">
+                  Reads the shortlisted passages with a model and puts the ones
+                  that answer the question first. Works with any chat model, or
+                  a Cohere Rerank model on Cohere and Azure AI Foundry keys.
+                  Optional.{" "}
+                  <ExternalDocsLink
+                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
+                    className="text-primary hover:underline"
+                    showIcon={false}
+                  >
+                    Learn more.
+                  </ExternalDocsLink>
+                </p>
+              </div>
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <div className="flex flex-col gap-4">
+                    <CardRow label="Key">
+                      <ApiKeySelector
+                        value={rerankerChatApiKeyId}
+                        onChange={handleRerankerKeyChange}
+                        disabled={!hasPermission}
+                        label="reranker API key"
+                        pulse={
+                          !embeddingSetupStep &&
+                          (rerankerSetupStep === "add-key" ||
+                            rerankerSetupStep === "select-key")
+                        }
+                      />
+                    </CardRow>
+                    <CardRow label="Model">
+                      <RerankerModelSelector
+                        value={rerankerModel}
+                        onChange={setRerankerModel}
+                        disabled={!hasPermission}
+                        selectedKeyId={rerankerChatApiKeyId}
+                        pulse={
+                          !embeddingSetupStep &&
+                          rerankerSetupStep === "select-model"
+                        }
+                      />
+                    </CardRow>
+                    {rerankerStatus.status === "failed" &&
+                      rerankerStatus.error && (
+                        <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>{rerankerStatus.error}</span>
+                        </p>
+                      )}
                   </div>
                 )}
               </WithPermissions>
@@ -1661,7 +1659,7 @@ function KnowledgeSettingsContent() {
                       selectedKeyId={ocrChatApiKeyId}
                     />
                   </CardRow>
-                  <p className="text-sm text-muted-foreground sm:pl-44">
+                  <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
                     Don't see your model?{" "}
                     <Link
                       href="/llm/models"
@@ -1672,7 +1670,7 @@ function KnowledgeSettingsContent() {
                     </Link>
                   </p>
                   {ocrConfigured && !ocrWasEnabled && (
-                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:pl-44">
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
                         Saving triggers a full re-sync of every connector so
@@ -1682,7 +1680,7 @@ function KnowledgeSettingsContent() {
                     </p>
                   )}
                   {ocrStatus.status === "failed" && ocrStatus.error && (
-                    <p className="flex items-start gap-2 text-sm text-destructive sm:pl-44">
+                    <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{ocrStatus.error}</span>
                     </p>

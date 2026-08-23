@@ -218,6 +218,10 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         // guaranteed to come back as failures.
         canSelect: (row) =>
           row.kind === "environment" && row.assignedCatalogCount === 0,
+        disabledReason: (row) =>
+          row.kind === "default"
+            ? "The default environment cannot be deleted"
+            : "Remove assigned MCP servers before deleting",
       }),
       {
         accessorKey: "name",

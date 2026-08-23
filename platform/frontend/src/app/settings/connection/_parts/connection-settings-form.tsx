@@ -476,9 +476,7 @@ export function ConnectionSettingsForm() {
 // ===================================================================
 
 /**
- * One setting whose control sits beside its label. Thin wrappers over
- * {@link SettingsBlock} so this page reads as the same kind of card as every
- * other settings page, rather than the dialog it was lifted out of.
+ * One compact setting whose control sits beside its label.
  */
 function SettingRow({
   title,
@@ -494,7 +492,7 @@ function SettingRow({
   );
 }
 
-/** One setting whose control needs the full width, below the header. */
+/** One compact setting whose control needs the full width below its header. */
 function SettingSection({
   title,
   description,

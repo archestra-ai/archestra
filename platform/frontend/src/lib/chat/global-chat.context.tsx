@@ -495,9 +495,6 @@ function ChatSessionHook({
     useUpdateChatMessage(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
-  // A user-initiated Stop pauses queued-message auto-drain (stop means stop);
-  // cleared when the user sends a message again, which resumes the queue.
-  const queueDrainSuspendedRef = useRef(false);
   // Ref to hold sendMessage for use in onFinish callback
   const sendMessageRef = useRef<
     | ((
@@ -706,9 +703,6 @@ function ChatSessionHook({
       // perpetually "running" tool. Drop those dangling parts so the live view
       // matches what the backend persists (and a reload would show).
       if (isAbort) {
-        // Stop means stop: don't auto-fire the next queued message right
-        // after the user aborted a turn. Sending again resumes the queue.
-        queueDrainSuspendedRef.current = true;
         // The updater form runs against the SDK's live messages, not this
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
@@ -1180,9 +1174,6 @@ function ChatSessionHook({
     // A new turn: any pending "clear the prior turn's persisted error on a
     // successful retry" intent no longer applies to this turn.
     recoveredPersistedErrorRef.current = false;
-    // A new user message (re)starts the turn pipeline, so queued messages
-    // paused by a Stop may flow again once this turn settles.
-    queueDrainSuspendedRef.current = false;
   }
 
   useEffect(() => {
@@ -1228,7 +1219,6 @@ function ChatSessionHook({
       queuedMessages.length === 0 ||
       !resumeSettled ||
       queueDrainInFlightRef.current ||
-      queueDrainSuspendedRef.current ||
       recoveringRef.current ||
       hasPendingApprovalRequest ||
       pendingMcpElicitation ||

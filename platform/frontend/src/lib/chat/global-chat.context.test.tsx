@@ -1654,6 +1654,73 @@ describe("ChatProvider title animation", () => {
   });
 });
 
+describe("stopping with queued messages", () => {
+  const conversationId = "conversation-stop-queue";
+  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let status: "ready" | "streaming";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatMessageQueue.clear(conversationId);
+    chatOptions = undefined;
+    status = "streaming";
+    mocks.resumeStream.mockResolvedValue(undefined);
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status,
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  afterEach(() => {
+    chatMessageQueue.clear(conversationId);
+  });
+
+  it("sends the next queued message after the active response is stopped", async () => {
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(chatOptions).toBeDefined());
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "show budget" });
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "assistant-stopped", role: "assistant", parts: [] },
+        isAbort: true,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage.mock.calls[0]?.[0]).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "show budget" }],
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+  });
+});
+
 describe("manual context compaction and the message queue", () => {
   const conversationId = "conversation-compaction-queue";
 

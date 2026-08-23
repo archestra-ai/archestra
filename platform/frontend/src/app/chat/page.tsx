@@ -2156,7 +2156,7 @@ export function ChatPageContent({
   }, []);
 
   // Stop the in-flight response. Wired to the submit button's Stop face in
-  // the prompt input; also pauses queue auto-drain (see ChatSessionHook).
+  // the prompt input; any queued follow-up starts once the stream settles.
   const handleStopStreaming = () => {
     if (conversationId) {
       // Set the cache flag first, THEN close the connection so the

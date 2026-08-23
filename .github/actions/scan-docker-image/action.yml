@@ -29,33 +29,54 @@ inputs:
 runs:
   using: composite
   steps:
-    # First attempt is allowed to fail so a transient infrastructure error
-    # (e.g. a 403 downloading the Scout binary release asset, which has kicked
-    # PRs out of the merge queue) gets one retry. A genuine CVE finding fails
-    # the retry identically, so real findings still fail the job.
-    - name: Docker Scout CVE Check
-      id: scout-first-attempt
-      continue-on-error: true
-      uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
-      with:
-        command: cves
-        image: ${{ inputs.image }}
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-password: ${{ inputs.dockerhub-password }}
-        only-severities: ${{ inputs.only-severities }}
-        only-fixed: ${{ inputs.only-fixed }}
-        write-comment: false
-        exit-code: ${{ inputs.exit-code }}
+    # scout-action downloads its 174 MB helper from GitHub's release-asset API
+    # without forwarding github-token, so hosted-runner IP rate limits surface
+    # as a 403 before the scan starts. Download the official CLI through `gh`
+    # instead: the workflow token authenticates the asset request, and the
+    # pinned checksum protects the extracted executable.
+    - name: Install Docker Scout CLI
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCOUT_VERSION: "1.24.0"
+        SCOUT_ARCHIVE_SHA256: "f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b"
+      run: |
+        set -euo pipefail
 
-    - name: Docker Scout CVE Check (retry)
-      if: steps.scout-first-attempt.outcome == 'failure'
-      uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
-      with:
-        command: cves
-        image: ${{ inputs.image }}
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-password: ${{ inputs.dockerhub-password }}
-        only-severities: ${{ inputs.only-severities }}
-        only-fixed: ${{ inputs.only-fixed }}
-        write-comment: false
-        exit-code: ${{ inputs.exit-code }}
+        scout_dir="${RUNNER_TEMP}/docker-scout-${SCOUT_VERSION}"
+        scout_archive="${scout_dir}/docker-scout_${SCOUT_VERSION}_linux_amd64.tar.gz"
+        mkdir -p "${scout_dir}"
+
+        gh release download "v${SCOUT_VERSION}" \
+          --repo docker/scout-cli \
+          --pattern "docker-scout_${SCOUT_VERSION}_linux_amd64.tar.gz" \
+          --output "${scout_archive}" \
+          --clobber
+        echo "${SCOUT_ARCHIVE_SHA256}  ${scout_archive}" | sha256sum --check
+        tar -xzf "${scout_archive}" -C "${scout_dir}" docker-scout
+
+    - name: Docker Scout CVE Check
+      shell: bash
+      env:
+        DOCKER_SCOUT_HUB_USER: ${{ inputs.dockerhub-user }}
+        DOCKER_SCOUT_HUB_PASSWORD: ${{ inputs.dockerhub-password }}
+        SCOUT_IMAGE: ${{ inputs.image }}
+        SCOUT_ONLY_SEVERITIES: ${{ inputs.only-severities }}
+        SCOUT_ONLY_FIXED: ${{ inputs.only-fixed }}
+        SCOUT_EXIT_CODE: ${{ inputs.exit-code }}
+      run: |
+        set -euo pipefail
+
+        scout_args=(
+          cves
+          "${SCOUT_IMAGE}"
+          --only-severity "${SCOUT_ONLY_SEVERITIES}"
+        )
+        if [[ "${SCOUT_ONLY_FIXED}" == "true" ]]; then
+          scout_args+=(--only-fixed)
+        fi
+        if [[ "${SCOUT_EXIT_CODE}" == "true" ]]; then
+          scout_args+=(--exit-code)
+        fi
+
+        "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}"

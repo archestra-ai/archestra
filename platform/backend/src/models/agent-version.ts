@@ -8,10 +8,11 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { ApiError } from "@/types";
-import type {
-  AgentConfigSnapshot,
-  AgentVersion,
-  AgentVersionMetadata,
+import {
+  type AgentConfigSnapshot,
+  AgentConfigSnapshotSchema,
+  type AgentVersion,
+  type AgentVersionMetadata,
 } from "@/types/agent-version";
 
 type AgentRow = typeof schema.agentsTable.$inferSelect;
@@ -354,7 +355,7 @@ class AgentVersionModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
         ),
       );
-    return row ?? null;
+    return row ? normalizeAgentVersion(row) : null;
   }
 
   /**
@@ -427,6 +428,20 @@ const agentVersionMetadataColumns = {
   contentHash: schema.agentVersionsTable.contentHash,
   createdAt: schema.agentVersionsTable.createdAt,
 };
+
+/** Fill compatibility defaults without rejecting deliberately opaque history. */
+function normalizeAgentVersion(row: AgentVersion): AgentVersion {
+  return {
+    ...row,
+    snapshot: {
+      ...row.snapshot,
+      missingCredentialBehavior:
+        AgentConfigSnapshotSchema.shape.missingCredentialBehavior.parse(
+          row.snapshot.missingCredentialBehavior,
+        ),
+    },
+  };
+}
 
 /**
  * Unscoped `(agent, version)` lookup for the fork's own head comparison, which

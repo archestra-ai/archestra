@@ -12,6 +12,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { describe, expect, test } from "@/test";
 import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
+import { SelectAgentVersionSchema } from "@/types/agent-version";
 
 type AgentRef = { id: string; organizationId: string };
 
@@ -65,6 +66,26 @@ describe("AgentVersionModel", () => {
     expect(versions[0].snapshot).not.toHaveProperty("labels");
     expect(versions[0].snapshot).not.toHaveProperty("slug");
     expect(versions[0].snapshot).not.toHaveProperty("isDefault");
+  });
+
+  test("legacy snapshots default missing credential behavior to allow", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const version = await getVersion(agent, 1);
+    if (!version) throw new Error("version 1 disappeared");
+
+    const legacySnapshot: Partial<AgentConfigSnapshot> = {
+      ...version.snapshot,
+    };
+    delete legacySnapshot.missingCredentialBehavior;
+
+    const normalized = SelectAgentVersionSchema.parse({
+      ...version,
+      snapshot: legacySnapshot,
+    });
+
+    expect(normalized.snapshot.missingCredentialBehavior).toBe("allow");
   });
 
   test("scalar config change forks a new head", async ({ makeAgent }) => {

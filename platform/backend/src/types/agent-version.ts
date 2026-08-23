@@ -14,8 +14,9 @@ import { schema } from "@/database";
  *
  * Enum-ish fields are plain strings on purpose: snapshots are immutable
  * historical data and must keep parsing after an enum gains or loses values.
- * For the same reason, any field added later must be `.optional()` or
- * `.nullable()` so legacy rows still validate.
+ * For the same reason, any field added later must accept absence (for example
+ * with `.optional()`, `.nullable()`, or a compatibility default) so legacy rows
+ * still validate.
  *
  * Referenced entities are captured as id + human-readable name so history
  * stays legible after the referent is renamed or deleted.
@@ -28,7 +29,9 @@ export const AgentConfigSnapshotSchema = z.object({
   systemPrompt: z.string().nullable(),
   considerContextUntrusted: z.boolean(),
   toolExposureMode: z.string(),
-  missingCredentialBehavior: z.string(),
+  // Snapshots created before credential-readiness controls preserve the
+  // historical behavior: missing credentials did not block execution.
+  missingCredentialBehavior: z.string().default("allow"),
   accessAllTools: z.boolean(),
   accessAllSubagents: z.boolean(),
   /** Header NAMES only (no values) — safe to capture verbatim. */

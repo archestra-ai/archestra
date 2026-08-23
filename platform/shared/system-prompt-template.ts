@@ -7,12 +7,14 @@ const toTemplateExpression = (path: string) => `{{${path}}}`;
 export const SYSTEM_PROMPT_VARIABLE_PATHS = {
   userName: `${USER_SYSTEM_PROMPT_CONTEXT_KEY}.name`,
   userEmail: `${USER_SYSTEM_PROMPT_CONTEXT_KEY}.email`,
+  userRole: `${USER_SYSTEM_PROMPT_CONTEXT_KEY}.role`,
   userTeams: `${USER_SYSTEM_PROMPT_CONTEXT_KEY}.teams`,
 } as const;
 
 export const SYSTEM_PROMPT_VARIABLE_EXPRESSIONS = {
   userName: toTemplateExpression(SYSTEM_PROMPT_VARIABLE_PATHS.userName),
   userEmail: toTemplateExpression(SYSTEM_PROMPT_VARIABLE_PATHS.userEmail),
+  userRole: toTemplateExpression(SYSTEM_PROMPT_VARIABLE_PATHS.userRole),
   userTeams: toTemplateExpression(SYSTEM_PROMPT_VARIABLE_PATHS.userTeams),
 } as const;
 
@@ -29,6 +31,10 @@ export const SYSTEM_PROMPT_VARIABLES = [
   {
     expression: SYSTEM_PROMPT_VARIABLE_EXPRESSIONS.userEmail,
     description: "Email of the user invoking the agent",
+  },
+  {
+    expression: SYSTEM_PROMPT_VARIABLE_EXPRESSIONS.userRole,
+    description: "Organization role of the user invoking the agent",
   },
   {
     expression: SYSTEM_PROMPT_VARIABLE_EXPRESSIONS.userTeams,
@@ -136,6 +142,12 @@ export interface UserSystemPromptContext {
   user: {
     name: string;
     email: string;
+    /**
+     * The user's organization role. Empty when the caller has no membership to
+     * resolve it from (e.g. an autonomous run acting outside a member context),
+     * so a prompt branching on it degrades to "no role" rather than to a leak.
+     */
+    role: string;
     teams: string[];
   };
 }
@@ -143,12 +155,14 @@ export interface UserSystemPromptContext {
 export function buildUserSystemPromptContext(params: {
   userName: string;
   userEmail: string;
+  userRole?: string | null;
   userTeams: string[];
 }): UserSystemPromptContext {
   return {
     [USER_SYSTEM_PROMPT_CONTEXT_KEY]: {
       name: params.userName,
       email: params.userEmail,
+      role: params.userRole ?? "",
       teams: params.userTeams,
     },
   };

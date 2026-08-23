@@ -150,6 +150,57 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Teams: Platform.");
   });
 
+  test("renders the invoking user's organization role", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Role: {{user.role}}.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser({ email: "admin@test.com" });
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).toContain(`Role: ${ADMIN_ROLE_NAME}.`);
+  });
+
+  test("substitutes the valid variables when the prompt also holds an unparseable expression", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // A prompt that documents its own variables cannot be compiled, and used to
+    // send every expression in it to the model as literal text.
+    const agent = await makeAgent({
+      systemPrompt: "Hi {{user.name}}. Available: {{user.*}}.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser({ name: "Alice", email: "alice@test.com" });
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).toContain("Hi Alice.");
+    expect(prompt).not.toContain("{{user.name}}");
+    // Only the expression Handlebars cannot read stays as the author wrote it.
+    expect(prompt).toContain("Available: {{user.*}}.");
+  });
+
   test("includes the skill catalog only when the load-skill tool is present", async ({
     makeAgent,
     makeUser,

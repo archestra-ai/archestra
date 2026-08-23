@@ -5,7 +5,7 @@ import {
   getSystemPromptTemplateExpressions,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Editor } from "@/components/editor";
@@ -23,6 +23,7 @@ import {
   computeHandlebarsReplaceOffsets,
   shouldShowHandlebarsCompletions,
 } from "@/lib/utils/handlebars-completion";
+import { useUnparseableExpressions } from "@/lib/utils/handlebars-validation";
 
 export function SystemPromptEditor({
   value,
@@ -49,6 +50,7 @@ export function SystemPromptEditor({
     "system-prompt-templating",
   );
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const unparseableExpressions = useUnparseableExpressions(value);
   const templateExpressions = getSystemPromptTemplateExpressions({
     builtInAgentId,
   });
@@ -118,6 +120,7 @@ export function SystemPromptEditor({
           options={{ ...SHARED_EDITOR_OPTIONS, readOnly }}
         />
       </div>
+      <UnparseableExpressionsWarning expressions={unparseableExpressions} />
       <SystemPromptFullScreenDialog
         open={isFullScreen}
         onOpenChange={setIsFullScreen}
@@ -127,6 +130,7 @@ export function SystemPromptEditor({
         description={description}
         headerExtra={headerExtra}
         templateExpressions={templateExpressions}
+        unparseableExpressions={unparseableExpressions}
       />
     </div>
   );
@@ -135,6 +139,42 @@ export function SystemPromptEditor({
 // ===
 // Internal helpers
 // ===
+
+/**
+ * Names the expressions Handlebars cannot parse. They are rendered as the
+ * literal text the author typed rather than dropped, so this is a warning and
+ * not an error — but an author who meant to interpolate a value has no other
+ * way to find out before a model reads the braces back to a user.
+ */
+function UnparseableExpressionsWarning({
+  expressions,
+}: {
+  expressions: string[];
+}) {
+  if (expressions.length === 0) return null;
+
+  const shown = [...new Set(expressions)].slice(0, UNPARSEABLE_SHOWN_MAX);
+
+  return (
+    <p className="text-xs text-amber-600 dark:text-amber-500">
+      <TriangleAlert className="mr-1 inline size-3.5 align-[-2px]" />
+      {shown.length === 1
+        ? "This expression isn't valid Handlebars and will appear literally in the prompt: "
+        : "These expressions aren't valid Handlebars and will appear literally in the prompt: "}
+      {shown.map((expression, index) => (
+        <span key={expression}>
+          {index > 0 && <span>, </span>}
+          <code className="font-mono">{expression}</code>
+        </span>
+      ))}
+      {expressions.length > shown.length && <span>, …</span>}
+      {". Prefix one with a backslash to keep it as literal text on purpose."}
+    </p>
+  );
+}
+
+/** Enough to act on without turning the warning into a second prompt. */
+const UNPARSEABLE_SHOWN_MAX = 5;
 
 /**
  * The same instruction, the whole viewport wide and tall: a second editor on
@@ -152,6 +192,7 @@ function SystemPromptFullScreenDialog({
   description,
   headerExtra,
   templateExpressions,
+  unparseableExpressions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -161,6 +202,7 @@ function SystemPromptFullScreenDialog({
   description: ReactNode;
   headerExtra?: ReactNode;
   templateExpressions: TemplateExpressions;
+  unparseableExpressions: string[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -217,6 +259,13 @@ function SystemPromptFullScreenDialog({
             }}
           />
         </div>
+        {unparseableExpressions.length > 0 && (
+          <div className="border-t px-4 py-3">
+            <UnparseableExpressionsWarning
+              expressions={unparseableExpressions}
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

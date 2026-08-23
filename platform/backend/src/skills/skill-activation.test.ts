@@ -1,4 +1,5 @@
 import {
+  ADMIN_ROLE_NAME,
   buildUserSystemPromptContext,
   getArchestraToolFullName,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
@@ -436,6 +437,37 @@ describe("buildSkillActivationPromptContext", () => {
 
     expect(result).toContain("Skill-Org-Finance");
     expect(result).not.toContain("Other-Org-Secret");
+  });
+
+  test("renders the activating user's organization role", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id, { role: ADMIN_ROLE_NAME });
+
+    const promptContext = await buildSkillActivationPromptContext({
+      userId: user.id,
+      organizationId: organization.id,
+    });
+
+    const result = formatSkillActivation({
+      skill: {
+        name: "Role",
+        content: "Role: {{user.role}}",
+        compatibility: null,
+        allowedTools: null,
+        templated: true,
+      },
+      version: 1,
+      files: [],
+      canRunSandbox: false,
+      promptContext,
+    });
+
+    expect(result).toContain(`Role: ${ADMIN_ROLE_NAME}`);
   });
 
   test("returns null when no organization is resolved", async ({

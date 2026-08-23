@@ -19,7 +19,7 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { TeamModel, UserModel } from "@/models";
+import { MemberModel, TeamModel, UserModel } from "@/models";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
@@ -508,13 +508,15 @@ async function renderAgentPrompt(params: {
   // Build template context only when prompts use Handlebars syntax.
   let promptContext: UserSystemPromptContext | null = null;
   if (promptNeedsRendering(systemPrompt)) {
-    const [resolvedUser, userTeams] = await Promise.all([
+    const [resolvedUser, userTeams, member] = await Promise.all([
       user ?? UserModel.getById(userId),
       TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
+      MemberModel.getByUserId(userId, organizationId),
     ]);
     promptContext = buildUserSystemPromptContext({
       userName: resolvedUser?.name ?? "",
       userEmail: resolvedUser?.email ?? "",
+      userRole: member?.role,
       userTeams: userTeams.map((t) => t.name),
     });
   }

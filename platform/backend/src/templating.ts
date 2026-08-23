@@ -1,8 +1,12 @@
 import {
+  escapeTemplateExpressions,
   extractSsoGroupsFromRenderedTemplate,
+  isBlockExpression,
   isTruthyTemplateOutput,
+  isUnparseableExpression,
   registerSsoTemplateHelpers,
   SYSTEM_PROMPT_HELPER_NAMES,
+  type TemplateExpression,
   type UserSystemPromptContext,
 } from "@archestra/shared";
 import Handlebars from "handlebars";
@@ -56,7 +60,15 @@ export function promptNeedsRendering(
 /**
  * Render an agent's system prompt, applying Handlebars template variables
  * (e.g. {{user.name}}) when present. Returns null if no system prompt is set.
- * If the template fails to compile or render, returns the original string unchanged.
+ *
+ * Rendering is deliberately resilient. A Handlebars template is compiled as a
+ * single unit, so one malformed expression anywhere in the prompt aborts the
+ * whole render — and a prompt that renders raw ships every *valid* expression
+ * to the model as literal `{{user.name}}` text. Authors write prose, not
+ * programs: prompts routinely document their own variables (`{{user.*}}`) or
+ * quote another engine's syntax, and neither should cost them the substitutions
+ * that do work. So an expression Handlebars cannot parse is escaped to the
+ * literal text the author typed, and everything around it still renders.
  *
  * @param additionalContext - Optional extra context merged alongside user context.
  *   Used by specific subagents (e.g. policy configuration) to inject agent-specific
@@ -73,16 +85,46 @@ export function renderSystemPrompt(
     return systemPrompt;
   }
 
-  try {
-    const template = Handlebars.compile(systemPrompt, { noEscape: true });
-    return template({ ...context, ...additionalContext });
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      "Failed to render system prompt template, using raw template string",
-    );
-    return systemPrompt;
+  const data = { ...context, ...additionalContext };
+
+  const direct = tryRender(systemPrompt, data);
+  if (direct.ok) {
+    return direct.output;
   }
+
+  // Escape the individual expressions that cannot parse on their own — the
+  // common case, and the one that leaves every other variable substitutable.
+  const { template: repaired, escaped } = escapeTemplateExpressions(
+    systemPrompt,
+    cannotParse,
+  );
+  if (escaped.length > 0) {
+    const partial = tryRender(repaired, data);
+    if (partial.ok) {
+      logUnrenderable(escaped, direct.error);
+      return partial.output;
+    }
+  }
+
+  // Still failing: the damage is structural (an unclosed block, or a block
+  // helper that does not exist) rather than a single bad expression. Escaping
+  // every block token leaves the block syntax visible as written while the
+  // plain variables around it — the ones users actually notice leaking — render.
+  const { template: blocksEscaped, escaped: escapedBlocks } =
+    escapeTemplateExpressions(repaired, isBlockExpression);
+  if (escapedBlocks.length > 0) {
+    const withoutBlocks = tryRender(blocksEscaped, data);
+    if (withoutBlocks.ok) {
+      logUnrenderable([...escaped, ...escapedBlocks], direct.error);
+      return withoutBlocks.output;
+    }
+  }
+
+  logger.warn(
+    { err: direct.error },
+    "Failed to render system prompt template, using raw template string",
+  );
+  return systemPrompt;
 }
 
 /**
@@ -132,3 +174,50 @@ export function extractGroupsWithTemplate(
 }
 
 export type { UserSystemPromptContext };
+
+// ===== Internal helpers =====
+
+/** Most unrenderable expressions to name in a log line. */
+const LOGGED_EXPRESSION_LIMIT = 10;
+
+type RenderAttempt =
+  | { ok: true; output: string }
+  | { ok: false; error: unknown };
+
+function tryRender(
+  template: string,
+  data: Record<string, unknown>,
+): RenderAttempt {
+  try {
+    // Compilation is lazy: parse errors surface on first invocation, so both
+    // steps have to sit inside the same try.
+    return {
+      ok: true,
+      output: Handlebars.compile(template, { noEscape: true })(data),
+    };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+/** Bind the shared syntax check to this module's Handlebars runtime. */
+function cannotParse(expression: TemplateExpression): boolean {
+  return isUnparseableExpression(expression, (template) =>
+    Handlebars.parse(template),
+  );
+}
+
+/**
+ * Surface what was left literal. Admins otherwise only learn about it when a
+ * model quotes `{{user.name}}` back at a user.
+ */
+function logUnrenderable(expressions: string[], error: unknown): void {
+  logger.warn(
+    {
+      err: error,
+      unrenderableExpressions: expressions.slice(0, LOGGED_EXPRESSION_LIMIT),
+      unrenderableExpressionCount: expressions.length,
+    },
+    "System prompt contains template expressions Handlebars cannot render; they were left as literal text and the rest of the prompt was rendered",
+  );
+}

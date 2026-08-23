@@ -1454,6 +1454,73 @@ describe("InteractionModel", () => {
   });
 
   describe("getSessions total", () => {
+    test("paginates mixed session and sessionless summaries before returning aggregates", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Pagination Agent",
+        teams: [],
+        scope: "org",
+      });
+      const baseTime = new Date("2020-01-01T00:00:00.000Z").getTime();
+      const rows = [
+        { sessionId: "page-older", seconds: 0, inputTokens: 1 },
+        { sessionId: "page-older", seconds: 1, inputTokens: 2 },
+        { sessionId: "page-newer", seconds: 2, inputTokens: 10 },
+        { sessionId: "page-newer", seconds: 3, inputTokens: 20 },
+        { sessionId: null, seconds: 4, inputTokens: 100 },
+      ];
+
+      for (const row of rows) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: row.sessionId,
+          createdAt: new Date(baseTime + row.seconds * 1000),
+          request: { model: "gpt-4", messages: [] },
+          response: {
+            id: `response-${row.seconds}`,
+            object: "chat.completion",
+            created: row.seconds,
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+          inputTokens: row.inputTokens,
+        });
+      }
+
+      const firstPage = await InteractionModel.getSessions(
+        { limit: 2, offset: 0 },
+        admin.id,
+        true,
+        { profileId: agent.id },
+      );
+
+      expect(firstPage.pagination.total).toBe(3);
+      expect(firstPage.data.map((session) => session.sessionId)).toEqual([
+        null,
+        "page-newer",
+      ]);
+      expect(firstPage.data[0].interactionId).not.toBeNull();
+      expect(firstPage.data[0].requestCount).toBe(1);
+      expect(firstPage.data[1].requestCount).toBe(2);
+      expect(firstPage.data[1].totalInputTokens).toBe(30);
+
+      const secondPage = await InteractionModel.getSessions(
+        { limit: 2, offset: 2 },
+        admin.id,
+        true,
+        { profileId: agent.id },
+      );
+
+      expect(secondPage.pagination.total).toBe(3);
+      expect(secondPage.data).toHaveLength(1);
+      expect(secondPage.data[0].sessionId).toBe("page-older");
+      expect(secondPage.data[0].requestCount).toBe(2);
+      expect(secondPage.data[0].totalInputTokens).toBe(3);
+    });
+
     // The total is reused across the pages of one sweep, so it must be keyed by
     // the filter set — otherwise a filtered page reports the unfiltered count.
     test("reports a total per filter set, not the first one computed", async ({

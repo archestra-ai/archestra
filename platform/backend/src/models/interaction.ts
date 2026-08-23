@@ -22,6 +22,7 @@ import {
   lte,
   max,
   min,
+  or,
   type SQL,
   sql,
   sum,
@@ -1247,104 +1248,21 @@ class InteractionModel {
     ]);
     const cachedTotal = sessionTotalCache.get(sessionTotalCacheKey);
 
-    // PHASE 1: Get sessions with lightweight aggregations (no ARRAY_AGG on large JSON)
-    // This is the fast path - simple aggregations on indexed columns
-    const [sessionsData, [{ total }]] = await Promise.all([
+    // PHASE 1: Find only the session keys for this page. The summary query has
+    // several joins and aggregates; applying LIMIT after all of that made every
+    // page summarize every session in the table before discarding almost all of
+    // the work. Selecting the page first keeps the expensive phase bounded by
+    // the requested page instead of total history size.
+    const [sessionPage, [{ total }]] = await Promise.all([
       db
         .select({
           sessionId: max(schema.interactionsTable.sessionId),
-          sessionSource: max(schema.interactionsTable.sessionSource),
-          source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
-          sources: sql<
-            InteractionSource[]
-          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
-          // For single interactions (no session), return the interaction ID for direct navigation
-          interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
-          requestCount: count(),
-          totalInputTokens: sum(schema.interactionsTable.inputTokens),
-          totalOutputTokens: sum(schema.interactionsTable.outputTokens),
-          totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
-          totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
-          // `totalCost` is the full list-price estimate across the session.
-          // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
-          // (metered = billed spend; subscription = flat-rate, not billed), so a
-          // session's Cost cell can show what was actually charged plus what the
-          // subscription-covered portion would have cost. A session may mix modes
-          // (e.g. a mid-session switch), so both filtered sums are needed.
-          totalCost: sum(schema.interactionsTable.cost),
-          totalBilledCost: sql<
+          interactionId: sql<
             string | null
-          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
-          totalSubscriptionCost: sql<
-            string | null
-          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
-          totalBaselineCost: sum(schema.interactionsTable.baselineCost),
-          totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
-          totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
-          // Count interactions where TOON was applied (has savings)
-          toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
-          // Count interactions by skip reason
-          toonNotEnabledCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_enabled')`,
-          toonNotEffectiveCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_effective')`,
-          toonNoToolResultsCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'no_tool_results')`,
-          firstRequestTime: min(schema.interactionsTable.createdAt),
-          lastRequestTime: max(schema.interactionsTable.createdAt),
-          models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
-          // Attribute the session to its primary (non-built-in) agent. A chat
-          // session mixes the user's agent with built-in utility subagents (e.g.
-          // title generation), all sharing one session_id; without the FILTER,
-          // MAX(id) and MAX(name) could resolve to different interactions and
-          // surface the utility subagent. Preferring built_in = false keeps id
-          // and name from the same agent; COALESCE falls back to any agent for
-          // sessions that only ran built-in agents. API/Claude-Code sessions have
-          // a single profile per session, so this is a no-op for them.
-          profileId: sql<
-            string | null
-          >`COALESCE(MAX(${schema.agentsTable.id}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.id}::text))`,
-          profileName: sql<
-            string | null
-          >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
-          externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
-          authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
-          authenticatedAppNames: sql<
-            string[]
-          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
-          // ARRAY_AGG (not STRING_AGG) — user names can contain commas
-          // (e.g. "Last, First" display names), so a delimited string can't
-          // be split back apart reliably
-          userNames: sql<
-            string[]
-          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
-          // Ids alongside names: two members can share a display name, which
-          // collapses them into a single entry above and leaves consumers
-          // matching on an ambiguous string. Ids identify the actual users.
-          userIds: sql<
-            string[]
-          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
-          // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
-          conversationTitle: max(schema.conversationsTable.title),
+          >`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         })
         .from(schema.interactionsTable)
-        .leftJoin(
-          schema.agentsTable,
-          and(
-            eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-            notDeleted(schema.agentsTable),
-          ),
-        )
-        .leftJoin(
-          schema.usersTable,
-          eq(schema.interactionsTable.userId, schema.usersTable.id),
-        )
-        .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause)
-        // A session is identified by its session id alone (COALESCE(session_id,
-        // id) for sessionless rows). profile_id / agent name must NOT be part of
-        // the group key: an Archestra Chat writes its title-generation call under
-        // a separate built-in subagent, so grouping by agent split one chat into
-        // two "sessions". This now matches the `total` count below, which already
-        // counts distinct session ids only. Agent attribution is aggregated in
-        // the SELECT (MAX) instead of being part of the key.
         .groupBy(sessionGroupExpr)
         .orderBy(desc(max(schema.interactionsTable.createdAt)))
         .limit(pagination.limit)
@@ -1352,10 +1270,9 @@ class InteractionModel {
       // Total = distinct sessions + sessionless interactions (each its own
       // "session"). Counted without COUNT(DISTINCT COALESCE(session_id,
       // id::text)) — the per-row uuid cast defeats the session_id index — and
-      // without the conversations join the main query needs for titles: the
+      // without the conversations join the summary query needs for titles: the
       // filters only touch interactions columns, and joining on the
-      // conversations PK can't change the count, so on large tables it only
-      // pushed this query into statement timeout.
+      // conversations PK can't change the count.
       cachedTotal !== undefined
         ? [{ total: cachedTotal }]
         : db
@@ -1370,7 +1287,133 @@ class InteractionModel {
       sessionTotalCache.set(sessionTotalCacheKey, Number(total));
     }
 
-    // PHASE 2: Batch fetch "last interaction" info for all sessions
+    if (sessionPage.length === 0) {
+      return createPaginatedResult([], Number(total), pagination);
+    }
+
+    const pageSessionIds = sessionPage.flatMap((session) =>
+      session.sessionId ? [session.sessionId] : [],
+    );
+    const pageInteractionIds = sessionPage.flatMap((session) =>
+      session.interactionId ? [session.interactionId] : [],
+    );
+    const pageConditions: SQL[] = [];
+    if (pageSessionIds.length > 0) {
+      pageConditions.push(
+        inArray(schema.interactionsTable.sessionId, pageSessionIds),
+      );
+    }
+    if (pageInteractionIds.length > 0) {
+      pageConditions.push(
+        inArray(schema.interactionsTable.id, pageInteractionIds),
+      );
+    }
+    const pageCondition =
+      pageConditions.length === 1 ? pageConditions[0] : or(...pageConditions);
+    const pageWhereClause = whereClause
+      ? and(whereClause, pageCondition)
+      : pageCondition;
+
+    // PHASE 2: Aggregate and join only the sessions selected above.
+    const sessionsData = await db
+      .select({
+        sessionId: max(schema.interactionsTable.sessionId),
+        sessionSource: max(schema.interactionsTable.sessionSource),
+        source: sql<InteractionSource | null>`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.source}) = 1 THEN MAX(${schema.interactionsTable.source}) ELSE NULL END`,
+        sources: sql<
+          InteractionSource[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.source} ORDER BY ${schema.interactionsTable.source}), NULL)`,
+        // For single interactions (no session), return the interaction ID for direct navigation
+        interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
+        requestCount: count(),
+        totalInputTokens: sum(schema.interactionsTable.inputTokens),
+        totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+        totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
+        totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
+        // `totalCost` is the full list-price estimate across the session.
+        // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
+        // (metered = billed spend; subscription = flat-rate, not billed), so a
+        // session's Cost cell can show what was actually charged plus what the
+        // subscription-covered portion would have cost. A session may mix modes
+        // (e.g. a mid-session switch), so both filtered sums are needed.
+        totalCost: sum(schema.interactionsTable.cost),
+        totalBilledCost: sql<
+          string | null
+        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
+        totalSubscriptionCost: sql<
+          string | null
+        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
+        totalBaselineCost: sum(schema.interactionsTable.baselineCost),
+        totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
+        totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
+        // Count interactions where TOON was applied (has savings)
+        toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
+        // Count interactions by skip reason
+        toonNotEnabledCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_enabled')`,
+        toonNotEffectiveCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'not_effective')`,
+        toonNoToolResultsCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonSkipReason} = 'no_tool_results')`,
+        firstRequestTime: min(schema.interactionsTable.createdAt),
+        lastRequestTime: max(schema.interactionsTable.createdAt),
+        models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
+        // Attribute the session to its primary (non-built-in) agent. A chat
+        // session mixes the user's agent with built-in utility subagents (e.g.
+        // title generation), all sharing one session_id; without the FILTER,
+        // MAX(id) and MAX(name) could resolve to different interactions and
+        // surface the utility subagent. Preferring built_in = false keeps id
+        // and name from the same agent; COALESCE falls back to any agent for
+        // sessions that only ran built-in agents. API/Claude-Code sessions have
+        // a single profile per session, so this is a no-op for them.
+        profileId: sql<
+          string | null
+        >`COALESCE(MAX(${schema.agentsTable.id}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.id}::text))`,
+        profileName: sql<
+          string | null
+        >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
+        externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
+        authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
+        authenticatedAppNames: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
+        // ARRAY_AGG (not STRING_AGG) — user names can contain commas
+        // (e.g. "Last, First" display names), so a delimited string can't
+        // be split back apart reliably
+        userNames: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
+        // Ids alongside names: two members can share a display name, which
+        // collapses them into a single entry above and leaves consumers
+        // matching on an ambiguous string. Ids identify the actual users.
+        userIds: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
+        // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
+        conversationTitle: max(schema.conversationsTable.title),
+      })
+      .from(schema.interactionsTable)
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.interactionsTable.userId, schema.usersTable.id),
+      )
+      .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
+      .where(pageWhereClause)
+      // A session is identified by its session id alone (COALESCE(session_id,
+      // id) for sessionless rows). profile_id / agent name must NOT be part of
+      // the group key: an Archestra Chat writes its title-generation call under
+      // a separate built-in subagent, so grouping by agent split one chat into
+      // two "sessions". This matches the `total` count above, which already
+      // counts distinct session ids only. Agent attribution is aggregated in
+      // the SELECT (MAX) instead of being part of the key.
+      .groupBy(sessionGroupExpr)
+      .orderBy(desc(max(schema.interactionsTable.createdAt)));
+
+    // PHASE 3: Batch fetch "last interaction" info for all sessions
     // This is much faster than ARRAY_AGG because:
     // 1. We only fetch for the paginated sessions (typically 10-50 rows)
     // 2. Uses index on (session_id, created_at DESC)

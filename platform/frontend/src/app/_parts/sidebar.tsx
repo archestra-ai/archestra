@@ -354,9 +354,7 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/costs",
         icon: CircleDollarSign,
         customIsActive: (pathname: string) =>
-          pathname === "/llm/usage" ||
-          pathname.startsWith("/llm/costs") ||
-          pathname === "/llm/limits",
+          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
         permissionUrls: ["/llm/costs", "/llm/limits"],
       },
     ],

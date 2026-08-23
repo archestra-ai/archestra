@@ -5,7 +5,7 @@ import {
   formatPercent,
   formatTokens,
   percentOf,
-} from "@/app/llm/(costs)/costs/_parts/usage-format";
+} from "@/app/llm/usage/_parts/usage-format";
 import {
   Card,
   CardContent,

@@ -26,13 +26,13 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
-Reading organization-wide costs requires the `llmCost:read` permission. The **My Usage** tab remains available without it.
+Reading organization-wide costs requires the `llmCost:read` permission. You can still open **My Usage** from your user menu without it.
 
 ![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
 
 ## My Usage
 
-The **My Usage** tab at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
+The **My Usage** page at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
 
 The lower sections explain the shape of that usage:
 
@@ -40,7 +40,7 @@ The lower sections explain the shape of that usage:
 - **Context size** groups requests by how much context the model received.
 - **Top sessions** shows which sessions concentrated the most list-price usage, along with their dominant model and client.
 
-Everyone can open **My Usage** from the user menu, between **Personal Settings** and **Sign Out**. Users with organization cost or limit permissions also see it beside the permitted **Costs** and **Limits** tabs. Limits remain available at `/llm/limits`.
+Everyone can open **My Usage** from the user menu, between **Personal Settings** and **Sign Out**. It is separate from the **Costs** and **Limits** tabs. Limits remain available at `/llm/limits`.
 
 ![My Usage showing personal totals and detailed model and client usage tables](/docs/automated_screenshots/platform-costs-and-limits_my-usage.webp)
 

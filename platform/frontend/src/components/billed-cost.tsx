@@ -37,6 +37,7 @@ export function BilledCost({
   format = "percent",
   tooltip = "never",
   variant = "default",
+  subscriptionBadge = "full",
   className,
 }: {
   /** Full list-price estimate (all rows). */
@@ -63,6 +64,8 @@ export function BilledCost({
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   variant?: "default" | "session" | "interaction";
+  /** Shorter label for dense tables; the tooltip retains the full meaning. */
+  subscriptionBadge?: "full" | "compact";
   className?: string;
 }) {
   // Derive the split from billingMode when explicit sums aren't supplied.
@@ -108,8 +111,12 @@ export function BilledCost({
           className={`${className || ""} inline-flex items-center gap-1.5 cursor-default`}
         >
           {formatCost(billed)}
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            Subscription
+          <Badge
+            variant="secondary"
+            className="px-1.5 py-0 text-[10px]"
+            aria-label="Subscription-covered usage"
+          >
+            {subscriptionBadge === "compact" ? "Sub" : "Subscription"}
           </Badge>
         </span>
       </TooltipTrigger>

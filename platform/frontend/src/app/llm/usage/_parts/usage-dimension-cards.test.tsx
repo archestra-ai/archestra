@@ -53,7 +53,9 @@ describe("usage dimension cards", () => {
 
     expect(screen.getByText("Example coding client")).toBeInTheDocument();
     expect(screen.getByText("$0.00")).toBeInTheDocument();
-    expect(screen.getByText("Subscription")).toBeInTheDocument();
+    expect(screen.getByText("Sub")).toHaveAccessibleName(
+      "Subscription-covered usage",
+    );
     expect(screen.queryByText("$12.50")).not.toBeInTheDocument();
   });
 

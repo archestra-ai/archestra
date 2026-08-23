@@ -6,7 +6,7 @@ import {
   formatDuration,
   formatTokens,
   percentOf,
-} from "@/app/llm/(costs)/costs/_parts/usage-format";
+} from "@/app/llm/usage/_parts/usage-format";
 import { BilledCost } from "@/components/billed-cost";
 import {
   Card,
@@ -131,6 +131,7 @@ export function TopSessionsCard({
                         baselineCost={String(session.billedCost)}
                         tooltip="hover"
                         format="number"
+                        subscriptionBadge="compact"
                         className="justify-end whitespace-nowrap"
                       />
                     </TableCell>

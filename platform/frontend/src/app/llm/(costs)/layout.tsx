@@ -10,7 +10,6 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 const TABS = [
-  { label: "My Usage", href: "/llm/usage" },
   { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
 ];
@@ -19,11 +18,6 @@ const PAGE_CONFIG: Record<
   string,
   { title: React.ReactNode; description: React.ReactNode }
 > = {
-  "/llm/usage": {
-    title: "My Usage",
-    description:
-      "Review your own LLM activity, token mix, clients, models, sessions, and billed spend.",
-  },
   "/llm/costs": {
     title: "Costs",
     description: (
@@ -69,8 +63,8 @@ export default function CostsLayout({
     "prometheus-metrics",
   );
 
-  // My Usage is reachable by everyone. Its siblings wait for the permission
-  // answer rather than flashing tabs that would only render a forbidden page.
+  // Wait for the permission answer rather than flashing tabs that would only
+  // render a forbidden page.
   const tabs = TABS.filter(({ href }) => {
     const required = requiredPagePermissionsMap[href];
     const isGated = required && Object.keys(required).length > 0;

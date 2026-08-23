@@ -175,6 +175,7 @@ function UsageDimensionCard({
                         baselineCost={String(row.billedCost)}
                         tooltip="hover"
                         format="number"
+                        subscriptionBadge="compact"
                         className="justify-end whitespace-nowrap"
                       />
                     </TableCell>
